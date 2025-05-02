@@ -1,373 +1,244 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BungieApiService } from '../../services/bungie-api.service';
+import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
 
 @Component({
   selector: 'app-player-search',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  template: `
-    <div class="search-container">
-      <div class="search-box">
-        <input 
-          type="text" 
-          [(ngModel)]="searchTerm"
-          (keyup.enter)="searchPlayer()"
-          placeholder="Enter Bungie Name (e.g. Guardian#1234) or Legacy Username"
-          [disabled]="isLoading"
-        >
-        <button 
-          (click)="searchPlayer()"
-          [disabled]="isLoading || !searchTerm"
-        >
-          {{ isLoading ? 'Searching...' : 'Search' }}
-        </button>
-      </div>
-
-      <!-- Error Message -->
-      <div *ngIf="error" class="error-message">
-        {{ error }}
-        <div *ngIf="errorDetails" class="error-details">
-          {{ errorDetails }}
-        </div>
-      </div>
-
-      <!-- Loading Indicator -->
-      <div *ngIf="isLoading" class="loading-indicator">
-        <div class="spinner"></div>
-        <p>Searching for guardians...</p>
-      </div>
-
-      <!-- Search Results -->
-      <div *ngIf="searchResults.length > 0" class="search-results">
-        <h3>Found Players:</h3>
-        <div *ngFor="let player of searchResults" class="player-card" (click)="selectPlayer(player)">
-          <div class="player-info">
-            <h4>
-              {{ player.bungieGlobalDisplayName }}
-              <span *ngIf="player.bungieGlobalDisplayNameCode">
-                #{{ player.bungieGlobalDisplayNameCode }}
-              </span>
-            </h4>
-            <p>Platform: {{ getPlatformName(player.membershipType) }}</p>
-            <p>Membership ID: {{ player.membershipId }}</p>
-          </div>
-          <button class="view-history">View History</button>
-        </div>
-      </div>
-
-      <!-- No Results Message -->
-      <div *ngIf="searchAttempted && searchResults.length === 0 && !error" class="no-results">
-        No guardians found with that name. Try a different search term.
-      </div>
-
-      <!-- Selected Player History -->
-      <div *ngIf="selectedPlayer && !isLoadingHistory" class="player-history">
-        <h3>Activity History for {{ selectedPlayer.bungieGlobalDisplayName }}</h3>
-        <div class="character-select" *ngIf="characters.length > 0">
-          <button 
-            *ngFor="let character of characters" 
-            (click)="loadCharacterHistory(character.characterId)"
-            [class.active]="character.characterId === selectedCharacterId"
-          >
-            {{ getClassName(character.classType) }}
-          </button>
-        </div>
-
-        <div *ngIf="activities.length > 0" class="activity-list">
-          <div *ngFor="let activity of activities" class="activity-card">
-            <div class="activity-info">
-              <h4>{{ activity.activityDetails.referenceId }}</h4>
-              <p>{{ formatDate(activity.period) }}</p>
-              <p>K/D: {{ activity.values.killsDeathsRatio.basic.displayValue }}</p>
-            </div>
-            <button (click)="viewPGCR(activity.activityDetails.instanceId)">
-              View Details
-            </button>
-          </div>
-        </div>
-
-        <div *ngIf="activities.length === 0" class="no-activities">
-          No activities found for this character.
-        </div>
-      </div>
-    </div>
-  `,
-  styles: [`
-    .search-container {
-      max-width: 800px;
-      margin: 2rem auto;
-      padding: 0 1rem;
-    }
-
-    .search-box {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 2rem;
-    }
-
-    input {
-      flex: 1;
-      padding: 0.5rem;
-      font-size: 1rem;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-
-    button {
-      padding: 0.5rem 1rem;
-      background: #2196f3;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    button:disabled {
-      background: #ccc;
-      cursor: not-allowed;
-    }
-
-    .error-message {
-      color: #f44336;
-      margin: 1rem 0;
-    }
-
-    .player-card {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem;
-      margin: 0.5rem 0;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background-color 0.2s;
-    }
-
-    .player-card:hover {
-      background-color: #f5f5f5;
-    }
-
-    .character-select {
-      display: flex;
-      gap: 1rem;
-      margin: 1rem 0;
-    }
-
-    .character-select button {
-      flex: 1;
-      background: #424242;
-    }
-
-    .character-select button.active {
-      background: #2196f3;
-    }
-
-    .activity-card {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1rem;
-      margin: 0.5rem 0;
-      border: 1px solid #eee;
-      border-radius: 4px;
-    }
-
-    .no-activities {
-      text-align: center;
-      padding: 2rem;
-      color: #666;
-    }
-
-    .loading-indicator {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin: 2rem 0;
-    }
-
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #2196f3;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 1rem;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    .error-details {
-      font-size: 0.8em;
-      margin-top: 0.5rem;
-      color: #ff8a8a;
-    }
-
-    .no-results {
-      text-align: center;
-      padding: 2rem;
-      color: #666;
-      font-style: italic;
-    }
-  `]
+  templateUrl: './player-search.component.html',
+  styleUrls: ['./player-search.component.css']
 })
 export class PlayerSearchComponent implements OnInit {
-  searchTerm = '';
-  isLoading = false;
-  isLoadingHistory = false;
-  error: string | null = null;
-  errorDetails: string | null = null;
-  searchResults: any[] = [];
-  searchAttempted = false;
-  selectedPlayer: any = null;
-  characters: any[] = [];
-  selectedCharacterId: string | null = null;
-  activities: any[] = [];
+  d1XboxSearchTerm: string = '';
+  d1PsnSearchTerm: string = '';
+  d2SearchTerm: string = '';
+  selectedDate: string = '';
+  selectedPlayers: PlayerSearchResult[] = [];
+  selectedCharacterIds: { [key: string]: string | undefined } = {};
+  characters: { [key: string]: any[] } = {};
+  activities: { [key: string]: any[] } = {};
+  loading: { [key: string]: boolean } = {};
+  error: { [key: string]: string } = {};
 
   constructor(private bungieService: BungieApiService) {}
 
-  ngOnInit(): void {
-    // Initialize component
+  ngOnInit(): void {}
+
+  get hasD1Players(): boolean {
+    return this.selectedPlayers.some(player => this.isD1Player(player));
   }
 
-  async searchPlayer(): Promise<void> {
-    if (!this.searchTerm) {
-      this.searchResults = [];
+  get hasD2Players(): boolean {
+    return this.selectedPlayers.some(player => !this.isD1Player(player));
+  }
+
+  getPlatforms(game: string): string[] {
+    const platforms = new Set<string>();
+    this.selectedPlayers.forEach(player => {
+      if ((game === 'D1' && this.isD1Player(player)) || 
+          (game === 'D2' && !this.isD1Player(player))) {
+        platforms.add(this.getPlatformName(player.membershipType));
+      }
+    });
+    return Array.from(platforms);
+  }
+
+  getPlayersByGameAndPlatform(game: string, platform: string): PlayerSearchResult[] {
+    return this.selectedPlayers.filter(player => {
+      const isGameMatch = (game === 'D1' && this.isD1Player(player)) || 
+                         (game === 'D2' && !this.isD1Player(player));
+      const isPlatformMatch = this.getPlatformName(player.membershipType) === platform;
+      return isGameMatch && isPlatformMatch;
+    });
+  }
+
+  async searchD1Player(searchTerm: string, membershipType: number) {
+    if (!searchTerm) return;
+
+    const key = `d1-${membershipType}-${searchTerm}`;
+    this.loading[key] = true;
+    this.error[key] = '';
+
+    try {
+      const results = await this.bungieService.searchD1Player(searchTerm, membershipType).toPromise();
+      if (results && results.length > 0) {
+        this.selectedPlayers = [...this.selectedPlayers, ...results];
+      } else {
+        this.error[key] = 'No players found';
+      }
+    } catch (error) {
+      console.error('Error searching D1 player:', error);
+      this.error[key] = 'Error searching for player';
+    } finally {
+      this.loading[key] = false;
+    }
+  }
+
+  async searchD2Player(searchTerm: string) {
+    if (!searchTerm) return;
+
+    const key = `d2-${searchTerm}`;
+    this.loading[key] = true;
+    this.error[key] = '';
+
+    try {
+      const results = await this.bungieService.searchD2Player(searchTerm).toPromise();
+      if (results && results.length > 0) {
+        this.selectedPlayers = [...this.selectedPlayers, ...results];
+      } else {
+        this.error[key] = 'No players found';
+      }
+    } catch (error) {
+      console.error('Error searching D2 player:', error);
+      this.error[key] = 'Error searching for player';
+    } finally {
+      this.loading[key] = false;
+    }
+  }
+
+  async selectPlayer(player: PlayerSearchResult) {
+    if (this.selectedPlayers.some(p => p.membershipId === player.membershipId)) {
       return;
     }
 
-    this.isLoading = true;
-    this.error = null;
-    this.errorDetails = null;
-    this.searchResults = [];
-    this.searchAttempted = true;
-    this.selectedPlayer = null;
-    this.characters = [];
-    this.activities = [];
-
-    try {
-      console.log('Starting search for:', this.searchTerm);
-      const results = await this.bungieService.searchPlayer(this.searchTerm).toPromise();
-      console.log('Search results:', results);
-      
-      if (results && Array.isArray(results) && results.length > 0) {
-        this.searchResults = results;
-      } else {
-        this.error = 'No players found with that name.';
-        this.errorDetails = 'Try using the exact Bungie Name format (e.g., Guardian#1234) or a legacy username.';
-      }
-    } catch (error: any) {
-      console.error('Search error:', error);
-      this.error = 'Error searching for player.';
-      
-      if (error.status === 401) {
-        this.errorDetails = 'API authentication failed. Please check your API key configuration.';
-      } else if (error.status === 429) {
-        this.errorDetails = 'Too many requests. Please wait a moment and try again.';
-      } else if (error.status === 500) {
-        this.errorDetails = 'An internal server error occurred. Please try again later.';
-        if (error.error && error.error.Message) {
-          this.errorDetails += ` (${error.error.Message})`;
-        }
-      } else if (error.status === 404) {
-        this.errorDetails = 'Player not found. Please check the name and try again.';
-      } else {
-        this.errorDetails = error.message || 'Please try again later.';
-      }
-    } finally {
-      this.isLoading = false;
-    }
+    this.selectedPlayers.push(player);
+    this.selectedCharacterIds[player.membershipId] = undefined;
+    await this.loadCharacterHistory(player);
   }
 
-  async selectPlayer(player: any) {
-    this.selectedPlayer = player;
-    this.isLoadingHistory = true;
-    this.characters = [];
-    this.activities = [];
-    this.selectedCharacterId = null;
+  async loadCharacterHistory(player: PlayerSearchResult) {
+    const key = `characters-${player.membershipId}`;
+    this.loading[key] = true;
+    this.error[key] = '';
 
     try {
-      const profile = await this.bungieService.getProfile(
-        player.membershipType,
-        player.membershipId
+      const isD1 = this.isD1Player(player);
+      const profile = await (isD1 
+        ? this.bungieService.getD1Profile(player.membershipType, player.membershipId)
+        : this.bungieService.getProfile(player.membershipType, player.membershipId)
       ).toPromise();
 
-      this.characters = Object.values(profile.characters.data);
-      
-      if (this.characters.length > 0) {
-        await this.loadCharacterHistory(this.characters[0].characterId);
+      if (profile) {
+        if (isD1) {
+          // D1 profile structure
+          this.characters[player.membershipId] = profile.characters || [];
+          if (this.characters[player.membershipId].length > 0) {
+            this.selectedCharacterIds[player.membershipId] = this.characters[player.membershipId][0].characterBase.characterId;
+            await this.loadActivityHistory(player);
+          }
+        } else {
+          // D2 profile structure
+          this.characters[player.membershipId] = Object.values(profile.characters.data);
+          if (this.characters[player.membershipId].length > 0) {
+            this.selectedCharacterIds[player.membershipId] = this.characters[player.membershipId][0].characterId;
+            await this.loadActivityHistory(player);
+          }
+        }
       }
     } catch (error) {
-      this.error = 'Error loading player profile. Please try again.';
-      console.error('Profile error:', error);
+      console.error('Error loading character history:', error);
+      this.error[key] = 'Error loading character history';
     } finally {
-      this.isLoadingHistory = false;
+      this.loading[key] = false;
     }
   }
 
-  async loadCharacterHistory(characterId: string) {
-    this.selectedCharacterId = characterId;
-    this.isLoadingHistory = true;
-    this.activities = [];
+  async loadActivityHistory(player: PlayerSearchResult) {
+    const characterId = this.selectedCharacterIds[player.membershipId];
+    if (!characterId) return;
+
+    const key = `activities-${player.membershipId}-${characterId}`;
+    this.loading[key] = true;
+    this.error[key] = '';
 
     try {
-      const history = await this.bungieService.getActivityHistory(
-        this.selectedPlayer.membershipType,
-        this.selectedPlayer.membershipId,
+      const activities = await this.bungieService.getActivityHistory(
+        player.membershipType,
+        player.membershipId,
         characterId
       ).toPromise();
 
-      this.activities = history.activities || [];
+      if (activities && activities.activities) {
+        this.activities[player.membershipId] = activities.activities;
+      }
     } catch (error) {
-      this.error = 'Error loading activity history. Please try again.';
-      console.error('History error:', error);
+      console.error('Error loading activity history:', error);
+      this.error[key] = 'Error loading activity history';
     } finally {
-      this.isLoadingHistory = false;
+      this.loading[key] = false;
     }
   }
 
-  async viewPGCR(instanceId: string) {
+  async viewPGCR(activityId: string) {
     try {
-      const pgcr = await this.bungieService.getPGCR(instanceId).toPromise();
-      // Here you would typically open a modal or navigate to a new route
-      // to display the PGCR details
+      const pgcr = await this.bungieService.getPGCR(activityId).toPromise();
       console.log('PGCR:', pgcr);
+      // TODO: Implement PGCR display
     } catch (error) {
-      this.error = 'Error loading activity details. Please try again.';
-      console.error('PGCR error:', error);
+      console.error('Error loading PGCR:', error);
     }
   }
 
   getPlatformName(membershipType: number): string {
-    const platforms: { [key: number]: string } = {
-      1: 'Xbox',
-      2: 'PlayStation',
-      3: 'Steam',
-      4: 'Battle.net',
-      5: 'Stadia',
-      6: 'Epic Games',
-      10: 'Demon',
-      254: 'BungieNext'
-    };
-    return platforms[membershipType] || 'Unknown';
+    switch (membershipType) {
+      case 1: return 'Xbox';
+      case 2: return 'PlayStation';
+      case 3: return 'Steam';
+      case 4: return 'Battle.net';
+      case 5: return 'Stadia';
+      case 6: return 'Epic';
+      default: return 'Unknown';
+    }
+  }
+
+  isD1Player(player: PlayerSearchResult): boolean {
+    return this.bungieService.isD1Player(player);
   }
 
   getClassName(classType: number): string {
-    const classes: { [key: number]: string } = {
-      0: 'Titan',
-      1: 'Hunter',
-      2: 'Warlock'
-    };
-    return classes[classType] || 'Unknown';
+    switch (classType) {
+      case 0: return 'Titan';
+      case 1: return 'Hunter';
+      case 2: return 'Warlock';
+      default: return 'Unknown';
+    }
   }
 
   formatDate(dateString: string): string {
     return new Date(dateString).toLocaleDateString();
+  }
+
+  getGroupedActivities() {
+    const grouped: { [key: string]: { [key: string]: any[] } } = {};
+    
+    this.selectedPlayers.forEach(player => {
+      const game = this.isD1Player(player) ? 'D1' : 'D2';
+      const platform = this.getPlatformName(player.membershipType);
+      const key = `${game}-${platform}-${player.membershipId}`;
+      
+      if (!grouped[game]) {
+        grouped[game] = {};
+      }
+      
+      if (!grouped[game][platform]) {
+        grouped[game][platform] = [];
+      }
+      
+      const activities = this.activities[player.membershipId] || [];
+      if (this.selectedDate) {
+        const date = new Date(this.selectedDate);
+        const filtered = activities.filter(activity => {
+          const activityDate = new Date(activity.period);
+          return activityDate.toDateString() === date.toDateString();
+        });
+        grouped[game][platform].push(...filtered);
+      } else {
+        grouped[game][platform].push(...activities);
+      }
+    });
+    
+    return grouped;
   }
 } 

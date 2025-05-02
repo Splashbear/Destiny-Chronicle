@@ -1,0 +1,122 @@
+<div class="search-container">
+  <div class="search-boxes">
+    <!-- D1 Xbox Search -->
+    <div class="search-box">
+      <h3>Destiny 1 Xbox Search</h3>
+      <input
+        type="text"
+        [(ngModel)]="d1XboxSearchTerm"
+        placeholder="Enter Xbox gamertag"
+        (keyup.enter)="searchD1Player(d1XboxSearchTerm, 1)"
+      />
+      <button
+        (click)="searchD1Player(d1XboxSearchTerm, 1)"
+        [disabled]="loading['d1-xbox'] || !d1XboxSearchTerm"
+      >
+        {{ loading['d1-xbox'] ? 'Searching...' : 'Search' }}
+      </button>
+      <div *ngIf="error['d1-xbox']" class="error-message">
+        {{ error['d1-xbox'] }}
+      </div>
+    </div>
+
+    <!-- D1 PlayStation Search -->
+    <div class="search-box">
+      <h3>Destiny 1 PlayStation Search</h3>
+      <input
+        type="text"
+        [(ngModel)]="d1PsnSearchTerm"
+        placeholder="Enter PSN ID"
+        (keyup.enter)="searchD1Player(d1PsnSearchTerm, 2)"
+      />
+      <button
+        (click)="searchD1Player(d1PsnSearchTerm, 2)"
+        [disabled]="loading['d1-psn'] || !d1PsnSearchTerm"
+      >
+        {{ loading['d1-psn'] ? 'Searching...' : 'Search' }}
+      </button>
+      <div *ngIf="error['d1-psn']" class="error-message">
+        {{ error['d1-psn'] }}
+      </div>
+    </div>
+
+    <!-- D2 Search -->
+    <div class="search-box">
+      <h3>Destiny 2 Search</h3>
+      <input
+        type="text"
+        [(ngModel)]="d2SearchTerm"
+        placeholder="Enter Bungie Name (e.g., Guardian#1234)"
+        (keyup.enter)="searchD2Player(d2SearchTerm)"
+      />
+      <button
+        (click)="searchD2Player(d2SearchTerm)"
+        [disabled]="loading['d2'] || !d2SearchTerm"
+      >
+        {{ loading['d2'] ? 'Searching...' : 'Search' }}
+      </button>
+      <div *ngIf="error['d2']" class="error-message">
+        {{ error['d2'] }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div *ngIf="loading['characters'] || loading['activities']" class="loading-indicator">
+    Loading...
+  </div>
+
+  <!-- Selected Players -->
+  <div *ngIf="selectedPlayers.length > 0" class="player-history">
+    <h3>Selected Players</h3>
+    <div class="selected-players">
+      <div *ngFor="let player of selectedPlayers" class="player-card">
+        <h4>
+          {{ player.displayName }}
+          <span class="game-version" [ngClass]="isD1Player(player) ? 'd1' : 'd2'">
+            {{ isD1Player(player) ? 'D1' : 'D2' }}
+          </span>
+        </h4>
+        <p class="platform">{{ getPlatformName(player.membershipType) }}</p>
+      </div>
+    </div>
+
+    <!-- Date Filter -->
+    <div class="date-filter">
+      <label for="date">Filter by Date:</label>
+      <input
+        type="date"
+        id="date"
+        [(ngModel)]="selectedDate"
+        (change)="getGroupedActivities()"
+      />
+    </div>
+
+    <!-- Activity History -->
+    <div class="grouped-activities">
+      <div *ngFor="let game of ['D1', 'D2']" class="game-section">
+        <h3 *ngIf="game === 'D1' && hasD1Players">Destiny 1 Activities</h3>
+        <h3 *ngIf="game === 'D2' && hasD2Players">Destiny 2 Activities</h3>
+        
+        <div *ngFor="let platform of getPlatforms(game)" class="account-section">
+          <h4>{{ platform }}</h4>
+          
+          <div *ngFor="let player of getPlayersByGameAndPlatform(game, platform)" class="activity-type-section">
+            <div *ngFor="let activity of activities[player.membershipId]" class="activity-card">
+              <div class="activity-info">
+                <h4>{{ activity.activityDetails.mode }}</h4>
+                <p>{{ formatDate(activity.period) }}</p>
+                <p>{{ activity.values.kills.basic.displayValue }} Kills</p>
+                <p>{{ activity.values.deaths.basic.displayValue }} Deaths</p>
+                <p>{{ activity.values.killsDeathsRatio.basic.displayValue }} K/D</p>
+              </div>
+              <button (click)="viewPGCR(activity.activityDetails.instanceId)">
+                View Details
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

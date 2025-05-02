@@ -1,27 +1,18 @@
 {
   "/Platform": {
     "target": "https://www.bungie.net",
-    "secure": true,
     "changeOrigin": true,
+    "secure": false,
     "logLevel": "debug",
-    "pathRewrite": {
-      "^/Platform": "/Platform"
-    },
     "headers": {
-      "Origin": "http://localhost:4200",
       "X-API-Key": "e55082388d014a79b9f5da4be0063d1c"
     }
   },
   "/d1": {
     "target": "https://www.bungie.net",
-    "secure": true,
     "changeOrigin": true,
-    "logLevel": "debug",
-    "pathRewrite": {
-      "^/d1": "/d1"
-    },
+    "secure": false,
     "headers": {
-      "Origin": "http://localhost:4200",
       "X-API-Key": "e55082388d014a79b9f5da4be0063d1c"
     }
   }

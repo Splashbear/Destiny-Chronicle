@@ -1,14 +1,14 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
+import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
+import { Observable, throwError, of } from 'rxjs';
+import { catchError, map, tap, switchMap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 
 export interface PlayerSearchResult {
   displayName: string;
+  membershipType: number;
   membershipId: string;
-  membershipType: BungieMembershipType;
   bungieGlobalDisplayName?: string;
   bungieGlobalDisplayNameCode?: number;
 }
@@ -26,8 +26,11 @@ interface BungieResponse<T> {
   providedIn: 'root'
 })
 export class BungieApiService {
-  private readonly API_KEY = environment.bungie.API_KEY;
-  private readonly API_ROOT = '/Platform';
+  private readonly API_KEY = 'e55082388d014a79b9f5da4be0063d1c';
+  private readonly BASE_URL = '/Platform';
+  private readonly OAUTH_AUTH_URL = 'https://www.bungie.net/en/OAuth/Authorize';
+  private readonly OAUTH_CLIENT_ID = '49589';
+  private readonly OAUTH_CLIENT_SECRET = 'VEB0lX66Of2PbonMGzpJT0YAGPb7G-yI.IJbkaZAlCQ';
 
   // Platform types for D1 and D2
   private readonly PLATFORMS = {
@@ -42,101 +45,134 @@ export class BungieApiService {
   constructor(private http: HttpClient) {}
 
   private getHeaders(): HttpHeaders {
-    const headers = new HttpHeaders({
-      'X-API-Key': this.API_KEY
+    return new HttpHeaders({
+      'X-API-Key': this.API_KEY,
+      'Content-Type': 'application/json'
     });
-    console.log('Request headers:', headers.keys());
-    return headers;
   }
 
-  searchPlayer(displayName: string): Observable<PlayerSearchResult[]> {
-    console.log('Starting search for:', displayName);
-    const [username, discriminator] = displayName.split('#');
+  searchD1Player(searchTerm: string, membershipType: number): Observable<PlayerSearchResult[]> {
+    console.log(`Searching D1 player: ${searchTerm} on platform: ${membershipType}`);
+    const url = `${this.BASE_URL}/Destiny/SearchDestinyPlayer/${membershipType}/${encodeURIComponent(searchTerm)}/`;
     
-    if (discriminator) {
-      return this.searchByBungieName(username, discriminator);
-    } else {
-      return this.searchByLegacyName(username);
-    }
+    return this.http.get<any>(url, { headers: this.getHeaders() }).pipe(
+      map(response => {
+        if (response.ErrorCode === 1) {
+          return response.Response.map((player: any) => ({
+            displayName: player.displayName,
+            membershipType: player.membershipType,
+            membershipId: player.membershipId
+          }));
+        }
+        return [];
+      }),
+      catchError(error => {
+        console.error('Error in D1 search:', error);
+        return of([]);
+      })
+    );
   }
 
-  private searchByBungieName(username: string, discriminator: string): Observable<PlayerSearchResult[]> {
+  searchD2Player(bungieName: string): Observable<any> {
+    const [displayName, displayNameCode] = bungieName.split('#');
+    if (!displayName || !displayNameCode) {
+      return throwError(() => new Error('Invalid Bungie name format. Use username#1234'));
+    }
+
+    const url = `${this.BASE_URL}/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
     const body = {
-      displayName: username,
-      displayNameCode: parseInt(discriminator)
+      displayName,
+      displayNameCode: parseInt(displayNameCode, 10)
     };
 
-    return this.http.post<BungieResponse<PlayerSearchResult[]>>(
-      `${this.API_ROOT}/Destiny2/SearchDestinyPlayerByBungieName/All/`,
+    console.log('Making D2 search request with:', {
+      url,
       body,
-      { 
-        headers: this.getHeaders()
-      }
-    ).pipe(
-      tap(response => console.log('Bungie name search response:', response)),
-      map(response => response.Response || []),
-      catchError((error: any) => {
-        console.error('Error in Bungie name search:', error);
+      headers: this.getHeaders()
+    });
+
+    const headers = new HttpHeaders({
+      'X-API-Key': this.API_KEY,
+      'Content-Type': 'application/json',
+      'Origin': 'https://www.bungie.net'
+    });
+
+    return this.http.post(url, body, {
+      headers
+    }).pipe(
+      tap(response => console.log('D2 Search Response:', response)),
+      catchError(error => {
+        console.error('Error in D2 search:', {
+          error,
+          errorMessage: error.message,
+          errorStatus: error.status,
+          errorStatusText: error.statusText,
+          errorUrl: error.url,
+          errorHeaders: error.headers,
+          errorBody: error.error
+        });
+        if (error instanceof HttpErrorResponse) {
+          console.error('HTTP Error Details:', {
+            status: error.status,
+            statusText: error.statusText,
+            url: error.url,
+            headers: error.headers,
+            error: error.error
+          });
+          if (error.error && error.error.ErrorCode === 2107) {
+            console.error('Bungie API Error:', {
+              errorCode: error.error.ErrorCode,
+              errorStatus: error.error.ErrorStatus,
+              message: error.error.Message,
+              messageData: error.error.MessageData
+            });
+          }
+        }
         return throwError(() => error);
       })
     );
   }
 
-  private searchByLegacyName(displayName: string): Observable<PlayerSearchResult[]> {
-    console.log('Starting D1 search for:', displayName);
-    const searchUrl = `${this.API_ROOT}/Destiny/SearchDestinyPlayer/all/${encodeURIComponent(displayName)}/`;
-    console.log('Search URL:', searchUrl);
-    
-    return this.http.get<BungieResponse<PlayerSearchResult[]>>(
-      searchUrl,
-      { 
-        headers: this.getHeaders(),
-        observe: 'response'  // This will give us access to the full response including headers
-      }
-    ).pipe(
-      tap(response => {
-        console.log('Response headers:', response.headers.keys());
-        console.log('Full search response:', JSON.stringify(response.body, null, 2));
-        if (response.body?.ErrorCode !== 1) {
-          console.error('API Error:', {
-            code: response.body?.ErrorCode,
-            status: response.body?.ErrorStatus,
-            message: response.body?.Message,
-            data: response.body?.MessageData
-          });
-        }
-      }),
-      map(response => {
-        if (response.body?.ErrorCode === 1) {
-          return response.body.Response || [];
-        }
-        console.error('Search failed:', {
-          code: response.body?.ErrorCode,
-          status: response.body?.ErrorStatus,
-          message: response.body?.Message,
-          data: response.body?.MessageData
-        });
-        return [];
-      }),
-      catchError((error: any) => {
-        console.error('Error in search:', error);
-        if (error.status === 404) {
-          console.error('404 Error - Check if proxy is running and configured correctly');
-        }
-        return [];
-      })
-    );
-  }
-
-  getPGCR(activityId: string): Observable<any> {
+  getProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     return this.http.get(
-      `${this.API_ROOT}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
+      `${this.BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=200,204`,
       { headers: this.getHeaders() }
     ).pipe(
       map((response: any) => response.Response),
       catchError(error => {
-        console.error('Error fetching PGCR:', error);
+        console.error('Error fetching D2 profile:', error);
         return throwError(() => error);
+      })
+    );
+  }
+
+  getD1Profile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
+    return this.http.get(
+      `${this.BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
+      { headers: this.getHeaders() }
+    ).pipe(
+      map((response: any) => response.Response),
+      catchError(error => {
+        console.error('Error fetching D1 profile:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  getCrossSaveProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
+    // For D1 players, return null since they don't have cross-save profiles
+    if (membershipType === 1 || membershipType === 2) {
+      return of(null);
+    }
+
+    return this.http.get(
+      `${this.BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=204`,
+      { headers: this.getHeaders() }
+    ).pipe(
+      map((response: any) => response.Response),
+      catchError(error => {
+        console.error('Error fetching cross-save profile:', error);
+        return of(null);
       })
     );
   }
@@ -153,7 +189,7 @@ export class BungieApiService {
     }
 
     return this.http.get(
-      `${this.API_ROOT}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`,
+      `${this.BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`,
       {
         headers: this.getHeaders(),
         params
@@ -167,16 +203,23 @@ export class BungieApiService {
     );
   }
 
-  getProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
+  getPGCR(activityId: string): Observable<any> {
     return this.http.get(
-      `${this.API_ROOT}/Destiny2/${membershipType}/Profile/${membershipId}/?components=200`, // 200 is for characters
+      `${this.BASE_URL}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
       { headers: this.getHeaders() }
     ).pipe(
       map((response: any) => response.Response),
       catchError(error => {
-        console.error('Error fetching profile:', error);
+        console.error('Error fetching PGCR:', error);
         return throwError(() => error);
       })
     );
+  }
+
+  isD1Player(player: PlayerSearchResult): boolean {
+    // D1 players typically have a membershipType of 1 (Xbox) or 2 (PlayStation)
+    // and don't have bungieGlobalDisplayName
+    return (player.membershipType === 1 || player.membershipType === 2) && 
+           !player.bungieGlobalDisplayName;
   }
 } 

@@ -1,5 +1,39 @@
 ---
-description:
-globs:
-alwaysApply: false
+description: 
+globs: 
+alwaysApply: true
 ---
+You are a expert in creating clean, simple, responsive web apps using technologies like Angular, React, Node, Rust, Go, Vue, Javascript, Typscript, TailwindCSS. You have a deep and comprehensive knowledge of the API's for Destiny 1 (D1) and Destiny 2 (D2) found at https://www.bungie.net/d1/platform/destiny/help/ and https://bungie-net.github.io/. Your code will be free of errors, especially linting and failed to compile errors. You will consider the whole codebase and the vision statement when suggesting changes in the code, and will avoid changes that will break code that's working. 
+
+Vision Statement:
+Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 2 players. It provides:
+Detailed activity history tracking with rich metadata
+Performance analytics and statistics
+Character progression monitoring
+Activity-specific insights and metrics
+Historical data visualization
+Cross-platform support for both Destiny 1 and Destiny 2 activities
+The app aims to be a one-stop solution for Destiny players to track their gaming journey, analyze their performance, and maintain a detailed journal of their in-game activities. App will need to interact with Bungie API and manifest services
+App should focus on displaying information from Post Game Carnage reports for one date, across the multiple years of Destiny 1 and 2. Once a username has been selected, the app will default display the information for the current date, with the option to select a new date. Information will follow this general look:
+Date  - Total Time in game
+D1 activities organized by year
+then by type and username/platform
+under each year
+D2 activities organized by year
+then by type and username/platform
+under each year
+
+Example:
+April 23, 2021
+:Destiny Tricorn Logo: Activity Type: Strike Name: Strike Name
+:Destiny Tricorn Logo: Activity Type: Raid   Name: Crota's End
+:Destiny 2 Tricorn Logo: Activity Type: Raid Name: Last Wish
+:Destiny 2 Tricorn Logo: Activity Type: Dungeon Name: Prophecy
+:Destiny 2 Tricorn Logo: Activity Type: PVP Name: Iron Banner
+April 23, 2022
+:Destiny Tricorn Logo: Activity Type: Strike Name: Strike Name
+:Destiny Tricorn Logo: Activity Type: Raid   Name: Vault of Glass
+:Destiny 2 Tricorn Logo: Activity Type: Raid Name: Vow of the Disciple
+:Destiny 2 Tricorn Logo: Activity Type: Dungeon Name: Duality
+
+:Destiny 2 Tricorn Logo: Activity Type: PVP Name: Control
