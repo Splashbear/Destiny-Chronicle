@@ -76,6 +76,9 @@
           <span class="game-version" [ngClass]="isD1Player(player) ? 'd1' : 'd2'">
             {{ isD1Player(player) ? 'D1' : 'D2' }}
           </span>
+          <span *ngIf="player.isCrossSavePrimary" class="cross-save-indicator" title="Cross Save Primary Account" style="margin-left: 0.5em; vertical-align: middle;">
+            <img src="https://www.bungie.net/img/theme/destiny/icons/icon_crosssave.svg" alt="Cross Save" style="height: 1em; vertical-align: middle;" />
+          </span>
         </h4>
         <p class="platform">{{ getPlatformName(player.membershipType) }}</p>
       </div>
@@ -88,35 +91,57 @@
         type="date"
         id="date"
         [(ngModel)]="selectedDate"
-        (change)="getGroupedActivities()"
+        (ngModelChange)="onDateChange($event)"
+        (input)="onDateInput($event)"
+        [disabled]="selectedPlayers.length === 0"
+        placeholder="YYYY-MM-DD"
       />
+      <small>Type or pick a date (YYYY-MM-DD)</small>
     </div>
 
     <!-- Activity History -->
-    <div class="grouped-activities">
-      <div *ngFor="let game of ['D1', 'D2']" class="game-section">
-        <h3 *ngIf="game === 'D1' && hasD1Players">Destiny 1 Activities</h3>
-        <h3 *ngIf="game === 'D2' && hasD2Players">Destiny 2 Activities</h3>
-        
-        <div *ngFor="let platform of getPlatforms(game)" class="account-section">
-          <h4>{{ platform }}</h4>
-          
-          <div *ngFor="let player of getPlayersByGameAndPlatform(game, platform)" class="activity-type-section">
-            <div *ngFor="let activity of activities[player.membershipId]" class="activity-card">
-              <div class="activity-info">
-                <h4>{{ activity.activityDetails.mode }}</h4>
-                <p>{{ formatDate(activity.period) }}</p>
-                <p>{{ activity.values.kills.basic.displayValue }} Kills</p>
-                <p>{{ activity.values.deaths.basic.displayValue }} Deaths</p>
-                <p>{{ activity.values.killsDeathsRatio.basic.displayValue }} K/D</p>
-              </div>
-              <button (click)="viewPGCR(activity.activityDetails.instanceId)">
-                View Details
-              </button>
-            </div>
-          </div>
+    <div class="grouped-activities" *ngIf="selectedPlayers.length > 0 && selectedDate">
+      <ng-container *ngIf="getGroupedYears().length === 0">
+        <div class="no-activity-placeholder">
+          <span class="tricorn-logo">🎮</span>
+          No activities found for this date
         </div>
-      </div>
+      </ng-container>
+      <ng-container *ngFor="let year of getGroupedYears()">
+        <div class="year-section">
+          <h2>{{ selectedDate | date:'MMMM d' }}, {{ year }}</h2>
+          <ng-container *ngFor="let type of getGroupedTypes(year)">
+            <ng-container *ngFor="let entry of getGroupedEntries(year, type)">
+              <div class="activity-type-group">
+                <div class="activity-header">
+                  <span *ngIf="entry.game === 'D1'" class="tricorn-logo">🎮</span>
+                  <span *ngIf="entry.game === 'D2'" class="tricorn-logo">🟪</span>
+                  <strong>{{ entry.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</strong> -
+                  <span>{{ type }}</span>
+                  <span>({{ entry.platform }})</span>
+                  <span>- {{ entry.player.displayName }}</span>
+                </div>
+                <div *ngFor="let activity of entry.activities" class="activity-card">
+                  <div class="activity-info">
+                    <h4>
+                      <img *ngIf="manifest.getActivityIcon(activity.activityDetails?.referenceId)" 
+                           [src]="manifest.getActivityIcon(activity.activityDetails?.referenceId)" 
+                           alt="" style="height: 1em; vertical-align: middle; margin-right: 0.5em;">
+                      {{ manifest.getActivityName(activity.activityDetails?.referenceId) || 'Unknown Activity' }}
+                    </h4>
+                    <p>{{ activity.values?.kills?.basic?.displayValue }} Kills</p>
+                    <p>{{ activity.values?.deaths?.basic?.displayValue }} Deaths</p>
+                    <p>{{ activity.values?.killsDeathsRatio?.basic?.displayValue }} K/D</p>
+                  </div>
+                  <button (click)="viewPGCR(activity.activityDetails.instanceId)">
+                    View Details
+                  </button>
+                </div>
+              </div>
+            </ng-container>
+          </ng-container>
+        </div>
+      </ng-container>
     </div>
   </div>
 </div> 

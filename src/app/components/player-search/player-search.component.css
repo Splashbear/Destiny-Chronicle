@@ -2,6 +2,8 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
+  background: #181a23;
+  color: #fff;
 }
 
 .search-boxes {
@@ -73,11 +75,12 @@
 }
 
 .player-card {
-  background-color: white;
+  background-color: #23263a;
   border-radius: 8px;
   padding: 15px;
   margin-bottom: 15px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  color: #fff;
 }
 
 .player-card h4 {
@@ -182,6 +185,10 @@
 
 .player-history {
   margin-top: 20px;
+  background: #202233;
+  border-radius: 8px;
+  padding: 20px;
+  color: #fff;
 }
 
 .date-select {
@@ -214,6 +221,10 @@
 
 .grouped-activities {
   margin-top: 20px;
+  background: #23263a;
+  border-radius: 8px;
+  padding: 20px;
+  color: #fff;
 }
 
 .game-section {
@@ -232,19 +243,21 @@
 }
 
 .activity-card {
-  background-color: white;
-  border: 1px solid #dee2e6;
+  background-color: #23263a;
+  border: 1px solid #35395a;
   border-radius: 4px;
   padding: 15px;
+  color: #fff;
 }
 
 .activity-info h4 {
   margin: 0 0 10px 0;
+  color: #fff;
 }
 
 .activity-info p {
   margin: 5px 0;
-  color: #6c757d;
+  color: #b3b8d1;
 }
 
 .activity-card button {
@@ -259,4 +272,46 @@
 
 .activity-card button:hover {
   background-color: #0056b3;
+}
+
+.no-activity-placeholder {
+  background: #23263a;
+  color: #fff;
+  padding: 24px 0;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 1.2em;
+  margin: 24px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.year-section {
+  margin-bottom: 32px;
+  background: #23263a;
+  border-radius: 8px;
+  padding: 16px 0 8px 0;
+  color: #fff;
+}
+
+.activity-type-group {
+  margin-bottom: 18px;
+  background: #23263a;
+  border-radius: 8px;
+  padding: 12px 0 8px 0;
+  color: #fff;
+}
+
+.activity-header {
+  font-weight: 600;
+  color: #b3b8d1;
+  background: #23263a;
+  border-radius: 6px;
+  padding: 8px 0 8px 8px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 } 
