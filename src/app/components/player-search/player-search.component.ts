@@ -22,6 +22,16 @@ interface ActivityEntry {
   activities: ActivityHistory[];
 }
 
+// Shared activity icons for both D1 and D2
+const SHARED_ACTIVITY_ICONS: { [type: string]: string } = {
+  raid: 'assets/icons/raid.png',
+  strike: 'assets/icons/strike.png',
+  crucible: 'assets/icons/crucible.png',
+  dungeon: 'assets/icons/dungeon.png',
+  nightfall: 'assets/icons/nightfall.png',
+  other: 'assets/icons/activity.png',
+};
+
 @Component({
   selector: 'app-player-search',
   standalone: true,
@@ -611,25 +621,8 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   getActivityTypeIcon(activityType: string): string {
-    const activityHash = this.getActivityTypeHash(activityType);
-    return this.manifest.getActivityIcon(activityHash) || '';
-  }
-
-  private getActivityTypeHash(activityType: string): string {
-    switch (activityType.toLowerCase()) {
-      case 'raid':
-        return '2043403989'; // Generic raid icon
-      case 'crucible':
-        return '1164760504'; // Generic crucible icon
-      case 'strike':
-        return '4110605575'; // Generic strike icon
-      case 'nightfall':
-        return '3789021730'; // Generic nightfall icon
-      case 'dungeon':
-        return '608898761'; // Generic dungeon icon
-      default:
-        return '2043403989'; // Default to raid icon
-    }
+    // Use shared icons for common types
+    return SHARED_ACTIVITY_ICONS[activityType.toLowerCase()] || SHARED_ACTIVITY_ICONS['other'];
   }
 
   formatTime(seconds: number): string {
@@ -657,4 +650,15 @@ export class PlayerSearchComponent implements OnInit {
       );
     });
   }
-} 
+
+  onActivityTypeChange(event: Event): void {
+    // The [(ngModel)] binding already updates selectedActivityType, but this can be used for any side effects if needed
+    // For now, just trigger change detection or filtering if needed
+    this.cdr.detectChanges();
+  }
+}
+
+// BungieNetPlatform Endpoints (https://destinydevs.github.io/BungieNetPlatform/docs/Endpoints)
+// - Useful for user lookups, activity history, and manifest endpoints for both D1 and D2.
+// - Can be referenced for advanced features like forum, admin, and token endpoints if needed in the future.
+// - Current implementation already uses the most relevant endpoints for player and activity data. 

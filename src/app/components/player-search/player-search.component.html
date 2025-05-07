@@ -99,14 +99,12 @@
       <small>Type or pick a date (YYYY-MM-DD)</small>
     </div>
 
-    <!-- Activity Type Filter Chips -->
+    <!-- Activity Type Filter Dropdown -->
     <div class="activity-type-filter">
-      <span *ngFor="let type of activityTypeOptions" 
-            class="activity-chip" 
-            [class.selected]="selectedActivityType.label === type.label"
-            (click)="selectedActivityType = type">
-        {{ type.label }}
-      </span>
+      <label for="activityTypeSelect">Activity Type:</label>
+      <select id="activityTypeSelect" [(ngModel)]="selectedActivityType" (change)="onActivityTypeChange($event)">
+        <option *ngFor="let type of activityTypeOptions" [ngValue]="type">{{ type.label }}</option>
+      </select>
     </div>
 
     <!-- Activity History -->

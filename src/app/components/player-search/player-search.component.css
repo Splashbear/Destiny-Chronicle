@@ -547,46 +547,9 @@
 }
 
 .activity-type-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
   margin-bottom: 20px;
 }
 
-.activity-chip {
-  display: inline-block;
-  padding: 8px 18px;
-  border-radius: 20px;
-  background: #23263a;
-  color: #fff;
-  font-weight: 500;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: background 0.2s, border 0.2s, color 0.2s;
-  margin-right: 8px;
-  margin-bottom: 8px;
-}
-
-.activity-chip.selected {
-  background: #007bff;
-  color: #fff;
-  border-color: #007bff;
-}
-
-/* Make Story, Raid, and Dungeon chips more prominent */
-.activity-chip:nth-child(2),
-.activity-chip:nth-child(3),
-.activity-chip:nth-child(4) {
-  background: #1a1b1e;
-  color: #ffd700;
-  font-weight: bold;
-  border: 2px solid #ffd700;
-}
-
-.activity-chip.selected:nth-child(2),
-.activity-chip.selected:nth-child(3),
-.activity-chip.selected:nth-child(4) {
-  background: #ffd700;
-  color: #1a1b1e;
-  border-color: #ffd700;
+.activity-type-filter {
+  margin-bottom: 20px;
 } 
