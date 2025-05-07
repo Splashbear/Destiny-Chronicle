@@ -54,8 +54,7 @@
             "development": {
               "optimization": false,
               "extractLicenses": false,
-              "sourceMap": true,
-              "baseHref": "/"
+              "sourceMap": true
             }
           },
           "defaultConfiguration": "production"
