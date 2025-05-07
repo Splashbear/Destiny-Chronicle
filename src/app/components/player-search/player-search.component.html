@@ -99,49 +99,104 @@
       <small>Type or pick a date (YYYY-MM-DD)</small>
     </div>
 
+    <!-- Activity Type Filter Chips -->
+    <div class="activity-type-filter">
+      <span *ngFor="let type of activityTypeOptions" 
+            class="activity-chip" 
+            [class.selected]="selectedActivityType.label === type.label"
+            (click)="selectedActivityType = type">
+        {{ type.label }}
+      </span>
+    </div>
+
     <!-- Activity History -->
-    <div class="grouped-activities" *ngIf="selectedPlayers.length > 0 && selectedDate">
-      <ng-container *ngIf="getGroupedYears().length === 0">
-        <div class="no-activity-placeholder">
-          <span class="tricorn-logo">🎮</span>
-          No activities found for this date
-        </div>
-      </ng-container>
-      <ng-container *ngFor="let year of getGroupedYears()">
-        <div class="year-section">
-          <h2>{{ selectedDate | date:'MMMM d' }}, {{ year }}</h2>
-          <ng-container *ngFor="let type of getGroupedTypes(year)">
-            <ng-container *ngFor="let entry of getGroupedEntries(year, type)">
+    <div class="activity-history" *ngIf="selectedPlayers.length > 0 && selectedDate">
+      <!-- Date Header -->
+      <div class="date-header">
+        <h2>{{ selectedDate | date:'MMMM d' }} Activities</h2>
+      </div>
+
+      <!-- Activity List -->
+      <div class="activity-list">
+        <ng-container *ngFor="let yearGroup of getGroupedActivitiesByYearAndType()">
+          <!-- Year Section -->
+          <div class="year-section">
+            <h3 class="year-header">{{ yearGroup.year }}</h3>
+            
+            <ng-container *ngFor="let activityType of getGroupedTypes(yearGroup.year)">
+              <!-- Activity Type Group -->
               <div class="activity-type-group">
-                <div class="activity-header">
-                  <span *ngIf="entry.game === 'D1'" class="tricorn-logo">🎮</span>
-                  <span *ngIf="entry.game === 'D2'" class="tricorn-logo">🟪</span>
-                  <strong>{{ entry.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</strong> -
-                  <span>{{ type }}</span>
-                  <span>({{ entry.platform }})</span>
-                  <span>- {{ entry.player.displayName }}</span>
+                <div class="activity-type-header">
+                  <img [src]="getActivityTypeIcon(activityType)" 
+                       alt="" 
+                       class="activity-icon"
+                       onerror="this.src='assets/icons/activity.png'">
+                  <span class="activity-type-name">{{ activityType }}</span>
                 </div>
-                <div *ngFor="let activity of entry.activities" class="activity-card">
-                  <div class="activity-info">
-                    <h4>
-                      <img *ngIf="manifest.getActivityIcon(activity.activityDetails?.referenceId)" 
-                           [src]="manifest.getActivityIcon(activity.activityDetails?.referenceId)" 
-                           alt="" style="height: 1em; vertical-align: middle; margin-right: 0.5em;">
-                      {{ manifest.getActivityName(activity.activityDetails?.referenceId) || 'Unknown Activity' }}
-                    </h4>
-                    <p>{{ activity.values?.kills?.basic?.displayValue }} Kills</p>
-                    <p>{{ activity.values?.deaths?.basic?.displayValue }} Deaths</p>
-                    <p>{{ activity.values?.killsDeathsRatio?.basic?.displayValue }} K/D</p>
+
+                <ng-container *ngFor="let entry of getGroupedEntries(yearGroup.year, activityType)">
+                  <!-- Game/Platform Indicator -->
+                  <div class="game-platform-indicator">
+                    <span class="game-badge" [ngClass]="entry.game.toLowerCase()">
+                      {{ entry.game }}
+                    </span>
+                    <span class="platform-badge">
+                      {{ entry.platform }}
+                    </span>
+                    <span class="player-name">{{ entry.player.displayName }}</span>
                   </div>
-                  <button (click)="viewPGCR(activity.activityDetails.instanceId)">
-                    View Details
-                  </button>
-                </div>
+
+                  <!-- Activities -->
+                  <div class="activity-cards">
+                    <div class="activity-card" *ngFor="let activity of getFilteredActivities(entry.activities, entry.game)">
+                      <!-- Activity Header -->
+                      <div class="activity-header">
+                        <img [src]="manifest.getActivityIcon(activity.activityDetails.referenceId || '', entry.game === 'D1')"
+                             [alt]="manifest.getActivityName(activity.activityDetails.referenceId || '', entry.game === 'D1')"
+                             class="activity-icon">
+                        <div class="activity-info">
+                          <div class="activity-name">
+                            {{ manifest.getActivityName(activity.activityDetails.referenceId || '', entry.game === 'D1') || 'Unknown Activity' }}
+                          </div>
+                          <div class="activity-stats">
+                            <div class="stat">
+                              <span class="stat-label">K/D/A</span>
+                              <span class="stat-value">
+                                {{ activity.values.kills?.basic?.value || 0 }}/{{ activity.values.deaths?.basic?.value || 0 }}/{{ activity.values.assists?.basic?.value || 0 }}
+                              </span>
+                            </div>
+                            <div class="stat">
+                              <span class="stat-label">Score</span>
+                              <span class="stat-value">{{ activity.values.score?.basic?.value || 0 | number }}</span>
+                            </div>
+                            <div class="stat">
+                              <span class="stat-label">Time</span>
+                              <span class="stat-value">{{ formatTime(activity.values.timePlayedSeconds?.basic?.value || 0) }}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- View Details Button -->
+                      <button class="view-details-btn" (click)="viewPGCR(activity.activityDetails.instanceId || '')">
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                </ng-container>
               </div>
             </ng-container>
-          </ng-container>
-        </div>
-      </ng-container>
+          </div>
+        </ng-container>
+      </div>
     </div>
+  </div>
+</div>
+
+<!-- PGCR Modal -->
+<div class="modal-overlay" *ngIf="showPGCRModal" (click)="closePGCRModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <button class="close-button" (click)="closePGCRModal()">×</button>
+    <app-pgcr-details [pgcr]="selectedPGCR"></app-pgcr-details>
   </div>
 </div> 

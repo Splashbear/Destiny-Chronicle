@@ -4,11 +4,28 @@ import { FormsModule } from '@angular/forms';
 import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
 import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
+import { ActivityCacheService } from '../../services/activity-cache.service';
+import { PGCRCacheService } from '../../services/pgcr-cache.service';
+import { PGCRDetailsComponent } from '../pgcr-details/pgcr-details.component';
+import { ActivityHistory, Character } from '../../models/activity-history.model';
+import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption } from '../../models/activity-types';
+
+interface YearGroup {
+  year: string;
+  types: { [type: string]: ActivityEntry[] };
+}
+
+interface ActivityEntry {
+  game: string;
+  platform: string;
+  player: PlayerSearchResult;
+  activities: ActivityHistory[];
+}
 
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PGCRDetailsComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.css']
 })
@@ -20,14 +37,20 @@ export class PlayerSearchComponent implements OnInit {
   selectedPlayers: PlayerSearchResult[] = [];
   selectedCharacterIds: { [key: string]: string | undefined } = {};
   characters: { [key: string]: any[] } = {};
-  activities: { [key: string]: any[] } = {};
+  activities: { [key: string]: ActivityHistory[] } = {};
   loading: { [key: string]: boolean } = {};
   error: { [key: string]: string } = {};
+  selectedPGCR: any = null;
+  showPGCRModal: boolean = false;
+  activityTypeOptions = ACTIVITY_TYPE_OPTIONS;
+  selectedActivityType: ActivityTypeOption = ACTIVITY_TYPE_OPTIONS[0]; // Default to 'All'
 
   constructor(
     private bungieService: BungieApiService,
     public manifest: DestinyManifestService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private activityCacheService: ActivityCacheService,
+    private pgcrCacheService: PGCRCacheService
   ) {}
 
   ngOnInit(): void {
@@ -201,13 +224,21 @@ export class PlayerSearchComponent implements OnInit {
       if (isD1) {
         this.characters[player.membershipId] = profile.data?.characters || [];
         for (const char of this.characters[player.membershipId]) {
-          await this.loadActivityHistoryForCharacter(player, char.characterBase.characterId);
+          await this.loadActivityHistoryForCharacter({
+            characterId: char.characterId,
+            membershipType: player.membershipType,
+            membershipId: player.membershipId
+          });
         }
       } else {
         const characters = Object.values(profile.characters?.data || {}) as Array<{ characterId: string }>;
         this.characters[player.membershipId] = characters;
         for (const char of characters) {
-          await this.loadActivityHistoryForCharacter(player, char.characterId);
+          await this.loadActivityHistoryForCharacter({
+            characterId: char.characterId,
+            membershipType: player.membershipType,
+            membershipId: player.membershipId
+          });
         }
       }
     } catch (error: any) {
@@ -223,100 +254,133 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
-  async loadActivityHistoryForCharacter(player: PlayerSearchResult, characterId: string) {
-    const key = `activities-${player.membershipId}-${characterId}`;
-    this.loading[key] = true;
-    this.error[key] = '';
+  async loadActivityHistoryForCharacter(character: Character): Promise<void> {
     try {
-      const isD1 = this.isD1Player(player);
-      let allActivities: any[] = [];
+      console.log(`Loading activity history for character ${character.characterId}`);
+      
+      // Check cache first
+      const cachedActivities = this.activityCacheService.getCachedActivities(
+        character.membershipType,
+        character.membershipId,
+        character.characterId
+      );
+
+      if (cachedActivities) {
+        console.log('Using cached activities');
+        this.processActivities(cachedActivities, character);
+        return;
+      }
+
+      console.log('No cache found, fetching from API');
       let page = 0;
       let hasMore = true;
-      let oldestDate: string | null = null;
-      let newestDate: string | null = null;
+      const allActivities: ActivityHistory[] = [];
 
-      console.log(`Starting activity history load for ${player.displayName} (${isD1 ? 'D1' : 'D2'})`);
+      // Determine if this is a D1 or D2 character
+      const isD1 = this.isD1Player({ membershipType: character.membershipType, membershipId: character.membershipId } as PlayerSearchResult);
 
       while (hasMore) {
-        console.log(`Loading page ${page} for ${player.displayName} (${isD1 ? 'D1' : 'D2'})`);
-        const activities = await firstValueFrom(
+        console.log(`Fetching page ${page + 1}`);
+        const response = await firstValueFrom(
           isD1
-            ? this.bungieService.getD1ActivityHistory(player.membershipType, player.membershipId, characterId, undefined, page)
-            : this.bungieService.getActivityHistory(player.membershipType, player.membershipId, characterId, undefined, page)
+            ? this.bungieService.getD1ActivityHistory(
+                character.membershipType,
+                character.membershipId,
+                character.characterId,
+                page
+              )
+            : this.bungieService.getActivityHistory(
+                character.membershipType,
+                character.membershipId,
+                character.characterId,
+                page
+              )
         );
 
-        if (!activities || !activities.activities || activities.activities.length === 0) {
-          console.log(`No more activities found for page ${page}`);
+        const activities = response?.Response?.activities || [];
+        if (!activities || activities.length === 0) {
+          hasMore = false;
+          continue;
+        }
+
+        allActivities.push(...activities);
+        console.log(`Retrieved ${activities.length} activities for page ${page + 1}`);
+
+        // Check if we've reached the end
+        if (activities.length < 250) { // Bungie's page size
           hasMore = false;
         } else {
-          // Track the date range
-          const oldestActivity = activities.activities[activities.activities.length - 1];
-          const newestActivity = activities.activities[0];
-          
-          if (oldestActivity && oldestActivity.period) {
-            const activityDate = new Date(oldestActivity.period).toISOString().split('T')[0];
-            if (!oldestDate || activityDate < oldestDate) {
-              oldestDate = activityDate;
-            }
-          }
-          
-          if (newestActivity && newestActivity.period) {
-            const activityDate = new Date(newestActivity.period).toISOString().split('T')[0];
-            if (!newestDate || activityDate > newestDate) {
-              newestDate = activityDate;
-            }
-          }
-
-          allActivities = allActivities.concat(activities.activities);
-          console.log(`Loaded ${activities.activities.length} activities for page ${page}. Total: ${allActivities.length}`);
-          console.log(`Current date range: ${oldestDate} to ${newestDate}`);
-          
           page++;
-          
-          // Safety check - if we've loaded more than 1000 activities, stop
-          if (allActivities.length >= 1000) {
-            console.log(`Reached maximum activity limit (1000) for ${player.displayName}`);
-            hasMore = false;
-          }
         }
       }
 
-      console.log(`Final activity load summary for ${player.displayName}:`, {
-        totalActivities: allActivities.length,
-        dateRange: `${oldestDate} to ${newestDate}`,
-        firstActivity: allActivities[0] ? {
-          date: new Date(allActivities[0].period).toISOString(),
-          type: allActivities[0].activityDetails?.mode,
-          referenceId: allActivities[0].activityDetails?.referenceId
-        } : null,
-        lastActivity: allActivities[allActivities.length - 1] ? {
-          date: new Date(allActivities[allActivities.length - 1].period).toISOString(),
-          type: allActivities[allActivities.length - 1].activityDetails?.mode,
-          referenceId: allActivities[allActivities.length - 1].activityDetails?.referenceId
-        } : null
-      });
+      // Cache the activities
+      this.activityCacheService.cacheActivities(
+        allActivities,
+        character.membershipType,
+        character.membershipId,
+        character.characterId
+      );
 
-      this.activities[key] = allActivities;
-    } catch (error: any) {
+      this.processActivities(allActivities, character);
+    } catch (error) {
       console.error('Error loading activity history:', error);
-      if (error.status === 503) {
-        this.error[key] = 'Bungie API is temporarily unavailable. Please try again in a few minutes.';
-      } else {
-        this.error[key] = 'Error loading activity history';
-      }
-    } finally {
-      this.loading[key] = false;
+      // Handle error appropriately
     }
+  }
+
+  private processActivities(activities: ActivityHistory[], character: Character): void {
+    // Store activities in the activities map
+    const key = `activities-${character.membershipId}-${character.characterId}`;
+    this.activities[key] = activities;
+    
+    // Update the UI
+    this.cdr.detectChanges();
+  }
+
+  private updateActivityDisplay(): void {
+    // Force change detection to update the view
+    this.cdr.detectChanges();
   }
 
   async viewPGCR(activityId: string) {
     try {
-      const pgcr = await this.bungieService.getPGCR(activityId).toPromise();
-      console.log('PGCR:', pgcr);
-      // TODO: Implement PGCR display
+      // First check if we have a cached PGCR
+      const cachedPGCR = this.pgcrCacheService.getPGCR(activityId);
+      
+      if (cachedPGCR) {
+        console.log('Using cached PGCR');
+        this.showPGCRDetails(cachedPGCR);
+        return;
+      }
+
+      // If not cached, fetch from API
+      console.log('Fetching PGCR from API');
+      const pgcr = await firstValueFrom(this.bungieService.getPGCR(activityId));
+      
+      if (!pgcr) {
+        throw new Error('No PGCR data received');
+      }
+
+      // Cache the PGCR data
+      this.pgcrCacheService.cachePGCR(activityId, pgcr, true);
+      
+      // Show the details
+      this.showPGCRDetails(pgcr);
     } catch (error) {
       console.error('Error loading PGCR:', error);
+      // TODO: Show error to user
     }
+  }
+
+  private showPGCRDetails(pgcr: any) {
+    this.selectedPGCR = pgcr;
+    this.showPGCRModal = true;
+  }
+
+  closePGCRModal() {
+    this.showPGCRModal = false;
+    this.selectedPGCR = null;
   }
 
   getPlatformName(membershipType: number): string {
@@ -451,44 +515,17 @@ export class PlayerSearchComponent implements OnInit {
     return grouped;
   }
 
-  /**
-   * Returns activity types for a given year
-   */
-  getGroupedTypes(year: string): string[] {
-    return Object.keys(this.getGroupedActivitiesByYearAndType()[year] || {});
-  }
+  getGroupedActivitiesByYearAndType(): YearGroup[] {
+    const grouped: { [year: string]: { [type: string]: ActivityEntry[] } } = {};
+    
+    if (!this.selectedDate) return [];
 
-  /**
-   * Returns entries for a given year and type
-   */
-  getGroupedEntries(year: string, type: string) {
-    return (this.getGroupedActivitiesByYearAndType()[year]?.[type]) || [];
-  }
-
-  /**
-   * Returns years as a sorted array (descending) for grouped activities
-   */
-  getGroupedYears(): string[] {
-    return Object.keys(this.getGroupedActivitiesByYearAndType()).sort((a, b) => +b - +a);
-  }
-
-  /**
-   * Returns activities grouped by year and type for the selected date, for all selected players.
-   * Structure: { [year: string]: { [type: string]: { game, platform, player, activities }[] } }
-   */
-  getGroupedActivitiesByYearAndType() {
-    const grouped: { [year: string]: { [type: string]: { game: string, platform: string, player: PlayerSearchResult, activities: any[] }[] } } = {};
-    if (!this.selectedDate) return grouped;
-
-    console.log('=== Activity Filtering Debug ===');
-    console.log('Selected date:', this.selectedDate);
-
-    this.selectedPlayers.forEach(player => {
+    this.selectedPlayers.forEach((player: PlayerSearchResult) => {
       const game = this.isD1Player(player) ? 'D1' : 'D2';
       const platform = this.getPlatformName(player.membershipType);
       
       // Get all activities for this player across all characters
-      const playerActivities: any[] = [];
+      const playerActivities: ActivityHistory[] = [];
       Object.keys(this.activities)
         .filter(key => key.startsWith(`activities-${player.membershipId}-`))
         .forEach(key => {
@@ -496,18 +533,14 @@ export class PlayerSearchComponent implements OnInit {
           playerActivities.push(...activities);
         });
 
-      this.logActivitySummary(player, playerActivities);
-
       // Filter activities for the selected date
       const filtered = playerActivities.filter(activity =>
         this.isActivityOnDate(activity, this.selectedDate)
       );
 
-      console.log(`Filtered to ${filtered.length} activities for ${this.selectedDate}`);
-
       filtered.forEach(activity => {
         const year = new Date(activity.period).getFullYear().toString();
-        const type = activity.activityDetails?.mode || 'Unknown';
+        const type = this.getActivityType(activity.activityDetails?.mode || 0);
         
         if (!grouped[year]) grouped[year] = {};
         if (!grouped[year][type]) grouped[year][type] = [];
@@ -526,22 +559,48 @@ export class PlayerSearchComponent implements OnInit {
       });
     });
 
-    console.log('=== Final Grouping ===');
-    Object.keys(grouped).forEach(year => {
-      console.log(`${year}: ${Object.keys(grouped[year]).length} activity types`);
-    });
-
-    return grouped;
+    // Convert to array format
+    return Object.entries(grouped).map(([year, types]) => ({
+      year,
+      types
+    })).sort((a, b) => +b.year - +a.year);
   }
 
-  onDateChange(newDate: string) {
+  getGroupedTypes(year: string): string[] {
+    const yearGroup = this.getGroupedActivitiesByYearAndType().find(g => g.year === year);
+    return yearGroup ? Object.keys(yearGroup.types) : [];
+  }
+
+  getGroupedEntries(year: string, type: string): ActivityEntry[] {
+    const yearGroup = this.getGroupedActivitiesByYearAndType().find(g => g.year === year);
+    return yearGroup?.types[type] || [];
+  }
+
+  getActivityType(mode: number): string {
+    switch (mode) {
+      case 4:
+        return 'Raid';
+      case 5:
+        return 'Crucible';
+      case 6:
+        return 'Strike';
+      case 46:
+        return 'Nightfall';
+      case 82:
+        return 'Dungeon';
+      default:
+        return 'Other';
+    }
+  }
+
+  onDateChange(newDate: string): void {
     console.log('Date changed to:', newDate);
     this.selectedDate = newDate;
     this.cdr.detectChanges();
   }
 
-  onDateInput(event: any) {
-    const value = event.target.value;
+  onDateInput(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
     console.log('Date input value:', value);
     // Accept only valid yyyy-MM-dd format
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -549,5 +608,53 @@ export class PlayerSearchComponent implements OnInit {
       console.log('Setting selected date to:', value);
       this.cdr.detectChanges();
     }
+  }
+
+  getActivityTypeIcon(activityType: string): string {
+    const activityHash = this.getActivityTypeHash(activityType);
+    return this.manifest.getActivityIcon(activityHash) || '';
+  }
+
+  private getActivityTypeHash(activityType: string): string {
+    switch (activityType.toLowerCase()) {
+      case 'raid':
+        return '2043403989'; // Generic raid icon
+      case 'crucible':
+        return '1164760504'; // Generic crucible icon
+      case 'strike':
+        return '4110605575'; // Generic strike icon
+      case 'nightfall':
+        return '3789021730'; // Generic nightfall icon
+      case 'dungeon':
+        return '608898761'; // Generic dungeon icon
+      default:
+        return '2043403989'; // Default to raid icon
+    }
+  }
+
+  formatTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
+  }
+
+  getFilteredActivities(activities: ActivityHistory[], game: string): ActivityHistory[] {
+    if (!this.selectedActivityType || this.selectedActivityType.label === 'All') {
+      return activities;
+    }
+    return activities.filter(activity => {
+      const mode = activity.activityDetails.mode;
+      if (this.selectedActivityType.label === 'Dungeon') {
+        return game === 'D2' && mode === this.selectedActivityType.d2Mode;
+      }
+      return (
+        (game === 'D1' && mode === this.selectedActivityType.d1Mode) ||
+        (game === 'D2' && mode === this.selectedActivityType.d2Mode)
+      );
+    });
   }
 } 

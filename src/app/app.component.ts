@@ -6,8 +6,10 @@ import { PlayerSearchComponent } from './components/player-search/player-search.
   selector: 'app-root',
   standalone: true,
   imports: [RouterOutlet, PlayerSearchComponent],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  template: `
+    <router-outlet></router-outlet>
+  `,
+  styles: []
 })
 export class AppComponent {
   title = 'destiny-chronicle';

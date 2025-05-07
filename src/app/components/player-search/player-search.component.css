@@ -314,4 +314,279 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #23263a;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+}
+
+.close-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #b3b8d1;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 5px;
+  line-height: 1;
+}
+
+.close-button:hover {
+  color: #fff;
+}
+
+.activity-history {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #181a23;
+  color: #fff;
+}
+
+.date-header {
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #35395a;
+}
+
+.date-header h2 {
+  font-size: 24px;
+  color: #fff;
+  margin: 0;
+}
+
+.year-section {
+  margin-bottom: 32px;
+}
+
+.year-header {
+  font-size: 20px;
+  color: #b3b8d1;
+  margin-bottom: 16px;
+}
+
+.activity-type-group {
+  background: #23263a;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.activity-type-header {
+  padding: 12px 16px;
+  background: #2a2d42;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  padding: 2px;
+}
+
+.activity-type-header .activity-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.activity-header .activity-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.activity-type-name {
+  font-weight: 600;
+  color: #fff;
+}
+
+.game-platform-indicator {
+  padding: 8px 16px;
+  background: #1a1b1e;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.game-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.game-badge.d1 {
+  background: #6c757d;
+}
+
+.game-badge.d2 {
+  background: #28a745;
+}
+
+.platform-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #35395a;
+  font-size: 12px;
+}
+
+.player-name {
+  color: #b3b8d1;
+  font-size: 14px;
+}
+
+.activity-cards {
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.activity-card {
+  background: #2a2d42;
+  border-radius: 6px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-name {
+  font-weight: 500;
+  color: #fff;
+}
+
+.activity-time {
+  margin-left: auto;
+  color: #b3b8d1;
+  font-size: 14px;
+}
+
+.activity-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.stat-group {
+  display: flex;
+  gap: 16px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #b3b8d1;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.view-details-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  align-self: flex-start;
+}
+
+.view-details-btn:hover {
+  background: #0056b3;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .activity-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-group {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+.activity-type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.activity-chip {
+  display: inline-block;
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: #23263a;
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: background 0.2s, border 0.2s, color 0.2s;
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.activity-chip.selected {
+  background: #007bff;
+  color: #fff;
+  border-color: #007bff;
+}
+
+/* Make Story, Raid, and Dungeon chips more prominent */
+.activity-chip:nth-child(2),
+.activity-chip:nth-child(3),
+.activity-chip:nth-child(4) {
+  background: #1a1b1e;
+  color: #ffd700;
+  font-weight: bold;
+  border: 2px solid #ffd700;
+}
+
+.activity-chip.selected:nth-child(2),
+.activity-chip.selected:nth-child(3),
+.activity-chip.selected:nth-child(4) {
+  background: #ffd700;
+  color: #1a1b1e;
+  border-color: #ffd700;
 } 
