@@ -27,44 +27,14 @@ jobs:
           rm -rf dist/
           
           # Run the build with production configuration
-          npm run build -- --configuration production --base-href=/Destiny-Chronicle/
+          npm run build -- --configuration production
           
-          # Debug: List all relevant directories
-          echo "Listing build output directories:"
-          ls -la dist/destiny-chronicle/browser/browser || echo "Browser directory not found"
-          ls -la dist/destiny-chronicle/browser || echo "Chronicle directory not found"
-          ls -la dist || echo "Dist directory not found"
-          
-          # Debug: List contents of dist directory recursively
-          echo "Recursive listing of dist directory:"
-          find dist -type f -name "index.html" || echo "No index.html found in dist"
-          
-          # Debug: Show contents of index.html if it exists
-          if [ -f "dist/destiny-chronicle/browser/browser/index.html" ]; then
-            echo "Contents of index.html:"
-            head -n 20 dist/destiny-chronicle/browser/browser/index.html
-          fi
-
-      - name: Copy index.html to 404.html
-        run: |
-          # Ensure the browser directory exists
-          mkdir -p dist/destiny-chronicle/browser/browser
-          
-          # Try to find and copy index.html
-          if [ -f "dist/destiny-chronicle/browser/browser/index.html" ]; then
-            echo "Found index.html in browser directory"
-            cp dist/destiny-chronicle/browser/browser/index.html dist/destiny-chronicle/browser/browser/404.html
-          elif [ -f "dist/destiny-chronicle/browser/index.html" ]; then
-            echo "Found index.html in chronicle directory"
-            cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
-          else
-            echo "Warning: index.html not found in expected locations"
-            echo "Creating a placeholder 404.html"
-            echo "<html><body><h1>404 Not Found</h1><p>The requested page could not be found.</p></body></html>" > dist/destiny-chronicle/browser/browser/404.html
-          fi
+          # Debug: List build output
+          echo "Listing build output:"
+          ls -la dist/destiny-chronicle/browser/
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist/destiny-chronicle/browser/browser
+          folder: dist/destiny-chronicle/browser
           branch: gh-pages 

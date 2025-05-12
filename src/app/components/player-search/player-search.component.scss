@@ -1,3 +1,5 @@
+@use "sass:color";
+
 .player-search-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -59,7 +61,7 @@ button {
   transition: background-color 0.2s;
 
   &:hover {
-    background-color: darken(#f5c542, 10%);
+    background-color: color.adjust(#f5c542, $lightness: -10%);
   }
 
   &:disabled {
