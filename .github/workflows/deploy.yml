@@ -22,14 +22,12 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: |
-          npm run build -- --configuration production --base-href=/Destiny-Chronicle/ --output-path=dist/destiny-chronicle/browser
+        run: npm run build -- --configuration production --base-href=/Destiny-Chronicle/
 
       - name: Copy index.html to 404.html
-        run: |
-          cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
+        run: cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
 
-      - name: Deploy
+      - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist/destiny-chronicle/browser
