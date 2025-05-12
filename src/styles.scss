@@ -1,14 +1,57 @@
 /* You can add global styles to this file, and also import other style files */
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Destiny theme colors */
+:root {
+  --destiny-blue: #0a0f1c;
+  --destiny-gold: #f5c542;
+  --destiny-red: #c41e3a;
+  --destiny-green: #2ecc71;
+  --destiny-purple: #9b59b6;
+}
+
+/* Base styles */
 body {
-  background-color: #0a0f1c;  /* Destiny's signature deep blue */
+  background-color: var(--destiny-blue);
   margin: 0;
   padding: 0;
   min-height: 100vh;
   color: #ffffff;  /* White text for better contrast */
+  font-family: 'Roboto', sans-serif;
 }
 
 /* Ensure all content takes up full height */
 html, body {
   height: 100%;
+}
+
+/* Destiny-themed utility classes */
+.bg-destiny-d1 {
+  background-color: var(--destiny-red);
+}
+
+.bg-destiny-d2 {
+  background-color: var(--destiny-blue);
+}
+
+.text-destiny-gold {
+  color: var(--destiny-gold);
+}
+
+/* Loading spinner */
+.spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top: 3px solid var(--destiny-gold);
+  width: 24px;
+  height: 24px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }

@@ -912,27 +912,32 @@ export class PlayerSearchComponent implements OnInit {
    * properly grouped by year in the UI.
    */
   private isActivityOnDate(activity: ActivityHistory, targetDate: Date): boolean {
+    if (!activity.period) {
+      console.log('[DEBUG] Activity has no period:', activity);
+      return false;
+    }
+
     const activityDate = new Date(activity.period);
     
-    // Compare month and day in local time
-    const activityMonth = activityDate.getMonth() + 1;
+    // Get month and day from both dates
+    const activityMonth = activityDate.getMonth() + 1; // getMonth() returns 0-11
     const activityDay = activityDate.getDate();
     const targetMonth = targetDate.getMonth() + 1;
     const targetDay = targetDate.getDate();
 
-    const matches = activityMonth === targetMonth && activityDay === targetDay;
+    // Log the comparison for debugging
+    console.log('[DEBUG] Comparing dates:', {
+      activityDate: activityDate.toISOString(),
+      activityMonth,
+      activityDay,
+      targetDate: targetDate.toISOString(),
+      targetMonth,
+      targetDay,
+      matches: activityMonth === targetMonth && activityDay === targetDay
+    });
 
-    // Log matches for debugging, but only once per activity
-    if (matches) {
-      console.log('[DEBUG] Found matching activity:', {
-        period: activity.period,
-        local: activityDate.toLocaleString(),
-        type: this.getActivityType(activity.activityDetails?.mode || 0),
-        instanceId: activity.activityDetails?.instanceId
-      });
-    }
-
-    return matches;
+    // Compare month and day only
+    return activityMonth === targetMonth && activityDay === targetDay;
   }
 
   /**
@@ -1143,6 +1148,7 @@ export class PlayerSearchComponent implements OnInit {
     }
     const selectedDateObj = new Date(this.selectedDate);
     selectedDateObj.setHours(0, 0, 0, 0);
+    console.log('[DEBUG] Selected date:', selectedDateObj.toISOString());
     
     if (!this.selectedPlayers.length) {
       console.log('[DEBUG] No players selected, skipping load');
@@ -1155,17 +1161,24 @@ export class PlayerSearchComponent implements OnInit {
     
     // Process all players and characters first
     for (const player of this.selectedPlayers) {
+      console.log(`[DEBUG] Processing player: ${player.displayName}`);
       const characterObjs = this.characters[player.membershipId] || [];
+      console.log(`[DEBUG] Found ${characterObjs.length} characters for player`);
       
       for (const char of characterObjs) {
         const characterId = char.characterId || char.characterBase?.characterId;
-        if (!characterId) continue;
+        if (!characterId) {
+          console.log('[DEBUG] Skipping character - no characterId found');
+          continue;
+        }
         
         try {
+          console.log(`[DEBUG] Loading activities for character ${characterId}`);
           const characterActivities = await this.activityDb.getAllActivitiesForCharacter(
             player.membershipId,
             characterId
           );
+          console.log(`[DEBUG] Found ${characterActivities.length} total activities for character ${characterId}`);
           
           // Filter and deduplicate activities
           const filteredActivities = characterActivities.filter(activity => {
@@ -1178,12 +1191,19 @@ export class PlayerSearchComponent implements OnInit {
             // Check if activity matches the selected date
             const matches = this.isActivityOnDate(activity, selectedDateObj);
             if (matches) {
+              console.log(`[DEBUG] Activity matches date:`, {
+                instanceId,
+                period: activity.period,
+                date: new Date(activity.period).toISOString(),
+                selectedDate: selectedDateObj.toISOString()
+              });
               uniqueActivities.add(instanceId);
               return true;
             }
             return false;
           });
           
+          console.log(`[DEBUG] Filtered to ${filteredActivities.length} matching activities for character ${characterId}`);
           allActivities.push(...filteredActivities);
         } catch (error) {
           console.error(`[DEBUG] Error loading activities for character ${characterId}:`, error);
@@ -1191,12 +1211,13 @@ export class PlayerSearchComponent implements OnInit {
       }
     }
     
-    console.log(`[DEBUG] Found ${allActivities.length} unique activities for date ${selectedDateObj.toLocaleDateString()}`);
+    console.log(`[DEBUG] Found ${allActivities.length} unique activities for date ${selectedDateObj.toISOString()}`);
     
     // Process activities once at the end
     if (allActivities.length > 0) {
       // Group activities by year and type
       const groupedActivities = this.groupActivitiesByYearAndType(allActivities);
+      console.log('[DEBUG] Grouped activities:', groupedActivities);
       this.groupedActivitiesByAccount = groupedActivities;
       
       // Update UI once
