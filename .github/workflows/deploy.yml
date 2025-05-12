@@ -23,10 +23,10 @@ jobs:
 
       - name: Build
         run: |
-          # Create output directories if they don't exist
-          mkdir -p dist/destiny-chronicle/browser
+          # Clean any existing build artifacts
+          rm -rf dist/
           
-          # Run the build
+          # Run the build with production configuration
           npm run build -- --configuration production --base-href=/Destiny-Chronicle/
           
           # Debug: List all relevant directories
@@ -38,6 +38,12 @@ jobs:
           # Debug: List contents of dist directory recursively
           echo "Recursive listing of dist directory:"
           find dist -type f -name "index.html" || echo "No index.html found in dist"
+          
+          # Debug: Show contents of index.html if it exists
+          if [ -f "dist/destiny-chronicle/browser/index.html" ]; then
+            echo "Contents of index.html:"
+            head -n 20 dist/destiny-chronicle/browser/index.html
+          fi
 
       - name: Copy index.html to 404.html
         run: |
