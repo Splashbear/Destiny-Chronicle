@@ -22,10 +22,23 @@ jobs:
         run: npm ci
 
       - name: Build
-        run: npm run build -- --configuration production --base-href=/Destiny-Chronicle/
+        run: |
+          npm run build -- --configuration production --base-href=/Destiny-Chronicle/
+          echo "Listing build output directory:"
+          ls -la dist/destiny-chronicle/browser || echo "Browser directory not found"
+          ls -la dist/destiny-chronicle || echo "Chronicle directory not found"
+          ls -la dist || echo "Dist directory not found"
 
       - name: Copy index.html to 404.html
-        run: cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
+        run: |
+          if [ -f "dist/destiny-chronicle/browser/index.html" ]; then
+            cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
+          elif [ -f "dist/destiny-chronicle/index.html" ]; then
+            cp dist/destiny-chronicle/index.html dist/destiny-chronicle/404.html
+          else
+            echo "Error: index.html not found in expected locations"
+            exit 1
+          fi
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
