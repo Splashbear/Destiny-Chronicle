@@ -88,7 +88,7 @@ interface ActivityCache {
   standalone: true,
   imports: [CommonModule, FormsModule, PGCRDetailsComponent, LoadingProgressComponent],
   templateUrl: './player-search.component.html',
-  styleUrls: ['./player-search.component.css']
+  styleUrls: ['./player-search.component.scss']
 })
 export class PlayerSearchComponent implements OnInit {
   d1XboxSearchTerm: string = '';

@@ -1,3 +1,21 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background-color: var(--destiny-blue);
+}
+
+.text-destiny-gold {
+  color: var(--destiny-gold);
+}
+
+.bg-slate-800\/95 {
+  background-color: rgba(30, 41, 59, 0.95);
+}
+
+.border-slate-700 {
+  border-color: rgb(51, 65, 85);
+}
+
 .app-container {
   min-height: 100vh;
   background-color: #1a1b1e;
