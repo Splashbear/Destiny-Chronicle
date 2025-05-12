@@ -1,0 +1,43 @@
+<div class="bg-slate-800 rounded-lg shadow-lg p-4 mb-4 hover:bg-slate-700 transition-colors">
+  <div class="flex items-center gap-4">
+    <!-- Game Icon (D1/D2) -->
+    <img [src]="gameIcon" alt="Game Icon" class="w-8 h-8">
+    
+    <!-- Activity Type & Name -->
+    <div class="flex-grow">
+      <div class="flex items-center gap-2">
+        <img [src]="activityTypeIcon" [alt]="activity.type" class="w-6 h-6">
+        <h3 class="text-lg font-semibold text-white">{{ activity.name }}</h3>
+      </div>
+      <p class="text-slate-300 text-sm">{{ activity.type }}</p>
+    </div>
+
+    <!-- Timestamp -->
+    <div class="text-right">
+      <p class="text-slate-400 text-sm">{{ activity.timestamp | date:'h:mm a' }}</p>
+      <p class="text-slate-500 text-xs">{{ activity.timestamp | date:'MMM d, y' }}</p>
+    </div>
+  </div>
+
+  <!-- Additional Details (expandable) -->
+  <div class="mt-4 text-slate-300" *ngIf="expanded">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="text-center p-2 bg-slate-700 rounded">
+        <p class="text-xs text-slate-400">Duration</p>
+        <p class="font-medium">{{ activity.duration }}</p>
+      </div>
+      <div class="text-center p-2 bg-slate-700 rounded">
+        <p class="text-xs text-slate-400">Score</p>
+        <p class="font-medium">{{ activity.score }}</p>
+      </div>
+      <div class="text-center p-2 bg-slate-700 rounded">
+        <p class="text-xs text-slate-400">K/D</p>
+        <p class="font-medium">{{ activity.kd }}</p>
+      </div>
+      <div class="text-center p-2 bg-slate-700 rounded">
+        <p class="text-xs text-slate-400">Standing</p>
+        <p class="font-medium">{{ activity.standing }}</p>
+      </div>
+    </div>
+  </div>
+</div> 

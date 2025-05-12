@@ -1,0 +1,27 @@
+<div class="flex items-center justify-between bg-slate-800 p-4 rounded-lg mb-6">
+  <!-- Previous Day -->
+  <button (click)="previousDay()" 
+          class="px-4 py-2 text-slate-300 hover:text-white transition-colors">
+    <span class="sr-only">Previous Day</span>
+    <i class="fas fa-chevron-left"></i>
+  </button>
+
+  <!-- Current Date -->
+  <div class="flex flex-col items-center">
+    <h2 class="text-2xl font-bold text-white">{{ selectedDate | date:'MMMM d, y' }}</h2>
+    <p class="text-slate-400 text-sm">Total Time: {{ totalPlayTime }}</p>
+  </div>
+
+  <!-- Next Day -->
+  <button (click)="nextDay()"
+          class="px-4 py-2 text-slate-300 hover:text-white transition-colors">
+    <span class="sr-only">Next Day</span>
+    <i class="fas fa-chevron-right"></i>
+  </button>
+
+  <!-- Date Picker -->
+  <input type="date" 
+         [value]="selectedDate | date:'yyyy-MM-dd'"
+         (change)="onDateChange($event)"
+         class="absolute opacity-0 cursor-pointer w-full h-full top-0 left-0">
+</div> 

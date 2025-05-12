@@ -1,200 +1,250 @@
-<div class="search-container">
-  <div class="search-boxes">
-    <!-- D1 Xbox Search -->
-    <div class="search-box">
-      <h3>Destiny 1 Xbox Search</h3>
-      <input
-        type="text"
-        [(ngModel)]="d1XboxSearchTerm"
-        placeholder="Enter Xbox gamertag"
-        (keyup.enter)="searchD1Player(d1XboxSearchTerm, 1)"
-      />
-      <button
-        (click)="searchD1Player(d1XboxSearchTerm, 1)"
-        [disabled]="loading['d1-xbox'] || !d1XboxSearchTerm"
-      >
-        {{ loading['d1-xbox'] ? 'Searching...' : 'Search' }}
-      </button>
-      <div *ngIf="error['d1-xbox']" class="error-message">
-        {{ error['d1-xbox'] }}
+<div class="max-w-4xl mx-auto p-4">
+  <app-loading-progress [progress]="loadingProgress"></app-loading-progress>
+  <div class="bg-slate-800/95 rounded-lg shadow-lg p-6">
+    <!-- Search Header -->
+    <h2 class="text-2xl font-bold text-white mb-6">Search Destiny Player</h2>
+
+    <!-- Selected Profiles -->
+    <div *ngIf="selectedPlayers.length > 0" class="mb-6 flex flex-wrap gap-2">
+      <div *ngFor="let player of selectedPlayers; let i = index" class="flex items-center bg-slate-700/80 rounded px-3 py-1 text-sm text-white gap-2">
+        <span class="font-semibold">{{ player.displayName }}</span>
+        <span class="px-2 py-0.5 rounded text-xs font-bold" [ngClass]="player.game === 'D1' ? 'bg-destiny-d1' : 'bg-destiny-d2'">{{ player.game }}</span>
+        <span class="text-slate-300">{{ player.platform }}</span>
+        <button (click)="removePlayer(i)" class="ml-1 text-red-400 hover:text-red-200" title="Remove">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
       </div>
     </div>
 
-    <!-- D1 PlayStation Search -->
-    <div class="search-box">
-      <h3>Destiny 1 PlayStation Search</h3>
-      <input
-        type="text"
-        [(ngModel)]="d1PsnSearchTerm"
-        placeholder="Enter PSN ID"
-        (keyup.enter)="searchD1Player(d1PsnSearchTerm, 2)"
-      />
-      <button
-        (click)="searchD1Player(d1PsnSearchTerm, 2)"
-        [disabled]="loading['d1-psn'] || !d1PsnSearchTerm"
-      >
-        {{ loading['d1-psn'] ? 'Searching...' : 'Search' }}
-      </button>
-      <div *ngIf="error['d1-psn']" class="error-message">
-        {{ error['d1-psn'] }}
+    <!-- Search Form -->
+    <div class="space-y-4">
+      <!-- Username Input -->
+      <div class="relative">
+        <label for="username" class="block text-sm font-medium text-slate-300 mb-2">Username</label>
+        <input type="text" 
+               id="username" 
+               [(ngModel)]="searchUsername"
+               [class.border-red-500]="errorMessage"
+               [attr.aria-invalid]="!!errorMessage"
+               class="w-full px-4 py-2 bg-slate-700/95 text-white rounded border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors"
+               placeholder="Enter username">
+        <div *ngIf="errorMessage" class="absolute -bottom-6 left-0 text-sm text-red-400 flex items-center">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          {{ errorMessage }}
+        </div>
       </div>
-    </div>
 
-    <!-- D2 Search -->
-    <div class="search-box">
-      <h3>Destiny 2 Search</h3>
-      <input
-        type="text"
-        [(ngModel)]="d2SearchTerm"
-        placeholder="Enter Bungie Name (e.g., Guardian#1234)"
-        (keyup.enter)="searchD2Player(d2SearchTerm)"
-      />
-      <button
-        (click)="searchD2Player(d2SearchTerm)"
-        [disabled]="loading['d2'] || !d2SearchTerm"
-      >
-        {{ loading['d2'] ? 'Searching...' : 'Search' }}
-      </button>
-      <div *ngIf="error['d2']" class="error-message">
-        {{ error['d2'] }}
+      <!-- Platform Select -->
+      <div class="relative">
+        <label for="platform" class="block text-sm font-medium text-slate-300 mb-2">Platform</label>
+        <select id="platform" 
+                [(ngModel)]="selectedPlatform"
+                class="w-full px-4 py-2 bg-slate-700/95 text-white rounded border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors">
+          <option *ngFor="let platform of platforms" [value]="platform.value">
+            {{ platform.label }}
+          </option>
+        </select>
       </div>
+
+      <!-- Game Select -->
+      <div class="relative">
+        <label for="game" class="block text-sm font-medium text-slate-300 mb-2">Game</label>
+        <select id="game" [(ngModel)]="selectedGame" class="w-full px-4 py-2 bg-slate-700/95 text-white rounded border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors">
+          <option value="D1">Destiny 1</option>
+          <option value="D2">Destiny 2</option>
+        </select>
+      </div>
+
+      <!-- Add Profile Button -->
+      <button (click)="addPlayer()" 
+              [disabled]="!searchUsername"
+              class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+        <span *ngIf="loading['search']" class="flex items-center justify-center">
+          <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Adding...
+        </span>
+        <span *ngIf="!loading['search']">Add Profile</span>
+      </button>
     </div>
   </div>
 
-  <!-- Loading Indicator -->
-  <div *ngIf="loading['characters'] || loading['activities']" class="loading-indicator">
-    Loading...
-  </div>
-
-  <!-- Selected Players -->
-  <div *ngIf="selectedPlayers.length > 0" class="player-history">
-    <h3>Selected Players</h3>
-    <div class="selected-players">
-      <div *ngFor="let player of selectedPlayers" class="player-card">
-        <h4>
-          {{ player.displayName }}
-          <span class="game-version" [ngClass]="isD1Player(player) ? 'd1' : 'd2'">
-            {{ isD1Player(player) ? 'D1' : 'D2' }}
-          </span>
-          <span *ngIf="player.isCrossSavePrimary" class="cross-save-indicator" title="Cross Save Primary Account" style="margin-left: 0.5em; vertical-align: middle;">
-            <img src="https://www.bungie.net/img/theme/destiny/icons/icon_crosssave.svg" alt="Cross Save" style="height: 1em; vertical-align: middle;" />
-          </span>
-        </h4>
-        <p class="platform">{{ getPlatformName(player.membershipType) }}</p>
-      </div>
-    </div>
-
-    <!-- Date Filter -->
-    <div class="date-filter">
-      <label for="date">Filter by Date:</label>
-      <input
-        type="date"
-        id="date"
-        [(ngModel)]="selectedDate"
-        (ngModelChange)="onDateChange($event)"
-        (input)="onDateInput($event)"
-        [disabled]="selectedPlayers.length === 0"
-        placeholder="YYYY-MM-DD"
-      />
-      <small>Type or pick a date (YYYY-MM-DD)</small>
-    </div>
-
-    <!-- Activity Type Filter Dropdown -->
-    <div class="activity-type-filter">
-      <label for="activityTypeSelect">Activity Type:</label>
-      <select id="activityTypeSelect" [(ngModel)]="selectedActivityType" (change)="onActivityTypeChange($event)">
-        <option *ngFor="let type of activityTypeOptions" [ngValue]="type">{{ type.label }}</option>
+  <!-- Date Picker -->
+  <div class="mt-6 flex items-center gap-2">
+    <label class="text-slate-300 font-medium">Select Date:</label>
+    <div class="flex gap-2">
+      <select #monthSelect [value]="currentMonth" (change)="onDateSelect(monthSelect.value, daySelect.value)" class="bg-slate-700 text-white rounded px-3 py-1 border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none">
+        <option value="1">January</option>
+        <option value="2">February</option>
+        <option value="3">March</option>
+        <option value="4">April</option>
+        <option value="5">May</option>
+        <option value="6">June</option>
+        <option value="7">July</option>
+        <option value="8">August</option>
+        <option value="9">September</option>
+        <option value="10">October</option>
+        <option value="11">November</option>
+        <option value="12">December</option>
+      </select>
+      <select #daySelect [value]="currentDay" (change)="onDateSelect(monthSelect.value, daySelect.value)" class="bg-slate-700 text-white rounded px-3 py-1 border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none">
+        <option *ngFor="let day of getDaysForMonth(monthSelect.value)" [value]="day">{{day}}</option>
       </select>
     </div>
+  </div>
 
-    <!-- Activity History -->
-    <div class="activity-history" *ngIf="selectedPlayers.length > 0 && selectedDate">
-      <!-- Date Header -->
-      <div class="date-header">
-        <h2>{{ selectedDate | date:'MMMM d' }} Activities</h2>
-      </div>
+  <!-- Account Stats Loading Indicator and Summary -->
+  <div *ngIf="loadingAccountStats" class="loading-indicator">
+    <span>Loading account stats...</span>
+    <div class="spinner"></div>
+  </div>
+  <div *ngIf="!loadingAccountStats && accountStats">
+    <div>
+      <strong>Total Time in Destiny:</strong>
+      {{ (accountStats.totalTime / 60) | number:'1.0-0' }}h =
+      {{ (accountStats.totalTime / 60 / 24) | number:'1.0-0' }}d
+      {{ (accountStats.totalTime % 60) | number:'1.0-0' }}m
+    </div>
+    <div>
+      <strong>Total Time in Activities:</strong>
+      {{ (accountStats.totalActivityTime / 3600) | number:'1.0-0' }}h =
+      {{ (accountStats.totalActivityTime / 3600 / 24) | number:'1.0-0' }}d
+      {{ ((accountStats.totalActivityTime / 60) % 60) | number:'1.0-0' }}m
+    </div>
+    <div>
+      <strong>Total Activity Count:</strong> {{ accountStats.totalActivityCount }}
+    </div>
+    <div *ngFor="let type of ['Raid','Dungeon','Strike','PvP','Gambit','Other']">
+      <strong>{{ type }}:</strong>
+      <ng-container *ngIf="accountStats.perType[type] as stats">
+        {{ stats.count || 0 }} activities,
+        {{ (stats.time / 3600) | number:'1.0-0' }}h
+      </ng-container>
+      <ng-container *ngIf="!accountStats.perType[type]">
+        0 activities, 0h
+      </ng-container>
+    </div>
+  </div>
 
-      <!-- Activity List -->
-      <div class="activity-list">
-        <ng-container *ngFor="let yearGroup of getGroupedActivitiesByYearAndType()">
-          <!-- Year Section -->
-          <div class="year-section">
-            <h3 class="year-header">{{ yearGroup.year }}</h3>
+  <!-- Activity History -->
+  <div class="activity-history" *ngIf="selectedPlayers.length > 0">
+    <h2>Activity History</h2>
+    
+    <!-- Year Groups -->
+    <div class="year-group" *ngFor="let yearGroup of getGroupedActivitiesByYearAndType()">
+      <h3>{{ yearGroup.year }}</h3>
+      
+      <!-- Activity Types -->
+      <div class="activity-type" *ngFor="let type of getObjectKeys(yearGroup.types)">
+        <div class="activity-type-header" *ngIf="yearGroup.types[type].length > 0">
+          <img #iconImg [src]="getActivityTypeIcon(type)" 
+               [alt]="type"
+               class="activity-type-icon"
+               (error)="iconImg.src='assets/icons/activity.svg'">
+          <h4>{{ type }}</h4>
+        </div>
+        
+        <!-- Activity Entries -->
+        <div class="activity-entries" *ngIf="yearGroup.types[type].length > 0">
+          <div class="activity-entry" *ngFor="let entry of yearGroup.types[type]">
+            <div class="player-info">
+              <span class="platform-badge" [class.d1]="entry.game === 'D1'" [class.d2]="entry.game === 'D2'">
+                {{ entry.platform }}
+              </span>
+              <span class="player-name">{{ entry.player.displayName }}</span>
+            </div>
             
-            <ng-container *ngFor="let activityType of getGroupedTypes(yearGroup.year)">
-              <!-- Activity Type Group -->
-              <div class="activity-type-group">
-                <div class="activity-type-header">
-                  <img [src]="getActivityTypeIcon(activityType)" 
-                       alt="" 
-                       class="activity-icon"
-                       onerror="this.src='assets/icons/activity.png'">
-                  <span class="activity-type-name">{{ activityType }}</span>
+            <!-- Activities -->
+            <div class="activities">
+              <ng-container *ngIf="getFilteredActivities(entry.activities, entry.game) | async as filteredActivities">
+                <div class="activity" *ngFor="let activity of filteredActivities">
+                  <div class="activity-details">
+                    <span class="activity-name">{{ getActivityName(activity, entry.game === 'D1') }}</span>
+                    <span class="activity-date">{{ activity.period | date:'MMM d, y, h:mm a' }}</span>
+                  </div>
+                  <div class="activity-stats">
+                    <ng-container *ngIf="getKills(activity) !== undefined">
+                      <span class="kills">
+                        Kills: {{ getKills(activity) }}
+                      </span>
+                    </ng-container>
+                    <ng-container *ngIf="getDeaths(activity) !== undefined">
+                      <span class="deaths">
+                        Deaths: {{ getDeaths(activity) }}
+                      </span>
+                    </ng-container>
+                    <ng-container *ngIf="getKDRatio(activity)">
+                      <span class="kd">
+                        K/D: {{ getKDRatio(activity) }}
+                      </span>
+                    </ng-container>
+                  </div>
                 </div>
-
-                <ng-container *ngFor="let entry of getGroupedEntries(yearGroup.year, activityType)">
-                  <!-- Game/Platform Indicator -->
-                  <div class="game-platform-indicator">
-                    <span class="game-badge" [ngClass]="entry.game.toLowerCase()">
-                      {{ entry.game }}
-                    </span>
-                    <span class="platform-badge">
-                      {{ entry.platform }}
-                    </span>
-                    <span class="player-name">{{ entry.player.displayName }}</span>
-                  </div>
-
-                  <!-- Activities -->
-                  <div class="activity-cards">
-                    <div class="activity-card" *ngFor="let activity of getFilteredActivities(entry.activities, entry.game)">
-                      <!-- Activity Header -->
-                      <div class="activity-header">
-                        <img [src]="manifest.getActivityIcon(activity.activityDetails.referenceId || '', entry.game === 'D1')"
-                             [alt]="manifest.getActivityName(activity.activityDetails.referenceId || '', entry.game === 'D1')"
-                             class="activity-icon">
-                        <div class="activity-info">
-                          <div class="activity-name">
-                            {{ manifest.getActivityName(activity.activityDetails.referenceId || '', entry.game === 'D1') || 'Unknown Activity' }}
-                          </div>
-                          <div class="activity-stats">
-                            <div class="stat">
-                              <span class="stat-label">K/D/A</span>
-                              <span class="stat-value">
-                                {{ activity.values.kills?.basic?.value || 0 }}/{{ activity.values.deaths?.basic?.value || 0 }}/{{ activity.values.assists?.basic?.value || 0 }}
-                              </span>
-                            </div>
-                            <div class="stat">
-                              <span class="stat-label">Score</span>
-                              <span class="stat-value">{{ activity.values.score?.basic?.value || 0 | number }}</span>
-                            </div>
-                            <div class="stat">
-                              <span class="stat-label">Time</span>
-                              <span class="stat-value">{{ formatTime(activity.values.timePlayedSeconds?.basic?.value || 0) }}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- View Details Button -->
-                      <button class="view-details-btn" (click)="viewPGCR(activity.activityDetails.instanceId || '')">
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                </ng-container>
-              </div>
-            </ng-container>
+                <div class="no-activities" *ngIf="filteredActivities.length === 0">
+                  No activities found for this type
+                </div>
+              </ng-container>
+            </div>
           </div>
-        </ng-container>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- PGCR Modal -->
-<div class="modal-overlay" *ngIf="showPGCRModal" (click)="closePGCRModal()">
-  <div class="modal-content" (click)="$event.stopPropagation()">
-    <button class="close-button" (click)="closePGCRModal()">×</button>
-    <app-pgcr-details [pgcr]="selectedPGCR"></app-pgcr-details>
+  <!-- PGCR Modal -->
+  <div *ngIf="showPGCRModal" 
+       class="fixed inset-0 bg-black/75 flex items-center justify-center z-50"
+       (click)="closePGCRModal()">
+    <div class="bg-slate-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+         (click)="$event.stopPropagation()">
+      <button (click)="closePGCRModal()"
+              class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <app-pgcr-details [pgcr]="selectedPGCR"></app-pgcr-details>
+    </div>
+  </div>
+
+  <!-- Platform Picker Modal -->
+  <div *ngIf="showPlatformPicker" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div class="bg-slate-800 rounded-lg p-6 max-w-md w-full">
+      <h3 class="text-lg font-semibold text-white mb-4">Select Platform</h3>
+      <div class="space-y-3">
+        <button *ngIf="crossSavePlayer" (click)="selectPlatformPlayer(crossSavePlayer)" class="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors">
+          <span class="font-bold">Cross Save</span> ({{ crossSavePlayer.platform }})
+        </button>
+        <button *ngFor="let player of d2SearchResults" (click)="selectPlatformPlayer(player)" class="w-full bg-slate-700 text-white py-2 px-4 rounded hover:bg-blue-600 transition-colors">
+          <span class="font-bold">{{ player.platform }}</span> - {{ player.displayName }}
+        </button>
+      </div>
+      <button (click)="showPlatformPicker = false" class="mt-4 w-full text-slate-400 hover:text-white">Cancel</button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4">
+    <div class="bg-gray-800 rounded-lg p-4">
+      <h3 class="text-lg font-semibold mb-2">Activities</h3>
+      <div class="space-y-2">
+        <div *ngFor="let type of getObjectKeys(accountStats.perType)" class="flex justify-between items-center">
+          <span class="text-gray-300">{{ type }}</span>
+          <span class="text-gray-300">{{ getActivityCount(type) }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="bg-gray-800 rounded-lg p-4">
+      <h3 class="text-lg font-semibold mb-2">Time</h3>
+      <div class="space-y-2">
+        <div *ngFor="let type of getObjectKeys(accountStats.perType)" class="flex justify-between items-center">
+          <span class="text-gray-300">{{ type }}</span>
+          <span class="text-gray-300">{{ getActivityTime(type) | number:'1.0-0' }}h</span>
+        </div>
+      </div>
+    </div>
   </div>
 </div> 

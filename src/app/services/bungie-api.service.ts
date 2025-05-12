@@ -27,22 +27,22 @@ export interface BungieResponse<T> {
 })
 export class BungieApiService {
   private readonly API_KEY = environment.bungie.API_KEY;
-  private readonly BASE_URL = 'https://www.bungie.net/Platform';
-  private readonly ORIGIN = environment.bungie.ORIGIN;
+  private readonly D1_BASE_URL = 'https://www.bungie.net/d1/Platform';
+  private readonly D2_BASE_URL = 'https://www.bungie.net/Platform';
 
   constructor(private http: HttpClient) {}
 
   private getHeaders(): HttpHeaders {
     return new HttpHeaders({
       'X-API-Key': this.API_KEY,
-      'Content-Type': 'application/json',
-      'Origin': this.ORIGIN
+      'User-Agent': 'DestinyChronicle/1.0',
+      'Origin': window.location.origin
     });
   }
 
   searchD1Player(searchTerm: string, membershipType: number): Observable<PlayerSearchResult[]> {
     console.log(`Searching D1 player: ${searchTerm} on platform: ${membershipType}`);
-    const url = `${this.BASE_URL}/Destiny/SearchDestinyPlayer/${membershipType}/${encodeURIComponent(searchTerm)}/`;
+    const url = `${this.D1_BASE_URL}/Destiny/SearchDestinyPlayer/${membershipType}/${encodeURIComponent(searchTerm)}/`;
     
     return this.http.get<any>(url, { headers: this.getHeaders() }).pipe(
       tap(response => console.log('D1 Search Response:', response)),
@@ -64,13 +64,13 @@ export class BungieApiService {
   }
 
   searchD2Player(searchTerm: string): Observable<BungieResponse<PlayerSearchResult[]>> {
-    const url = `${this.BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodeURIComponent(searchTerm)}/`;
+    const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodeURIComponent(searchTerm)}/`;
     return this.http.get<BungieResponse<PlayerSearchResult[]>>(url, { headers: this.getHeaders() });
   }
 
   getLinkedProfiles(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     return this.http.get(
-      `${this.BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/LinkedProfiles/`,
+      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/LinkedProfiles/`,
       { headers: this.getHeaders() }
     ).pipe(
       map((response: any) => response.Response),
@@ -83,7 +83,7 @@ export class BungieApiService {
 
   getProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     return this.http.get(
-      `${this.BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=100,200`,
+      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=100,200`,
       { headers: this.getHeaders() }
     ).pipe(
       map((response: any) => response.Response),
@@ -96,7 +96,7 @@ export class BungieApiService {
 
   getD1Profile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     return this.http.get(
-      `${this.BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
+      `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
       { headers: this.getHeaders() }
     ).pipe(
       tap(response => console.log('D1 Profile Response:', response)),
@@ -120,7 +120,7 @@ export class BungieApiService {
     }
 
     return this.http.get(
-      `${this.BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`,
+      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`,
       {
         headers: this.getHeaders(),
         params
@@ -135,16 +135,14 @@ export class BungieApiService {
     );
   }
 
-  getD1ActivityHistory(membershipType: BungieMembershipType, membershipId: string, characterId: string, mode?: number, page: number = 0): Observable<any> {
+  getD1ActivityHistory(membershipType: BungieMembershipType, membershipId: string, characterId: string, mode: number = 0, page: number = 0): Observable<any> {
     const count = 250; // Max activities per request
     const params: any = {
       count,
-      page
+      page,
+      mode // always include mode, default 0
     };
-    if (mode !== undefined) {
-      params.mode = mode;
-    }
-    const url = `${this.BASE_URL}/Destiny/Stats/ActivityHistory/${membershipType}/${membershipId}/${characterId}/`;
+    const url = `${this.D1_BASE_URL}/Destiny/Stats/ActivityHistory/${membershipType}/${membershipId}/${characterId}/`;
     console.log('D1 ActivityHistory Request:', { url, params });
     return this.http.get<BungieResponse<any>>(url, {
       headers: this.getHeaders(),
@@ -188,7 +186,7 @@ export class BungieApiService {
 
   getPGCR(activityId: string): Observable<any> {
     return this.http.get(
-      `${this.BASE_URL}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
+      `${this.D2_BASE_URL}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
       { headers: this.getHeaders() }
     ).pipe(
       tap(response => console.log('PGCR Response:', response)),
@@ -201,18 +199,34 @@ export class BungieApiService {
   }
 
   isD1Player(player: PlayerSearchResult): boolean {
-    // D1 players typically have a membershipType of 1 (Xbox) or 2 (PlayStation)
-    // and don't have bungieGlobalDisplayName
+    // D1 players are identified by:
+    // 1. Having a membershipType of 1 (Xbox) or 2 (PlayStation)
+    // 2. Not having a bungieGlobalDisplayName (which is D2-specific)
+    // 3. Not having cross-save enabled
     return (player.membershipType === 1 || player.membershipType === 2) && 
-           !player.bungieGlobalDisplayName;
+           !player.bungieGlobalDisplayName &&
+           !player.isCrossSavePrimary;
   }
 
   searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<any> {
-    const url = `${this.BASE_URL}/Platform/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
+    const url = `${this.D2_BASE_URL}/Platform/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
-      'Origin': this.BASE_URL
+      'User-Agent': 'DestinyChronicle/1.0',
     });
     return this.http.post(url, { displayName, displayNameCode }, { headers });
+  }
+
+  getActivityCount(membershipType: number, membershipId: string, characterId: string): Observable<number> {
+    return this.http.get<any>(
+      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/?count=1`,
+      { headers: this.getHeaders() }
+    ).pipe(
+      map(response => response.Response?.totalResults ?? 0),
+      catchError(error => {
+        console.error('Error fetching activity count:', error);
+        return of(0);
+      })
+    );
   }
 } 
