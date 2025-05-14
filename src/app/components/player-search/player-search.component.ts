@@ -27,6 +27,8 @@ interface ActivityWithMembership extends ActivityHistory {
   membershipId: string;
   displayName: string;
   platform: string;
+  game: 'D1' | 'D2';
+  iconPath?: string;
 }
 
 interface TypeGroup {
@@ -46,15 +48,15 @@ interface AccountGroup {
   yearGroups: Map<string, YearGroup>;
 }
 
-// Shared activity icons for both D1 and D2
-const SHARED_ACTIVITY_ICONS: { [type: string]: string } = {
-  raid: 'assets/icons/raid.svg',
-  strike: 'assets/icons/strike.svg',
-  crucible: 'assets/icons/crucible.svg',
-  dungeon: 'assets/icons/dungeon.svg',
-  nightfall: 'assets/icons/nightfall.svg',
-  gambit: 'assets/icons/gambit.svg',
-  other: 'assets/icons/activity.svg',
+// Representative activity referenceIds for each type (D2 hashes)
+const ACTIVITY_TYPE_REFERENCE_IDS: { [type: string]: number } = {
+  raid: 2122313384,      // Last Wish
+  strike: 1437935813,    // Lake of Shadows
+  crucible: 3881495763,  // Control
+  dungeon: 2032534090,   // Prophecy
+  nightfall: 2964135793, // The Corrupted (Nightfall)
+  gambit: 2693136600,    // Gambit Prime
+  other: 1375089621      // The Whisper (as a fallback)
 };
 
 // Add extended type for display
@@ -179,6 +181,7 @@ export class PlayerSearchComponent implements OnInit {
     perType: {}
   };
   private filteredActivitiesForDate: ActivityWithMembership[] = [];
+  private currentLoadToken = 0;
 
   constructor(
     private bungieService: BungieApiService,
@@ -709,19 +712,24 @@ export class PlayerSearchComponent implements OnInit {
     return seconds;
   }
 
-  private async loadAllFilteredActivities() {
+  public async loadAllFilteredActivities() {
+    const loadToken = ++this.currentLoadToken;
+    this.loadingActivities[this.selectedDate] = true;
+    this.cdr.detectChanges();
+
     try {
-      // Get all activities for the selected date
       const activities = await this.getAllFilteredActivitiesForDate();
-      
-      // Process and group the activities
+      if (loadToken !== this.currentLoadToken) return; // Abort if a newer load started
+
       this.processAndGroupActivities();
-      
-      // Calculate stats
       await this.calculateAccountStats();
     } catch (error) {
-      console.error('Error in loadAllFilteredActivities:', error);
-      throw error;
+      // handle error
+    } finally {
+      if (loadToken === this.currentLoadToken) {
+        this.loadingActivities[this.selectedDate] = false;
+        this.cdr.detectChanges();
+      }
     }
   }
 
@@ -730,47 +738,16 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  async viewPGCR(activityId: string) {
-    try {
-      // First check if we have a cached PGCR
-      const cachedPGCR = this.pgcrCacheService.getPGCR(activityId);
-      
-      if (cachedPGCR) {
-        console.log('Using cached PGCR');
-        this.showPGCRDetails(cachedPGCR);
-        return;
-      }
-
-      // If not cached, fetch from API
-      console.log('Fetching PGCR from API');
-      const pgcr = await firstValueFrom(this.bungieService.getPGCR(activityId));
-      
-      if (!pgcr) {
-        throw new Error('No PGCR data received');
-      }
-
-      // Cache the PGCR data
-      this.pgcrCacheService.cachePGCR(activityId, pgcr, true);
-      
-      // Also sync it to the database
-      await this.syncSpecificPGCR(activityId);
-      
-      // Show the details
-      this.showPGCRDetails(pgcr);
-    } catch (error) {
-      console.error('Error loading PGCR:', error);
-      // TODO: Show error to user
+  async viewPGCR(activityId: string | number) {
+    // Ensure activityId is a string
+    const id = typeof activityId === 'object' ? activityId?.instanceId : activityId;
+    if (!id) {
+      console.error('Invalid activityId passed to viewPGCR:', activityId);
+      return;
     }
-  }
-
-  private showPGCRDetails(pgcr: any) {
-    this.selectedPGCR = pgcr;
-    this.showPGCRModal = true;
-  }
-
-  closePGCRModal() {
-    this.showPGCRModal = false;
-    this.selectedPGCR = null;
+    // Always use HTTPS for the PGCR URL
+    const url = `https://www.bungie.net/en/PGCR/${id}`;
+    window.open(url, '_blank');
   }
 
   getPlatformName(membershipType: number): string {
@@ -1194,7 +1171,9 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   getActivityTypeIcon(activityType: string): string {
-    return SHARED_ACTIVITY_ICONS[activityType.toLowerCase()] || SHARED_ACTIVITY_ICONS['other'];
+    const refId = ACTIVITY_TYPE_REFERENCE_IDS[activityType.toLowerCase()] || ACTIVITY_TYPE_REFERENCE_IDS['other'];
+    // Use D2 icons for type icons
+    return this.manifest.getActivityIcon(refId, false) || '';
   }
 
   formatTime(dateString: string): string {
@@ -1371,7 +1350,9 @@ export class PlayerSearchComponent implements OnInit {
           ...activity,
           membershipId: player.membershipId,
           displayName: player.displayName,
-          platform: player.platform
+          platform: player.platform,
+          game: player.game,
+          iconPath: this.manifest.getActivityIcon(activity.activityDetails?.referenceId, player.game === 'D1')
         }));
       // Debug log: filtered activities for player
       console.log(`[DEBUG] [Filter] Filtered ${playerFilteredActivities.length} activities for player ${player.displayName} (${player.membershipId}) on ${month}/${day}`);
