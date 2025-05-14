@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, of, timer } from 'rxjs';
-import { catchError, map, tap, switchMap, retryWhen, delayWhen } from 'rxjs/operators';
+import { catchError, map, tap, switchMap, retryWhen, delayWhen, retry } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 
@@ -33,10 +33,13 @@ export class BungieApiService {
   constructor(private http: HttpClient) {}
 
   private getHeaders(): HttpHeaders {
+    const origin = window.location.origin || 'http://localhost:4200';
     return new HttpHeaders({
       'X-API-Key': this.API_KEY,
       'User-Agent': 'DestinyChronicle/1.0',
-      'Origin': window.location.origin
+      'Origin': origin,
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
     });
   }
 
@@ -185,14 +188,42 @@ export class BungieApiService {
   }
 
   getPGCR(activityId: string): Observable<any> {
+    console.log('PGCR Request Headers:', this.getHeaders());
+    
     return this.http.get(
       `${this.D2_BASE_URL}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
       { headers: this.getHeaders() }
     ).pipe(
       tap(response => console.log('PGCR Response:', response)),
-      map((response: any) => response.Response),
+      map((response: any) => {
+        if (response.ErrorCode !== 1) {
+          throw new Error(`Bungie API Error: ${response.ErrorStatus} - ${response.Message}`);
+        }
+        return response.Response;
+      }),
+      retry({
+        count: 3,
+        delay: (error, retryCount) => {
+          // Only retry on 500 errors
+          if (error.status !== 500) {
+            return throwError(() => error);
+          }
+          // Exponential backoff: 1s, 2s, 4s
+          const delay = Math.pow(2, retryCount - 1) * 1000;
+          console.log(`Retrying PGCR fetch in ${delay}ms (attempt ${retryCount}/3)`);
+          return timer(delay);
+        }
+      }),
       catchError(error => {
-        console.error('Error fetching PGCR:', error);
+        console.error('Error fetching PGCR:', {
+          error,
+          errorMessage: error.message,
+          errorStatus: error.status,
+          errorStatusText: error.statusText,
+          errorUrl: error.url,
+          errorHeaders: error.headers,
+          errorBody: error.error
+        });
         return throwError(() => error);
       })
     );

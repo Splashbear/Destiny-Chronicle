@@ -1,59 +1,37 @@
-# DestinyChronicle
+# Destiny Chronicle
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.2.9.
+## Overview
+Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 1 and Destiny 2 players. It provides detailed activity history, performance analytics, character progression monitoring, and historical data visualization. The app interacts with the Bungie API to fetch and display player data, focusing on a clean, responsive UI built with Angular.
 
-## Development server
+## Features
+- **Activity History Tracking**: Fetches and displays activities across all modes (0-53), with deduplication and efficient pagination.
+- **Date and Timezone Handling**: Filters activities by local date, ensuring accurate display based on user timezone.
+- **Performance Analytics**: View stats like kills, deaths, and time played.
+- **Cross-Platform Support**: Handles Destiny 1 and 2 data seamlessly.
+- **User-Friendly UI**: Modern design with loading indicators and error handling.
 
-To start a local development server, run:
+## Installation
+1. Clone the repository: `git clone https://github.com/your-username/destiny-chronicle.git`
+2. Install dependencies: `npm install`
+3. Set up environment variables in `src/environments/environment.prod.ts` (e.g., Bungie API key).
 
-```bash
-ng serve
-```
+## Usage
+1. Run locally: `ng serve`
+2. Access at `http://localhost:4200`
+3. Search for players and view their activity history.
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+## Recent Updates
+- Expanded activity mode fetching for comprehensive data retrieval.
+- Cleaned up code, removing debug logs and optimizing for production.
+- Improved date filtering and UI responsiveness.
 
-## Code scaffolding
+## Deployment
+- Build for production: `ng build --prod`
+- Deploy to GitHub Pages: Ensure your GitHub Actions workflow is configured in `.github/workflows/`. Use the `gh-pages` branch.
+- Verify SPA routing by adding a 404.html redirect if needed.
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Contributing
+Pull requests are welcome! Please open an issue for any bugs or feature requests.
 
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+## License
+MIT License

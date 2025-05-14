@@ -131,9 +131,9 @@ button {
 }
 
 .activity-list {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
 .activity-card {
@@ -176,6 +176,226 @@ button {
   justify-content: center;
   align-items: center;
   padding: 2rem;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+  color: #fff;
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #cbd5e1;
+    border-top: 3px solid #2563eb;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+}
+
+.account-stats {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  margin: 1rem 0;
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+
+      strong {
+        color: #94a3b8;
+        font-size: 0.875rem;
+      }
+
+      span {
+        font-size: 1.125rem;
+        color: #fff;
+      }
+    }
+  }
+
+  .activity-type-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+
+    .type-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+
+      strong {
+        color: #94a3b8;
+        font-size: 0.875rem;
+      }
+
+      span {
+        color: #fff;
+      }
+    }
+  }
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+
+  .account-group {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+
+    .account-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+
+      h3 {
+        font-size: 1.25rem;
+        color: #fff;
+        margin: 0;
+      }
+
+      .platform-badge {
+        background: #2563eb;
+        color: #fff;
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.875rem;
+      }
+    }
+  }
+
+  .year-group {
+    margin-bottom: 2rem;
+
+    .year-header {
+      color: #94a3b8;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+  }
+
+  .type-group {
+    margin-bottom: 1.5rem;
+
+    .type-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+
+      .type-icon {
+        width: 24px;
+        height: 24px;
+      }
+
+      h5 {
+        color: #fff;
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .activity-count {
+        color: #94a3b8;
+        font-size: 0.875rem;
+      }
+    }
+  }
+
+  .activity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+
+    .activity-card {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 0.5rem;
+      padding: 1rem;
+
+      .activity-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+
+        .activity-icon {
+          width: 32px;
+          height: 32px;
+        }
+
+        .activity-info {
+          flex: 1;
+
+          h6 {
+            color: #fff;
+            margin: 0;
+            font-size: 0.875rem;
+          }
+
+          .activity-time {
+            color: #94a3b8;
+            font-size: 0.75rem;
+          }
+        }
+      }
+
+      .activity-details {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+
+        .activity-duration {
+          color: #94a3b8;
+          font-size: 0.875rem;
+        }
+
+        .view-details-btn {
+          background: #2563eb;
+          color: #fff;
+          border: none;
+          padding: 0.5rem 1rem;
+          border-radius: 0.25rem;
+          font-size: 0.875rem;
+          cursor: pointer;
+          transition: background-color 0.2s;
+
+          &:hover {
+            background: #1d4ed8;
+          }
+        }
+      }
+    }
+  }
+}
+
+.no-activities {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 0.5rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @media (max-width: 768px) {

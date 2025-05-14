@@ -99,95 +99,81 @@
 
   <!-- Account Stats Loading Indicator and Summary -->
   <div *ngIf="loadingAccountStats" class="loading-indicator">
-    <span>Loading account stats...</span>
     <div class="spinner"></div>
+    <span>Calculating account statistics...</span>
   </div>
-  <div *ngIf="!loadingAccountStats && accountStats">
-    <div>
-      <strong>Total Time in Destiny:</strong>
-      {{ (accountStats.totalTime / 60) | number:'1.0-0' }}h =
-      {{ (accountStats.totalTime / 60 / 24) | number:'1.0-0' }}d
-      {{ (accountStats.totalTime % 60) | number:'1.0-0' }}m
+  <div *ngIf="!loadingAccountStats && accountStats" class="account-stats">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <strong>Total Time in Destiny:</strong>
+        <span>{{ (accountStats.totalTime / 60) | number:'1.0-0' }}h = {{ (accountStats.totalTime / 60 / 24) | number:'1.0-0' }}d {{ (accountStats.totalTime % 60) | number:'1.0-0' }}m</span>
+      </div>
+      <div class="stat-item">
+        <strong>Total Time in Activities:</strong>
+        <span>{{ (accountStats.totalActivityTime / 3600) | number:'1.0-0' }}h = {{ (accountStats.totalActivityTime / 3600 / 24) | number:'1.0-0' }}d {{ ((accountStats.totalActivityTime / 60) % 60) | number:'1.0-0' }}m</span>
+      </div>
+      <div class="stat-item">
+        <strong>Total Activity Count:</strong>
+        <span>{{ accountStats.totalActivityCount }}</span>
+      </div>
     </div>
-    <div>
-      <strong>Total Time in Activities:</strong>
-      {{ (accountStats.totalActivityTime / 3600) | number:'1.0-0' }}h =
-      {{ (accountStats.totalActivityTime / 3600 / 24) | number:'1.0-0' }}d
-      {{ ((accountStats.totalActivityTime / 60) % 60) | number:'1.0-0' }}m
-    </div>
-    <div>
-      <strong>Total Activity Count:</strong> {{ accountStats.totalActivityCount }}
-    </div>
-    <div *ngFor="let type of ['Raid','Dungeon','Strike','PvP','Gambit','Other']">
-      <strong>{{ type }}:</strong>
-      <ng-container *ngIf="accountStats.perType[type] as stats">
-        {{ stats.count || 0 }} activities,
-        {{ (stats.time / 3600) | number:'1.0-0' }}h
-      </ng-container>
-      <ng-container *ngIf="!accountStats.perType[type]">
-        0 activities, 0h
-      </ng-container>
+    <div class="activity-type-stats">
+      <div *ngFor="let type of ['Raid','Dungeon','Strike','PvP','Gambit','Other']" class="type-stat">
+        <strong>{{ type }}:</strong>
+        <ng-container *ngIf="accountStats.perType[type] as stats">
+          <span>{{ stats.count || 0 }} activities, {{ (stats.time / 3600) | number:'1.0-0' }}h</span>
+        </ng-container>
+        <ng-container *ngIf="!accountStats.perType[type]">
+          <span>0 activities, 0h</span>
+        </ng-container>
+      </div>
     </div>
   </div>
 
-  <!-- Activity History -->
-  <div class="activity-history" *ngIf="selectedPlayers.length > 0">
-    <h2>Activity History</h2>
-    
-    <!-- Year Groups -->
-    <div class="year-group" *ngFor="let yearGroup of getGroupedActivitiesByYearAndType()">
-      <h3>{{ yearGroup.year }}</h3>
+  <!-- Activity History Loading State -->
+  <div *ngIf="loadingActivities[selectedDate]" class="loading-indicator">
+    <div class="spinner"></div>
+    <span>Loading activities for {{ selectedDate | date:'mediumDate' }}...</span>
+  </div>
+
+  <!-- No Activities Message -->
+  <div *ngIf="!loadingActivities[selectedDate] && (!groupedActivitiesByAccount || groupedActivitiesByAccount.length === 0)" class="no-activities">
+    No activities found for this date in your Destiny history.
+  </div>
+
+  <!-- Activity List -->
+  <div *ngIf="!loadingActivities[selectedDate] && groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0" class="activity-list">
+    <div *ngFor="let account of groupedActivitiesByAccount" class="account-group">
+      <div class="account-header">
+        <h3>{{ account.displayName }}</h3>
+        <span class="platform-badge">{{ account.platform }}</span>
+      </div>
       
-      <!-- Activity Types -->
-      <div class="activity-type" *ngFor="let type of getObjectKeys(yearGroup.types)">
-        <div class="activity-type-header" *ngIf="yearGroup.types[type].length > 0">
-          <img #iconImg [src]="getActivityTypeIcon(type)" 
-               [alt]="type"
-               class="activity-type-icon"
-               (error)="iconImg.src='assets/icons/activity.svg'">
-          <h4>{{ type }}</h4>
-        </div>
+      <div *ngFor="let yearGroup of account.yearGroups" class="year-group">
+        <h4 class="year-header">{{ yearGroup.year }}</h4>
         
-        <!-- Activity Entries -->
-        <div class="activity-entries" *ngIf="yearGroup.types[type].length > 0">
-          <div class="activity-entry" *ngFor="let entry of yearGroup.types[type]">
-            <div class="player-info">
-              <span class="platform-badge" [class.d1]="entry.game === 'D1'" [class.d2]="entry.game === 'D2'">
-                {{ entry.platform }}
-              </span>
-              <span class="player-name">{{ entry.player.displayName }}</span>
-            </div>
-            
-            <!-- Activities -->
-            <div class="activities">
-              <ng-container *ngIf="getFilteredActivities(entry.activities, entry.game) | async as filteredActivities">
-                <div class="activity" *ngFor="let activity of filteredActivities">
-                  <div class="activity-details">
-                    <span class="activity-name">{{ getActivityName(activity, entry.game === 'D1') }}</span>
-                    <span class="activity-date">{{ activity.period | date:'MMM d, y, h:mm a' }}</span>
-                  </div>
-                  <div class="activity-stats">
-                    <ng-container *ngIf="getKills(activity) !== undefined">
-                      <span class="kills">
-                        Kills: {{ getKills(activity) }}
-                      </span>
-                    </ng-container>
-                    <ng-container *ngIf="getDeaths(activity) !== undefined">
-                      <span class="deaths">
-                        Deaths: {{ getDeaths(activity) }}
-                      </span>
-                    </ng-container>
-                    <ng-container *ngIf="getKDRatio(activity)">
-                      <span class="kd">
-                        K/D: {{ getKDRatio(activity) }}
-                      </span>
-                    </ng-container>
-                  </div>
+        <div *ngFor="let typeGroup of yearGroup.typeGroups" class="type-group">
+          <div class="type-header">
+            <img [src]="typeGroup.icon" [alt]="typeGroup.type" class="type-icon">
+            <h5>{{ typeGroup.type }}</h5>
+            <span class="activity-count">{{ typeGroup.activities.length }} activities</span>
+          </div>
+          
+          <div class="activity-grid">
+            <div *ngFor="let activity of typeGroup.activities" class="activity-card">
+              <div class="activity-header">
+                <img [src]="activity.icon" [alt]="activity.name" class="activity-icon">
+                <div class="activity-info">
+                  <h6>{{ activity.name }}</h6>
+                  <span class="activity-time">{{ activity.period | date:'shortTime' }}</span>
                 </div>
-                <div class="no-activities" *ngIf="filteredActivities.length === 0">
-                  No activities found for this type
-                </div>
-              </ng-container>
+              </div>
+              <div class="activity-details">
+                <span class="activity-duration">{{ activity.duration | number:'1.0-0' }}m</span>
+                <button (click)="viewPGCR(activity)" class="view-details-btn">
+                  View Details
+                </button>
+              </div>
             </div>
           </div>
         </div>

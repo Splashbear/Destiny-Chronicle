@@ -14,6 +14,7 @@ import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/l
 import { ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { TimezoneService } from '../../services/timezone.service';
 
 interface ActivityEntry {
   game: string;
@@ -22,9 +23,27 @@ interface ActivityEntry {
   activities: ActivityHistory[];
 }
 
+interface ActivityWithMembership extends ActivityHistory {
+  membershipId: string;
+  displayName: string;
+  platform: string;
+}
+
+interface TypeGroup {
+  type: string;
+  icon: string;
+  activities: ActivityWithMembership[];
+}
+
 interface YearGroup {
   year: string;
-  types: { [type: string]: ActivityEntry[] };
+  typeGroups: Map<string, TypeGroup>;
+}
+
+interface AccountGroup {
+  displayName: string;
+  platform: string;
+  yearGroups: Map<string, YearGroup>;
 }
 
 // Shared activity icons for both D1 and D2
@@ -73,7 +92,10 @@ export function isPvP(mode: number): boolean {
 }
 
 // Update the type where we need the game property
-type CharacterWithGame = Character & { game?: 'D1' | 'D2' };
+type CharacterWithGame = Character & { 
+  game?: 'D1' | 'D2';
+  mode?: number; // Add mode property for activity type filtering
+};
 
 // Add cache interface
 interface ActivityCache {
@@ -81,6 +103,17 @@ interface ActivityCache {
   timestamp: number;
   type: string;
   game: string;
+}
+
+// Add VerificationResult interface
+interface VerificationResult {
+  profileName: string;
+  characterId: string;
+  characterClass: string;
+  apiCount: number;
+  dbCount: number;
+  synced: boolean;
+  missingIds: string[];
 }
 
 @Component({
@@ -96,6 +129,7 @@ export class PlayerSearchComponent implements OnInit {
   d2SearchTerm: string = '';
   selectedMonth: number = new Date().getMonth() + 1;
   selectedDay: number = new Date().getDate();
+  selectedYear?: number;
   selectedDate: string = '';
   currentMonth: number = new Date().getMonth() + 1;
   currentDay: number = new Date().getDate();
@@ -107,44 +141,31 @@ export class PlayerSearchComponent implements OnInit {
   error: { [key: string]: string } = {};
   selectedPGCR: any = null;
   showPGCRModal: boolean = false;
-  selectedActivityType: ActivityTypeOption = ACTIVITY_TYPE_OPTIONS[0]; // Default to 'All'
-
-  // Search form properties
+  selectedActivityType: ActivityTypeOption = ACTIVITY_TYPE_OPTIONS[0];
   searchUsername = '';
   selectedPlatform = '';
   selectedGame: 'D1' | 'D2' = 'D2';
   errorMessage = '';
-  
-  // Platform options
   platforms = [
     { label: 'Xbox', value: 'Xbox' },
     { label: 'PlayStation', value: 'PlayStation' },
     { label: 'Steam', value: 'Steam' },
     { label: 'Cross Save', value: 'Cross Save' },
   ];
-
   activityTypeOptions = ACTIVITY_TYPE_OPTIONS;
-
   d2SearchResults: PlayerSearchDisplay[] = [];
   showPlatformPicker: boolean = false;
   crossSavePlayer: PlayerSearchDisplay | null = null;
-
   loadingActivities: { [key: string]: boolean } = {};
-
   groupedActivitiesByAccount: any[] = [];
-
   private processedActivities: YearGroup[] = [];
-
   loadingProgress: LoadingProgress | null = null;
   private readonly BATCH_SIZE = 50;
   private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAY = 1000; // 1 second
-
-  // Add cache properties
+  private readonly RETRY_DELAY = 1000;
   private activityCache: Map<string, ActivityCache> = new Map();
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_DURATION = 5 * 60 * 1000;
   private filteredActivities$ = new BehaviorSubject<ActivityHistory[]>([]);
-
   loadingAccountStats = false;
   accountStats: {
     totalTime: number;
@@ -157,6 +178,7 @@ export class PlayerSearchComponent implements OnInit {
     totalActivityCount: 0,
     perType: {}
   };
+  private filteredActivitiesForDate: ActivityWithMembership[] = [];
 
   constructor(
     private bungieService: BungieApiService,
@@ -164,15 +186,14 @@ export class PlayerSearchComponent implements OnInit {
     private cdr: ChangeDetectorRef,
     private activityCacheService: ActivityCacheService,
     private pgcrCacheService: PGCRCacheService,
-    private activityDb: ActivityDbService
-  ) {}
+    private activityDb: ActivityDbService,
+    private timezoneService: TimezoneService
+  ) {
+  }
 
   ngOnInit(): void {
-    // Set default to current month/day
-    const today = new Date();
-    this.currentMonth = today.getMonth() + 1;
-    this.currentDay = today.getDate();
-    this.onDateSelect(String(this.currentMonth), String(this.currentDay));
+    // Don't set default date - let user select it
+    this.selectedDate = '';
   }
 
   get hasD1Players(): boolean {
@@ -389,185 +410,215 @@ export class PlayerSearchComponent implements OnInit {
                 character.membershipType,
                 character.membershipId,
                 character.characterId,
-                0,
+                character.mode || 0,
                 page
               )
             : this.bungieService.getActivityHistory(
                 character.membershipType,
                 character.membershipId,
                 character.characterId,
-                page
+                page,
+                character.mode
               )
         );
-        return character.game === 'D1' ? response?.data?.activities || [] : response?.activities || [];
+
+        const activities = character.game === 'D1'
+          ? response?.data?.activities || []
+          : response?.activities || [];
+
+        return activities;
       } catch (error) {
         retries++;
-        console.log(`[DEBUG] Retry ${retries}/${maxRetries} for page ${page}`);
         if (retries === maxRetries) throw error;
-        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries)); // Exponential backoff
+        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
       }
     }
     return [];
   }
 
   private async processActivityBatch(activities: ActivityHistory[], character: CharacterWithGame): Promise<void> {
-    for (let i = 0; i < activities.length; i += this.BATCH_SIZE) {
-      const batch = activities.slice(i, i + this.BATCH_SIZE);
-      
-      // Store in database
-      const storedActivities: StoredActivity[] = batch.map(a => ({
-        ...a,
+    const existingIds = new Set(
+      (await this.activityDb.getAllActivitiesForCharacter(
+        character.membershipId,
+        character.characterId
+      )).map(a => a.activityDetails?.instanceId)
+    );
+
+    const newActivities = activities.filter(activity => 
+      !existingIds.has(activity.activityDetails?.instanceId)
+    );
+
+    if (newActivities.length > 0) {
+      const storedActivities: StoredActivity[] = newActivities.map(activity => ({
+        ...activity,
         membershipId: character.membershipId,
-        characterId: character.characterId
+        characterId: character.characterId,
+        instanceId: activity.activityDetails?.instanceId,
+        mode: activity.activityDetails?.mode
       }));
-      await this.activityDb.addActivities(storedActivities);
       
-      // Update UI periodically
-      if (i % 200 === 0) {
-        this.cdr.detectChanges();
-      }
+      await this.activityDb.addActivities(storedActivities);
+      this.cdr.detectChanges();
     }
   }
 
-  async loadActivityHistoryForCharacter(character: CharacterWithGame): Promise<void> {
+  private validateDateRanges(activities: ActivityHistory[], character: CharacterWithGame): void {
+    if (activities.length === 0) {
+      console.log(`[DEBUG] No activities to validate for character ${character.characterId}`);
+      return;
+    }
+
+    // Sort activities by date
+    const sortedActivities = [...activities].sort((a, b) => 
+      new Date(a.period).getTime() - new Date(b.period).getTime()
+    );
+
+    // Get date range
+    const firstDate = new Date(sortedActivities[0].period);
+    const lastDate = new Date(sortedActivities[sortedActivities.length - 1].period);
+    
+    console.log(`[DEBUG] Activity date range for character ${character.characterId}:`, {
+      firstDate: firstDate.toISOString(),
+      lastDate: lastDate.toISOString(),
+      totalActivities: activities.length
+    });
+
+    // Check for gaps larger than 30 days
+    const GAP_THRESHOLD = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+    const gaps: { start: Date; end: Date; duration: number }[] = [];
+
+    for (let i = 0; i < sortedActivities.length - 1; i++) {
+      const currentDate = new Date(sortedActivities[i].period);
+      const nextDate = new Date(sortedActivities[i + 1].period);
+      const gap = nextDate.getTime() - currentDate.getTime();
+
+      if (gap > GAP_THRESHOLD) {
+        gaps.push({
+          start: currentDate,
+          end: nextDate,
+          duration: gap
+        });
+      }
+    }
+
+    if (gaps.length > 0) {
+      console.log(`[DEBUG] Found ${gaps.length} gaps in activity history for character ${character.characterId}:`);
+      gaps.forEach(gap => {
+        console.log(`[DEBUG] Gap from ${gap.start.toISOString()} to ${gap.end.toISOString()} (${Math.round(gap.duration / (24 * 60 * 60 * 1000))} days)`);
+      });
+    } else {
+      console.log(`[DEBUG] No significant gaps found in activity history for character ${character.characterId}`);
+    }
+
+    // Check for expected date range based on game
+    const gameReleaseDate = character.game === 'D1' 
+      ? new Date('2014-09-09T00:00:00Z') 
+      : new Date('2017-09-06T00:00:00Z');
+    
+    if (firstDate.getTime() > gameReleaseDate.getTime()) {
+      console.log(`[DEBUG] WARNING: First activity (${firstDate.toISOString()}) is after game release date (${gameReleaseDate.toISOString()})`);
+    }
+  }
+
+  private async loadActivityHistoryForCharacter(character: CharacterWithGame): Promise<void> {
     const loadingKey = `${character.membershipId}-${character.characterId}`;
     this.loadingActivities[loadingKey] = true;
     
     try {
-      console.log(`[DEBUG] Starting activity history fetch for character ${character.characterId}`);
-
-      // Get expected activity count from API
-      const expectedCount = await firstValueFrom(
-        this.bungieService.getActivityCount(character.membershipType, character.membershipId, character.characterId)
-      );
-      console.log(`[DEBUG] Expected activity count for character ${character.characterId}: ${expectedCount}`);
-
-      // First check what we have in the database
       const dbActivities = await this.activityDb.getAllActivitiesForCharacter(
         character.membershipId,
         character.characterId
       );
-      console.log(`[DEBUG] Found ${dbActivities.length} activities in database for character ${character.characterId}`);
 
-      // Check if we have activities from multiple years
-      const years = new Set(dbActivities.map(a => new Date(a.period).getUTCFullYear()));
-      console.log(`[DEBUG] Found activities from years in database: ${Array.from(years).sort().join(', ')}`);
-
-      // Only fetch from API if we don't have enough data
-      const D2_RELEASE_DATE = new Date('2017-09-06T00:00:00Z');
-      const D1_RELEASE_DATE = new Date('2014-09-09T00:00:00Z');
-      const releaseDate = character.game === 'D1' ? D1_RELEASE_DATE : D2_RELEASE_DATE;
+      let newActivities: StoredActivity[] = [];
       
-      let oldestActivityDate = dbActivities.length > 0 
-        ? new Date(Math.min(...dbActivities.map(a => new Date(a.period).getTime())))
-        : null;
+      // Fetch activities for all relevant modes
+      const modes = [
+        0,   // None (PvE)
+        1,   // Story
+        2,   // Strike
+        3,   // Raid
+        4,   // AllPvP
+        5,   // Patrol
+        6,   // AllPvE
+        7,   // Reserved7
+        8,   // Reserved8
+        9,   // Reserved9
+        10,  // Control
+        12,  // Clash
+        15,  // Iron Banner
+        16,  // Nightfall
+        17,  // PrestigeNightfall
+        18,  // AllStrikes
+        19,  // TrialsOfOsiris
+        22,  // Survival
+        24,  // Rumble
+        25,  // AllMayhem
+        31,  // Supremacy
+        32,  // PrivateMatchesAll
+        37,  // Survival
+        38,  // Countdown
+        39,  // TrialsOfTheNine
+        40,  // Breakthrough
+        41,  // Doubles
+        42,  // PrivateMatchesClash
+        43,  // PrivateMatchesControl
+        44,  // PrivateMatchesSupremacy
+        45,  // Gambit
+        46,  // AllPvECompetitive
+        48,  // Showdown
+        49,  // Lockdown
+        50,  // Momentum
+        51,  // CountdownClassic
+        52,  // Elimination
+        53   // Rift
+      ];
 
-      let newActivities: ActivityHistory[] = [];
-      
-      // Only fetch from API if:
-      // 1. We have no activities in the database, or
-      // 2. Our oldest activity is newer than the game's release date, or
-      // 3. We have fewer activities than expected
-      if (!oldestActivityDate || 
-          oldestActivityDate.getTime() > releaseDate.getTime() || 
-          dbActivities.length < expectedCount) {
-        console.log('[DEBUG] Fetching activities from API');
+      for (const mode of modes) {
         let page = 0;
         let hasMore = true;
-        let totalActivitiesFetched = 0;
-        let consecutiveEmptyPages = 0;
-        const MAX_CONSECUTIVE_EMPTY = 3;
-        let foundYears = new Set<number>();
-        let foundActivityTypes = new Set<number>();
 
-        // Get initial page to estimate total
-        const initialActivities = await this.fetchActivitiesWithRetry(character, 0);
-        const activitiesPerPage = initialActivities.length || 50;
-        const estimatedTotalPages = Math.ceil(expectedCount / activitiesPerPage);
-        
-        newActivities = newActivities.concat(initialActivities);
-        totalActivitiesFetched += initialActivities.length;
-
-        this.updateLoadingProgress(character.characterId, 0, estimatedTotalPages, totalActivitiesFetched);
-
-        while (hasMore && totalActivitiesFetched < expectedCount) {
-          page++;
-          const progress = Math.min(100, (page / estimatedTotalPages) * 100);
-          this.updateLoadingProgress(character.characterId, progress, estimatedTotalPages, totalActivitiesFetched);
-
-          console.log(`[DEBUG] Fetching page ${page + 1} (${totalActivitiesFetched}/${expectedCount} activities)`);
-          const activities = await this.fetchActivitiesWithRetry(character, page);
+        while (hasMore) {
+          const activities = await this.fetchActivitiesWithRetry(
+            { ...character, mode },
+            page
+          );
           
           if (!activities || activities.length === 0) {
-            consecutiveEmptyPages++;
-            console.log(`[DEBUG] Empty page received. Consecutive empty pages: ${consecutiveEmptyPages}`);
-            if (consecutiveEmptyPages >= MAX_CONSECUTIVE_EMPTY) {
-              console.log('[DEBUG] Too many consecutive empty pages, stopping pagination');
-              hasMore = false;
-              break;
-            }
+            hasMore = false;
             continue;
           }
 
-          consecutiveEmptyPages = 0;
-          totalActivitiesFetched += activities.length;
-          newActivities = newActivities.concat(activities);
+          const storedActivities: StoredActivity[] = activities.map(activity => ({
+            ...activity,
+            membershipId: character.membershipId,
+            characterId: character.characterId,
+            instanceId: activity.activityDetails?.instanceId,
+            mode: activity.activityDetails?.mode
+          }));
 
-          // Process activities in batches
-          await this.processActivityBatch(activities, character);
+          const uniqueNewActivities = storedActivities.filter(activity => 
+            !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
+          );
 
-          // Track years and activity types
-          for (const activity of activities) {
-            if (activity.period) {
-              const activityDate = new Date(activity.period);
-              const year = activityDate.getUTCFullYear();
-              foundYears.add(year);
-              
-              if (!oldestActivityDate || activityDate < oldestActivityDate) {
-                oldestActivityDate = activityDate;
-              }
-            }
-            if (activity.activityDetails?.mode) {
-              foundActivityTypes.add(activity.activityDetails.mode);
-            }
+          if (uniqueNewActivities.length > 0) {
+            newActivities = newActivities.concat(uniqueNewActivities);
+            await this.processActivityBatch(uniqueNewActivities, character);
           }
 
-          // Check if we've reached the release date
-          if (oldestActivityDate && oldestActivityDate.getTime() < releaseDate.getTime()) {
-            console.log(`[DEBUG] Reached ${character.game} release date (${releaseDate.toISOString()}), stopping pagination`);
-            hasMore = false;
-            break;
-          }
-        }
-
-        console.log(`[DEBUG] Finished fetching new activities. Total new: ${totalActivitiesFetched}`);
-        console.log(`[DEBUG] Expected count: ${expectedCount}, Actual count: ${totalActivitiesFetched}`);
-        if (totalActivitiesFetched < expectedCount) {
-          console.log(`[DEBUG] WARNING: Fetched fewer activities than expected (${totalActivitiesFetched}/${expectedCount})`);
-        }
-        console.log(`[DEBUG] All years found: ${Array.from(foundYears).sort().join(', ')}`);
-        console.log(`[DEBUG] All activity types found: ${Array.from(foundActivityTypes).sort().join(', ')}`);
-        if (oldestActivityDate) {
-          console.log(`[DEBUG] Final oldest activity date: ${oldestActivityDate.toISOString()}`);
-        }
-      } else {
-        console.log('[DEBUG] Using cached activities from database');
-        console.log(`[DEBUG] Database count: ${dbActivities.length}, Expected count: ${expectedCount}`);
-        if (dbActivities.length < expectedCount) {
-          console.log(`[DEBUG] WARNING: Database has fewer activities than expected (${dbActivities.length}/${expectedCount})`);
+          // Update loading progress
+          this.updateLoadingProgress(
+            character.characterId, 
+            ((page + 1) / (page + 2)) * 100,
+            page + 1,
+            newActivities.length
+          );
+          
+          page++;
         }
       }
 
-      // Combine database activities with new activities
-      const allActivities = [...dbActivities, ...newActivities];
-      console.log(`[DEBUG] Total activities (database + new): ${allActivities.length}`);
-      console.log(`[DEBUG] Expected count: ${expectedCount}, Actual total: ${allActivities.length}`);
-      if (allActivities.length < expectedCount) {
-        console.log(`[DEBUG] WARNING: Total activities less than expected (${allActivities.length}/${expectedCount})`);
-      }
-
-      // Process all activities
-      this.processActivities(allActivities, character);
+      this.processActivities([...dbActivities, ...newActivities], character);
     } catch (error) {
       console.error('Error loading activity history:', error);
       throw error;
@@ -593,115 +644,84 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   private processAndGroupActivities(): void {
-    // Use a Map for faster lookups
-    const activityMap = new Map<string, ActivityEntry>();
-    const grouped: { [year: string]: { [type: string]: ActivityEntry[] } } = {};
-    
-    // Initialize years once
-    const currentYear = new Date().getFullYear();
-    const d1LaunchYear = 2014;
-    const years = Array.from({ length: currentYear - d1LaunchYear + 1 }, (_, i) => (d1LaunchYear + i).toString());
-    
-    years.forEach(year => {
-      grouped[year] = {};
-      ACTIVITY_TYPE_OPTIONS.forEach(type => {
-        grouped[year][type.label] = [];
-      });
-    });
-
-    // Process activities in batches
-    this.selectedPlayers.forEach(player => {
-      const game = this.isD1Player(player) ? 'D1' : 'D2';
-      const platform = this.getPlatformName(player.membershipType);
-      
-      // Get activities for this player
-      const playerActivities = this.getPlayerActivities(player.membershipId);
-      
-      // Filter by date if selected
-      const filteredActivities = this.selectedDate 
-        ? playerActivities.filter(activity => this.isActivityOnDate(activity, new Date(this.selectedDate)))
-        : playerActivities;
-
-      // Process activities in a single pass
-      filteredActivities.forEach(activity => {
-        if (!activity.period || !activity.activityDetails?.mode) return;
-        
-        const activityDate = new Date(activity.period);
-        const year = activityDate.getFullYear().toString();
-        const type = this.getActivityType(activity.activityDetails.mode);
-        
-        const entryKey = `${year}-${type}-${player.membershipId}`;
-        let entry = activityMap.get(entryKey);
-        
-        if (!entry) {
-          entry = { game, platform, player, activities: [] };
-          activityMap.set(entryKey, entry);
-          grouped[year][type].push(entry);
-        }
-        
-        if (!entry.activities.some(a => a.activityDetails?.instanceId === activity.activityDetails?.instanceId)) {
-          entry.activities.push(activity);
-        }
-      });
-    });
-
-    // Convert to array and sort by year descending
-    this.processedActivities = Object.entries(grouped)
-      .map(([year, types]) => ({ year, types }))
-      .sort((a, b) => parseInt(b.year) - parseInt(a.year));
-
-    // Update UI once at the end
+    if (!this.filteredActivitiesForDate.length) {
+      this.groupedActivitiesByAccount = [];
+      console.log('[DEBUG] [Group] No activities to group.');
+      return;
+    }
+    const accountGroups = new Map<string, AccountGroup>();
+    for (const activity of this.filteredActivitiesForDate) {
+      const accountKey = activity.membershipId;
+      if (!accountGroups.has(accountKey)) {
+        accountGroups.set(accountKey, {
+          displayName: activity.displayName,
+          platform: activity.platform,
+          yearGroups: new Map<string, YearGroup>()
+        });
+      }
+      const account = accountGroups.get(accountKey)!;
+      const year = new Date(activity.period).getFullYear().toString();
+      if (!account.yearGroups.has(year)) {
+        account.yearGroups.set(year, {
+          year,
+          typeGroups: new Map<string, TypeGroup>()
+        });
+      }
+      const yearGroup = account.yearGroups.get(year)!;
+      const type = this.getActivityType(activity.activityDetails?.mode || 0);
+      if (!yearGroup.typeGroups.has(type)) {
+        yearGroup.typeGroups.set(type, {
+          type,
+          icon: this.getActivityTypeIcon(type),
+          activities: []
+        });
+      }
+      yearGroup.typeGroups.get(type)!.activities.push(activity);
+    }
+    this.groupedActivitiesByAccount = Array.from(accountGroups.values()).map(account => ({
+      ...account,
+      yearGroups: Array.from(account.yearGroups.values()).map(yearGroup => ({
+        year: yearGroup.year,
+        typeGroups: Array.from(yearGroup.typeGroups.values())
+      }))
+    }));
+    // Debug log: grouped activities
+    console.log('[DEBUG] [Group] Grouped activities by account:', this.groupedActivitiesByAccount);
     this.cdr.detectChanges();
   }
 
+  private getActivityDurationSeconds(activity: ActivityHistory): number {
+    const values = activity.values as any;
+    const seconds = values && values['timePlayedSeconds']?.basic?.value;
+    
+    // More reasonable validation
+    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
+      console.warn('[DEBUG] Invalid activity duration:', seconds, activity);
+      return 0;
+    }
+    
+    // Allow for longer activities (up to 24 hours)
+    if (seconds > 86400) {
+      console.warn('[DEBUG] Suspiciously long activity duration:', seconds, activity);
+      return 86400; // Cap at 24 hours
+    }
+    
+    return seconds;
+  }
+
   private async loadAllFilteredActivities() {
-    if (!this.selectedDate || !this.selectedPlayers.length) return;
-
-    const selectedDateObj = new Date(this.selectedDate);
-    selectedDateObj.setHours(0, 0, 0, 0);
-    
-    // Use a Set for faster lookups
-    const uniqueActivities = new Set<string>();
-    const allActivities: ActivityHistory[] = [];
-    
-    // Process players in parallel
-    await Promise.all(this.selectedPlayers.map(async player => {
-      const characterObjs = this.characters[player.membershipId] || [];
+    try {
+      // Get all activities for the selected date
+      const activities = await this.getAllFilteredActivitiesForDate();
       
-      // Process characters in parallel
-      await Promise.all(characterObjs.map(async char => {
-        const characterId = char.characterId || char.characterBase?.characterId;
-        if (!characterId) return;
-
-        try {
-          const characterActivities = await this.activityDb.getAllActivitiesForCharacter(
-            player.membershipId,
-            characterId
-          );
-          
-          // Filter activities in a single pass
-          const filteredActivities = characterActivities.filter(activity => {
-            const instanceId = activity.activityDetails?.instanceId;
-            if (!instanceId || uniqueActivities.has(instanceId)) return false;
-            
-            const matches = this.isActivityOnDate(activity, selectedDateObj);
-            if (matches) {
-              uniqueActivities.add(instanceId);
-              return true;
-            }
-            return false;
-          });
-          
-          allActivities.push(...filteredActivities);
-        } catch (error) {
-          console.error(`Error loading activities for character ${characterId}:`, error);
-        }
-      }));
-    }));
-    
-    // Process activities once at the end
-    if (allActivities.length > 0) {
+      // Process and group the activities
       this.processAndGroupActivities();
+      
+      // Calculate stats
+      await this.calculateAccountStats();
+    } catch (error) {
+      console.error('Error in loadAllFilteredActivities:', error);
+      throw error;
     }
   }
 
@@ -731,6 +751,9 @@ export class PlayerSearchComponent implements OnInit {
 
       // Cache the PGCR data
       this.pgcrCacheService.cachePGCR(activityId, pgcr, true);
+      
+      // Also sync it to the database
+      await this.syncSpecificPGCR(activityId);
       
       // Show the details
       this.showPGCRDetails(pgcr);
@@ -777,7 +800,7 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString();
+    return this.timezoneService.formatDate(dateString);
   }
 
   /**
@@ -903,72 +926,34 @@ export class PlayerSearchComponent implements OnInit {
     let totalActivityCount = 0;
     const perType: { [type: string]: { count: number, time: number } } = {};
 
+    // Use filtered activities for stats
+    const activities = this.filteredActivitiesForDate;
     for (const player of this.selectedPlayers) {
       const characters = this.characters[player.membershipId] || [];
       for (const char of characters) {
         totalTime += Number(char.minutesPlayedTotal || 0);
-        const count = await firstValueFrom(
-          this.bungieService.getActivityCount(player.membershipType, player.membershipId, char.characterId)
-        ) as number;
-        totalActivityCount += count;
-        let activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, char.characterId);
-
-        // Deduplicate by instanceId
-        const seenIds = new Set();
-        activities = activities.filter(a => {
-          const id = a.activityDetails?.instanceId;
-          if (!id) return false;
-          if (seenIds.has(id)) return false;
-          seenIds.add(id);
-          return true;
-        });
-        console.log(`[DEBUG] Character ${char.characterId}: ${activities.length} unique activities after deduplication`);
-
-        // Log a sample of activity durations
-        if (activities.length > 0) {
-          console.log('[DEBUG] Sample activity durations:', activities.slice(0, 10).map(a => a.values?.timePlayedSeconds?.basic?.value));
-        }
-
-        // Check for outliers
-        activities.forEach(a => {
-          const val = a.values?.timePlayedSeconds?.basic?.value;
-          if (typeof val === 'number' && val > 100000) {
-            console.warn('[DEBUG] Suspiciously high activity duration:', val, a);
-          }
-        });
-
-        for (const activity of activities) {
-          const type = this.getActivityType(activity.activityDetails?.mode || 0);
-          if (!perType[type]) perType[type] = { count: 0, time: 0 };
-          perType[type].count += 1;
-          let seconds = this.getActivityDurationSeconds(activity);
-          // Clamp/validate time values
-          if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0 || seconds > 100000) {
-            console.warn('[DEBUG] Ignoring invalid activity duration:', seconds, activity);
-            seconds = 0;
-          }
-          perType[type].time += seconds;
-          totalActivityTime += seconds;
-        }
-        // Update stats after each character
-        this.accountStats = {
-          totalTime,
-          totalActivityTime,
-          totalActivityCount,
-          perType: { ...perType }
-        };
-        this.cdr.detectChanges();
       }
     }
-    // Log summary
-    console.log('[DEBUG] Final accountStats:', this.accountStats);
+    totalActivityCount = activities.length;
+    for (const activity of activities) {
+      const type = this.getActivityType(activity.activityDetails?.mode || 0);
+      if (!perType[type]) perType[type] = { count: 0, time: 0 };
+      perType[type].count += 1;
+      let seconds = this.getActivityDurationSeconds(activity);
+      if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0 || seconds > 100000) {
+        seconds = 0;
+      }
+      perType[type].time += seconds;
+      totalActivityTime += seconds;
+    }
+    this.accountStats = {
+      totalTime,
+      totalActivityTime,
+      totalActivityCount,
+      perType: { ...perType }
+    };
     this.loadingAccountStats = false;
     this.cdr.detectChanges();
-  }
-
-  private getActivityDurationSeconds(activity: ActivityHistory): number {
-    const values = activity.values as any;
-    return values && values['timePlayedSeconds']?.basic?.value || 0;
   }
 
   // Helper method to safely get perType stats
@@ -1041,50 +1026,50 @@ export class PlayerSearchComponent implements OnInit {
     return Array.from({ length: daysInMonth }, (_, i) => i + 1);
   }
 
-  onDateSelect(month: string, day: string): void {
-    console.log('[DEBUG] onDateSelect called with:', { month, day });
-    
-    // Create a date object for the selected date in the current year
-    const currentYear = new Date().getFullYear();
-    const targetDate = new Date(currentYear, parseInt(month) - 1, parseInt(day));
-    targetDate.setHours(0, 0, 0, 0); // Set to midnight in local timezone
-    
-    // Update selected values
+  async onDateSelect(month: string, day: string) {
     this.selectedMonth = parseInt(month);
     this.selectedDay = parseInt(day);
+    this.selectedDate = `${month}-${day}`;
     
-    // Store the date in YYYY-MM-DD format
-    this.selectedDate = targetDate.toISOString().split('T')[0];
-    
-    console.log('[DEBUG] Date selected:', {
-      targetDate: targetDate.toLocaleString(),
-      selectedDate: this.selectedDate,
-      month: targetDate.getMonth() + 1,
-      day: targetDate.getDate()
-    });
-    
-    // Trigger activity loading
-    this.onDateOrTypeChange();
+    // Set loading state for the selected date
+    this.loadingActivities[this.selectedDate] = true;
+    this.cdr.detectChanges();
+
+    try {
+      await this.loadAllFilteredActivities();
+    } catch (error) {
+      console.error('Error loading activities for date:', error);
+    } finally {
+      this.loadingActivities[this.selectedDate] = false;
+      this.cdr.detectChanges();
+    }
   }
 
-  private isActivityOnDate(activity: ActivityHistory, targetDate: Date): boolean {
+  private isActivityOnSelectedDate(activity: ActivityHistory): boolean {
     if (!activity.period) return false;
-
+    
     const activityDate = new Date(activity.period);
-    const activityMonth = activityDate.getMonth() + 1;
-    const activityDay = activityDate.getDate();
-    const targetMonth = targetDate.getMonth() + 1;
-    const targetDay = targetDate.getDate();
+    const activityMonth = activityDate.getUTCMonth() + 1; // Convert 0-11 to 1-12
+    const activityDay = activityDate.getUTCDate();
+    const activityYear = activityDate.getUTCFullYear();
 
-    // Only log mismatches for debugging
-    if (activityMonth !== targetMonth || activityDay !== targetDay) {
-      console.log('[DEBUG] Date mismatch:', {
-        activityDate: activityDate.toLocaleString(),
-        targetDate: targetDate.toLocaleString()
+    // Debug logging for specific activity
+    if (activity.activityDetails.instanceId === '1859166440') {
+      console.log('[Date Check] Activity 1859166440:', {
+        period: activity.period,
+        utc: activityDate.toISOString(),
+        month: activityMonth,
+        day: activityDay,
+        year: activityYear,
+        selectedMonth: this.selectedMonth,
+        selectedDay: this.selectedDay,
+        selectedYear: this.selectedYear
       });
     }
 
-    return activityMonth === targetMonth && activityDay === targetDay;
+    return activityMonth === this.selectedMonth && 
+           activityDay === this.selectedDay && 
+           (!this.selectedYear || activityYear === this.selectedYear);
   }
 
   onDateOrTypeChange() {
@@ -1096,9 +1081,6 @@ export class PlayerSearchComponent implements OnInit {
 
     // Clear cache when date or type changes
     this.clearCache();
-
-    // Validate and set the date
-    this.validateAndSetDate(this.selectedDate);
     
     // If we have players selected, load their activities
     if (this.selectedPlayers.length > 0) {
@@ -1123,31 +1105,32 @@ export class PlayerSearchComponent implements OnInit {
    * 3. Maintains the date in the user's local timezone
    */
   private validateAndSetDate(dateStr: string): void {
-    // Convert input date to local midnight
-    const selectedDate = new Date(dateStr);
-    selectedDate.setHours(0, 0, 0, 0);
+    // Parse the month and day from the date string
+    const [month, day] = dateStr.split('-').map(Number);
+    
+    // Create a date object for comparison (year doesn't matter)
+    const selectedDate = new Date(Date.UTC(2024, month - 1, day));
     
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
     
     // Only treat as future date if the month/day is in the future
-    const isFutureDate = selectedDate.getMonth() > today.getMonth() || 
-                        (selectedDate.getMonth() === today.getMonth() && 
-                         selectedDate.getDate() > today.getDate());
+    const isFutureDate = selectedDate.getUTCMonth() > today.getUTCMonth() || 
+                        (selectedDate.getUTCMonth() === today.getUTCMonth() && 
+                         selectedDate.getUTCDate() > today.getUTCDate());
     
     if (isFutureDate) {
       console.log('[DEBUG] Future date detected, using today instead');
-      this.selectedDate = today.toISOString().split('T')[0];
+      this.selectedDate = `${today.getUTCMonth() + 1}-${today.getUTCDate()}`;
     } else {
-      // Keep the full date format for consistency with the database
-      this.selectedDate = selectedDate.toISOString().split('T')[0];
+      // Keep just the month and day
+      this.selectedDate = `${month}-${day}`;
     }
     
     console.log('[DEBUG] Date validated and set to:', {
-      local: selectedDate.toLocaleString(),
-      stored: this.selectedDate,
-      month: selectedDate.getMonth() + 1,
-      day: selectedDate.getDate(),
+      selectedDate: this.selectedDate,
+      month: selectedDate.getUTCMonth() + 1,
+      day: selectedDate.getUTCDate(),
       isFutureDate
     });
   }
@@ -1211,18 +1194,15 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   getActivityTypeIcon(activityType: string): string {
-    // Use shared icons for common types
     return SHARED_ACTIVITY_ICONS[activityType.toLowerCase()] || SHARED_ACTIVITY_ICONS['other'];
   }
 
-  formatTime(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
+  formatTime(dateString: string): string {
+    return this.timezoneService.formatTime(dateString);
+  }
+
+  formatDateTime(dateString: string): string {
+    return this.timezoneService.formatDateTime(dateString);
   }
 
   onActivityTypeChange(event: Event): void {
@@ -1307,82 +1287,6 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
-  getGroupedActivitiesByYearAndType(): YearGroup[] {
-    // Initialize year range
-    const d1LaunchYear = 2014;
-    const endYear = 2025;
-    const years = Array.from(
-      { length: endYear - d1LaunchYear + 1 }, 
-      (_, i) => (d1LaunchYear + i).toString()
-    );
-    
-    // Initialize grouped structure with pre-allocated arrays
-    const grouped: { [year: string]: { [type: string]: ActivityEntry[] } } = {};
-    const activityTypes = Object.values(ACTIVITY_MODE_MAP);
-    
-    years.forEach(year => {
-      grouped[year] = {};
-      activityTypes.forEach(type => {
-        grouped[year][type] = [];
-      });
-      grouped[year]['Other'] = [];
-    });
-
-    // Process each player's activities in a single pass
-    this.selectedPlayers.forEach(player => {
-      const game = this.isD1Player(player) ? 'D1' : 'D2';
-      const platform = this.getPlatformName(player.membershipType);
-      
-      // Get all activities for this player
-      const playerActivities = this.getPlayerActivities(player.membershipId);
-      
-      // Filter by date if selected
-      const filteredActivities = this.selectedDate 
-        ? playerActivities.filter(activity => this.isActivityOnDate(activity, new Date(this.selectedDate)))
-        : playerActivities;
-
-      // Group activities in a single pass
-      const activityMap = new Map<string, ActivityEntry>();
-      
-      filteredActivities.forEach(activity => {
-        if (!activity.period || !activity.activityDetails?.mode) return;
-        
-        const activityDate = new Date(activity.period);
-        const year = activityDate.getUTCFullYear().toString();
-        const type = this.getActivityType(activity.activityDetails.mode);
-        
-        // Skip if type doesn't match filter
-        if (this.selectedActivityType.label !== 'All' && type !== this.selectedActivityType.label) {
-          return;
-        }
-
-        // Skip if game version doesn't match
-        if ((game === 'D1' && !this.isD1Player(player)) || 
-            (game === 'D2' && this.isD1Player(player))) {
-          return;
-        }
-
-        const entryKey = `${year}-${type}-${player.membershipId}-${platform}-${game}`;
-        let entry = activityMap.get(entryKey);
-        
-        if (!entry) {
-          entry = { game, platform, player, activities: [] };
-          activityMap.set(entryKey, entry);
-          grouped[year][type].push(entry);
-        }
-        
-        if (!entry.activities.some(a => a.activityDetails?.instanceId === activity.activityDetails?.instanceId)) {
-          entry.activities.push(activity);
-        }
-      });
-    });
-
-    // Convert to array and sort by year descending
-    return Object.entries(grouped)
-      .map(([year, types]) => ({ year, types }))
-      .sort((a, b) => parseInt(b.year) - parseInt(a.year));
-  }
-
   /**
    * Helper method to get all activities for a player with caching.
    * @param membershipId The player's membership ID
@@ -1393,7 +1297,6 @@ export class PlayerSearchComponent implements OnInit {
     const cached = this.activityCache.get(cacheKey);
     
     if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      console.log('[DEBUG] Using cached activities for player:', membershipId);
       return cached.activities;
     }
 
@@ -1401,24 +1304,16 @@ export class PlayerSearchComponent implements OnInit {
     const activities = Object.keys(this.activities)
       .filter(key => key.startsWith(`activities-${membershipId}-`))
       .reduce((acc, key) => {
-        const activities = this.activities[key] || [];
-        console.log(`[DEBUG] Found ${activities.length} activities for key ${key}`);
-        return acc.concat(activities);
+        const acts = this.activities[key] || [];
+        return acc.concat(acts);
       }, [] as ActivityHistory[]);
 
-    // Log sample of activities
-    if (activities.length > 0) {
-      console.log('[DEBUG] Sample activities from database:', 
-        activities.slice(0, 3).map(a => ({
-          period: a.period,
-          local: new Date(a.period).toLocaleString(),
-          utc: new Date(a.period).toISOString(),
-          month: new Date(a.period).getMonth() + 1,
-          day: new Date(a.period).getDate(),
-          year: new Date(a.period).getFullYear()
-        }))
-      );
-    }
+    // Debug log: loaded activities
+    console.log(`[DEBUG] Loaded ${activities.length} activities for player ${membershipId}`);
+    activities.slice(0, 10).forEach(a => {
+      const d = new Date(a.period);
+      console.log(`[DEBUG] Activity: UTC=${d.toISOString()}, Local=${d.toLocaleString()}, Month=${d.getMonth() + 1}, Day=${d.getDate()}, Year=${d.getFullYear()}, InstanceId=${a.activityDetails?.instanceId}`);
+    });
 
     this.activityCache.set(cacheKey, {
       activities,
@@ -1441,6 +1336,114 @@ export class PlayerSearchComponent implements OnInit {
     
     // Update the UI
     this.cdr.detectChanges();
+  }
+
+  // Add method to clear all activities from the database
+  async clearAllActivitiesFromDb() {
+    if (!confirm('Are you sure you want to clear all activities from the database? This cannot be undone.')) return;
+    await this.activityDb.clearAllActivities();
+    this.activities = {};
+    this.clearCache();
+    this.accountStats = {
+      totalTime: 0,
+      totalActivityTime: 0,
+      totalActivityCount: 0,
+      perType: {}
+    };
+    this.cdr.detectChanges();
+    alert('All activities have been cleared from the database.');
+  }
+
+  // Centralized method to get all activities for selected players and date
+  private async getAllFilteredActivitiesForDate(): Promise<ActivityWithMembership[]> {
+    if (!this.selectedDate) {
+      return [];
+    }
+    const [month, day] = this.selectedDate.split('-').map(Number);
+    const allFilteredActivities: ActivityWithMembership[] = [];
+    for (const player of this.selectedPlayers) {
+      const playerActivities = this.getPlayerActivities(player.membershipId);
+      // Debug log: all activities for player
+      console.log(`[DEBUG] [Filter] Player ${player.displayName} (${player.membershipId}) has ${playerActivities.length} activities in DB`);
+      const playerFilteredActivities = playerActivities
+        .filter(activity => this.isActivityOnSelectedDate(activity))
+        .map(activity => ({
+          ...activity,
+          membershipId: player.membershipId,
+          displayName: player.displayName,
+          platform: player.platform
+        }));
+      // Debug log: filtered activities for player
+      console.log(`[DEBUG] [Filter] Filtered ${playerFilteredActivities.length} activities for player ${player.displayName} (${player.membershipId}) on ${month}/${day}`);
+      playerFilteredActivities.slice(0, 10).forEach(a => {
+        const utcDate = new Date(a.period);
+        const { month: localMonth, day: localDay } = this.timezoneService.getLocalMonthAndDay(a.period);
+        console.log(`[DEBUG] [Filter] Matched Activity: UTC=${utcDate.toISOString()}, Local=${utcDate.toLocaleString()}, Local Month/Day=${localMonth}/${localDay}, InstanceId=${a.activityDetails?.instanceId}`);
+      });
+      allFilteredActivities.push(...playerFilteredActivities);
+    }
+    // Deduplicate by instanceId
+    const dedupedMap = new Map<string, ActivityWithMembership>();
+    for (const activity of allFilteredActivities) {
+      const instanceId = activity.activityDetails?.instanceId;
+      if (instanceId && !dedupedMap.has(instanceId)) {
+        dedupedMap.set(instanceId, activity);
+      }
+    }
+    const dedupedActivities = Array.from(dedupedMap.values());
+    // Sort by period (descending)
+    dedupedActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
+    this.filteredActivitiesForDate = dedupedActivities;
+    // Debug log: all deduped and sorted activities
+    console.log(`[DEBUG] [Filter] Total deduped & sorted activities for all players: ${dedupedActivities.length}`);
+    dedupedActivities.slice(0, 10).forEach(a => {
+      const utcDate = new Date(a.period);
+      const { month: localMonth, day: localDay } = this.timezoneService.getLocalMonthAndDay(a.period);
+      console.log(`[DEBUG] [Filter] Deduped Activity: UTC=${utcDate.toISOString()}, Local=${utcDate.toLocaleString()}, Local Month/Day=${localMonth}/${localDay}, Name=${a.displayName}, InstanceId=${a.activityDetails?.instanceId}`);
+    });
+    return dedupedActivities;
+  }
+
+  async syncSpecificPGCR(activityId: string) {
+    try {
+      console.log(`[DEBUG] Attempting to sync specific PGCR: ${activityId}`);
+      
+      // First check if it's already in the database
+      const existingActivity = await this.activityDb.getActivityByInstanceId(activityId);
+      if (existingActivity) {
+        console.log('[DEBUG] PGCR already exists in database');
+        return;
+      }
+
+      // Fetch the PGCR from API
+      const pgcr = await firstValueFrom(this.bungieService.getPGCR(activityId));
+      if (!pgcr) {
+        throw new Error('No PGCR data received');
+      }
+
+      // Convert PGCR to StoredActivity format
+      const storedActivity: StoredActivity = {
+        ...pgcr,
+        membershipId: pgcr.entries?.[0]?.player?.destinyUserInfo?.membershipId || '',
+        characterId: pgcr.entries?.[0]?.characterId || '',
+        instanceId: activityId,
+        mode: pgcr.activityDetails?.mode
+      };
+
+      // Add to database
+      await this.activityDb.addActivities([storedActivity]);
+      console.log('[DEBUG] Successfully added PGCR to database');
+      
+      // Refresh the activity list
+      await this.loadAllFilteredActivities();
+    } catch (error) {
+      console.error('[DEBUG] Error syncing specific PGCR:', error);
+      throw error;
+    }
+  }
+
+  private isDuplicateActivity(a1: ActivityHistory, a2: ActivityHistory): boolean {
+    return a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
   }
 }
 
