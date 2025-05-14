@@ -141,8 +141,6 @@ export class PlayerSearchComponent implements OnInit {
   activities: { [key: string]: ActivityHistory[] } = {};
   loading: { [key: string]: boolean } = {};
   error: { [key: string]: string } = {};
-  selectedPGCR: any = null;
-  showPGCRModal: boolean = false;
   selectedActivityType: ActivityTypeOption = ACTIVITY_TYPE_OPTIONS[0];
   searchUsername = '';
   selectedPlatform = '';
