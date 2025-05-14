@@ -22,7 +22,7 @@ jobs:
         run: npm ci
 
       - name: Build Angular app
-        run: npx ng build --configuration production --base-href /destiny-chronicle/
+        run: npx ng build --configuration production --base-href /Destiny-Chronicle/
 
       - name: Copy index.html to 404.html
         run: cp dist/destiny-chronicle/browser/browser/index.html dist/destiny-chronicle/browser/browser/404.html
