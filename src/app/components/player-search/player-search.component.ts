@@ -737,13 +737,11 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async viewPGCR(activityId: string | number) {
-    // Ensure activityId is a string
-    const id = typeof activityId === 'object' ? activityId?.instanceId : activityId;
+    const id = activityId?.toString();
     if (!id) {
       console.error('Invalid activityId passed to viewPGCR:', activityId);
       return;
     }
-    // Always use HTTPS for the PGCR URL
     const url = `https://www.bungie.net/en/PGCR/${id}`;
     window.open(url, '_blank');
   }
