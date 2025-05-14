@@ -6,33 +6,22 @@ on:
       - master
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
           node-version: '20'
-          cache: 'npm'
-
+          
       - name: Install dependencies
         run: npm ci
-
+        
       - name: Build
-        run: |
-          # Clean any existing build artifacts
-          rm -rf dist/
-          
-          # Run the build with production configuration
-          npm run build -- --configuration production
-          
-          # Debug: List build output
-          echo "Listing build output:"
-          ls -la dist/destiny-chronicle/browser/
-
+        run: npm run build
+        
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
