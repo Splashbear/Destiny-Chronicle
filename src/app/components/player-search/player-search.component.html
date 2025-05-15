@@ -94,6 +94,10 @@
       <select #daySelect [value]="currentDay" (change)="onDateSelect(monthSelect.value, daySelect.value)" class="bg-slate-700 text-white rounded px-3 py-1 border border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none">
         <option *ngFor="let day of getDaysForMonth(monthSelect.value)" [value]="day">{{day}}</option>
       </select>
+      <button (click)="loadAllFilteredActivities()"
+              class="bg-green-600 text-white py-1 px-3 rounded hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+        Load Activities
+      </button>
     </div>
   </div>
 
@@ -162,15 +166,15 @@
           <div class="activity-grid">
             <div *ngFor="let activity of typeGroup.activities" class="activity-card">
               <div class="activity-header">
-                <img [src]="activity.icon" [alt]="activity.name" class="activity-icon">
+                <img [src]="activity.iconPath || typeGroup.icon" [alt]="getActivityName(activity, activity.game === 'D1')" class="activity-icon">
                 <div class="activity-info">
-                  <h6>{{ activity.name }}</h6>
+                  <h6>{{ getActivityName(activity, activity.game === 'D1') }}</h6>
                   <span class="activity-time">{{ activity.period | date:'shortTime' }}</span>
                 </div>
               </div>
               <div class="activity-details">
                 <span class="activity-duration">{{ activity.duration | number:'1.0-0' }}m</span>
-                <button (click)="viewPGCR(activity)" class="view-details-btn">
+                <button (click)="viewPGCR(activity.activityDetails?.instanceId)" class="view-details-btn">
                   View Details
                 </button>
               </div>
@@ -178,22 +182,6 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- PGCR Modal -->
-  <div *ngIf="showPGCRModal" 
-       class="fixed inset-0 bg-black/75 flex items-center justify-center z-50"
-       (click)="closePGCRModal()">
-    <div class="bg-slate-800 rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-         (click)="$event.stopPropagation()">
-      <button (click)="closePGCRModal()"
-              class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      <app-pgcr-details [pgcr]="selectedPGCR"></app-pgcr-details>
     </div>
   </div>
 
@@ -232,5 +220,13 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Purge Database Button -->
+  <div class="flex justify-end mt-8">
+    <button (click)="clearAllActivitiesFromDb()"
+            class="bg-red-700 text-white py-1 px-4 rounded shadow hover:bg-red-800 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-800">
+      Purge All Activities
+    </button>
   </div>
 </div> 

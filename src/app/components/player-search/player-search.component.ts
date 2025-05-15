@@ -8,7 +8,7 @@ import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/loading-progress.component';
 import { ActivityHistory, Character } from '../../models/activity-history.model';
-import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption } from '../../models/activity';
+import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity } from '../../services/activity-db.service';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap } from 'rxjs/operators';

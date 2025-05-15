@@ -188,11 +188,15 @@ export class BungieApiService {
   }
 
   getPGCR(activityId: string): Observable<any> {
-    console.log('PGCR Request Headers:', this.getHeaders());
-    
+    const headers = this.getHeaders();
+    console.log('Attempting to fetch PGCR with ID:', activityId);
+    console.log('X-API-Key being sent:', headers.get('X-API-Key'));
+    console.log('All headers being sent:', JSON.stringify(headers));
+
+    // Use stats.bungie.net for PGCR endpoint
     return this.http.get(
-      `${this.D2_BASE_URL}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
-      { headers: this.getHeaders() }
+      `https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${activityId}/`,
+      { headers: headers }
     ).pipe(
       tap(response => console.log('PGCR Response:', response)),
       map((response: any) => {
@@ -240,7 +244,7 @@ export class BungieApiService {
   }
 
   searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<any> {
-    const url = `${this.D2_BASE_URL}/Platform/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
+    const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
       'User-Agent': 'DestinyChronicle/1.0',
