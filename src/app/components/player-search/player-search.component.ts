@@ -6,12 +6,10 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
-import { PGCRDetailsComponent } from '../pgcr-details/pgcr-details.component';
+import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/loading-progress.component';
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption } from '../../models/activity';
 import { ActivityDbService, StoredActivity } from '../../services/activity-db.service';
-import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/loading-progress.component';
-import { ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { TimezoneService } from '../../services/timezone.service';
@@ -121,7 +119,7 @@ interface VerificationResult {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, PGCRDetailsComponent, LoadingProgressComponent],
+  imports: [CommonModule, FormsModule, LoadingProgressComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
