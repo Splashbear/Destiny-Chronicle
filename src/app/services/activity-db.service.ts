@@ -1,24 +1,30 @@
 import { Injectable } from '@angular/core';
 import Dexie, { Table } from 'dexie';
 import { ActivityHistory } from '../models/activity-history.model';
+import { RAID_NAMES, GuardianFirsts, ActivityFirstCompletion } from '../models/guardian-firsts.model';
+import { DestinyManifestService } from './destiny-manifest.service';
 
 export interface StoredActivity extends ActivityHistory {
   membershipId: string;
   characterId: string;
   // period is already in ActivityHistory
   // mode is already in activityDetails
+  validated?: boolean;
+  validatedAt?: string;
+  instanceId?: string;
+  game?: 'D1' | 'D2';
 }
 
 @Injectable({ providedIn: 'root' })
 export class ActivityDbService extends Dexie {
   activities!: Table<StoredActivity, number>;
 
-  constructor() {
+  constructor(private manifest: DestinyManifestService) {
     super('DestinyActivityDb');
     try {
-      this.version(3).stores({
-        // Use top-level instanceId and mode for compound indexes
-        activities: '++id, membershipId, characterId, period, instanceId, mode, [membershipId+characterId+instanceId], [membershipId+characterId+mode]'
+      this.version(4).stores({
+        // Add indexes for validation state and improve date indexing
+        activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]'
       });
       this.activities = this.table('activities');
       console.log('[Dexie] ActivityDbService initialized successfully');
@@ -36,74 +42,21 @@ export class ActivityDbService extends Dexie {
   }
 
   private isDuplicateActivity(a1: StoredActivity, a2: StoredActivity): boolean {
-    const isDuplicate = a1.membershipId === a2.membershipId &&
+    return a1.membershipId === a2.membershipId &&
            a1.characterId === a2.characterId &&
-           a1.activityDetails?.instanceId === a2.activityDetails?.instanceId &&
-           a1.period === a2.period;
-
-    // Debug logging for our target activity
-    if (a1.activityDetails?.instanceId === '1859166440' || a2.activityDetails?.instanceId === '1859166440') {
-      console.log('[Dexie] Checking for duplicate of target activity:', {
-        activity1: {
-          instanceId: a1.activityDetails?.instanceId,
-          period: a1.period,
-          membershipId: a1.membershipId,
-          characterId: a1.characterId
-        },
-        activity2: {
-          instanceId: a2.activityDetails?.instanceId,
-          period: a2.period,
-          membershipId: a2.membershipId,
-          characterId: a2.characterId
-        },
-        isDuplicate,
-        reason: isDuplicate ? 'All fields match' : 'Fields differ'
-      });
-    }
-
-    return isDuplicate;
+           a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
   }
 
   async addActivities(activities: StoredActivity[]) {
     try {
       console.log(`[Dexie] Adding ${activities.length} activities to database`);
-      
-      // Log if our target activity is in the incoming batch
-      const targetActivity = activities.find(a => a.activityDetails?.instanceId === '1859166440');
-      if (targetActivity) {
-        console.log('[Dexie] Target activity found in incoming batch:', {
-          period: targetActivity.period,
-          utc: new Date(targetActivity.period).toISOString(),
-          local: new Date(targetActivity.period).toLocaleString(),
-          membershipId: targetActivity.membershipId,
-          characterId: targetActivity.characterId
-        });
-      }
-      
       // Deduplicate activities before storing
       const uniqueActivities = activities.filter((activity, index, self) => {
-        const isDuplicate = index !== self.findIndex(a => this.isDuplicateActivity(a, activity));
-        
-        // Log if this is our target activity
-        if (activity.activityDetails?.instanceId === '1859166440') {
-          console.log('[Dexie] Target activity being deduplicated:', {
-            isDuplicate,
-            period: activity.period,
-            utc: new Date(activity.period).toISOString(),
-            local: new Date(activity.period).toLocaleString(),
-            membershipId: activity.membershipId,
-            characterId: activity.characterId
-          });
-        }
-        
-        return !isDuplicate;
+        return index === self.findIndex(a => this.isDuplicateActivity(a, activity));
       });
-
       console.log(`[Dexie] After deduplication: ${uniqueActivities.length} unique activities`);
-      
       // Store activities in the database
       await this.activities.bulkPut(uniqueActivities);
-      
       // Log the total count after adding
       const totalCount = await this.activities.count();
       console.log(`[Dexie] Total activities in database: ${totalCount}`);
@@ -117,65 +70,21 @@ export class ActivityDbService extends Dexie {
     try {
       console.log(`[Dexie] Getting activities for ${membershipId}/${characterId} on ${month}/${day}${year ? `/${year}` : ' (all years)'}`);
       
-      // Get all activities for this character
+      // Create date range for the specified day
+      const startDate = new Date(Date.UTC(year || 2014, month - 1, day, 0, 0, 0));
+      const endDate = new Date(Date.UTC(year || 2030, month - 1, day, 23, 59, 59));
+      
+      // Use compound index for efficient date-based querying
       const activities = await this.activities
-        .where({ membershipId, characterId })
+        .where('[period+membershipId+characterId]')
+        .between(
+          [startDate.toISOString(), membershipId, characterId],
+          [endDate.toISOString(), membershipId, characterId]
+        )
         .toArray();
       
-      console.log(`[Dexie] Found ${activities.length} total activities before date filtering`);
-      
-      // Filter activities by month, day, and optionally year using UTC
-      const filtered = activities.filter(a => {
-        if (!a.period) return false;
-        const d = new Date(a.period);
-        const activityMonth = d.getUTCMonth() + 1; // Convert 0-11 to 1-12
-        const activityDay = d.getUTCDate();
-        const activityYear = d.getUTCFullYear();
-        
-        // Log detailed date information for debugging
-        console.log(`[Dexie] Checking activity date:`, {
-          period: a.period, // Log the raw period string
-          utc: d.toISOString(),
-          local: d.toLocaleString(),
-          month: activityMonth,
-          day: activityDay,
-          year: activityYear,
-          targetMonth: month,
-          targetDay: day,
-          targetYear: year
-        });
-        
-        const match = activityMonth === month && 
-                     activityDay === day && 
-                     (!year || activityYear === year);
-                     
-        if (match) {
-          console.log(`[Dexie] Found matching activity on ${d.toISOString()}`);
-        }
-        
-        return match;
-      });
-
-      // Group filtered activities by year for analysis
-      const filteredByYear = filtered.reduce((acc, activity) => {
-        const year = new Date(activity.period).getUTCFullYear();
-        if (!acc[year]) acc[year] = [];
-        acc[year].push(activity);
-        return acc;
-      }, {} as { [year: string]: StoredActivity[] });
-
-      // Log detailed information about filtered activities
-      const filteredYears = Object.keys(filteredByYear).sort();
-      console.log(`[Dexie] Found matches in years: ${filteredYears.join(', ')}`);
-      
-      filteredYears.forEach(year => {
-        console.log(`[Dexie] Year ${year}: ${filteredByYear[year].length} activities`);
-        // Log sample of activity types for this year
-        const types = new Set(filteredByYear[year].map(a => a.activityDetails.mode));
-        console.log(`[Dexie] Activity types in ${year}: ${Array.from(types).join(', ')}`);
-      });
-
-      return filtered;
+      console.log(`[Dexie] Found ${activities.length} activities for date range`);
+      return activities;
     } catch (error) {
       console.error('[Dexie] Error getting activities by date:', error);
       throw error;
@@ -257,5 +166,93 @@ export class ActivityDbService extends Dexie {
       console.error('[Dexie] Error getting activity by instance ID:', error);
       return undefined;
     }
+  }
+
+  async getUnvalidatedActivities(membershipId: string, characterId: string): Promise<StoredActivity[]> {
+    try {
+      return await this.activities
+        .where({ membershipId, characterId })
+        .filter(activity => !activity.validated)
+        .toArray();
+    } catch (error) {
+      console.error('[Dexie] Error getting unvalidated activities:', error);
+      throw error;
+    }
+  }
+
+  async getFirstCompletions(membershipId: string, characterId: string, game?: 'D1' | 'D2'): Promise<GuardianFirsts | undefined> {
+    try {
+      if (!membershipId || !characterId) {
+        console.log('[DEBUG] getFirstCompletions: Missing membershipId or characterId');
+        return undefined;
+      }
+
+      console.log(`[DEBUG] getFirstCompletions: Starting for ${membershipId}/${characterId} (game: ${game})`);
+
+      // Get all activities for the character
+      const activities = await this.activities
+        .where({ membershipId, characterId })
+        .toArray();
+
+      console.log(`[DEBUG] getFirstCompletions: Found ${activities.length} total activities`);
+
+      // Group by activity type and referenceId to find first completions
+      const firstCompletions = new Map<string, ActivityFirstCompletion>();
+
+      for (const activity of activities) {
+        if (!activity.activityDetails?.referenceId) continue;
+        
+        const type = this.manifest.getActivityType(activity.activityDetails.referenceId);
+        // Only process raids and dungeons
+        if (type !== 'raid' && type !== 'dungeon') continue;
+
+        const key = `${type}-${activity.activityDetails.referenceId}`;
+        const existing = firstCompletions.get(key);
+
+        if (!existing || new Date(activity.period) < new Date(existing.period)) {
+          firstCompletions.set(key, {
+            type,
+            name: this.manifest.getActivityName(activity.activityDetails.referenceId, activity.game === 'D1'),
+            game: activity.game || 'D2', // Default to D2 if undefined
+            period: activity.period,
+            completionDate: activity.period,
+            referenceId: activity.activityDetails.referenceId,
+            instanceId: activity.activityDetails.instanceId || '',
+            mode: activity.activityDetails.mode,
+            characterId: activity.characterId,
+            membershipId: activity.membershipId
+          });
+        }
+      }
+
+      const filteredFirsts = Array.from(firstCompletions.values());
+      console.log('[DEBUG] Filtered first completions (raids/dungeons only):', filteredFirsts);
+
+      return {
+        membershipId,
+        characterId,
+        displayName: '', // or whatever you use
+        platform: '',    // or whatever you use
+        firstCompletions: filteredFirsts
+      };
+    } catch (error) {
+      console.error('Error getting first completions:', error);
+      return undefined;
+    }
+  }
+
+  async validateAllActivities() {
+    const all = await this.activities.toArray();
+    let updated = 0;
+    for (const activity of all) {
+      if (!activity.validated) {
+        activity.validated = true;
+        activity.validatedAt = new Date().toISOString();
+        await this.activities.put(activity);
+        updated++;
+      }
+      console.log('[DEBUG] Activity membershipId/characterId:', activity.membershipId, activity.characterId);
+    }
+    console.log(`[DEBUG] Validated ${updated} activities out of ${all.length}`);
   }
 } 
