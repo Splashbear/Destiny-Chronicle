@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Inject } from '@angular/core';
+import { Cache } from './cache.service';
 
 interface CachedPGCR {
   activityId: string;
@@ -14,8 +15,13 @@ export class PGCRCacheService {
   private readonly CACHE_KEY = 'destiny_pgcr_cache';
   private readonly MAX_CACHE_SIZE = 50; // Maximum number of PGCRs to cache
   private readonly CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+  private d2PgcrCache: Cache<any>;
+  private d1PgcrCache: Cache<any>;
 
-  constructor() {}
+  constructor() {
+    this.d2PgcrCache = new Cache<any>('d2-pgcr-cache', 24 * 60 * 60 * 1000); // 24 hours
+    this.d1PgcrCache = new Cache<any>('d1-pgcr-cache', 24 * 60 * 60 * 1000); // 24 hours
+  }
 
   private getCache(): CachedPGCR[] {
     const cached = localStorage.getItem(this.CACHE_KEY);
@@ -89,6 +95,8 @@ export class PGCRCacheService {
 
   clearCache(): void {
     localStorage.removeItem(this.CACHE_KEY);
+    this.d2PgcrCache.clear();
+    this.d1PgcrCache.clear();
   }
 
   getCacheStats(): { total: number; fullData: number; size: number } {
@@ -101,5 +109,41 @@ export class PGCRCacheService {
       fullData: fullDataCount,
       size: cacheSize
     };
+  }
+
+  /**
+   * Caches a D2 PGCR (Post Game Carnage Report).
+   * @param activityId The ID of the activity to cache.
+   * @param pgcr The PGCR data to cache.
+   */
+  cacheD2PGCR(activityId: string, pgcr: any): void {
+    this.d2PgcrCache.set(activityId, pgcr);
+  }
+
+  /**
+   * Gets a cached D2 PGCR (Post Game Carnage Report).
+   * @param activityId The ID of the activity to get.
+   * @returns The cached PGCR data, or undefined if not cached.
+   */
+  getD2PGCR(activityId: string): any {
+    return this.d2PgcrCache.get(activityId);
+  }
+
+  /**
+   * Caches a D1 PGCR (Post Game Carnage Report).
+   * @param activityId The ID of the activity to cache.
+   * @param pgcr The PGCR data to cache.
+   */
+  cacheD1PGCR(activityId: string, pgcr: any): void {
+    this.d1PgcrCache.set(activityId, pgcr);
+  }
+
+  /**
+   * Gets a cached D1 PGCR (Post Game Carnage Report).
+   * @param activityId The ID of the activity to get.
+   * @returns The cached PGCR data, or undefined if not cached.
+   */
+  getD1PGCR(activityId: string): any {
+    return this.d1PgcrCache.get(activityId);
   }
 } 

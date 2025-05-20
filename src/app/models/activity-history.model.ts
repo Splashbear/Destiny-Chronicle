@@ -15,6 +15,9 @@ export interface ActivityHistory {
     team?: { basic: { value: number } };
     standing?: { basic: { value: number } };
   };
+  validated?: boolean;
+  validatedAt?: string;
+  pgcrUnavailable?: boolean;
 }
 
 export interface Character {

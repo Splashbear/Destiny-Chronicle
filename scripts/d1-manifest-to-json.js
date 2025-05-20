@@ -49,12 +49,15 @@ function extractActivityDefinitions(sqlitePath) {
     const db = new sqlite3.Database(sqlitePath, sqlite3.OPEN_READONLY, (err) => {
       if (err) return reject(err);
     });
-    db.all('SELECT id, json FROM DestinyActivityDefinition', (err, rows) => {
+    db.all('SELECT json FROM DestinyActivityDefinition', (err, rows) => {
       if (err) return reject(err);
       const defs = {};
       for (const row of rows) {
         try {
-          defs[row.id] = JSON.parse(row.json);
+          const def = JSON.parse(row.json);
+          if (def && def.activityHash !== undefined) {
+            defs[String(def.activityHash)] = def;
+          }
         } catch (e) {
           // skip malformed rows
         }

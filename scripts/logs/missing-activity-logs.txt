@@ -1,0 +1,3 @@
+[Manifest][getActivityIcon] MISSING {referenceId: 4107311671, isD1: true}
+[Manifest][getActivityPgcrImage] MISSING {referenceId: 4107311671, isD1: true}
+[Manifest][getActivityName] MISSING {referenceId: 4107311671, isD1: true}

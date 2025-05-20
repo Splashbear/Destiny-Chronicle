@@ -1,69 +1,76 @@
 <div class="min-h-screen bg-slate-900">
   <div class="container mx-auto px-4 py-6">
     <div class="grid grid-cols-12 gap-6">
-      <!-- Left Sidebar - Account Selection -->
-      <div class="col-span-12 lg:col-span-3">
-        <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
-          <h2 class="text-xl font-bold text-white mb-4">Accounts</h2>
-          
-          <!-- Selected Profiles -->
-          <div class="mb-4 space-y-2">
-            <div *ngFor="let player of selectedPlayers; let i = index" 
-                 class="flex items-center bg-slate-700/80 rounded px-2 py-1 text-sm text-white">
-              <span class="font-semibold truncate">{{ player.displayName }}</span>
-              <span class="ml-1 px-1.5 py-0.5 rounded text-xs font-bold" 
-                    [ngClass]="player.game === 'D1' ? 'bg-destiny-d1' : 'bg-destiny-d2'">
-                {{ player.game }}
-              </span>
-              <span class="ml-1 text-xs text-slate-300">{{ player.platform }}</span>
-              <button (click)="removePlayer(i)" 
-                      class="ml-auto text-red-400 hover:text-red-200" 
-                      title="Remove">×</button>
+      <!-- Top Row: Account and Date Pickers (Horizontal) -->
+      <div class="col-span-12 flex flex-col xl:flex-row gap-4 mb-6">
+        <!-- Account Picker -->
+        <div class="flex-1 xl:basis-1/3 flex flex-row gap-4 items-end min-w-0">
+          <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex-1 min-w-0">
+            <h2 class="text-xl font-bold text-white mb-4">Accounts</h2>
+            <!-- Favorites Section -->
+            <div *ngIf="favoriteAccounts.length > 0" class="mb-4">
+              <h3 class="text-lg font-semibold text-yellow-400 mb-2">Favorites</h3>
+              <div class="flex flex-wrap gap-2">
+                <div *ngFor="let fav of favoriteAccounts" class="bg-slate-700 rounded px-3 py-2 flex items-center gap-2 cursor-pointer" (click)="selectPlayer(fav)">
+                  <span class="font-bold">{{ fav.displayName }}</span>
+                  <span class="text-xs text-slate-400">({{ fav.platform }}, {{ fav.game }})</span>
+                  <button (click)="$event.stopPropagation(); toggleFavorite(fav)">
+                    <span [ngClass]="'text-yellow-400'">★</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-
-          <!-- Compact Search Form -->
-          <div class="space-y-2">
-            <input type="text" 
-                   [(ngModel)]="searchUsername"
-                   [class.border-red-500]="errorMessage"
-                   class="w-full px-3 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600"
-                   placeholder="Username">
-            
-            <div class="grid grid-cols-2 gap-2">
+            <!-- API Unavailable Message -->
+            <div *ngIf="!apiAvailable" class="bg-red-900 text-red-200 p-2 rounded mb-4">
+              Bungie API is currently unavailable. Showing cached data for favorite accounts only.
+            </div>
+            <!-- Selected Profiles -->
+            <div class="mb-4 flex flex-row flex-wrap gap-2">
+              <div *ngFor="let player of selectedPlayers; let i = index" 
+                   class="flex items-center gap-2 mb-2">
+                <span>{{ player.displayName }} ({{ player.platform }}, {{ player.game }})</span>
+                <button (click)="toggleFavorite(player)" [attr.aria-label]="isFavorite(player) ? 'Unfavorite' : 'Favorite'">
+                  <span [ngClass]="isFavorite(player) ? 'text-yellow-400' : 'text-slate-400'">★</span>
+                </button>
+                <button (click)="removePlayer(i)">Remove</button>
+              </div>
+            </div>
+            <!-- Compact Search Form -->
+            <div class="flex flex-row gap-2 items-end">
+              <input type="text" 
+                     [(ngModel)]="searchUsername"
+                     [class.border-red-500]="errorMessage"
+                     class="w-40 px-3 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600"
+                     placeholder="Username">
               <select [(ngModel)]="selectedPlatform"
-                      class="w-full px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
+                      class="w-32 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
                 <option *ngFor="let platform of platforms" [value]="platform.value">
                   {{ platform.label }}
                 </option>
               </select>
-              
               <select [(ngModel)]="selectedGame" 
-                      class="w-full px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
+                      class="w-20 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
                 <option value="D1">D1</option>
                 <option value="D2">D2</option>
               </select>
+              <button (click)="addPlayer()" 
+                      [disabled]="!searchUsername"
+                      class="bg-blue-600 text-white py-1.5 px-3 text-sm rounded">
+                {{ loading['search'] ? 'Adding...' : 'Add Account' }}
+              </button>
             </div>
-
-            <button (click)="addPlayer()" 
-                    [disabled]="!searchUsername"
-                    class="w-full bg-blue-600 text-white py-1.5 px-3 text-sm rounded">
-              {{ loading['search'] ? 'Adding...' : 'Add Account' }}
-            </button>
-          </div>
-
-          <div *ngIf="errorMessage" class="mt-2 text-sm text-red-400">
-            {{ errorMessage }}
+            <div *ngIf="errorMessage" class="mt-2 text-sm text-red-400">
+              {{ errorMessage }}
+            </div>
           </div>
         </div>
-
-        <!-- Date Selection -->
-        <div class="mt-4 bg-slate-800/95 rounded-lg shadow-lg p-4">
+        <!-- Date Picker -->
+        <div *ngIf="dbReady" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:basis-1/3 min-w-0">
           <h2 class="text-xl font-bold text-white mb-4">Date</h2>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="flex flex-row gap-2">
             <select #monthSelect [value]="currentMonth" 
                     (change)="onDateSelect(monthSelect.value, daySelect.value)"
-                    class="w-full px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
+                    class="w-32 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
               <option value="1">January</option>
               <option value="2">February</option>
               <option value="3">March</option>
@@ -79,7 +86,7 @@
             </select>
             <select #daySelect [value]="currentDay" 
                     (change)="onDateSelect(monthSelect.value, daySelect.value)"
-                    class="w-full px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
+                    class="w-24 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
               <option *ngFor="let day of getDaysForMonth(monthSelect.value)" [value]="day">{{day}}</option>
             </select>
           </div>
@@ -89,70 +96,40 @@
           </button>
         </div>
       </div>
-
-      <!-- Main Content Area -->
-      <div class="col-span-12 lg:col-span-9">
-        <app-loading-progress [progress]="loadingProgress"></app-loading-progress>
-        
-        <!-- Account Stats -->
-        <div *ngIf="!loadingAccountStats && accountStats" 
-             class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-6">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="stat-box">
-              <div class="text-sm text-slate-400">Total Time</div>
-              <div class="text-xl text-white">
-                {{ (accountStats.totalTime / 60) | number:'1.0-0' }}h
+      <!-- Main Content: Yearly Activity Cards -->
+      <div class="col-span-12 xl:col-span-8 2xl:col-span-9 xl:basis-2/3">
+        <!-- Account Stats Summary -->
+        <div *ngIf="!loadingAccountStats && (accountStats.totalActivityCount > 0 || selectedPlayers.length > 0)" class="mb-6">
+          <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4">
+            <h3 class="text-lg font-semibold text-white mb-2">Account Summary</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="stat-item">
+                <strong>Total Time Played</strong>
+                <span>{{ accountStats.totalTime | number }} min</span>
+              </div>
+              <div class="stat-item">
+                <strong>Total Activity Time</strong>
+                <span>{{ accountStats.totalActivityTime | number }} min</span>
+              </div>
+              <div class="stat-item">
+                <strong>Total Activities</strong>
+                <span>{{ accountStats.totalActivityCount }}</span>
               </div>
             </div>
-            <div class="stat-box">
-              <div class="text-sm text-slate-400">Activity Time</div>
-              <div class="text-xl text-white">
-                {{ (accountStats.totalActivityTime / 3600) | number:'1.0-0' }}h
-              </div>
-            </div>
-            <div class="stat-box">
-              <div class="text-sm text-slate-400">Activities</div>
-              <div class="text-xl text-white">
-                {{ accountStats.totalActivityCount }}
-              </div>
-            </div>
-          </div>
-
-          <!-- Guardian Firsts Section -->
-          <div *ngIf="!loadingGuardianFirsts && guardianFirsts.length > 0" class="mt-6">
-            <h3 class="text-lg font-semibold text-white mb-4">Guardian Firsts (Lifetime Overview)</h3>
-            <div class="space-y-4">
-              <div *ngFor="let game of guardianGames">
-                <div *ngIf="hasGuardianFirstsForGame(game)">
-                  <div class="text-md font-bold text-yellow-400 mb-2">
-                    <span *ngIf="game === 'D1'">Destiny 1</span>
-                    <span *ngIf="game === 'D2'">Destiny 2</span>
-                  </div>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div *ngFor="let first of getGuardianFirstsForGame(game)" class="bg-slate-700/50 rounded-lg p-3 flex items-center justify-between">
-                      <div class="flex items-center">
-                        <img [src]="manifest.getActivityPgcrImage(first.referenceId, first.game === 'D1')" alt="{{ first.name }}" class="w-16 h-16 rounded mr-3 object-cover" />
-                        <div>
-                          <div class="flex items-center mb-1">
-                            <img [src]="manifest.getActivityIcon(first.referenceId, first.game === 'D1')" alt="icon" class="w-5 h-5 mr-2" />
-                            <span class="font-semibold text-white">{{ first.name }}</span>
-                            <span class="ml-2 text-xs px-2 py-0.5 rounded bg-slate-600 text-slate-200 uppercase">{{ first.type }}</span>
-                          </div>
-                          <div class="text-sm text-slate-300">
-                            {{ first.period | date:'medium' }}
-                          </div>
-                        </div>
-                      </div>
-                      <button (click)="viewPGCR(first.instanceId)" class="ml-4 px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 transition">View PGCR</button>
-                    </div>
-                  </div>
-                </div>
+            <div class="activity-type-stats mt-4">
+              <div class="type-stat" *ngFor="let type of (selectedPlayers.length === 1 ? (selectedPlayers[0].game === 'D1' ? ['Raid','Strike','Nightfall','Crucible','Other'] : ['Raid','Dungeon','Strike','Nightfall','Crucible','Gambit','Other']) : ['Raid','Dungeon','Strike','Nightfall','Crucible','Gambit','Other'])">
+                <ng-container *ngIf="accountStats.perType[type]">
+                  <strong>{{ type }}</strong>
+                  <span>
+                    {{ getPerTypeStats(type).count }} runs,
+                    {{ getPerTypeStats(type).time | number }} min
+                  </span>
+                </ng-container>
               </div>
             </div>
           </div>
         </div>
-
-        <!-- Activities Grid -->
+        <app-loading-progress [progress]="loadingProgress"></app-loading-progress>
         <div *ngIf="!loadingActivities[selectedDate] && (groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0)"
              class="space-y-6">
           <div *ngFor="let account of groupedActivitiesByAccount" 
@@ -162,35 +139,54 @@
               <span class="ml-2 px-2 py-0.5 text-sm rounded bg-slate-600 text-white">
                 {{ account.platform }}
               </span>
+              <span class="ml-2 px-2 py-0.5 text-sm rounded bg-slate-600 text-white">
+                {{ account.game }}
+              </span>
             </div>
-            
             <div class="p-4">
               <div *ngFor="let yearGroup of account.yearGroups" class="mb-6 last:mb-0">
                 <h4 class="text-lg font-semibold text-white mb-4">{{ yearGroup.year }}</h4>
-                
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div *ngFor="let activity of yearGroup.typeGroups[0].activities" 
+                  <div *ngFor="let activityGroup of groupActivitiesByType(yearGroup.typeGroups[0].activities)" 
                        class="activity-card bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
                     <div class="relative">
-                      <img [src]="getActivityImage(activity, activity.game === 'D1') || activity.iconPath || getActivityTypeIcon(activity.activityDetails?.mode)"
-                           [alt]="getActivityName(activity, activity.game === 'D1')"
-                           class="w-full h-24 object-cover">
+                      <ng-container *ngIf="getActivityImage(activityGroup.activities[0], activityGroup.game === 'D1') as imgSrc">
+                        <ng-container *ngIf="imgSrc.includes('/assets/icons/activities/')">
+                          <div class="w-full h-24 flex items-center justify-center bg-slate-900">
+                            <img [src]="imgSrc"
+                                 [alt]="getActivityName(activityGroup.activities[0], activityGroup.game === 'D1')"
+                                 class="h-12 w-12 object-contain"
+                                 (error)="handleImageError($event, activityGroup.game === 'D1')">
+                          </div>
+                        </ng-container>
+                        <ng-container *ngIf="!imgSrc.includes('/assets/icons/activities/')">
+                          <img [src]="imgSrc"
+                               [alt]="getActivityName(activityGroup.activities[0], activityGroup.game === 'D1')"
+                               class="w-full h-24 object-cover"
+                               (error)="handleImageError($event, activityGroup.game === 'D1')">
+                        </ng-container>
+                      </ng-container>
                       <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                       <div class="absolute bottom-0 left-0 right-0 p-3">
                         <h6 class="text-white font-medium truncate">
-                          {{ getActivityName(activity, activity.game === 'D1') }}
+                          {{ getActivityName(activityGroup.activities[0], activityGroup.game === 'D1') }}
                         </h6>
                         <div class="flex items-center justify-between text-sm text-slate-300">
-                          <span>{{ formatTime(activity.period) }}</span>
-                          <span>{{ getActivityDurationSeconds(activity) / 60 | number:'1.0-0' }}m</span>
+                          <span>{{ activityGroup.activities.length }} {{ activityGroup.activities.length === 1 ? 'completion' : 'completions' }}</span>
+                          <span>{{ getAverageDuration(activityGroup.activities) | number:'1.0-0' }}m avg</span>
                         </div>
                       </div>
                     </div>
                     <div class="p-3 border-t border-slate-600/50">
-                      <button (click)="viewPGCR(activity.activityDetails?.instanceId)"
-                              class="w-full text-center text-sm text-blue-400 hover:text-blue-300">
-                        View Details
-                      </button>
+                      <div class="space-y-2">
+                        <div *ngFor="let activity of activityGroup.activities" class="flex items-center justify-between text-sm">
+                          <span class="text-slate-300">{{ formatTime(activity.period) }}</span>
+                          <button (click)="openExternalPGCR(activity, activity.game === 'D1')"
+                                  class="text-blue-400 hover:text-blue-300">
+                            View PGCR
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -198,18 +194,41 @@
             </div>
           </div>
         </div>
-
-        <!-- Loading State -->
         <div *ngIf="loadingActivities[selectedDate]" 
              class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center">
           <div class="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
           <p class="text-slate-300">Loading activities...</p>
         </div>
-
-        <!-- No Activities State -->
         <div *ngIf="!loadingActivities[selectedDate] && (!groupedActivitiesByAccount || groupedActivitiesByAccount.length === 0)" 
              class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center text-slate-300">
           No activities found for this date.
+        </div>
+      </div>
+      <!-- Guardian Firsts: Sticky Right Sidebar -->
+      <div class="col-span-12 xl:col-span-4 2xl:col-span-3 xl:sticky xl:top-4">
+        <div class="w-full xl:w-auto xl:max-w-5xl mx-auto">
+          <div *ngIf="!loadingGuardianFirsts && guardianFirsts.length > 0" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4">Guardian Firsts (Lifetime Overview)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-2 gap-6">
+              <ng-container *ngFor="let game of guardianGames">
+                <ng-container *ngFor="let first of getGuardianFirstsForGame(game)">
+                  <div class="bg-slate-900 rounded-lg p-4 flex flex-col items-center shadow-md">
+                    <img [src]="getFirstCompletionImage(first)" 
+                         [alt]="first.name"
+                         class="w-12 h-12 mb-2 object-cover"
+                         (error)="handleImageError($event, first.game === 'D1')">
+                    <div class="text-white text-center font-semibold">{{ first.name }}</div>
+                    <div class="text-xs text-slate-400 mb-1">{{ first.type | titlecase }} &bull; {{ first.game }}</div>
+                    <div class="text-xs text-slate-400">{{ first.completionDate | date:'mediumDate' }}</div>
+                    <button (click)="openExternalPGCRForFirst(first)"
+                            class="mt-2 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold py-1 px-3 rounded shadow">
+                      View PGCR
+                    </button>
+                  </div>
+                </ng-container>
+              </ng-container>
+            </div>
+          </div>
         </div>
       </div>
     </div>

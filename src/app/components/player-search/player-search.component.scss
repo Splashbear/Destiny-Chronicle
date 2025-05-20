@@ -137,45 +137,48 @@ button {
 }
 
 .activity-card {
-  background-color: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 1rem;
-  transition: transform 0.2s;
-
+  @apply relative overflow-hidden;
+  
   &:hover {
-    transform: translateY(-2px);
-    border-color: var(--destiny-gold);
+    .activity-details {
+      opacity: 1;
+    }
   }
 
-  .activity-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
+  .activity-image {
+    @apply w-full h-24 object-cover;
+    background-size: cover;
+    background-position: center;
+  }
 
-    .activity-icon {
-      width: 24px;
-      height: 24px;
-    }
+  .activity-fallback-icon {
+    @apply h-12 w-12 object-contain;
+    display: block;
+    margin: 0 auto;
+    background: none;
+  }
 
-    .activity-name {
-      font-weight: 600;
-      color: var(--destiny-gold);
-    }
+  .activity-fallback-container {
+    @apply w-full h-24 flex items-center justify-center bg-slate-900;
+  }
+
+  .activity-overlay {
+    @apply absolute inset-0;
+    background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+  }
+
+  .activity-content {
+    @apply absolute bottom-0 left-0 right-0 p-3;
   }
 
   .activity-details {
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.7);
+    @apply opacity-0 transition-opacity duration-200;
+    @apply absolute inset-0 bg-black/80 flex flex-col items-center justify-center p-4;
   }
 }
 
 .loading-spinner {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem;
+  @apply w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin;
 }
 
 .loading-indicator {
@@ -394,8 +397,9 @@ button {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 768px) {
@@ -409,5 +413,42 @@ button {
 
   .activity-list {
     grid-template-columns: 1fr;
+  }
+}
+
+:host {
+  display: block;
+  min-height: 100vh;
+  background-color: theme('colors.slate.900');
+}
+
+.bg-destiny-d1 {
+  background-color: #7b6b4e;
+}
+
+.bg-destiny-d2 {
+  background-color: #4c88ff;
+}
+
+.stat-box {
+  @apply bg-slate-700/50 rounded-lg p-4;
+}
+
+// Custom scrollbar for webkit browsers
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: theme('colors.slate.800');
+}
+
+::-webkit-scrollbar-thumb {
+  background: theme('colors.slate.600');
+  border-radius: 4px;
+  
+  &:hover {
+    background: theme('colors.slate.500');
   }
 } 

@@ -9,10 +9,13 @@ import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/loading-progress.component';
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
-import { ActivityDbService, StoredActivity } from '../../services/activity-db.service';
+import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap } from 'rxjs/operators';
 import { TimezoneService } from '../../services/timezone.service';
+import { ActivityIconService } from '../../services/activity-icon.service';
+import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
+import type { ActivityIconType } from '../../services/activity-icon.service';
 
 interface ActivityEntry {
   game: string;
@@ -44,6 +47,12 @@ interface AccountGroup {
   displayName: string;
   platform: string;
   yearGroups: Map<string, YearGroup>;
+}
+
+interface ActivityGroup {
+  type: number;
+  game: 'D1' | 'D2';
+  activities: any[];
 }
 
 // Representative activity referenceIds for each type (D2 hashes)
@@ -94,7 +103,9 @@ export function isPvP(mode: number): boolean {
 // Update the type where we need the game property
 type CharacterWithGame = Character & { 
   game?: 'D1' | 'D2';
-  mode?: number; // Add mode property for activity type filtering
+  mode?: number;
+  membershipType: number;
+  membershipId: string;
 };
 
 // Add cache interface
@@ -114,6 +125,20 @@ interface VerificationResult {
   dbCount: number;
   synced: boolean;
   missingIds: string[];
+}
+
+// Add interface for PGCR entry at the top with other interfaces
+interface PGCREntry {
+  player?: {
+    destinyUserInfo?: {
+      membershipId: string;
+      membershipType: number;
+      displayName?: string;
+    };
+    characterClass?: string;
+    lightLevel?: number;
+  };
+  characterId: string;
 }
 
 @Component({
@@ -162,6 +187,7 @@ export class PlayerSearchComponent implements OnInit {
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000;
   private activityCache: Map<string, ActivityCache> = new Map();
+  private filteredActivitiesCache: Map<string, ActivityWithMembership[]> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000;
   private filteredActivities$ = new BehaviorSubject<ActivityHistory[]>([]);
   loadingAccountStats = false;
@@ -178,6 +204,14 @@ export class PlayerSearchComponent implements OnInit {
   };
   private filteredActivitiesForDate: ActivityWithMembership[] = [];
   private currentLoadToken = 0;
+  private readonly PGCR_BATCH_SIZE = 30; // Increased from 10 to 30 for better parallelization
+  private readonly VALIDATION_DELAY = 50; // Reduced from 100ms to 50ms
+  guardianFirsts: ActivityFirstCompletion[] = [];
+  loadingGuardianFirsts = false;
+  readonly guardianGames: ('D1' | 'D2')[] = ['D1', 'D2'];
+  favoriteAccounts: FavoriteAccount[] = [];
+  apiAvailable: boolean = true;
+  dbReady: boolean = false;
 
   constructor(
     private bungieService: BungieApiService,
@@ -186,13 +220,54 @@ export class PlayerSearchComponent implements OnInit {
     private activityCacheService: ActivityCacheService,
     private pgcrCacheService: PGCRCacheService,
     private activityDb: ActivityDbService,
-    private timezoneService: TimezoneService
+    private timezoneService: TimezoneService,
+    private activityIconService: ActivityIconService
   ) {
+    (window as any).activityDbService = this.activityDb;
   }
 
-  ngOnInit(): void {
-    // Don't set default date - let user select it
-    this.selectedDate = '';
+  async ngOnInit() {
+    // Set default date to today
+    const today = new Date();
+    this.selectedMonth = today.getMonth() + 1;
+    this.selectedDay = today.getDate();
+    this.selectedDate = `${this.selectedMonth}-${this.selectedDay}`;
+    await this.loadFavorites();
+    this.dbReady = true;
+    this.cdr.detectChanges();
+  }
+
+  async loadFavorites() {
+    this.favoriteAccounts = await this.activityDb.getFavorites();
+    this.cdr.detectChanges();
+  }
+
+  isFavorite(player: PlayerSearchDisplay): boolean {
+    return this.favoriteAccounts.some(f => f.membershipId === player.membershipId && f.game === player.game);
+  }
+
+  async toggleFavorite(player: PlayerSearchDisplay) {
+    if (this.isFavorite(player)) {
+      await this.activityDb.removeFavorite(player.membershipId, player.game);
+    } else {
+      await this.activityDb.addFavorite({
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        displayName: player.displayName,
+        game: player.game,
+        platform: player.platform,
+        lastUpdated: new Date().toISOString()
+      });
+    }
+    await this.loadFavorites();
+  }
+
+  // On API error, set apiAvailable = false and show cached favorites
+  async handleApiError(error: any) {
+    if (error.status === 503 || error.status === 0) {
+      this.apiAvailable = false;
+      await this.loadFavorites();
+    }
   }
 
   get hasD1Players(): boolean {
@@ -353,10 +428,10 @@ export class PlayerSearchComponent implements OnInit {
       if (isD1) {
         const profile = await firstValueFrom(this.bungieService.getD1Profile(player.membershipType, player.membershipId));
         console.log('Profile fetch result:', profile);
-        if (!profile) {
+        if (!profile || !profile.Response) {
           throw new Error('No profile data received');
         }
-        this.characters[player.membershipId] = profile.data?.characters || [];
+        this.characters[player.membershipId] = profile.Response.data?.characters || [];
         for (const char of this.characters[player.membershipId]) {
           await this.loadActivityHistoryForCharacter({
             characterId: char.characterBase?.characterId,
@@ -368,10 +443,10 @@ export class PlayerSearchComponent implements OnInit {
       } else {
         const profile = await firstValueFrom(this.bungieService.getProfile(player.membershipType, player.membershipId));
         console.log('Profile fetch result:', profile);
-        if (!profile) {
+        if (!profile || !profile.Response) {
           throw new Error('No profile data received');
         }
-        const characters = Object.values(profile.characters?.data || {}) as Array<{ characterId: string }>;
+        const characters = Object.values(profile.Response.characters?.data || {}) as Array<{ characterId: string }>;
         this.characters[player.membershipId] = characters;
         for (const char of characters) {
           await this.loadActivityHistoryForCharacter({
@@ -395,6 +470,136 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
+  private async validatePGCRBatch(
+    activities: ActivityHistory[],
+    character: CharacterWithGame,
+    startIdx: number
+  ): Promise<ActivityHistory[]> {
+    const batch = activities.slice(startIdx, startIdx + this.PGCR_BATCH_SIZE);
+    const validatedActivities: ActivityHistory[] = [];
+    
+    // Log the character we're looking for with full details
+    console.log(`[DEBUG] Looking for character in PGCRs:`, {
+      membershipId: character.membershipId,
+      characterId: character.characterId,
+      game: character.game,
+      membershipType: character.membershipType,
+      platform: this.getPlatformName(character.membershipType)
+    });
+    
+    // Create array of PGCR fetch promises with metadata
+    const pgcrPromises = batch.map(activity => {
+      const instanceId = activity.activityDetails?.instanceId;
+      if (!instanceId) {
+        console.warn('[DEBUG] Activity missing instanceId:', activity);
+        return null;
+      }
+      
+      return {
+        promise: firstValueFrom(this.bungieService.getPGCR(
+          instanceId,
+          character.game === 'D1'
+        )),
+        activity,
+        instanceId
+      };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+    // Use Promise.allSettled for more robust error handling
+    const results = await Promise.allSettled(pgcrPromises.map(p => p.promise));
+
+    // Process results and match with activities
+    results.forEach((result, index) => {
+      const { activity, instanceId } = pgcrPromises[index];
+      
+      if (result.status === 'fulfilled' && result.value) {
+        const pgcr = result.value;
+        
+        // Enhanced debug logging for PGCR entries
+        if (!pgcr.entries || !Array.isArray(pgcr.entries) || pgcr.entries.length === 0) {
+          console.warn(`[DEBUG] PGCR ${instanceId} has no entries (undefined or empty). Marking as unavailable.`);
+          validatedActivities.push({
+            ...activity,
+            pgcrUnavailable: true
+          });
+          return;
+        }
+        console.log(`[DEBUG] Processing PGCR ${instanceId}:`, {
+          entries: pgcr.entries.map((e: any) => ({
+            membershipId: e.player?.destinyUserInfo?.membershipId,
+            characterId: e.characterId,
+            displayName: e.player?.destinyUserInfo?.displayName,
+            membershipType: e.player?.destinyUserInfo?.membershipType,
+            platform: this.getPlatformName(e.player?.destinyUserInfo?.membershipType)
+          }))
+        });
+
+        // Try multiple matching strategies
+        const playerInPgcr = pgcr.entries.some((entry: PGCREntry) => {
+          // Strategy 1: Exact match (both membershipId and characterId)
+          const exactMatch = entry.player?.destinyUserInfo?.membershipId === character.membershipId &&
+                           entry.characterId === character.characterId;
+          
+          // Strategy 2: Just membershipId match
+          const membershipMatch = entry.player?.destinyUserInfo?.membershipId === character.membershipId;
+          
+          // Strategy 3: Just characterId match (for cross-save scenarios)
+          const characterMatch = entry.characterId === character.characterId;
+          
+          // Strategy 4: Platform-specific membershipId match
+          const platformMatch = entry.player?.destinyUserInfo?.membershipType === character.membershipType &&
+                              entry.player?.destinyUserInfo?.membershipId === character.membershipId;
+
+          // Log match attempt details
+          console.log(`[DEBUG] Match attempt for PGCR ${instanceId}:`, {
+            entry: {
+              membershipId: entry.player?.destinyUserInfo?.membershipId,
+              characterId: entry.characterId,
+              membershipType: entry.player?.destinyUserInfo?.membershipType,
+              platform: this.getPlatformName(entry.player?.destinyUserInfo?.membershipType)
+            },
+            character: {
+              membershipId: character.membershipId,
+              characterId: character.characterId,
+              membershipType: character.membershipType,
+              platform: this.getPlatformName(character.membershipType)
+            },
+            matchResults: {
+              exactMatch,
+              membershipMatch,
+              characterMatch,
+              platformMatch
+            }
+          });
+
+          return exactMatch || membershipMatch || characterMatch || platformMatch;
+        });
+
+        if (playerInPgcr) {
+          console.log(`[DEBUG] Successfully validated activity ${instanceId} for player ${character.membershipId}`);
+          validatedActivities.push({
+            ...activity,
+            validated: true,
+            validatedAt: new Date().toISOString()
+          });
+        } else {
+          console.warn(`[DEBUG] Player ${character.membershipId} not found in PGCR ${instanceId} using any matching strategy`);
+        }
+      } else {
+        const error = result.status === 'rejected' ? result.reason : 'Unknown error';
+        console.warn(`[DEBUG] Failed to fetch PGCR ${instanceId}:`, error);
+        
+        // If it's a D1 activity and we got a 500 error, we might want to try the D2 endpoint
+        if (character.game === 'D1' && error.status === 500) {
+          console.log(`[DEBUG] Attempting to fetch D1 activity ${instanceId} using D2 endpoint`);
+          // TODO: Implement fallback to D2 endpoint if needed
+        }
+      }
+    });
+
+    return validatedActivities;
+  }
+
   private async fetchActivitiesWithRetry(
     character: CharacterWithGame,
     page: number,
@@ -403,30 +608,111 @@ export class PlayerSearchComponent implements OnInit {
     let retries = 0;
     while (retries < maxRetries) {
       try {
-        const response = await firstValueFrom(
-          character.game === 'D1'
-            ? this.bungieService.getD1ActivityHistory(
-                character.membershipType,
-                character.membershipId,
-                character.characterId,
-                character.mode || 0,
-                page
-              )
-            : this.bungieService.getActivityHistory(
-                character.membershipType,
-                character.membershipId,
-                character.characterId,
-                page,
-                character.mode
-              )
-        );
+        if (character.game === 'D1') {
+          const response = await firstValueFrom(
+            this.bungieService.getD1ActivityHistory(
+              character.membershipType,
+              character.membershipId,
+              character.characterId,
+              character.mode || 0,
+              page
+            )
+          );
+          
+          // Validate D1 response structure
+          if (!response?.data?.activities) {
+            console.warn('[DEBUG] Invalid D1 activity response structure:', response);
+            return [];
+          }
 
-        const activities = character.game === 'D1'
-          ? response?.data?.activities || []
-          : response?.activities || [];
+          // Filter out activities missing required fields
+          const validStructureActivities = response.data.activities.filter((activity: ActivityHistory) => {
+            const hasRequiredFields = Boolean(
+              activity.period && 
+              activity.activityDetails?.instanceId
+            );
+            
+            if (!hasRequiredFields) {
+              console.warn('[DEBUG] D1 activity missing required fields:', activity);
+            }
+            
+            return hasRequiredFields;
+          });
 
-        return activities;
+          // Get already validated activities from DB
+          const dbActivities = await this.activityDb.getAllActivitiesForCharacter(
+            character.membershipId,
+            character.characterId
+          );
+          const dbInstanceIds = new Set(dbActivities.map(a => a.activityDetails?.instanceId));
+
+          // Only validate activities not already in DB
+          const toValidate = validStructureActivities.filter((a: ActivityHistory) => !dbInstanceIds.has(a.activityDetails?.instanceId));
+
+          // Log raid activities
+          const raidActivities = toValidate.filter((activity: ActivityHistory) => {
+            const mode = activity.activityDetails?.mode;
+            return mode === 3; // Raid mode
+          });
+          // console.log('[DEBUG] D1 Raid activities found:', {
+          //   total: toValidate.length,
+          //   raids: raidActivities.length,
+          //   raidActivities: raidActivities.map((a: ActivityHistory) => ({
+          //     period: a.period,
+          //     mode: a.activityDetails?.mode,
+          //     instanceId: a.activityDetails?.instanceId,
+          //     completed: a.values?.completed?.basic?.value
+          //   }))
+          // });
+
+          return toValidate;
+        } else {
+          const response = await firstValueFrom(
+            this.bungieService.getActivityHistory(
+              character.membershipType,
+              character.membershipId,
+              character.characterId,
+              page,
+              character.mode
+            )
+          );
+
+          // Validate D2 response structure
+          if (!response?.Response?.activities) {
+            console.warn('[DEBUG] Invalid D2 activity response structure:', response);
+            return [];
+          }
+
+          // For D2, we trust the API to return correct activities
+          const validActivities = response.Response.activities.filter((activity: ActivityHistory) => {
+            if (!activity.period || !activity.activityDetails?.instanceId) {
+              console.warn('[DEBUG] D2 activity missing required fields:', activity);
+              return false;
+            }
+            return true;
+          });
+
+          // Log raid activities
+          const raidActivities = validActivities.filter((activity: ActivityHistory) => {
+            const mode = activity.activityDetails?.mode;
+            return mode === 4; // Raid mode
+          });
+          // console.log('[DEBUG] D2 Raid activities found:', {
+          //   total: validActivities.length,
+          //   raids: raidActivities.length,
+          //   raidActivities: raidActivities.map((a: ActivityHistory) => ({
+          //     period: a.period,
+          //     mode: a.activityDetails?.mode,
+          //     referenceId: a.activityDetails?.referenceId,
+          //     instanceId: a.activityDetails?.instanceId,
+          //     completed: a.values?.completed?.basic?.value
+          //   }))
+          // });
+
+          return validActivities;
+        }
       } catch (error) {
+        console.error(`[DEBUG] Activity fetch error (attempt ${retries + 1}/${maxRetries}):`, error);
         retries++;
         if (retries === maxRetries) throw error;
         await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
@@ -437,15 +723,24 @@ export class PlayerSearchComponent implements OnInit {
 
   private async processActivityBatch(activities: ActivityHistory[], character: CharacterWithGame): Promise<void> {
     const existingIds = new Set(
-      (await this.activityDb.getAllActivitiesForCharacter(
-        character.membershipId,
-        character.characterId
-      )).map(a => a.activityDetails?.instanceId)
+      (await this.activityDb.getAllActivitiesForCharacter(character.membershipId, character.characterId))
+        .map(a => a.activityDetails?.instanceId)
     );
 
-    const newActivities = activities.filter(activity => 
-      !existingIds.has(activity.activityDetails?.instanceId)
-    );
+    const newActivities = activities.filter(activity => {
+      const isNew = !existingIds.has(activity.activityDetails?.instanceId);
+      if (isNew) {
+        console.log('[DEBUG] New activity found:', {
+          period: activity.period,
+          mode: activity.activityDetails?.mode,
+          referenceId: activity.activityDetails?.referenceId,
+          instanceId: activity.activityDetails?.instanceId,
+          completed: activity.values?.completed?.basic?.value,
+          isRaid: activity.activityDetails?.mode === (character.game === 'D1' ? 3 : 4)
+        });
+      }
+      return isNew;
+    });
 
     if (newActivities.length > 0) {
       const storedActivities: StoredActivity[] = newActivities.map(activity => ({
@@ -456,7 +751,20 @@ export class PlayerSearchComponent implements OnInit {
         mode: activity.activityDetails?.mode
       }));
       
+      console.log('[DEBUG] Storing activities:', {
+        total: storedActivities.length,
+        raids: storedActivities.filter(a => a.activityDetails?.mode === (character.game === 'D1' ? 3 : 4)).length,
+        sample: storedActivities.slice(0, 3).map(a => ({
+          period: a.period,
+          mode: a.activityDetails?.mode,
+          referenceId: a.activityDetails?.referenceId,
+          instanceId: a.activityDetails?.instanceId,
+          completed: a.values?.completed?.basic?.value
+        }))
+      });
+      
       await this.activityDb.addActivities(storedActivities);
+      console.log(`[DEBUG] Stored ${storedActivities.length} new activities for character ${character.characterId} (${character.game})`);
       this.cdr.detectChanges();
     }
   }
@@ -671,7 +979,7 @@ export class PlayerSearchComponent implements OnInit {
       if (!yearGroup.typeGroups.has(type)) {
         yearGroup.typeGroups.set(type, {
           type,
-          icon: this.getActivityTypeIcon(type),
+          icon: this.getActivityTypeIcon(type, activity.game === 'D1'),
           activities: []
         });
       }
@@ -689,13 +997,13 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  private getActivityDurationSeconds(activity: ActivityHistory): number {
+  getActivityDurationSeconds(activity: ActivityHistory): number {
     const values = activity.values as any;
     const seconds = values && values['timePlayedSeconds']?.basic?.value;
     
     // More reasonable validation
     if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
-      console.warn('[DEBUG] Invalid activity duration:', seconds, activity);
+      // console.warn('[DEBUG] Invalid activity duration:', seconds, activity);
       return 0;
     }
     
@@ -734,17 +1042,8 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  async viewPGCR(activityId: string | number) {
-    const id = activityId?.toString();
-    if (!id) {
-      console.error('Invalid activityId passed to viewPGCR:', activityId);
-      return;
-    }
-    const url = `https://www.bungie.net/en/PGCR/${id}`;
-    window.open(url, '_blank');
-  }
-
-  getPlatformName(membershipType: number): string {
+  getPlatformName(membershipType: number | undefined): string {
+    if (membershipType === undefined) return 'Unknown';
     switch (membershipType) {
       case 1: return 'Xbox';
       case 2: return 'PlayStation';
@@ -892,39 +1191,103 @@ export class PlayerSearchComponent implements OnInit {
 
   async calculateAccountStats() {
     this.loadingAccountStats = true;
+    this.loadingGuardianFirsts = true;
     let totalTime = 0;
     let totalActivityTime = 0;
     let totalActivityCount = 0;
     const perType: { [type: string]: { count: number, time: number } } = {};
-
-    // Use filtered activities for stats
-    const activities = this.filteredActivitiesForDate;
-    for (const player of this.selectedPlayers) {
-      const characters = this.characters[player.membershipId] || [];
-      for (const char of characters) {
-        totalTime += Number(char.minutesPlayedTotal || 0);
-      }
-    }
-    totalActivityCount = activities.length;
-    for (const activity of activities) {
-      const type = this.getActivityType(activity.activityDetails?.mode || 0);
-      if (!perType[type]) perType[type] = { count: 0, time: 0 };
-      perType[type].count += 1;
-      let seconds = this.getActivityDurationSeconds(activity);
-      if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0 || seconds > 100000) {
-        seconds = 0;
-      }
-      perType[type].time += seconds;
-      totalActivityTime += seconds;
-    }
-    this.accountStats = {
-      totalTime,
-      totalActivityTime,
-      totalActivityCount,
-      perType: { ...perType }
+    const guardianFirstsMap: { [key: string]: ActivityFirstCompletion } = {};
+    const D1_FAMILY_MAP: Record<string, string> = {
+      '3801607287': 'Vault of Glass', '708693006': 'Vault of Glass',
+      '3879860661': "Crota's End", '898834093': "Crota's End",
+      '1733556769': "King's Fall", '421023204': "King's Fall",
+      '2578867903': 'Wrath of the Machine', '4007500989': 'Wrath of the Machine',
     };
-    this.loadingAccountStats = false;
-    this.cdr.detectChanges();
+    try {
+      for (const player of this.selectedPlayers) {
+        const characters = this.characters[player.membershipId] || [];
+        const gameCharacters = characters.filter(char => {
+          const isD1 = this.isD1Player(player);
+          return isD1 === (player.game === 'D1');
+        });
+        for (const char of gameCharacters) {
+          const characterId = this.isD1Player(player)
+            ? char.characterBase?.characterId
+            : char.characterId;
+          if (!characterId) continue;
+          // Get all activities for this character
+          const allActivities = Object.keys(this.activities)
+            .filter(key => key.startsWith(`activities-${player.membershipId}-${characterId}`))
+            .reduce((acc, key) => acc.concat(this.activities[key] || []), [] as ActivityHistory[]);
+          // Sum activity time and count
+          totalActivityCount += allActivities.length;
+          for (const activity of allActivities) {
+            const seconds = this.getActivityDurationSeconds(activity);
+            totalActivityTime += seconds / 60; // convert to minutes
+            // Per-type stats
+            const mode = activity.activityDetails?.mode;
+            const type = this.getActivityType(mode);
+            // Only count types relevant to the game
+            if ((player.game === 'D1' && ['Raid','Strike','Nightfall','Crucible','Other'].includes(type)) ||
+                (player.game === 'D2' && ['Raid','Dungeon','Strike','Nightfall','Crucible','Gambit','Other'].includes(type))) {
+              if (!perType[type]) perType[type] = { count: 0, time: 0 };
+              perType[type].count++;
+              perType[type].time += seconds / 60;
+            }
+          }
+          totalTime += Number(char.minutesPlayedTotal || 0);
+          // Guardian firsts logic unchanged
+          const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
+          if (firsts && firsts.firstCompletions) {
+            for (const first of firsts.firstCompletions) {
+              let familyName = '';
+              if (first.game === 'D2') {
+                const map = (this.activityDb.constructor as any).ACTIVITY_FAMILY_MAP;
+                familyName = map && map[first.referenceId] ? map[first.referenceId] : first.name;
+              } else {
+                familyName = D1_FAMILY_MAP[first.referenceId] || first.name;
+              }
+              const key = `${first.type}-${first.game}-${familyName}`;
+              if (!guardianFirstsMap[key] || new Date(first.completionDate) < new Date(guardianFirstsMap[key].completionDate)) {
+                guardianFirstsMap[key] = {
+                  ...first,
+                  name: familyName,
+                  completionDate: first.completionDate,
+                  referenceId: first.referenceId
+                };
+              }
+            }
+          }
+        }
+      }
+      const guardianFirsts = Object.values(guardianFirstsMap).sort((a, b) => {
+        if (a.game !== b.game) return a.game === 'D1' ? -1 : 1;
+        return new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime();
+      });
+      this.guardianFirsts = guardianFirsts;
+      this.accountStats = {
+        totalTime,
+        totalActivityTime: Math.round(totalActivityTime),
+        totalActivityCount,
+        perType: { ...perType }
+      };
+    } catch (error) {
+      console.error('[DEBUG] Error in calculateAccountStats:', error);
+    } finally {
+      this.loadingAccountStats = false;
+      this.loadingGuardianFirsts = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Helper method to format duration
+  formatDuration(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${minutes}m`;
   }
 
   // Helper method to safely get perType stats
@@ -1044,28 +1407,8 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   onDateOrTypeChange() {
-    console.log('[DEBUG] Date or type changed, reloading activities');
-    if (!this.selectedDate) {
-      console.log('[DEBUG] No date selected, skipping load');
-      return;
-    }
-
-    // Clear cache when date or type changes
-    this.clearCache();
-    
-    // If we have players selected, load their activities
-    if (this.selectedPlayers.length > 0) {
-      console.log('[DEBUG] Loading activities for selected players');
-      this.loadAllFilteredActivities();
-    } else {
-      console.log('[DEBUG] No players selected yet, activities will load when players are added');
-    }
-    
-    // Process and group all activities
-    this.processAndGroupActivities();
-    
-    // Update the UI
-    this.cdr.detectChanges();
+    this.clearFilteredActivitiesCache();
+    this.loadAllFilteredActivities();
   }
 
   /**
@@ -1164,10 +1507,27 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
-  getActivityTypeIcon(activityType: string): string {
-    const refId = ACTIVITY_TYPE_REFERENCE_IDS[activityType.toLowerCase()] || ACTIVITY_TYPE_REFERENCE_IDS['other'];
-    // Use D2 icons for type icons
-    return this.manifest.getActivityIcon(refId, false) || '';
+  getActivityTypeIcon(activityType: string, isD1: boolean = false): string {
+    if (!activityType) return this.activityIconService.getIconPath('other');
+    
+    // Map activity types to icon types
+    const typeMap: Record<string, ActivityIconType> = {
+      'raid': isD1 ? 'raid-d1' : 'raid-d2',
+      'dungeon': 'dungeon',
+      'strike': 'strike',
+      'nightfall': 'nightfall',
+      'crucible': 'crucible',
+      'gambit': 'gambit',
+      'story': 'story',
+      'patrol': 'patrol',
+      'public-event': 'public-event',
+      'lost-sector': 'lost-sector',
+      'seasonal': 'seasonal',
+      'exotic-mission': 'exotic-mission'
+    };
+
+    const iconType = typeMap[activityType.toLowerCase()] || 'other';
+    return this.activityIconService.getIconPath(iconType);
   }
 
   formatTime(dateString: string): string {
@@ -1332,13 +1692,24 @@ export class PlayerSearchComponent implements OnInit {
     if (!this.selectedDate) {
       return [];
     }
+
+    // Check filtered activities cache first
+    const cacheKey = `filtered-${this.selectedDate}-${this.selectedActivityType.label}`;
+    const cachedFiltered = this.filteredActivitiesCache.get(cacheKey);
+    if (cachedFiltered) {
+      console.log('[DEBUG] Using cached filtered activities for date:', this.selectedDate);
+      return cachedFiltered;
+    }
+
     const [month, day] = this.selectedDate.split('-').map(Number);
     const allFilteredActivities: ActivityWithMembership[] = [];
-    for (const player of this.selectedPlayers) {
+
+    // Get all activities for selected players in parallel
+    const playerActivitiesPromises = this.selectedPlayers.map(async player => {
       const playerActivities = this.getPlayerActivities(player.membershipId);
-      // Debug log: all activities for player
       console.log(`[DEBUG] [Filter] Player ${player.displayName} (${player.membershipId}) has ${playerActivities.length} activities in DB`);
-      const playerFilteredActivities = playerActivities
+      
+      return playerActivities
         .filter(activity => this.isActivityOnSelectedDate(activity))
         .map(activity => ({
           ...activity,
@@ -1348,15 +1719,11 @@ export class PlayerSearchComponent implements OnInit {
           game: player.game,
           iconPath: this.manifest.getActivityIcon(activity.activityDetails?.referenceId, player.game === 'D1')
         }));
-      // Debug log: filtered activities for player
-      console.log(`[DEBUG] [Filter] Filtered ${playerFilteredActivities.length} activities for player ${player.displayName} (${player.membershipId}) on ${month}/${day}`);
-      playerFilteredActivities.slice(0, 10).forEach(a => {
-        const utcDate = new Date(a.period);
-        const { month: localMonth, day: localDay } = this.timezoneService.getLocalMonthAndDay(a.period);
-        console.log(`[DEBUG] [Filter] Matched Activity: UTC=${utcDate.toISOString()}, Local=${utcDate.toLocaleString()}, Local Month/Day=${localMonth}/${localDay}, InstanceId=${a.activityDetails?.instanceId}`);
-      });
-      allFilteredActivities.push(...playerFilteredActivities);
-    }
+    });
+
+    const playerFilteredActivities = await Promise.all(playerActivitiesPromises);
+    allFilteredActivities.push(...playerFilteredActivities.flat());
+
     // Deduplicate by instanceId
     const dedupedMap = new Map<string, ActivityWithMembership>();
     for (const activity of allFilteredActivities) {
@@ -1365,59 +1732,130 @@ export class PlayerSearchComponent implements OnInit {
         dedupedMap.set(instanceId, activity);
       }
     }
+
     const dedupedActivities = Array.from(dedupedMap.values());
     // Sort by period (descending)
     dedupedActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
+    
+    // Cache the filtered activities
+    this.filteredActivitiesCache.set(cacheKey, dedupedActivities);
+    
     this.filteredActivitiesForDate = dedupedActivities;
-    // Debug log: all deduped and sorted activities
-    console.log(`[DEBUG] [Filter] Total deduped & sorted activities for all players: ${dedupedActivities.length}`);
-    dedupedActivities.slice(0, 10).forEach(a => {
-      const utcDate = new Date(a.period);
-      const { month: localMonth, day: localDay } = this.timezoneService.getLocalMonthAndDay(a.period);
-      console.log(`[DEBUG] [Filter] Deduped Activity: UTC=${utcDate.toISOString()}, Local=${utcDate.toLocaleString()}, Local Month/Day=${localMonth}/${localDay}, Name=${a.displayName}, InstanceId=${a.activityDetails?.instanceId}`);
-    });
     return dedupedActivities;
   }
 
-  async syncSpecificPGCR(activityId: string) {
-    try {
-      console.log(`[DEBUG] Attempting to sync specific PGCR: ${activityId}`);
-      
-      // First check if it's already in the database
-      const existingActivity = await this.activityDb.getActivityByInstanceId(activityId);
-      if (existingActivity) {
-        console.log('[DEBUG] PGCR already exists in database');
-        return;
-      }
-
-      // Fetch the PGCR from API
-      const pgcr = await firstValueFrom(this.bungieService.getPGCR(activityId));
-      if (!pgcr) {
-        throw new Error('No PGCR data received');
-      }
-
-      // Convert PGCR to StoredActivity format
-      const storedActivity: StoredActivity = {
-        ...pgcr,
-        membershipId: pgcr.entries?.[0]?.player?.destinyUserInfo?.membershipId || '',
-        characterId: pgcr.entries?.[0]?.characterId || '',
-        instanceId: activityId,
-        mode: pgcr.activityDetails?.mode
-      };
-
-      // Add to database
-      await this.activityDb.addActivities([storedActivity]);
-      console.log('[DEBUG] Successfully added PGCR to database');
-      
-      // Refresh the activity list
-      await this.loadAllFilteredActivities();
-    } catch (error) {
-      console.error('[DEBUG] Error syncing specific PGCR:', error);
-      throw error;
-    }
+  // Add method to clear filtered activities cache
+  private clearFilteredActivitiesCache(): void {
+    this.filteredActivitiesCache.clear();
   }
 
-  private isDuplicateActivity(a1: ActivityHistory, a2: ActivityHistory): boolean {
+  // Add method to open external PGCR
+  openExternalPGCR(activity: ActivityHistory, isD1: boolean) {
+    const instanceId = activity.activityDetails?.instanceId;
+    if (!instanceId) return;
+    const game = isD1 ? 'destiny1' : 'destiny2';
+    window.open(`https://pgcr.eververse.trade/${game}/${instanceId}`, '_blank', 'noopener');
+  }
+
+  handleImageError(event: Event, isD1: boolean): void {
+    const imgElement = event.target as HTMLImageElement;
+    imgElement.src = '/assets/icons/activities/tricorn.png';
+  }
+
+  // Helper for Guardian Firsts template
+  getGuardianFirstsForGame(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    // Only show raids and dungeons
+    return this.guardianFirsts.filter(f => f.game === game && (f.type === 'raid' || f.type === 'dungeon'));
+  }
+  hasGuardianFirstsForGame(game: 'D1' | 'D2'): boolean {
+    return this.guardianFirsts.some(f => f.game === game);
+  }
+
+  // Helper for Guardian Firsts image
+  getFirstCompletionImage(first: ActivityFirstCompletion): string {
+    if (!first) return '/assets/icons/activities/tricorn.png';
+
+    // Try to get the PGCR image first
+    if (first.referenceId) {
+      const pgcrImage = this.manifest.getActivityPgcrImage(first.referenceId, first.game === 'D1');
+      if (pgcrImage) {
+        if (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/')) {
+          return 'https://www.bungie.net' + pgcrImage;
+        }
+        return pgcrImage;
+      }
+    }
+
+    // If no PGCR image, try to get the activity type icon
+    const typeIcon = this.getActivityTypeIcon(first.type, first.game === 'D1');
+    if (typeIcon) return typeIcon;
+
+    // Final fallback to Destiny tricorn logo
+    return '/assets/icons/activities/tricorn.png';
+  }
+
+  groupActivitiesByType(activities: any[]): ActivityGroup[] {
+    const groups = new Map<string, ActivityGroup>();
+    
+    activities.forEach(activity => {
+      const key = `${activity.activityDetails?.referenceId}-${activity.game}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          type: activity.activityDetails?.mode || 0,
+          game: activity.game,
+          activities: []
+        });
+      }
+      groups.get(key)?.activities.push(activity);
+    });
+
+    // Sort activities within each group by time
+    groups.forEach(group => {
+      group.activities.sort((a, b) => 
+        new Date(b.period).getTime() - new Date(a.period).getTime()
+      );
+    });
+
+    return Array.from(groups.values());
+  }
+
+  getAverageDuration(activities: any[]): number {
+    if (!activities.length) return 0;
+    const totalDuration = activities.reduce((sum, activity) => 
+      sum + this.getActivityDurationSeconds(activity), 0
+    );
+    return totalDuration / activities.length / 60; // Convert to minutes
+  }
+
+  public getActivityImage(activity: any, isD1: boolean): string {
+    if (!activity) return '/assets/icons/activities/tricorn.png';
+    const referenceId = activity.activityDetails?.referenceId;
+    if (referenceId) {
+      const pgcrImage = this.manifest.getActivityPgcrImage(referenceId, isD1);
+      if (pgcrImage) {
+        if (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/')) {
+          return 'https://www.bungie.net' + pgcrImage;
+        }
+        return pgcrImage;
+      }
+    }
+    const mode = activity.activityDetails?.mode;
+    if (mode !== undefined) {
+      const type = this.getActivityType(mode);
+      const typeIcon = this.getActivityTypeIcon(type, isD1);
+      if (typeIcon) return typeIcon;
+    }
+    return '/assets/icons/activities/tricorn.png';
+  }
+
+  // For Guardian Firsts PGCR button
+  openExternalPGCRForFirst(first: ActivityFirstCompletion) {
+    if (!first.instanceId) return;
+    const game = first.game === 'D1' ? 'destiny1' : 'destiny2';
+    window.open(`https://pgcr.eververse.trade/${game}/${first.instanceId}`, '_blank', 'noopener');
+  }
+
+  private isDuplicateActivity(a1: any, a2: any): boolean {
     return a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
   }
 }

@@ -39,4 +39,9 @@ This iteration introduces a new feature to calculate and display total account s
 - Allow filtering or drill-down by activity type.
 - Add error handling for API failures during stats calculation.
 
+### Recent Major Changes
+- **Date Filtering and Timezone Handling:** Improved the date filtering logic to ensure activities are displayed correctly based on the user's local timezone. This ensures that activities are accurately grouped by date, regardless of the user's location.
+- **Guardian Firsts Feature:** Implemented a new feature to track and display the first completion of each unique raid or dungeon. This feature now correctly identifies the true first completion, regardless of difficulty, and filters out any duplicate entries.
+- **UI Enhancements:** Moved the Guardian Firsts section to a right-side column, making the daily activities cards the main focus in the center. This layout change improves the overall user experience by providing a clearer view of daily activities.
+
 --- 

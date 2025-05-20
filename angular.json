@@ -60,13 +60,31 @@
               "namedChunks": false,
               "aot": true,
               "extractLicenses": true,
-              "optimization": true
+              "optimization": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.prod.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true,
               "baseHref": "/"
+            },
+            "test": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "baseHref": "/",
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.test.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"
@@ -79,6 +97,9 @@
             },
             "development": {
               "buildTarget": "destiny-chronicle:build:development"
+            },
+            "test": {
+              "buildTarget": "destiny-chronicle:build:test"
             }
           },
           "defaultConfiguration": "development"

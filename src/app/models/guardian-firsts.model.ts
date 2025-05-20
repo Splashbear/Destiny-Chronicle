@@ -1,11 +1,14 @@
-export interface RaidFirstCompletion {
-  raidName: string;
+export interface ActivityFirstCompletion {
+  type: 'raid' | 'dungeon' | 'strike' | 'nightfall' | 'crucible' | 'gambit' | 'other';
+  name: string;
+  game: 'D1' | 'D2';
+  period: string;
+  completionDate: string;
+  instanceId: string;
   referenceId: string;
   mode: number;
-  completionDate: string;
-  activityDuration: number;
-  instanceId: string;
-  game: 'D1' | 'D2';
+  characterId: string;
+  membershipId: string;
 }
 
 export interface GuardianFirsts {
@@ -13,56 +16,27 @@ export interface GuardianFirsts {
   characterId: string;
   displayName: string;
   platform: string;
-  raidFirstCompletions: RaidFirstCompletion[];
-  firstRaid?: {
-    instanceId: string;
-    date: string;
-    name: string;
-  };
-  firstDungeon?: {
-    instanceId: string;
-    date: string;
-    name: string;
-  };
-  firstNightfall?: {
-    instanceId: string;
-    date: string;
-    name: string;
-  };
-  firstCrucible?: {
-    instanceId: string;
-    date: string;
-    name: string;
-  };
-  firstGambit?: {
-    instanceId: string;
-    date: string;
-    name: string;
-  };
-  firstStrike?: {
-    instanceId: string;
-    date: string;
-    name: string;
-  };
+  firstCompletions: ActivityFirstCompletion[];
 }
 
-// Map of raid modes to their names
-export const RAID_NAMES: { [mode: number]: { name: string, game: 'D1' | 'D2' } } = {
-  8: { name: 'Vault of Glass', game: 'D1' },
-  9: { name: 'Crota\'s End', game: 'D1' },
-  16: { name: 'King\'s Fall', game: 'D1' },
-  17: { name: 'Wrath of the Machine', game: 'D1' },
-  31: { name: 'Leviathan', game: 'D2' },
-  32: { name: 'Eater of Worlds', game: 'D2' },
-  54: { name: 'Spire of Stars', game: 'D2' },
-  55: { name: 'Last Wish', game: 'D2' },
-  56: { name: 'Scourge of the Past', game: 'D2' },
-  57: { name: 'Crown of Sorrow', game: 'D2' },
-  58: { name: 'Garden of Salvation', game: 'D2' },
-  59: { name: 'Deep Stone Crypt', game: 'D2' },
-  60: { name: 'Vault of Glass', game: 'D2' },
-  61: { name: 'Vow of the Disciple', game: 'D2' },
-  62: { name: 'King\'s Fall', game: 'D2' },
-  63: { name: 'Root of Nightmares', game: 'D2' },
-  64: { name: 'Crota\'s End', game: 'D2' }
+// Map of raid referenceIds (D2) and modes (D1) to their names
+export const RAID_NAMES: Record<string, { name: string; game: 'D1' | 'D2' }> = {
+  // Destiny 1 Raids
+  '4': { name: 'Vault of Glass', game: 'D1' },
+  '5': { name: 'Crota\'s End', game: 'D1' },
+  '6': { name: 'King\'s Fall', game: 'D1' },
+  '7': { name: 'Wrath of the Machine', game: 'D1' },
+  
+  // Destiny 2 Raids
+  '2693136601': { name: 'Leviathan', game: 'D2' },
+  '2693136600': { name: 'Leviathan (Prestige)', game: 'D2' },
+  '3333172150': { name: 'Eater of Worlds', game: 'D2' },
+  '3089205900': { name: 'Spire of Stars', game: 'D2' },
+  '2122313384': { name: 'Crown of Sorrow', game: 'D2' },
+  '3458480158': { name: 'Garden of Salvation', game: 'D2' },
+  '910380154': { name: 'Deep Stone Crypt', game: 'D2' },
+  '1374392663': { name: 'Vow of the Disciple', game: 'D2' },
+  '1441982566': { name: 'Vault of Glass', game: 'D2' },
+  '2381413762': { name: 'King\'s Fall', game: 'D2' },
+  '3711931140': { name: 'Crota\'s End', game: 'D2' }
 }; 
