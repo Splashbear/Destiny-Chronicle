@@ -147,6 +147,7 @@ interface PlayerTitle {
   description: string;
   iconPath: string;
   isEquipped: boolean;
+  legacy?: boolean; // Add legacy flag
 }
 
 interface TitleRecord {
@@ -169,7 +170,7 @@ interface PlayerTitleInfo {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, LoadingProgressComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -2076,62 +2077,49 @@ export class PlayerSearchComponent implements OnInit {
       // Process records to find completed titles
       for (const [recordHash, record] of Object.entries(records)) {
         const typedRecord = record as TitleRecord;
-        
-        // Log the raw record data
-        console.log('[Titles] Processing record:', {
-          hash: recordHash,
-          record: {
-            completed: typedRecord.completed,
-            state: typedRecord.state,
-            objectives: typedRecord.objectives?.map(o => ({
-              complete: o.complete,
-              progress: o.progress,
-              completionValue: o.completionValue
-            }))
-          }
-        });
-        
-        // Check if the record is completed
         const isCompleted = typedRecord.completed || 
                           (typedRecord.objectives && 
                            typedRecord.objectives.length > 0 && 
                            typedRecord.objectives.every(obj => obj.complete));
-
-        // Log the completion check details
-        console.log('[Titles] Completion check:', {
-          hash: recordHash,
+        const titleDef = await this.manifest.getTitleDefinition(recordHash);
+        console.log('[Titles][DEBUG] Checking record', recordHash, {
           isCompleted,
-          completedDirectly: typedRecord.completed,
-          hasObjectives: !!typedRecord.objectives,
-          objectiveCount: typedRecord.objectives?.length,
-          allObjectivesComplete: typedRecord.objectives?.every(obj => obj.complete),
-          objectives: typedRecord.objectives?.map(o => ({
-            complete: o.complete,
-            progress: o.progress,
-            completionValue: o.completionValue
-          }))
+          hasManifestDef: !!titleDef,
+          hasTitleInfo: !!titleDef?.titleInfo,
+          name: titleDef?.displayProperties?.name,
+          titleDef
         });
-
-        if (isCompleted) {
-          const titleDef = await this.manifest.getTitleDefinition(recordHash);
-          
-          // Log the title definition lookup
-          console.log('[Titles] Title definition lookup:', {
-            hash: recordHash,
-            found: !!titleDef,
-            name: titleDef?.displayProperties?.name,
-            description: titleDef?.displayProperties?.description
-          });
-          
-          if (titleDef) {
-            titles.push({
-              titleHash: parseInt(recordHash),
-              name: titleDef.displayProperties.name,
-              description: titleDef.displayProperties.description,
-              iconPath: titleDef.displayProperties.icon,
-              isEquipped: typedRecord.state === 67
-            });
+        if (isCompleted && titleDef && titleDef.titleInfo && titleDef.titleInfo.hasTitle) {
+          // Fix icon path to always use Bungie CDN if not already absolute
+          let iconPath = titleDef.displayProperties.icon;
+          if (iconPath) {
+            iconPath = iconPath.startsWith('http')
+              ? iconPath
+              : 'https://www.bungie.net' + iconPath;
+          } else {
+            iconPath = '/assets/icons/activities/tricorn.png';
           }
+
+          // Log missing or empty title names
+          if (!titleDef.displayProperties.name || titleDef.displayProperties.name.trim() === '') {
+            console.warn('[Titles][WARN] Title with hash', recordHash, 'has empty name:', titleDef);
+          }
+
+          // Gilded titles: log if gilded, and use a special image if available (for now, just log)
+          const isGilded = typedRecord.state === 68; // 68 is a common state for gilded, but may need adjustment
+          if (isGilded) {
+            console.log('[Titles][GILDED] Title is gilded:', titleDef.displayProperties.name, recordHash);
+            // TODO: If Bungie provides a gilded icon, use it here
+          }
+
+          titles.push({
+            titleHash: parseInt(recordHash),
+            name: titleDef.displayProperties.name,
+            description: titleDef.displayProperties.description,
+            iconPath: iconPath,
+            isEquipped: typedRecord.state === 67,
+            legacy: !!titleDef.titleInfo.legacy
+          });
         }
       }
       
