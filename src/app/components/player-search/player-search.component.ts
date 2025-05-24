@@ -141,10 +141,35 @@ interface PGCREntry {
   characterId: string;
 }
 
+interface PlayerTitle {
+  titleHash: number;
+  name: string;
+  description: string;
+  iconPath: string;
+  isEquipped: boolean;
+}
+
+interface TitleRecord {
+  completed: boolean;
+  objectives?: Array<{
+    complete: boolean;
+    progress?: number;
+    completionValue?: number;
+  }>;
+  state: number;
+}
+
+// Add this with the other interfaces at the top of the file
+interface PlayerTitleInfo {
+  titles: PlayerTitle[];
+  privacy?: number;
+  error?: string;
+}
+
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingProgressComponent],
+  imports: [CommonModule, FormsModule],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -177,6 +202,7 @@ export class PlayerSearchComponent implements OnInit {
   ];
   activityTypeOptions = ACTIVITY_TYPE_OPTIONS;
   d2SearchResults: PlayerSearchDisplay[] = [];
+  d1SearchResults: PlayerSearchDisplay[] = [];
   showPlatformPicker: boolean = false;
   crossSavePlayer: PlayerSearchDisplay | null = null;
   loadingActivities: { [key: string]: boolean } = {};
@@ -204,14 +230,17 @@ export class PlayerSearchComponent implements OnInit {
   };
   private filteredActivitiesForDate: ActivityWithMembership[] = [];
   private currentLoadToken = 0;
-  private readonly PGCR_BATCH_SIZE = 30; // Increased from 10 to 30 for better parallelization
-  private readonly VALIDATION_DELAY = 50; // Reduced from 100ms to 50ms
+  private readonly PGCR_BATCH_SIZE = 30;
+  private readonly VALIDATION_DELAY = 50;
   guardianFirsts: ActivityFirstCompletion[] = [];
   loadingGuardianFirsts = false;
   readonly guardianGames: ('D1' | 'D2')[] = ['D1', 'D2'];
   favoriteAccounts: FavoriteAccount[] = [];
   apiAvailable: boolean = true;
   dbReady: boolean = false;
+  activeTab: 'activities' | 'firsts' | 'titles' = 'activities';
+  playerTitles: { [key: string]: PlayerTitleInfo } = {};
+  loadingTitles: { [key: string]: boolean } = {};
 
   constructor(
     private bungieService: BungieApiService,
@@ -300,74 +329,103 @@ export class PlayerSearchComponent implements OnInit {
 
   async searchD1Player(searchTerm: string, membershipType: number) {
     console.log('searchD1Player called', { searchTerm, membershipType });
-    if (!searchTerm) return;
+    if (!searchTerm) {
+      this.errorMessage = 'Please enter a username';
+      return;
+    }
 
     const key = `d1-${membershipType}-${searchTerm}`;
     this.loading[key] = true;
     this.error[key] = '';
+    this.d1SearchResults = []; // Clear previous results
+    this.errorMessage = '';
 
     try {
       const results = await firstValueFrom(this.bungieService.searchD1Player(searchTerm, membershipType));
-      if (results && results.length > 0) {
-        for (const player of results) {
-          await this.selectPlayer(player);
-        }
-      } else {
-        this.error[key] = 'No players found';
+      if (!results || results.length === 0) {
+        this.errorMessage = 'No Destiny 1 player found with that username.';
+        return;
+      }
+
+      // Map results to PlayerSearchDisplay type
+      this.d1SearchResults = results.map(player => ({
+        ...player,
+        game: 'D1',
+        platform: this.getPlatformName(player.membershipType)
+      }));
+      
+      // Show platform picker if we have results
+      if (this.d1SearchResults.length > 0) {
+        this.showPlatformPicker = true;
       }
     } catch (error: any) {
       console.error('Error searching D1 player:', error);
       if (error.status === 503) {
-        this.error[key] = 'Bungie API is temporarily unavailable. Please try again in a few minutes.';
+        this.errorMessage = 'Bungie API is temporarily unavailable. Please try again in a few minutes.';
       } else {
-        this.error[key] = 'Error searching for player';
+        this.errorMessage = 'Error searching for Destiny 1 player.';
       }
     } finally {
       this.loading[key] = false;
+      this.cdr.detectChanges();
     }
   }
 
   async searchD2Player(searchTerm: string) {
     console.log('searchD2Player called', { searchTerm });
-    if (!searchTerm) return;
+    if (!searchTerm) {
+      this.errorMessage = 'Please enter a username';
+      return;
+    }
+
     const key = `d2-${searchTerm}`;
     this.loading[key] = true;
     this.error[key] = '';
     this.d2SearchResults = [];
     this.showPlatformPicker = false;
     this.crossSavePlayer = null;
+    this.errorMessage = '';
+
     try {
       const response = await firstValueFrom(this.bungieService.searchD2Player(searchTerm));
       console.log('D2 search response:', response);
-      if (response?.ErrorCode === 1 && response?.Response?.length > 0) {
-        // Find cross-save primary if available
-        const crossSave = response.Response.find((profile: any) => profile.crossSaveOverride && profile.crossSaveOverride > 0);
-        if (crossSave) {
-          this.crossSavePlayer = {
-            ...crossSave,
-            game: 'D2',
-            platform: this.getPlatformName(crossSave.membershipType)
-          };
-          console.log('[DEBUG] Found crossSavePlayer:', this.crossSavePlayer);
-        }
-        // Store all returned memberships for platform selection
-        this.d2SearchResults = response.Response.map((player: PlayerSearchResult) => ({
-          ...player,
-          game: 'D2',
-          platform: this.getPlatformName(player.membershipType)
-        }));
-        console.log('[DEBUG] d2SearchResults:', this.d2SearchResults);
-        // Show platform picker if more than one membership or cross-save is available
-        if (this.d2SearchResults.length > 1 || this.crossSavePlayer) {
-          this.showPlatformPicker = true;
-          console.log('[DEBUG] showPlatformPicker set to true');
-        } else if (this.d2SearchResults.length === 1) {
-          // Only one result, auto-select
-          await this.selectPlayer(this.d2SearchResults[0]);
-        }
-      } else {
+      
+      if (!response || response.ErrorCode !== 1) {
         this.errorMessage = 'No Destiny 2 player found with that username.';
-        throw new Error('No player found');
+        return;
+      }
+
+      if (!response.Response || response.Response.length === 0) {
+        this.errorMessage = 'No Destiny 2 player found with that username.';
+        return;
+      }
+
+      // Find cross-save primary if available
+      const crossSave = response.Response.find((profile: any) => profile.crossSaveOverride && profile.crossSaveOverride > 0);
+      if (crossSave) {
+        this.crossSavePlayer = {
+          ...crossSave,
+          game: 'D2',
+          platform: this.getPlatformName(crossSave.membershipType)
+        };
+        console.log('[DEBUG] Found crossSavePlayer:', this.crossSavePlayer);
+      }
+
+      // Store all returned memberships for platform selection
+      this.d2SearchResults = response.Response.map((player: PlayerSearchResult) => ({
+        ...player,
+        game: 'D2',
+        platform: this.getPlatformName(player.membershipType)
+      }));
+      console.log('[DEBUG] d2SearchResults:', this.d2SearchResults);
+
+      // Show platform picker if more than one membership or cross-save is available
+      if (this.d2SearchResults.length > 1 || this.crossSavePlayer) {
+        this.showPlatformPicker = true;
+        console.log('[DEBUG] showPlatformPicker set to true');
+      } else if (this.d2SearchResults.length === 1) {
+        // Only one result, auto-select
+        await this.selectPlayer(this.d2SearchResults[0]);
       }
     } catch (error: any) {
       console.error('Error searching D2 player:', error);
@@ -376,9 +434,9 @@ export class PlayerSearchComponent implements OnInit {
       } else {
         this.errorMessage = 'Error searching for Destiny 2 player.';
       }
-      throw error; // Re-throw to be handled by addPlayer
     } finally {
       this.loading[key] = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -389,10 +447,31 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async selectPlayer(player: PlayerSearchResult) {
+    // Hide the platform picker
+    this.showPlatformPicker = false;
+
     // Check if player is already selected
     if (this.selectedPlayers.some(p => p.membershipId === player.membershipId)) {
       return;
     }
+
+    // Clear previous activity data
+    this.activities = {};
+    this.characters = {};
+    this.selectedCharacterIds = {};
+    this.groupedActivitiesByAccount = [];
+    this.processedActivities = [];
+    this.filteredActivities$.next([]);
+    this.filteredActivitiesForDate = [];
+    this.accountStats = {
+      totalTime: 0,
+      totalActivityTime: 0,
+      totalActivityCount: 0,
+      perType: {}
+    };
+    this.guardianFirsts = [];
+    this.playerTitles = {};
+
     // Use the game property from the player object if present, otherwise fallback to selectedGame
     const displayPlayer: PlayerSearchDisplay = {
       ...player,
@@ -400,8 +479,19 @@ export class PlayerSearchComponent implements OnInit {
       platform: this.getPlatformName(player.membershipType)
     };
     console.log('[DEBUG] selectPlayer:', displayPlayer);
-    this.selectedPlayers.push(displayPlayer);
+    this.selectedPlayers = [displayPlayer]; // Replace instead of push
     this.selectedCharacterIds[player.membershipId] = undefined;
+
+    // Ensure a date is selected
+    if (!this.selectedDate) {
+      const month = this.currentMonth;
+      const day = this.currentDay;
+      this.selectedDate = `${month}-${day}`;
+    }
+    // Set loading state for the selected date
+    this.loadingActivities[this.selectedDate] = true;
+    this.cdr.detectChanges();
+
     try {
       await this.loadCharacterHistory(displayPlayer);
       // After loading character history, trigger activity loading if we have a date selected
@@ -411,10 +501,17 @@ export class PlayerSearchComponent implements OnInit {
       }
       // Calculate account stats when a new player is added
       await this.calculateAccountStats();
+      // Load titles for D2 players
+      if (!this.isD1Player(displayPlayer)) {
+        await this.loadPlayerTitles(displayPlayer);
+      }
     } catch (error) {
-      this.selectedPlayers = this.selectedPlayers.filter(p => p.membershipId !== player.membershipId);
+      this.selectedPlayers = [];
       delete this.selectedCharacterIds[player.membershipId];
       throw error;
+    } finally {
+      this.loadingActivities[this.selectedDate] = false;
+      this.cdr.detectChanges();
     }
   }
 
@@ -432,6 +529,10 @@ export class PlayerSearchComponent implements OnInit {
           throw new Error('No profile data received');
         }
         this.characters[player.membershipId] = profile.Response.data?.characters || [];
+        // Set the first character as selected if we have characters
+        if (this.characters[player.membershipId].length > 0) {
+          this.selectedCharacterIds[player.membershipId] = this.characters[player.membershipId][0].characterBase?.characterId;
+        }
         for (const char of this.characters[player.membershipId]) {
           await this.loadActivityHistoryForCharacter({
             characterId: char.characterBase?.characterId,
@@ -448,6 +549,10 @@ export class PlayerSearchComponent implements OnInit {
         }
         const characters = Object.values(profile.Response.characters?.data || {}) as Array<{ characterId: string }>;
         this.characters[player.membershipId] = characters;
+        // Set the first character as selected if we have characters
+        if (characters.length > 0) {
+          this.selectedCharacterIds[player.membershipId] = characters[0].characterId;
+        }
         for (const char of characters) {
           await this.loadActivityHistoryForCharacter({
             characterId: char.characterId,
@@ -1055,9 +1160,18 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
-  isD1Player(player: PlayerSearchResult | PlayerSearchDisplay): boolean {
-    // Use the 'game' field as the source of truth
-    return (player as any).game === 'D1';
+  isD1Player(player: PlayerSearchResult | PlayerSearchDisplay | undefined): boolean {
+    if (!player) return false;
+    
+    // If the game property is explicitly set, use it
+    if ((player as any).game) {
+      return (player as any).game === 'D1';
+    }
+    
+    // Fallback to membership type check for D1
+    return (player.membershipType === 1 || player.membershipType === 2) && 
+           !(player as any).bungieGlobalDisplayName &&
+           !(player as any).isCrossSavePrimary;
   }
 
   getClassName(classType: number): string {
@@ -1194,85 +1308,69 @@ export class PlayerSearchComponent implements OnInit {
     this.loadingGuardianFirsts = true;
     let totalTime = 0;
     let totalActivityTime = 0;
-    let totalActivityCount = 0;
     const perType: { [type: string]: { count: number, time: number } } = {};
-    const guardianFirstsMap: { [key: string]: ActivityFirstCompletion } = {};
-    const D1_FAMILY_MAP: Record<string, string> = {
-      '3801607287': 'Vault of Glass', '708693006': 'Vault of Glass',
-      '3879860661': "Crota's End", '898834093': "Crota's End",
-      '1733556769': "King's Fall", '421023204': "King's Fall",
-      '2578867903': 'Wrath of the Machine', '4007500989': 'Wrath of the Machine',
-    };
+    const allFirstCompletions: ActivityFirstCompletion[] = [];
+
     try {
+      console.log('[GuardianFirsts][DEBUG] Starting calculateAccountStats with players:', this.selectedPlayers);
+      
       for (const player of this.selectedPlayers) {
-        const characters = this.characters[player.membershipId] || [];
-        const gameCharacters = characters.filter(char => {
-          const isD1 = this.isD1Player(player);
-          return isD1 === (player.game === 'D1');
+        const characterId = this.selectedCharacterIds[player.membershipId];
+        console.log('[GuardianFirsts][DEBUG] Processing player:', {
+          membershipId: player.membershipId,
+          characterId,
+          game: player.game
         });
-        for (const char of gameCharacters) {
-          const characterId = this.isD1Player(player)
-            ? char.characterBase?.characterId
-            : char.characterId;
-          if (!characterId) continue;
-          // Get all activities for this character
-          const allActivities = Object.keys(this.activities)
-            .filter(key => key.startsWith(`activities-${player.membershipId}-${characterId}`))
-            .reduce((acc, key) => acc.concat(this.activities[key] || []), [] as ActivityHistory[]);
-          // Sum activity time and count
-          totalActivityCount += allActivities.length;
-          for (const activity of allActivities) {
-            const seconds = this.getActivityDurationSeconds(activity);
-            totalActivityTime += seconds / 60; // convert to minutes
-            // Per-type stats
-            const mode = activity.activityDetails?.mode;
-            const type = this.getActivityType(mode);
-            // Only count types relevant to the game
-            if ((player.game === 'D1' && ['Raid','Strike','Nightfall','Crucible','Other'].includes(type)) ||
-                (player.game === 'D2' && ['Raid','Dungeon','Strike','Nightfall','Crucible','Gambit','Other'].includes(type))) {
-              if (!perType[type]) perType[type] = { count: 0, time: 0 };
-              perType[type].count++;
-              perType[type].time += seconds / 60;
-            }
-          }
-          totalTime += Number(char.minutesPlayedTotal || 0);
-          // Guardian firsts logic unchanged
-          const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
-          if (firsts && firsts.firstCompletions) {
-            for (const first of firsts.firstCompletions) {
-              let familyName = '';
-              if (first.game === 'D2') {
-                const map = (this.activityDb.constructor as any).ACTIVITY_FAMILY_MAP;
-                familyName = map && map[first.referenceId] ? map[first.referenceId] : first.name;
-              } else {
-                familyName = D1_FAMILY_MAP[first.referenceId] || first.name;
-              }
-              const key = `${first.type}-${first.game}-${familyName}`;
-              if (!guardianFirstsMap[key] || new Date(first.completionDate) < new Date(guardianFirstsMap[key].completionDate)) {
-                guardianFirstsMap[key] = {
-                  ...first,
-                  name: familyName,
-                  completionDate: first.completionDate,
-                  referenceId: first.referenceId
-                };
-              }
-            }
-          }
+        
+        if (!characterId) {
+          console.log('[GuardianFirsts][DEBUG][SKIP] No characterId found for player:', player.membershipId);
+          continue;
+        }
+
+        // Guardian firsts logic
+        const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
+        console.log('[GuardianFirsts][DEBUG] Got firsts for player:', {
+          membershipId: player.membershipId,
+          characterId,
+          firstsCount: firsts?.firstCompletions?.length || 0
+        });
+        
+        if (firsts && firsts.firstCompletions) {
+          // Add display name and platform to each completion
+          const completionsWithInfo = firsts.firstCompletions.map(completion => ({
+            ...completion,
+            displayName: player.displayName,
+            platform: player.platform
+          }));
+          allFirstCompletions.push(...completionsWithInfo);
         }
       }
-      const guardianFirsts = Object.values(guardianFirstsMap).sort((a, b) => {
+
+      // Sort and assign the guardian firsts once
+      this.guardianFirsts = allFirstCompletions.sort((a, b) => {
         if (a.game !== b.game) return a.game === 'D1' ? -1 : 1;
         return new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime();
       });
-      this.guardianFirsts = guardianFirsts;
+      
+      console.log('[GuardianFirsts][UI] Final guardianFirsts array:', this.guardianFirsts);
+      console.log('[GuardianFirsts][UI] Raids for D1:', this.getGuardianFirstRaidsForGame('D1'));
+      console.log('[GuardianFirsts][UI] Raids for D2:', this.getGuardianFirstRaidsForGame('D2'));
+      console.log('[GuardianFirsts][UI] Dungeons for D1:', this.getGuardianFirstDungeonsForGame('D1'));
+      console.log('[GuardianFirsts][UI] Dungeons for D2:', this.getGuardianFirstDungeonsForGame('D2'));
+      
+      this.cdr.detectChanges();
+
+      // Calculate total activity time
+      totalActivityTime = Object.values(perType).reduce((sum, stats) => sum + stats.time, 0);
+      
       this.accountStats = {
         totalTime,
-        totalActivityTime: Math.round(totalActivityTime),
-        totalActivityCount,
+        totalActivityTime,
+        totalActivityCount: Object.values(perType).reduce((sum, stats) => sum + stats.count, 0),
         perType: { ...perType }
       };
     } catch (error) {
-      console.error('[DEBUG] Error in calculateAccountStats:', error);
+      console.error('[GuardianFirsts][ERROR] Error in calculateAccountStats:', error);
     } finally {
       this.loadingAccountStats = false;
       this.loadingGuardianFirsts = false;
@@ -1282,12 +1380,16 @@ export class PlayerSearchComponent implements OnInit {
 
   // Helper method to format duration
   formatDuration(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
+    const days = Math.floor(seconds / (24 * 3600));
+    const hours = Math.floor((seconds % (24 * 3600)) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
+    
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+    
+    return parts.join(' ');
   }
 
   // Helper method to safely get perType stats
@@ -1552,21 +1654,22 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async addPlayer() {
-    if (!this.searchUsername || !this.selectedPlatform || !this.selectedGame) {
-      this.errorMessage = 'Please enter all fields.';
+    if (!this.searchUsername || !this.selectedGame) {
+      this.errorMessage = 'Please enter a username and select a game.';
       return;
     }
-    // Only allow Cross Save for D2
-    if (this.selectedPlatform === 'Cross Save' && this.selectedGame !== 'D2') {
-      this.errorMessage = 'Cross Save is only available for Destiny 2.';
-      return;
-    }
+
     this.errorMessage = '';
     this.loading['search'] = true;
     try {
       if (this.selectedGame === 'D2') {
         await this.searchD2Player(this.searchUsername);
       } else {
+        // For D1, we need to know which platform to search
+        if (!this.selectedPlatform) {
+          this.errorMessage = 'Please select a platform for Destiny 1.';
+          return;
+        }
         // Map platform string to BungieMembershipType for D1
         let membershipType = 0;
         switch (this.selectedPlatform) {
@@ -1767,6 +1870,64 @@ export class PlayerSearchComponent implements OnInit {
     // Only show raids and dungeons
     return this.guardianFirsts.filter(f => f.game === game && (f.type === 'raid' || f.type === 'dungeon'));
   }
+
+  getGuardianFirstRaidsForGame(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const raids = this.guardianFirsts.filter(f => f.type === 'raid' && f.game === game);
+
+    // Sort by release date
+    const releaseOrder = game === 'D1' ? [
+      'Vault of Glass',
+      "Crota's End",
+      "King's Fall",
+      'Wrath of the Machine'
+    ] : [
+      'Leviathan',
+      'Leviathan, Eater of Worlds',
+      'Leviathan, Spire of Stars',
+      'Last Wish',
+      'Scourge of the Past',
+      'Crown of Sorrow',
+      'Garden of Salvation',
+      'Deep Stone Crypt',
+      'Vault of Glass',
+      "King's Fall",
+      'Vow of the Disciple',
+      'Root of Nightmares',
+      "Crota's End",
+      "Salvation's Edge"
+    ];
+
+    return raids.sort((a, b) => {
+      const aIndex = releaseOrder.indexOf(a.name);
+      const bIndex = releaseOrder.indexOf(b.name);
+      return aIndex - bIndex;
+    });
+  }
+
+  getGuardianFirstDungeonsForGame(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const dungeons = this.guardianFirsts.filter(f => f.type === 'dungeon' && f.game === game);
+
+    // Sort by release date
+    const releaseOrder = [
+      'The Shattered Throne',
+      'Pit of Heresy',
+      'Prophecy',
+      'Grasp of Avarice',
+      'Duality',
+      'Spire of the Watcher',
+      'Ghosts of the Deep',
+      "Warlord's Ruin",
+      "Vesper's Host",
+      "Sundered Doctrine"
+    ];
+
+    return dungeons.sort((a, b) => {
+      const aIndex = releaseOrder.indexOf(a.name);
+      const bIndex = releaseOrder.indexOf(b.name);
+      return aIndex - bIndex;
+    });
+  }
+
   hasGuardianFirstsForGame(game: 'D1' | 'D2'): boolean {
     return this.guardianFirsts.some(f => f.game === game);
   }
@@ -1858,9 +2019,214 @@ export class PlayerSearchComponent implements OnInit {
   private isDuplicateActivity(a1: any, a2: any): boolean {
     return a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
   }
-}
+
+  getPlatformIcon(membershipType: number): string {
+    switch (membershipType) {
+      case 1: return 'fab fa-xbox';
+      case 2: return 'fab fa-playstation';
+      case 3: return 'fab fa-steam';
+      case 4: return 'fab fa-battle-net';
+      case 5: return 'fab fa-google';
+      case 6: return 'fab fa-epic-games';
+      default: return 'fas fa-question';
+    }
+  }
+
+  async loadPlayerTitles(player: PlayerSearchDisplay) {
+    if (this.isD1Player(player)) {
+      return;
+    }
+
+    this.loadingTitles[player.membershipId] = true;
+    this.cdr.detectChanges();
+
+    try {
+      const response = await firstValueFrom(this.bungieService.getPlayerTitles(player.membershipType, player.membershipId));
+      console.log('[Titles] Raw API response:', {
+        hasResponse: !!response,
+        hasRecords: !!response?.records,
+        privacy: response?.privacy,
+        recordCount: response?.records ? Object.keys(response.records).length : 0
+      });
+
+      if (!response || !response.records) {
+        console.warn('[Titles] Invalid API response:', response);
+        this.playerTitles[player.membershipId] = { 
+          titles: [], 
+          error: 'Invalid API response'
+        };
+        return;
+      }
+
+      const records = response.records;
+      const privacy = response.privacy;
+
+      if (!records) {
+        console.warn('[Titles] No records found in response');
+        this.playerTitles[player.membershipId] = { 
+          titles: [], 
+          privacy: privacy ?? 0,
+          error: 'No records found'
+        };
+        return;
+      }
+
+      const titles: PlayerTitle[] = [];
+
+      // Process records to find completed titles
+      for (const [recordHash, record] of Object.entries(records)) {
+        const typedRecord = record as TitleRecord;
+        
+        // Log the raw record data
+        console.log('[Titles] Processing record:', {
+          hash: recordHash,
+          record: {
+            completed: typedRecord.completed,
+            state: typedRecord.state,
+            objectives: typedRecord.objectives?.map(o => ({
+              complete: o.complete,
+              progress: o.progress,
+              completionValue: o.completionValue
+            }))
+          }
+        });
+        
+        // Check if the record is completed
+        const isCompleted = typedRecord.completed || 
+                          (typedRecord.objectives && 
+                           typedRecord.objectives.length > 0 && 
+                           typedRecord.objectives.every(obj => obj.complete));
+
+        // Log the completion check details
+        console.log('[Titles] Completion check:', {
+          hash: recordHash,
+          isCompleted,
+          completedDirectly: typedRecord.completed,
+          hasObjectives: !!typedRecord.objectives,
+          objectiveCount: typedRecord.objectives?.length,
+          allObjectivesComplete: typedRecord.objectives?.every(obj => obj.complete),
+          objectives: typedRecord.objectives?.map(o => ({
+            complete: o.complete,
+            progress: o.progress,
+            completionValue: o.completionValue
+          }))
+        });
+
+        if (isCompleted) {
+          const titleDef = await this.manifest.getTitleDefinition(recordHash);
+          
+          // Log the title definition lookup
+          console.log('[Titles] Title definition lookup:', {
+            hash: recordHash,
+            found: !!titleDef,
+            name: titleDef?.displayProperties?.name,
+            description: titleDef?.displayProperties?.description
+          });
+          
+          if (titleDef) {
+            titles.push({
+              titleHash: parseInt(recordHash),
+              name: titleDef.displayProperties.name,
+              description: titleDef.displayProperties.description,
+              iconPath: titleDef.displayProperties.icon,
+              isEquipped: typedRecord.state === 67
+            });
+          }
+        }
+      }
+      
+      console.log('[Titles] Final processed titles:', {
+        count: titles.length,
+        titles: titles.map(t => ({ 
+          name: t.name, 
+          isEquipped: t.isEquipped,
+          hash: t.titleHash
+        })),
+        privacy,
+        privacyMeaning: this.getPrivacyMeaning(privacy)
+      });
+      
+      // Store titles
+      this.playerTitles[player.membershipId] = { 
+        titles, 
+        privacy: privacy ?? 0
+      };
+    } catch (error) {
+      console.error('[Titles] Error loading player titles:', error);
+      this.playerTitles[player.membershipId] = { 
+        titles: [], 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    } finally {
+      this.loadingTitles[player.membershipId] = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Helper method to get privacy meaning
+  private getPrivacyMeaning(privacy: number | undefined): string {
+    if (privacy === undefined) return 'Undefined';
+    switch (privacy) {
+      case 0: return 'Open';
+      case 1: return 'Private';
+      case 2: return 'Public';
+      default: return `Unknown (${privacy})`;
+    }
+  }
+
+  getLoadingMessage(): string {
+    if (this.loading['search'] && this.searchUsername) {
+      return `Searching for player ${this.searchUsername}...`;
+    }
+    if (this.loadingActivities[this.selectedDate] && this.selectedPlayers.length > 0) {
+      const player = this.selectedPlayers[0];
+      const month = this.currentMonth;
+      const day = this.currentDay;
+      const type = this.selectedActivityType && this.selectedActivityType.label !== 'All'
+        ? this.selectedActivityType.label + 's'
+        : 'Activities';
+      return `Loading ${type} for ${player.displayName} on ${this.getMonthName(month)} ${day}...`;
+    }
+    return 'Loading...';
+  }
+
+  getMonthName(month: number): string {
+    return [
+      '', 'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ][month] || '';
+  }
+
+  hasTitles(player: PlayerSearchDisplay): boolean {
+    return !!this.playerTitles[player.membershipId] && 
+           this.playerTitles[player.membershipId].titles.length > 0;
+  }
+
+  hasD2Player(): boolean {
+    return this.selectedPlayers.some(player => player.game === 'D2');
+  }
+
+  getSelectedPlayerId(): string | undefined {
+    return this.selectedPlayers[0]?.membershipId;
+  }
+
+  getSelectedPlayerTitles(): PlayerTitle[] {
+    const id = this.getSelectedPlayerId();
+    return id && this.playerTitles[id] ? this.playerTitles[id].titles : [];
+  }
+
+  getSelectedPlayerTitlesPrivacy(): number | undefined {
+    const id = this.getSelectedPlayerId();
+    return id && this.playerTitles[id] ? this.playerTitles[id].privacy : undefined;
+  }
+
+  isTitlesLoading(): boolean {
+    const id = this.getSelectedPlayerId();
+    return id ? (this.loadingTitles[id] || false) : false;
+  }
 
 // BungieNetPlatform Endpoints (https://destinydevs.github.io/BungieNetPlatform/docs/Endpoints)
 // - Useful for user lookups, activity history, and manifest endpoints for both D1 and D2.
 // - Can be referenced for advanced features like forum, admin, and token endpoints if needed in the future.
 // - Current implementation already uses the most relevant endpoints for player and activity data. 
+}
