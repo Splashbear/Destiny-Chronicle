@@ -9,6 +9,7 @@ export interface ActivityFirstCompletion {
   mode: number;
   characterId: string;
   membershipId: string;
+  completed: number;
 }
 
 export interface GuardianFirsts {
@@ -23,9 +24,33 @@ export interface GuardianFirsts {
 export const RAID_NAMES: Record<string, { name: string; game: 'D1' | 'D2' }> = {
   // Destiny 1 Raids
   '4': { name: 'Vault of Glass', game: 'D1' },
+  // Vault of Glass
+  '3801607287': { name: 'Vault of Glass', game: 'D1' },
+  '708693006': { name: 'Vault of Glass', game: 'D1' },
+  '2659248071': { name: 'Vault of Glass', game: 'D1' },
+  '2659248068': { name: 'Vault of Glass', game: 'D1' },
+  '2659248069': { name: 'Vault of Glass', game: 'D1' },
+  '856898338': { name: 'Vault of Glass', game: 'D1' },
+  '4038697181': { name: 'Vault of Glass', game: 'D1' },
+  // Crota's End
   '5': { name: 'Crota\'s End', game: 'D1' },
+  '898834093': { name: 'Crota\'s End', game: 'D1' },
+  '112157962': { name: 'Crota\'s End', game: 'D1' },
+  '3879860662': { name: 'Crota\'s End', game: 'D1' },
+  '1836893116': { name: 'Crota\'s End', game: 'D1' },
+  // King's Fall
   '6': { name: 'King\'s Fall', game: 'D1' },
+  '1733556769': { name: 'King\'s Fall', game: 'D1' },
+  '421023204': { name: 'King\'s Fall', game: 'D1' },
+  '1661734046': { name: 'King\'s Fall', game: 'D1' },
+  '2964135793': { name: 'King\'s Fall', game: 'D1' },
+  // Wrath of the Machine
   '7': { name: 'Wrath of the Machine', game: 'D1' },
+  '2578867903': { name: 'Wrath of the Machine', game: 'D1' },
+  '4007500989': { name: 'Wrath of the Machine', game: 'D1' },
+  '1099433614': { name: 'Wrath of the Machine', game: 'D1' },
+  '1342567280': { name: 'Wrath of the Machine', game: 'D1' },
+  '260765522': { name: 'Wrath of the Machine', game: 'D1' },
   
   // Destiny 2 Raids
   '2693136601': { name: 'Leviathan', game: 'D2' },
@@ -38,5 +63,7 @@ export const RAID_NAMES: Record<string, { name: string; game: 'D1' | 'D2' }> = {
   '1374392663': { name: 'Vow of the Disciple', game: 'D2' },
   '1441982566': { name: 'Vault of Glass', game: 'D2' },
   '2381413762': { name: 'King\'s Fall', game: 'D2' },
-  '3711931140': { name: 'Crota\'s End', game: 'D2' }
+  '3711931140': { name: 'Crota\'s End', game: 'D2' },
+  '2381413763': { name: 'Root of Nightmares', game: 'D2' },
+  '548750096': { name: 'Scourge of the Past', game: 'D2' }
 }; 

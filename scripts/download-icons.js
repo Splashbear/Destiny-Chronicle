@@ -1,119 +1,132 @@
-const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
+const https = require('https');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
-const ICON_DIR = path.join(__dirname, '../src/assets/icons/activities');
-
-// Ensure the directory exists
-if (!fs.existsSync(ICON_DIR)) {
-  fs.mkdirSync(ICON_DIR, { recursive: true });
-}
-
-// Bungie API configuration
-const API_KEY = process.env.BUNGIE_API_KEY;
-const BUNGIE_API_ROOT = 'https://www.bungie.net/Platform';
-const BUNGIE_NET_ROOT = 'https://www.bungie.net';
-
-if (!API_KEY) {
-  console.error('Please set BUNGIE_API_KEY environment variable');
-  process.exit(1);
-}
-
-// Activity mode hashes that have good icons
-const ACTIVITY_MODES = {
-  'raid-d2': 4,                // Raid
-  'dungeon': 82,              // Dungeon
-  'strike-d2': 3,             // Strike
-  'story-d2': 2,              // Story
-  'pvp-d2': 5,                // PvP
-  'nightfall-d2': 46,         // Nightfall
-  'gambit': 63,               // Gambit
-  'iron-banner': 19,          // Iron Banner
-  'trials': 84                // Trials of Osiris
+// Icon definitions for all activity types
+const ICONS = {
+  d1: {
+    raid: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/raid.svg',
+    strike: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/strike.svg',
+    crucible: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/factions/faction_crucible.svg',
+    nightfall: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/factions/faction_vanguard.svg',
+    story: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    patrol: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/patrol.svg',
+    'public-event': 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/flashpoint.svg'
+  },
+  d2: {
+    raid: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/raid.svg',
+    strike: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/strike.svg',
+    crucible: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/factions/faction_crucible.svg',
+    nightfall: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/factions/faction_vanguard.svg',
+    story: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    patrol: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/patrol.svg',
+    'public-event': 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/flashpoint.svg',
+    dungeon: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/raid_complex.svg',
+    'lost-sector': 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/lost_sector.svg',
+    seasonal: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    'seasonal-event': 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    'exotic-mission': 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    gambit: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg'
+  },
+  special: {
+    trials: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    'iron-banner': 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/quest.svg',
+    ghost: 'https://raw.githubusercontent.com/justrealmilk/destiny-icons/master/explore/ghost.svg'
+  }
 };
 
-async function getManifest() {
-  try {
-    const response = await axios.get(`${BUNGIE_API_ROOT}/Destiny2/Manifest/`, {
-      headers: {
-        'X-API-Key': API_KEY
-      }
-    });
-    return response.data.Response;
-  } catch (error) {
-    console.error('Error fetching manifest:', error.message);
-    return null;
-  }
-}
-
-async function getActivityModeDefinitions(manifest) {
-  try {
-    const response = await axios.get(`${BUNGIE_NET_ROOT}${manifest.jsonWorldComponentContentPaths.en.DestinyActivityModeDefinition}`, {
-      headers: {
-        'X-API-Key': API_KEY
-      }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching activity mode definitions:', error.message);
-    return null;
-  }
-}
-
-async function downloadAndOptimizeIcon(name, iconPath) {
-  try {
-    const url = `${BUNGIE_NET_ROOT}${iconPath}`;
-    console.log(`Downloading ${name} from ${url}`);
-    
-    const response = await axios.get(url, { 
-      responseType: 'arraybuffer',
-      headers: {
-        'X-API-Key': API_KEY
-      }
-    });
-    
-    const buffer = Buffer.from(response.data);
-    const outputPath = path.join(ICON_DIR, `${name}.png`);
-    
-    await sharp(buffer)
-      .resize(128, 128) // Standardize size
-      .png({ quality: 90 })
-      .toFile(outputPath);
-      
-    console.log(`Successfully processed ${name}`);
-  } catch (error) {
-    console.error(`Error processing ${name}:`, error.message);
-  }
-}
-
-async function downloadAllIcons() {
-  try {
-    const manifest = await getManifest();
-    if (!manifest) {
-      throw new Error('Failed to fetch manifest');
-    }
-
-    const definitions = await getActivityModeDefinitions(manifest);
-    if (!definitions) {
-      throw new Error('Failed to fetch activity mode definitions');
-    }
-
-    for (const [name, modeHash] of Object.entries(ACTIVITY_MODES)) {
-      const definition = definitions[modeHash];
-      if (definition?.displayProperties?.icon) {
-        await downloadAndOptimizeIcon(name, definition.displayProperties.icon);
-        // Add a small delay between requests to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
+// Function to download a file
+function downloadFile(url, filepath) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(filepath);
+    https.get(url, response => {
+      if (response.statusCode === 200) {
+        response.pipe(file);
+        file.on('finish', () => {
+          file.close();
+          resolve();
+        });
       } else {
-        console.error(`No icon found for ${name}`);
+        reject(new Error(`Failed to download ${url}: ${response.statusCode}`));
       }
-    }
-  } catch (error) {
-    console.error('Error:', error.message);
+    }).on('error', err => {
+      fs.unlink(filepath, () => {}); // Delete the file if there's an error
+      reject(err);
+    });
+  });
+}
+
+// Function to convert SVG to PNG using Inkscape
+async function convertSvgToPng(svgPath, pngPath) {
+  try {
+    const inkscapePath = 'C:\\Program Files\\Inkscape\\bin\\inkscape.exe';
+    await execPromise(`"${inkscapePath}" --export-filename="${pngPath}" "${svgPath}"`);
+    console.log(`✓ Converted ${svgPath} to ${pngPath}`);
+  } catch (err) {
+    console.error(`✗ Failed to convert ${svgPath} to PNG:`, err.message);
+    throw err;
   }
 }
 
-downloadAllIcons().then(() => {
-  console.log('All icons processed');
-}).catch(console.error); 
+// Main function to download all icons
+async function downloadIcons() {
+  const baseDir = path.join(__dirname, '..', 'src', 'assets', 'icons', 'activities');
+
+  // Create directories if they don't exist
+  fs.mkdirSync(path.join(baseDir, 'd1'), { recursive: true });
+  fs.mkdirSync(path.join(baseDir, 'd2'), { recursive: true });
+
+  // Download D1 icons
+  for (const [name, url] of Object.entries(ICONS.d1)) {
+    const svgPath = path.join(baseDir, 'd1', `${name}.svg`);
+    const pngPath = path.join(baseDir, 'd1', `${name}.png`);
+    console.log(`Downloading D1 ${name} icon...`);
+    try {
+      await downloadFile(url, svgPath);
+      console.log(`✓ Downloaded D1 ${name} icon`);
+      await convertSvgToPng(svgPath, pngPath);
+      // Clean up SVG file after conversion
+      fs.unlinkSync(svgPath);
+    } catch (err) {
+      console.error(`✗ Failed to download/convert D1 ${name} icon:`, err.message);
+    }
+  }
+
+  // Download D2 icons
+  for (const [name, url] of Object.entries(ICONS.d2)) {
+    const svgPath = path.join(baseDir, 'd2', `${name}.svg`);
+    const pngPath = path.join(baseDir, 'd2', `${name}.png`);
+    console.log(`Downloading D2 ${name} icon...`);
+    try {
+      await downloadFile(url, svgPath);
+      console.log(`✓ Downloaded D2 ${name} icon`);
+      await convertSvgToPng(svgPath, pngPath);
+      // Clean up SVG file after conversion
+      fs.unlinkSync(svgPath);
+    } catch (err) {
+      console.error(`✗ Failed to download/convert D2 ${name} icon:`, err.message);
+    }
+  }
+
+  // Download special icons
+  for (const [name, url] of Object.entries(ICONS.special)) {
+    const svgPath = path.join(baseDir, `${name}.svg`);
+    const pngPath = path.join(baseDir, `${name}.png`);
+    console.log(`Downloading special ${name} icon...`);
+    try {
+      await downloadFile(url, svgPath);
+      console.log(`✓ Downloaded special ${name} icon`);
+      await convertSvgToPng(svgPath, pngPath);
+      // Clean up SVG file after conversion
+      fs.unlinkSync(svgPath);
+    } catch (err) {
+      console.error(`✗ Failed to download/convert special ${name} icon:`, err.message);
+    }
+  }
+}
+
+// Run the download
+downloadIcons().catch(console.error); 

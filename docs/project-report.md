@@ -27,6 +27,20 @@
    - Centralized activity filtering logic
    - Improved error handling and recovery
 
+5. **API Integration & Deployment**
+   - Successfully deployed to GitHub Pages at https://splashbear.github.io
+   - Fixed Origin Header configuration for Bungie API
+   - Implemented environment-specific API key handling
+   - Added proper CORS and security headers
+   - Resolved deployment-specific API authentication issues
+
+6. **Account Statistics**
+   - Added comprehensive account summary section
+   - Implemented total time played calculation
+   - Added activity type breakdowns
+   - Included per-character statistics
+   - Added loading indicators for stats calculation
+
 ### Current Features
 1. **Player Management**
    - Search and add Destiny 1 & 2 players
@@ -82,6 +96,14 @@
    - Implement end-to-end testing
    - Add performance monitoring
    - Optimize bundle size
+   - Investigate and fix inconsistent player search behavior
+     - Some Bungie Names work while others don't
+     - Need to understand why certain searches return empty results
+     - Consider alternative search methods or fallback options
+   - Fix activity bleedover issue
+     - Ensure proper clearing of previous user's activity data
+     - Implement proper state management between user searches
+     - Add validation to prevent displaying wrong user's activities
 
 3. **UI/UX**
    - Add dark/light theme support
@@ -98,21 +120,46 @@
    - Some loading states could be more informative
    - Mobile layout needs refinement
 
+3. **Player Search**
+   - Inconsistent behavior with Bungie Name searches
+   - Some valid Bungie Names return empty results
+   - Need to investigate API response patterns
+   - Consider adding fallback search methods
+
+4. **Data Management**
+   - Activity bleedover between user searches
+   - Previous user's activity history may be displayed for new searches
+   - Need to implement proper data clearing between searches
+   - Add validation to ensure displayed activities match current user
+
 ### Success Metrics
 1. **User Experience**
    - Reduced loading times
    - Improved error handling
    - Better feedback during operations
+   - Successful deployment to GitHub Pages
+   - Working API integration in production
 
 2. **Technical**
    - Successful activity deduplication
    - Efficient database queries
    - Reduced API calls
+   - Proper environment-specific configurations
+   - Resolved CORS and API authentication issues
 
 3. **Code Quality**
    - Type safety improvements
    - Reduced debug noise
    - Centralized business logic
+   - Environment-aware API key handling
+   - Improved error handling for API requests
+
+4. **Deployment**
+   - Successful GitHub Pages deployment
+   - Working API integration in production
+   - Proper CORS configuration
+   - Environment-specific API key handling
+   - Resolved Origin Header issues
 
 ---
 

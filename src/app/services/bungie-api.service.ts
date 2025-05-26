@@ -22,6 +22,50 @@ export interface BungieResponse<T> {
   MessageData: { [key: string]: string };
 }
 
+interface BungieApiResponse<T> {
+  ErrorCode: number;
+  ErrorStatus: string;
+  Message: string;
+  MessageData: { [key: string]: string };
+  Response: T;
+  ThrottleSeconds: number;
+}
+
+interface ProfileRecordsResponse {
+  data: {
+    records: {
+      [key: string]: {
+        objectives: Array<{ complete: boolean }>;
+        state: number;
+      };
+    };
+  };
+}
+
+interface TitleRecord {
+  completed: boolean;
+  objectives?: Array<{
+    complete: boolean;
+    progress?: number;
+    completionValue?: number;
+  }>;
+  state: number;
+}
+
+interface TitleResponse {
+  profileRecords?: {
+    data?: {
+      records?: { [key: string]: TitleRecord }
+    }
+  };
+  characterRecords?: {
+    data?: {
+      records?: { [key: string]: TitleRecord }
+    }
+  };
+  // Add other fields if needed
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -65,7 +109,20 @@ export class BungieApiService {
   }
 
   searchD2Player(searchTerm: string): Observable<BungieResponse<PlayerSearchResult[]>> {
-    const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodeURIComponent(searchTerm)}/`;
+    console.log('[DEBUG] Original search term:', searchTerm);
+    
+    // Check if the search term contains a Bungie Name (contains #)
+    if (searchTerm.includes('#')) {
+      const [displayName, displayNameCode] = searchTerm.split('#');
+      console.log('[DEBUG] Using Bungie Name search:', { displayName, displayNameCode });
+      return this.searchDestinyPlayerByBungieName(displayName, parseInt(displayNameCode));
+    }
+    
+    // Regular search for non-Bungie Names
+    const encodedTerm = encodeURIComponent(searchTerm);
+    console.log('[DEBUG] Encoded search term:', encodedTerm);
+    const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodedTerm}/`;
+    console.log('[DEBUG] Final URL:', url);
     return this.http.get<BungieResponse<PlayerSearchResult[]>>(url, { headers: this.getHeaders() });
   }
 
@@ -88,6 +145,18 @@ export class BungieApiService {
     ).pipe(
       catchError(error => {
         console.error('Error fetching profile:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  getPlayerTitles(membershipType: number, membershipId: string): Observable<BungieResponse<TitleResponse>> {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900`;
+    return this.http.get<BungieResponse<TitleResponse>>(url, {
+      headers: this.getHeaders()
+    }).pipe(
+      catchError(error => {
+        console.error('[DEBUG] Error fetching player titles:', error);
         return throwError(() => error);
       })
     );
@@ -328,13 +397,36 @@ export class BungieApiService {
            !player.isCrossSavePrimary;
   }
 
-  searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<any> {
+  searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<BungieResponse<PlayerSearchResult[]>> {
     const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
       'User-Agent': 'DestinyChronicle/1.0',
+      'Content-Type': 'application/json'
     });
-    return this.http.post(url, { displayName, displayNameCode }, { headers });
+    const body = {
+      displayName,
+      displayNameCode: parseInt(displayNameCode.toString(), 10)
+    };
+    console.log('[DEBUG] Bungie Name Search Request:', {
+      url,
+      headers: headers.keys().reduce((acc, key) => ({ ...acc, [key]: headers.get(key) }), {}),
+      body
+    });
+    return this.http.post<BungieResponse<PlayerSearchResult[]>>(url, body, { headers }).pipe(
+      tap(response => console.log('[DEBUG] Bungie Name Search Response:', response)),
+      map(response => {
+        if (response.ErrorCode === 1) {
+          // The response might be a single object or an array
+          const responseData = response.Response;
+          return {
+            ...response,
+            Response: Array.isArray(responseData) ? responseData : [responseData]
+          };
+        }
+        return response;
+      })
+    );
   }
 
   getActivityCount(membershipType: number, membershipId: string, characterId: string): Observable<number> {
