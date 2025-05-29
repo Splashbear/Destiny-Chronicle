@@ -88,8 +88,7 @@ async function downloadIcons() {
       await downloadFile(url, svgPath);
       console.log(`✓ Downloaded D1 ${name} icon`);
       await convertSvgToPng(svgPath, pngPath);
-      // Clean up SVG file after conversion
-      fs.unlinkSync(svgPath);
+      // Keep SVG file after conversion
     } catch (err) {
       console.error(`✗ Failed to download/convert D1 ${name} icon:`, err.message);
     }
@@ -104,8 +103,7 @@ async function downloadIcons() {
       await downloadFile(url, svgPath);
       console.log(`✓ Downloaded D2 ${name} icon`);
       await convertSvgToPng(svgPath, pngPath);
-      // Clean up SVG file after conversion
-      fs.unlinkSync(svgPath);
+      // Keep SVG file after conversion
     } catch (err) {
       console.error(`✗ Failed to download/convert D2 ${name} icon:`, err.message);
     }
@@ -120,8 +118,7 @@ async function downloadIcons() {
       await downloadFile(url, svgPath);
       console.log(`✓ Downloaded special ${name} icon`);
       await convertSvgToPng(svgPath, pngPath);
-      // Clean up SVG file after conversion
-      fs.unlinkSync(svgPath);
+      // Keep SVG file after conversion
     } catch (err) {
       console.error(`✗ Failed to download/convert special ${name} icon:`, err.message);
     }

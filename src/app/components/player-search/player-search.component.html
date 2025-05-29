@@ -66,7 +66,7 @@
           </div>
         </div>
         <!-- Date Picker -->
-        <div *ngIf="dbReady" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:basis-1/3 min-w-0">
+        <div *ngIf="dbReady && !loadingActivities[selectedDate]" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:basis-1/3 min-w-0">
           <h2 class="text-xl font-bold text-white mb-4">Date</h2>
           <div class="flex flex-row gap-2">
             <select #monthSelect [value]="currentMonth" 
@@ -153,7 +153,7 @@
             </div>
           </div>
           <div *ngIf="loadingActivities[selectedDate]" class="flex justify-center items-center py-8">
-            <div class="animate-spin w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full mr-4"></div>
+            <app-loading-progress [progress]="loadingProgress"></app-loading-progress>
             <span class="text-slate-300 text-lg">{{ getLoadingMessage() }}</span>
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && (groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0)"
@@ -172,7 +172,7 @@
                         <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
                         <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
                       </ng-container>
-                      <span class="font-semibold text-slate-200 text-lg ml-2">{{ typeGroup.type }}</span>
+                      <span class="font-semibold text-slate-200 text-lg ml-2">{{ typeGroup.name }}</span>
                     </div>
                     <div class="grid grid-cols-1 gap-2">
                       <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
@@ -297,19 +297,68 @@
               <div class="animate-spin w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
               <p class="text-slate-300 text-sm">Loading titles...</p>
             </div>
-            <div *ngIf="!loadingTitles[player.membershipId] && hasTitles(player)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div *ngFor="let title of getPlayerTitles(player)" 
-                   class="bg-slate-700/50 rounded-lg p-4 flex items-center gap-4"
-                   [ngClass]="{'opacity-40 grayscale': title.locked}">
-                <img [src]="title.sealImagePath" [alt]="title.name" class="w-16 h-16 object-contain rounded shadow border border-slate-600">
-                <div class="flex-1">
-                  <h4 class="text-yellow-200 font-semibold text-lg flex items-center gap-2">
-                    {{ title.name }}
-                    <span *ngIf="title.legacy" class="ml-2 px-2 py-0.5 text-xs rounded bg-red-600 text-white font-bold uppercase tracking-wide">Legacy</span>
-                    <span *ngIf="title.gildedSealImagePath" class="ml-2 px-2 py-0.5 text-xs rounded bg-yellow-600 text-white font-bold uppercase tracking-wide">Gilded</span>
-                    <span *ngIf="title.locked" class="ml-2 px-2 py-0.5 text-xs rounded bg-slate-500 text-white font-bold uppercase tracking-wide">Locked</span>
-                  </h4>
-                  <div class="text-slate-300 text-sm mt-1">{{ title.description }}</div>
+            <div *ngIf="!loadingTitles[player.membershipId] && hasTitles(player)">
+              <!-- Title Card Template -->
+              <ng-template #titleCard let-title>
+                <div class="bg-slate-700/50 rounded-lg p-4 flex items-center gap-4" [ngClass]="{'opacity-40 grayscale': title.locked}">
+                  <img 
+                    [src]="getSealImageInfo(title).src"
+                    [alt]="getSealImageInfo(title).alt"
+                    [ngClass]="getSealImageInfo(title).cssClass"
+                    class="w-auto object-contain rounded shadow"
+                    (error)="handleImageError($event, false)"
+                    loading="lazy"
+                  >
+                  <div class="flex-1">
+                    <h4 class="text-yellow-200 font-semibold text-lg flex items-center gap-2">
+                      {{ title.name }}
+                      <span *ngIf="title.currentlyGilded" class="ml-2 px-2 py-0.5 text-xs rounded bg-yellow-600 text-white font-bold uppercase tracking-wide">
+                        Gilded
+                      </span>
+                      <span *ngIf="(title.gildedCount ?? 0) > 0" class="ml-2 px-2 py-0.5 text-xs rounded bg-yellow-400 text-black font-bold">
+                        ×{{ title.gildedCount ?? 0 }}
+                      </span>
+                      <span *ngIf="title.legacy" class="ml-2 px-2 py-0.5 text-xs rounded bg-red-600 text-white font-bold uppercase tracking-wide">Legacy</span>
+                      <span *ngIf="title.locked" class="ml-2 px-2 py-0.5 text-xs rounded bg-slate-500 text-white font-bold uppercase tracking-wide">Locked</span>
+                    </h4>
+                    <div class="text-slate-300 text-sm mt-1">{{ title.description }}</div>
+                  </div>
+                </div>
+              </ng-template>
+              <!-- Gilded -->
+              <div *ngIf="getOrganizedTitles(player).gilded.length > 0" class="mb-4">
+                <h4 class="text-yellow-400 font-bold mb-2">Gilded Titles</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <ng-container *ngFor="let title of getOrganizedTitles(player).gilded; trackBy: trackByTitleHash">
+                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                  </ng-container>
+                </div>
+              </div>
+              <!-- Unlocked -->
+              <div *ngIf="getOrganizedTitles(player).unlocked.length > 0" class="mb-4">
+                <h4 class="text-green-400 font-bold mb-2">Unlocked Titles</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <ng-container *ngFor="let title of getOrganizedTitles(player).unlocked; trackBy: trackByTitleHash">
+                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                  </ng-container>
+                </div>
+              </div>
+              <!-- Locked -->
+              <div *ngIf="getOrganizedTitles(player).locked.length > 0" class="mb-4">
+                <h4 class="text-slate-400 font-bold mb-2">Locked Titles</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <ng-container *ngFor="let title of getOrganizedTitles(player).locked; trackBy: trackByTitleHash">
+                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                  </ng-container>
+                </div>
+              </div>
+              <!-- Legacy -->
+              <div *ngIf="getOrganizedTitles(player).legacy.length > 0" class="mt-8">
+                <h4 class="text-red-400 font-bold mb-2">No Longer Available</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <ng-container *ngFor="let title of getOrganizedTitles(player).legacy; trackBy: trackByTitleHash">
+                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                  </ng-container>
                 </div>
               </div>
             </div>
@@ -317,6 +366,9 @@
               <span>No titles found for this player.</span>
               <span class="block text-xs text-slate-500 mt-1">[Debug: No title records loaded]</span>
             </div>
+            <span style="color: red; font-size: 12px;">
+              LOADPLAYER DEBUG: {{ player.displayName }} | {{ player.membershipId }}
+            </span>
           </div>
         </div>
       </div>
@@ -333,7 +385,7 @@
                   <div *ngFor="let yearGroup of account.yearGroups" class="mb-2">
                     <div class="font-medium text-slate-300">{{ yearGroup.year }}</div>
                     <div *ngFor="let typeGroup of yearGroup.typeGroups" class="ml-2">
-                      {{ typeGroup.type }}: {{ typeGroup.activities.length }} activities
+                      {{ typeGroup.name }}: {{ typeGroup.activities.length }} activities
                     </div>
                   </div>
                 </div>
@@ -416,4 +468,16 @@
     title="This will remove all stored activity data from your browser.">
     Clear Activity Database
   </button>
-</div> 
+</div>
+
+<!-- Add styles for the new image sizes -->
+<style>
+  .gilded-seal-img {
+    height: 80px;
+    max-width: 80px;
+  }
+  .regular-seal-img {
+    height: 64px;
+    max-width: 64px;
+  }
+</style> 

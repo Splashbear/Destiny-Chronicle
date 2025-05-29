@@ -110,15 +110,36 @@ export class DestinyManifestService {
       // Wrath of the Machine
       2578867903, 4007500989, 1099433614, 1342567280, 260765522
     ];
+    // D1 story and strike hashes (add more as needed)
+    const D1_STORY_HASHES = [1584820970, 2393304318, 2393304319, 2393304320]; // Example hashes
+    const D1_STRIKE_HASHES = [3604094944, 3604094945, 3604094946]; // Example hashes
+    // Add detailed logging for D1 activities (after declarations)
+    if (typeof referenceId !== 'undefined') {
+      console.log(`[DestinyManifestService] getActivityType called for D1 activity:`, {
+        referenceId,
+        mode,
+        isRaidHash: D1_RAID_HASHES.includes(Number(referenceId)),
+        isStoryHash: D1_STORY_HASHES.includes(Number(referenceId)),
+        isStrikeHash: D1_STRIKE_HASHES.includes(Number(referenceId))
+      });
+    }
     if (D1_RAID_HASHES.includes(Number(referenceId))) {
       return 'raid';
     }
+    if (D1_STORY_HASHES.includes(Number(referenceId))) {
+      return 'story';
+    }
+    if (D1_STRIKE_HASHES.includes(Number(referenceId))) {
+      return 'strike';
+    }
     // First check the mode if provided (from activity data)
     if (mode !== undefined) {
+      // Crucible modes (D1 & D2)
+      const CRUCIBLE_MODES = [5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66];
+      if (CRUCIBLE_MODES.includes(mode)) return 'crucible';
       // D1 modes
       if (mode === 4) return 'raid';
       if (mode === 16) return 'strike';
-      if (mode === 5) return 'crucible';
       if (mode === 2) return 'story';
       if (mode === 3 || mode === 6) return 'patrol';
       if (mode === 1) return 'public-event';
@@ -127,7 +148,6 @@ export class DestinyManifestService {
       if (mode === 82) return 'dungeon';
       if (mode === 46 || mode === 18 || mode === 48 || mode === 49) return 'strike';
       if (mode === 63 || mode === 75 || mode === 45 || mode === 47 || mode === 67) return 'gambit';
-      if ([5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66].includes(mode)) return 'crucible';
       if (mode === 79) return 'lost-sector';
       if (mode === 80 || mode === 81) return 'seasonal';
       if (mode === 90 || mode === 91) return 'exotic-mission';
@@ -143,7 +163,12 @@ export class DestinyManifestService {
     }
     // Fall back to manifest data
     const def = this.activityDefs[referenceId];
-    if (!def) return 'other';
+    if (!def) {
+      if (typeof referenceId !== 'undefined') {
+        console.warn(`[DestinyManifestService] getActivityType: Unknown activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
+      }
+      return 'other';
+    }
     // Destiny 2: Use activityTypeHash or activityModeTypes
     const typeHash = def.activityTypeHash;
     const modeTypes: number[] = def.activityModeTypes || [];
@@ -160,6 +185,8 @@ export class DestinyManifestService {
     if (typeHash === 1063765675 || modeTypes.includes(80) || modeTypes.includes(81)) return 'seasonal';
     if (typeHash === 1234567890 || modeTypes.includes(90) || modeTypes.includes(91)) return 'exotic-mission';
     if (typeHash === 987654321 || modeTypes.includes(92) || modeTypes.includes(93)) return 'seasonal-event';
+    // If still falling through to 'other', log it
+    console.warn(`[DestinyManifestService] getActivityType: Unmapped activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
     return 'other';
   }
 
@@ -237,5 +264,73 @@ export class DestinyManifestService {
     return childHashes
       .map((hash: number | string) => this.presentationNodes[hash])
       .filter(Boolean);
+  }
+
+  /**
+   * Debug: List all Destiny 2 titles (seals) with their hashes and names
+   */
+  public debugListAllD2Titles(): void {
+    const titles = Object.values(this.presentationNodes)
+      .filter(
+        node =>
+          node.completionRecordHash &&
+          node.parentNodeHashes &&
+          node.parentNodeHashes.includes(1652422747)
+      )
+      .map(node => ({
+        hash: node.completionRecordHash,
+        name: node.displayProperties?.name,
+        description: node.displayProperties?.description,
+      }));
+    console.log('D2 Titles:', titles);
+    console.log('Total D2 Titles:', titles.length);
+  }
+
+  /**
+   * Debug: List all Destiny 2 titles (seals) with their hashes and names, waiting for manifest load if needed
+   */
+  public debugListAllD2TitlesWhenLoaded(): void {
+    this.isLoaded().subscribe(loaded => {
+      if (loaded) {
+        this.debugListAllD2Titles();
+      } else {
+        console.warn('Manifest not loaded yet.');
+      }
+    });
+  }
+
+  /**
+   * Returns all Destiny 2 title nodes (seals) by parentNodeHashes including 1652422747
+   */
+  public getAllD2TitleNodesByParentHash(): any[] {
+    return Object.values(this.presentationNodes).filter(
+      (node: any) =>
+        node.completionRecordHash &&
+        node.parentNodeHashes &&
+        node.parentNodeHashes.includes(1652422747)
+    );
+  }
+
+  /**
+   * Returns all Destiny 2 title nodes (seals) by loose filter: has completionRecordHash and titleInfo.hasTitle
+   */
+  public getAllD2TitleNodesLoose(): any[] {
+    return Object.values(this.presentationNodes).filter(
+      (node: any) =>
+        node.completionRecordHash &&
+        node.titleInfo &&
+        node.titleInfo.hasTitle
+    );
+  }
+
+  /**
+   * Returns all Destiny 2 title records (seals) by loose filter: has titleInfo.hasTitle
+   */
+  public getAllD2TitleRecordsLoose(): any[] {
+    return Object.values(this.titleDefs).filter(
+      (record: any) =>
+        record.titleInfo &&
+        record.titleInfo.hasTitle
+    );
   }
 } 

@@ -1,0 +1,81 @@
+# Destiny Chronicle Project Setup Guide
+
+## 1. Prerequisites
+
+- **Node.js:**  
+  - Install Node.js (version 18 or higher recommended for Angular 19)  
+  - Download from [nodejs.org](https://nodejs.org/)
+
+- **Git:**  
+  - Install Git if not already installed  
+  - Download from [git-scm.com](https://git-scm.com/)
+
+- **Angular CLI:**  
+  - Install globally:  
+    ```bash
+    npm install -g @angular/cli@19.2.9
+    ```
+
+## 2. Clone the Repository
+
+```bash
+git clone https://github.com/Splashbear/Destiny-Chronicle.git
+cd Destiny-Chronicle
+```
+
+## 3. Install Dependencies
+
+```bash
+npm install
+```
+
+## 4. Verify Key Files and Data
+
+- **Data Files:**  
+  - Ensure these files exist in the project root:  
+    - `d1-manifest.zip`  
+    - `DestinyActivityDefinition.json`  
+  - If missing, download or copy them manually.
+
+- **Environment Variables:**  
+  - If you use a `.env` file, copy it manually (it's usually in `.gitignore`).  
+  - Check for any API keys or secrets needed for Bungie API access.
+
+- **Large Files:**  
+  - The Inkscape installer (`inkscape-1.4.2_2025-05-13_f4327f4-x64.msi`) is not in the repository.  
+  - Download it separately if needed.
+
+## 5. Build and Run
+
+- **For Development:**  
+  ```bash
+  npm start
+  ```
+
+- **For Production Build:**  
+  ```bash
+  npm run build
+  ```
+
+## 6. Additional Scripts
+
+- **Download Icons:**  
+  If icons are missing, run:  
+  ```bash
+  npm run download-icons
+  ```
+
+## Troubleshooting
+
+- **Node.js Version:**  
+  Ensure you're using Node.js 18+ for compatibility with Angular 19.
+
+- **Missing Files:**  
+  If any data files or environment variables are missing, check the project documentation or ask for them.
+
+- **Git Issues:**  
+  If you encounter git errors, ensure you have the latest changes and that large files are not in the history.
+
+## Need Help?
+
+If you encounter any issues or need further assistance, check the project documentation or reach out to the development team.

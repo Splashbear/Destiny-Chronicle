@@ -44,25 +44,21 @@ async function downloadManifest() {
   return extractedPath;
 }
 
-function extractActivityDefinitions(sqlitePath) {
+function extractTable(db, tableName, hashKey) {
   return new Promise((resolve, reject) => {
-    const db = new sqlite3.Database(sqlitePath, sqlite3.OPEN_READONLY, (err) => {
-      if (err) return reject(err);
-    });
-    db.all('SELECT json FROM DestinyActivityDefinition', (err, rows) => {
+    db.all(`SELECT json FROM ${tableName}`, (err, rows) => {
       if (err) return reject(err);
       const defs = {};
       for (const row of rows) {
         try {
           const def = JSON.parse(row.json);
-          if (def && def.activityHash !== undefined) {
-            defs[String(def.activityHash)] = def;
+          if (def && def[hashKey] !== undefined) {
+            defs[String(def[hashKey])] = def;
           }
         } catch (e) {
           // skip malformed rows
         }
       }
-      db.close();
       resolve(defs);
     });
   });
@@ -72,9 +68,20 @@ async function main() {
   try {
     console.log('Downloading D1 manifest...');
     const sqlitePath = await downloadManifest();
-    console.log('Extracting DestinyActivityDefinition...');
-    const defs = await extractActivityDefinitions(sqlitePath);
-    fs.writeFileSync(OUTPUT_PATH, JSON.stringify(defs, null, 2));
+    const db = new sqlite3.Database(sqlitePath, sqlite3.OPEN_READONLY);
+    const tables = [
+      { name: 'DestinyActivityDefinition', hash: 'activityHash' },
+      { name: 'DestinyActivityTypeDefinition', hash: 'activityTypeHash' },
+      { name: 'DestinyActivityModeDefinition', hash: 'activityModeHash' },
+      { name: 'DestinyActivityCategoryDefinition', hash: 'activityCategoryHash' }
+    ];
+    const manifest = {};
+    for (const t of tables) {
+      console.log(`Extracting ${t.name}...`);
+      manifest[t.name] = await extractTable(db, t.name, t.hash);
+    }
+    db.close();
+    fs.writeFileSync(OUTPUT_PATH, JSON.stringify(manifest, null, 2));
     fs.unlinkSync(sqlitePath);
     console.log('Done! Output at:', OUTPUT_PATH);
   } catch (err) {
