@@ -1,0 +1,81 @@
+Mode Number,Activity Type,Description
+0,Other,All activities
+1,Public Event,Public Events
+2,Story,Story missions (modeType)
+3,Patrol,Patrol zones
+4,Raid,All raids
+5,Crucible,All PvP
+6,Patrol,D1 Patrol
+7,Nightfall,D1 Nightfall
+8,Raid,D1 Vault of Glass
+9,Raid,D1 Crota's End
+10,Crucible,Control
+12,Crucible,Clash
+15,Crucible,Iron Banner
+16,Raid,D1 King's Fall
+17,Raid,D1 Wrath of the Machine
+18,Strike,Strikes
+19,Crucible,Trials of Osiris
+24,Crucible,Rumble
+25,Crucible,All PvP modes
+28,Crucible,Supremacy
+31,Raid,D2 Leviathan
+32,Raid,D2 Eater of Worlds
+37,Crucible,Survival
+38,Crucible,Countdown
+39,Crucible,Unknown
+40,Crucible,Breakthrough
+41,Crucible,Doubles
+42,Crucible,Private Match
+43,Crucible,Scorched
+44,Crucible,Scorched Team
+45,Gambit,Gambit
+46,Nightfall,D2 Nightfall
+47,Gambit,Gambit Prime
+48,Strike,D1 Strike
+49,Strike,D2 Strike
+50,Crucible,Momentum Control
+51,Crucible,Countdown Classic
+52,Crucible,Elimination
+53,Crucible,Rift
+54,Raid,D2 Spire of Stars
+55,Raid,D2 Last Wish
+56,Raid,D2 Scourge of the Past
+57,Raid,D2 Crown of Sorrow
+58,Raid,D2 Garden of Salvation
+59,Raid,D2 Deep Stone Crypt
+60,Raid,D2 Vault of Glass (D2)
+61,Raid,D2 Vow of the Disciple
+62,Raid,D2 King's Fall (D2)
+63,Raid,D2 Root of Nightmares
+64,Raid,D2 Crota's End (D2)
+65,Crucible,Showdown
+66,Crucible,Lockdown
+67,Gambit,Gambit (new)
+68,Public Event,D1 Public Events
+69,Crucible,Competitive PvP
+70,Crucible,Quickplay PvP
+71,Crucible,Clash: Quickplay
+72,Crucible,Clash: Competitive
+73,Crucible,Control: Quickplay
+74,Crucible,Control: Competitive
+75,Gambit,Gambit Prime
+76,Seasonal,The Reckoning
+77,Seasonal,The Menagerie
+78,Vex Offensive,Vex Offensive
+79,Lost Sector,Lost Sectors
+80,Seasonal,Seasonal Activities
+81,Seasonal,Seasonal Activities
+82,Dungeon,Shattered Throne
+83,Dungeon,Pit of Heresy
+84,Dungeon,Prophecy
+85,Dungeon,Grasp of Avarice
+86,Dungeon,Duality
+87,Dungeon,Spire of the Watcher
+88,Dungeon,Ghosts of the Deep
+89,Dungeon,Warlord's Ruin
+90,Exotic Mission,Exotic Missions
+91,Exotic Mission,Exotic Missions
+92,Seasonal Event,Seasonal Events
+93,Seasonal Event,Seasonal Events
+1686739444,Story,Story activity hash with unique icon 
