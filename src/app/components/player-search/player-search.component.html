@@ -167,7 +167,10 @@
                 <div class="flex flex-wrap gap-6">
                   <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[220px]">
                     <div class="flex items-center mb-2 gap-3">
-                      <span class="activity-icon" [innerHTML]="getActivityTypeIconSvg(typeGroup.type, typeGroup.isD1)"></span>
+                      <img class="activity-icon"
+                           [src]="getPreferredActivityIconPath(typeGroup.type, typeGroup.isD1)"
+                           (error)="onIconError($event, typeGroup.type, typeGroup.isD1)"
+                           [alt]="typeGroup.type + ' icon'" />
                       <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
                         <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
                         <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>

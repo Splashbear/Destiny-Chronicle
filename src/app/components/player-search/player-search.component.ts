@@ -198,7 +198,8 @@ const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
   'flamekeeper': '/assets/gilded-seals/Flamekeeper-Gilded.png',
   'champ': '/assets/gilded-seals/Champ-Gilded.png',
   'iron lord': '/assets/gilded-seals/Iron-Lord-Gilded.png',
-  'reveler': '/assets/gilded-seals/Reveler-Gilded.png'
+  'reveler': '/assets/gilded-seals/Reveler-Gilded.png',
+  'heavy metal': '/assets/gilded-seals/Heavy-Metal.png'
 };
 
 // Utility to normalize title names for mapping
@@ -1588,8 +1589,6 @@ export class PlayerSearchComponent implements OnInit {
     this.selectedMonth = parseInt(month);
     this.selectedDay = parseInt(day);
     this.selectedDate = `${month}-${day}`;
-    this.currentMonth = this.selectedMonth;
-    this.currentDay = this.selectedDay;
     
     // Set loading state for the selected date
     this.loadingActivities[this.selectedDate] = true;
@@ -2471,6 +2470,50 @@ export class PlayerSearchComponent implements OnInit {
     } finally {
       this.loadingGuardianFirsts = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  // Returns the preferred icon path (SVG first, then PNG from mapping)
+  getPreferredActivityIconPath(type: string, isD1: boolean): string {
+    const normalizedType = type.toLowerCase().replace(/\s+/g, '-');
+    const game = isD1 ? 'd1' : 'd2';
+    const iconService = (this as any).activityIconService;
+    if (iconService && iconService.ICON_PATHS && iconService.ICON_PATHS[game]) {
+      const svgPath = iconService.ICON_PATHS[game][normalizedType];
+      const pngPath = iconService.ICON_PATHS[game][`${normalizedType}-png`];
+      const fallback = iconService.ICON_PATHS.default;
+      console.log('Icon lookup:', { type, normalizedType, game, svgPath, pngPath, fallback });
+      if (svgPath) return svgPath;
+      if (pngPath) return pngPath;
+      return fallback;
+    }
+    return `assets/icons/activities/${game}/${normalizedType}.svg`;
+  }
+
+  // Handles icon load errors and falls back to PNG or ghost using mapping
+  onIconError(event: Event, type: string, isD1: boolean) {
+    const img = event.target as HTMLImageElement;
+    const normalizedType = type.toLowerCase().replace(/\s+/g, '-');
+    const game = isD1 ? 'd1' : 'd2';
+    const iconService = (this as any).activityIconService;
+    if (iconService && iconService.ICON_PATHS && iconService.ICON_PATHS[game]) {
+      // If currently SVG, try PNG
+      if (img.src.endsWith('.svg')) {
+        const pngPath = iconService.ICON_PATHS[game][`${normalizedType}-png`];
+        if (pngPath) {
+          img.src = pngPath;
+          return;
+        }
+      }
+      // Fallback to ghost
+      img.src = iconService.ICON_PATHS.default;
+      return;
+    }
+    // Fallback to old logic
+    if (!img.src.endsWith('.png')) {
+      img.src = `assets/icons/activities/${game}/${normalizedType}.png`;
+    } else {
+      img.src = 'assets/icons/activities/ghost.png';
     }
   }
 }
