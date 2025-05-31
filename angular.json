@@ -38,7 +38,8 @@
               "src/styles.scss"
             ],
             "scripts": [],
-            "baseHref": "/Destiny-Chronicle/"
+            "baseHref": "/destiny-chronicle/",
+            "deployUrl": "/destiny-chronicle/"
           },
           "configurations": {
             "production": {
