@@ -170,10 +170,35 @@ export class ActivityDbService extends Dexie {
   ) {
     super('DestinyChronicleDb');
     try {
-      this.version(2).stores({
+      this.version(1).stores({
         activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]',
         favorites: 'membershipId, game'
       });
+
+      this.version(2).stores({
+        activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]',
+        favorites: 'membershipId, game'
+      }).upgrade(tx => {
+        console.log('[Dexie] Upgrading to version 2');
+      });
+
+      this.version(3).stores({
+        activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
+                   '[membershipId+characterId+instanceId], ' + // For deduplication
+                   '[membershipId+characterId+mode], ' + // For activity type filtering
+                   '[period+membershipId+characterId], ' + // For date-based queries
+                   '[game+membershipId+characterId], ' + // For game-specific queries
+                   '[mode+period+membershipId], ' + // For activity type + date queries
+                   '[validated+membershipId+characterId]', // For validation status
+        favorites: 'membershipId, game'
+      }).upgrade(tx => {
+        console.log('[Dexie] Upgrading to version 3');
+        // Add game field to existing activities
+        return tx.activities.toCollection().modify(activity => {
+          activity.game = activity.activityDetails?.mode >= 4 ? 'D2' : 'D1';
+        });
+      });
+
       this.activities = this.table('activities');
       this.favorites = this.table('favorites');
       // console.log('[Dexie] ActivityDbService initialized successfully');
@@ -541,5 +566,44 @@ export class ActivityDbService extends Dexie {
 
   async getFavorites(): Promise<FavoriteAccount[]> {
     return this.favorites.toArray();
+  }
+
+  async getActivitiesByGame(membershipId: string, characterId: string, game: 'D1' | 'D2'): Promise<StoredActivity[]> {
+    try {
+      return await this.activities
+        .where('[game+membershipId+characterId]')
+        .equals([game, membershipId, characterId])
+        .toArray();
+    } catch (error) {
+      console.error('[Dexie] Error getting activities by game:', error);
+      throw error;
+    }
+  }
+
+  async getActivitiesByModeAndDate(membershipId: string, mode: number, startDate: Date, endDate: Date): Promise<StoredActivity[]> {
+    try {
+      return await this.activities
+        .where('[mode+period+membershipId]')
+        .between(
+          [mode, startDate.toISOString(), membershipId],
+          [mode, endDate.toISOString(), membershipId]
+        )
+        .toArray();
+    } catch (error) {
+      console.error('[Dexie] Error getting activities by mode and date:', error);
+      throw error;
+    }
+  }
+
+  async getUnvalidatedActivitiesByCharacter(membershipId: string, characterId: string): Promise<StoredActivity[]> {
+    try {
+      return await this.activities
+        .where('[validated+membershipId+characterId]')
+        .equals([false, membershipId, characterId])
+        .toArray();
+    } catch (error) {
+      console.error('[Dexie] Error getting unvalidated activities:', error);
+      throw error;
+    }
   }
 } 
