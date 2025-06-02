@@ -227,6 +227,14 @@ async function testBungieProfileRecords(bungieService: any, membershipType: numb
   }
 }
 
+// Utility function to extract characterId for both D1 and D2 character objects
+// D1: character.characterBase.characterId
+// D2: character.characterId
+// Use this everywhere you need a characterId to avoid regressions and ensure accuracy.
+function getCharacterId(char: any): string | undefined {
+  return char.characterId || char.characterBase?.characterId;
+}
+
 @Component({
   selector: 'app-player-search',
   standalone: true,
@@ -600,11 +608,13 @@ export class PlayerSearchComponent implements OnInit {
         // Set the first character as selected if we have characters
         if (this.characters[player.membershipId].length > 0) {
           // D1: characterBase.characterId
-          this.selectedCharacterIds[player.membershipId] = this.characters[player.membershipId][0].characterBase?.characterId;
+          this.selectedCharacterIds[player.membershipId] = getCharacterId(this.characters[player.membershipId][0]) || '';
         }
         for (const char of this.characters[player.membershipId]) {
+          const charId = getCharacterId(char);
+          if (!charId) continue; // Defensive: skip if no valid ID
           await this.loadActivityHistoryForCharacter({
-            characterId: char.characterBase?.characterId, // D1: use characterBase
+            characterId: charId,
             membershipType: player.membershipType,
             membershipId: player.membershipId,
             game: 'D1'
@@ -621,11 +631,13 @@ export class PlayerSearchComponent implements OnInit {
         this.characters[player.membershipId] = characters;
         // Set the first character as selected if we have characters
         if (characters.length > 0) {
-          this.selectedCharacterIds[player.membershipId] = characters[0].characterId;
+          this.selectedCharacterIds[player.membershipId] = getCharacterId(characters[0]) || '';
         }
         for (const char of characters) {
+          const charId = getCharacterId(char);
+          if (!charId) continue; // Defensive: skip if no valid ID
           await this.loadActivityHistoryForCharacter({
-            characterId: char.characterId, // D2: use characterId
+            characterId: charId,
             membershipType: player.membershipType,
             membershipId: player.membershipId,
             game: 'D2'
@@ -1858,8 +1870,7 @@ export class PlayerSearchComponent implements OnInit {
 
   /**
    * Helper method to get all activities for a player with caching.
-   * Handles D1/D2 characterId differences: D1 uses char.characterBase.characterId, D2 uses char.characterId.
-   * Always check both to avoid regressions if the data shape changes.
+   * Handles D1/D2 characterId differences using getCharacterId utility.
    */
   private async getPlayerActivities(membershipId: string): Promise<StoredActivity[]> {
     // Check cache first
@@ -1877,12 +1888,14 @@ export class PlayerSearchComponent implements OnInit {
     }
 
     // Get activities for all characters in parallel
-    // D1: characterBase.characterId, D2: characterId
-    const activitiesPromises = characters.map(async (character: any) => {
-      const charId = character.characterId || character.characterBase?.characterId;
-      const game = character.game || 'D2'; // Default to D2 if not specified
-      return this.activityDb.getActivitiesByGame(membershipId, charId, game);
-    });
+    // Always use getCharacterId utility, filter out undefineds
+    const activitiesPromises = characters
+      .map(getCharacterId)
+      .filter((id): id is string => !!id)
+      .map(async (charId: string) => {
+        const game = characters.find((c: any) => getCharacterId(c) === charId)?.game || 'D2';
+        return this.activityDb.getActivitiesByGame(membershipId, charId, game);
+      });
 
     const activitiesArrays = await Promise.all(activitiesPromises);
     const allActivities = activitiesArrays.flat();
@@ -1928,7 +1941,9 @@ export class PlayerSearchComponent implements OnInit {
       
       if (this.selectedActivityType.label === 'All') {
         // Get all activities for the date
-        const charIds = (this.characters[player.membershipId] || []).map((char: any) => char.characterId || char.characterBase?.characterId);
+        const charIds = (this.characters[player.membershipId] || [])
+          .map(getCharacterId)
+          .filter((id): id is string => !!id);
         console.log('[DEBUG][D1] Found character IDs:', { 
           player: player.displayName, 
           charIds,
@@ -2431,9 +2446,10 @@ export class PlayerSearchComponent implements OnInit {
   // 1. Store all characterIds for each player
   // Add a helper to get all characterIds for a player
   private getAllCharacterIdsForPlayer(player: PlayerSearchDisplay): string[] {
-    return (this.characters[player.membershipId] || []).map((char: any) =>
-      char.characterId || char.characterBase?.characterId
-    );
+    // Filter out undefineds to ensure return type is string[]
+    return (this.characters[player.membershipId] || [])
+      .map(getCharacterId)
+      .filter((id): id is string => !!id);
   }
 
   // Helper function as a class method
