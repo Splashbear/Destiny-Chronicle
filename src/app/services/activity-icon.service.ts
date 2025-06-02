@@ -56,46 +56,12 @@ export class ActivityIconService {
       normalizedType = 'story'; // Use the story icon for all PoE/arena/story types in D1
     }
     const game = isD1 ? 'd1' : 'd2';
-    // Prefer SVG, then PNG, then ghost fallback
-    const svgPath = `assets/icons/activities/${game}/${normalizedType}.svg`;
     const pngPath = `assets/icons/activities/${game}/${normalizedType}.png`;
-    // Check if SVG exists
-    if ((window as any).iconFileExists?.(svgPath)) {
-      return svgPath;
-    }
-    // Check if PNG exists
+    // Check if PNG exists (if iconFileExists is available in window)
     if ((window as any).iconFileExists?.(pngPath)) {
       return pngPath;
     }
     // Fallback to ghost icon
     return this.ICON_PATHS.default;
-  }
-
-  getActivityIconSvg(type: string, isD1: boolean): Observable<SafeHtml> {
-    const path = this.getActivityIconPath(type, isD1);
-    return this.http.get(path, { responseType: 'text' }).pipe(
-      map(svg => {
-        // Parse SVG as DOM and set all fill to currentColor, leave stroke as-is
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(svg, 'image/svg+xml');
-        const elements = doc.querySelectorAll('[fill], [style]');
-        elements.forEach(el => {
-          if (el.hasAttribute('fill')) el.setAttribute('fill', 'currentColor');
-          if (el.hasAttribute('style')) {
-            let style = el.getAttribute('style') || '';
-            style = style.replace(/fill\s*:\s*[^;]+;?/g, 'fill:currentColor;');
-            // Do NOT replace stroke styles
-            el.setAttribute('style', style);
-          }
-        });
-        // Also set on root svg
-        const root = doc.documentElement;
-        root.setAttribute('fill', 'currentColor');
-        // Do NOT set stroke on root
-        const serializer = new XMLSerializer();
-        const updatedSvg = serializer.serializeToString(doc.documentElement);
-        return this.sanitizer.bypassSecurityTrustHtml(updatedSvg);
-      })
-    );
   }
 } 

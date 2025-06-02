@@ -162,6 +162,7 @@ interface TitleObjective {
   progress?: number;
   completionValue?: number;
   objectiveHash?: number;
+  visible?: boolean;
 }
 
 interface TitleRecord {
@@ -205,6 +206,25 @@ const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
 // Utility to normalize title names for mapping
 function normalizeTitleName(name: string): string {
   return name.trim().toLowerCase();
+}
+
+// Minimal standalone function to test Bungie API response for profileRecords
+async function testBungieProfileRecords(bungieService: any, membershipType: number, membershipId: string) {
+  try {
+    const response = await firstValueFrom(bungieService.getPlayerTitles(membershipType, membershipId)) as any;
+    console.log('[TEST] Full API response:', JSON.stringify(response, null, 2));
+    if (response.Response && response.Response.profileRecords && response.Response.profileRecords.data && response.Response.profileRecords.data.records) {
+      const records = response.Response.profileRecords.data.records;
+      const keys = Object.keys(records);
+      console.log('[TEST] profileRecords.data.records keys:', keys);
+      console.log('[TEST] profileRecords.data.records[126238604]:', records['126238604']);
+      console.log('[TEST] profileRecords.data.records[3175660257]:', records['3175660257']);
+    } else {
+      console.log('[TEST] profileRecords.data.records not found in response');
+    }
+  } catch (err) {
+    console.error('[TEST] Error fetching Bungie profile records:', err);
+  }
 }
 
 @Component({
@@ -285,6 +305,11 @@ export class PlayerSearchComponent implements OnInit {
   activityTypeIcons: { [key: string]: SafeHtml } = {};
   public GILDED_SEAL_IMAGE_MAP = GILDED_SEAL_IMAGE_MAP;
   public normalizeTitleName = normalizeTitleName;
+  private activitiesCache: Map<string, StoredActivity[]> = new Map();
+  // Debug filter for record hashes
+  recordHashFilter: string = '';
+  // Map to store presentation node completion status for titles
+  private presentationNodeCompletion: { [hash: string]: boolean } = {};
 
   constructor(
     private bungieService: BungieApiService,
@@ -565,6 +590,7 @@ export class PlayerSearchComponent implements OnInit {
     try {
       const isD1 = this.isD1Player(player);
       if (isD1) {
+        // D1: characterId is under characterBase.characterId
         const profile = await firstValueFrom(this.bungieService.getD1Profile(player.membershipType, player.membershipId));
         console.log('Profile fetch result:', profile);
         if (!profile || !profile.Response) {
@@ -573,17 +599,19 @@ export class PlayerSearchComponent implements OnInit {
         this.characters[player.membershipId] = profile.Response.data?.characters || [];
         // Set the first character as selected if we have characters
         if (this.characters[player.membershipId].length > 0) {
+          // D1: characterBase.characterId
           this.selectedCharacterIds[player.membershipId] = this.characters[player.membershipId][0].characterBase?.characterId;
         }
         for (const char of this.characters[player.membershipId]) {
           await this.loadActivityHistoryForCharacter({
-            characterId: char.characterBase?.characterId,
+            characterId: char.characterBase?.characterId, // D1: use characterBase
             membershipType: player.membershipType,
             membershipId: player.membershipId,
             game: 'D1'
           });
         }
       } else {
+        // D2: characterId is top-level
         const profile = await firstValueFrom(this.bungieService.getProfile(player.membershipType, player.membershipId));
         console.log('Profile fetch result:', profile);
         if (!profile || !profile.Response) {
@@ -597,7 +625,7 @@ export class PlayerSearchComponent implements OnInit {
         }
         for (const char of characters) {
           await this.loadActivityHistoryForCharacter({
-            characterId: char.characterId,
+            characterId: char.characterId, // D2: use characterId
             membershipType: player.membershipType,
             membershipId: player.membershipId,
             game: 'D2'
@@ -826,7 +854,7 @@ export class PlayerSearchComponent implements OnInit {
 
           // Validate D2 response structure
           if (!response?.Response?.activities) {
-            console.warn('[DEBUG] Invalid D2 activity response structure:', response);
+            // console.warn('[DEBUG] Invalid D2 activity response structure:', response);
             return [];
           }
 
@@ -1059,7 +1087,7 @@ export class PlayerSearchComponent implements OnInit {
             newActivities = newActivities.concat(uniqueNewActivities);
             await this.processActivityBatch(uniqueNewActivities, character);
             // Progressive update: update UI after each batch
-            this.processActivities([...dbActivities, ...newActivities], character);
+            this.processAndGroupActivities();
             // Also update filtered activities and UI for the current date
             await this.loadAllFilteredActivities();
           }
@@ -1076,7 +1104,7 @@ export class PlayerSearchComponent implements OnInit {
         }
       }
 
-      this.processActivities([...dbActivities, ...newActivities], character);
+      this.processAndGroupActivities();
     } catch (error) {
       console.error('Error loading activity history:', error);
       throw error;
@@ -1134,9 +1162,9 @@ export class PlayerSearchComponent implements OnInit {
       const normalizedType = (activityType || 'other').toLowerCase().replace(/\s+/g, '-');
       const groupKey = `${activityName}`;
       if (!yearGroup.typeGroups.has(groupKey)) {
-        let icon = this.getActivityTypeIconSvg(normalizedType, isD1);
+        let icon = this.activityIconService.getActivityIconPath(normalizedType, isD1);
         if (!icon) {
-          icon = this.getActivityTypeIconSvg('other', isD1);
+          icon = this.activityIconService.getActivityIconPath('other', isD1);
         }
         yearGroup.typeGroups.set(groupKey, {
           name: activityName,      // for display
@@ -1236,14 +1264,17 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   isD1Player(player: PlayerSearchResult | PlayerSearchDisplay | undefined): boolean {
-    if (!player) return false;
-    
+    if (!player) {
+      // Defensive: player is undefined/null
+      return false;
+    }
     // If the game property is explicitly set, use it
     if ((player as any).game) {
+      // D1/D2 distinction by explicit property
       return (player as any).game === 'D1';
     }
-    
-    // Fallback to membership type check for D1
+    // Fallback: D1 is Xbox/PlayStation, no BungieGlobalDisplayName, not cross-save
+    // This logic is brittle if Bungie changes their API, so always test both games after refactor.
     return (player.membershipType === 1 || player.membershipType === 2) && 
            !(player as any).bungieGlobalDisplayName &&
            !(player as any).isCrossSavePrimary;
@@ -1422,38 +1453,38 @@ export class PlayerSearchComponent implements OnInit {
         for (const characterId of charIds) {
           const activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, characterId);
           const raidActivities = activities.filter(a => D1_RAID_HASHES.includes(String(a.activityDetails.referenceId)) && a.values?.completed?.basic?.value === 1);
-          raidActivities.forEach(a => {
-            console.log('[DEBUG][Firsts][D1Raid] Including completed raid activity:', {
-              period: a.period,
-              referenceId: a.activityDetails.referenceId,
-              completed: a.values?.completed?.basic?.value,
-              characterId: a.characterId
-            });
-          });
+          // raidActivities.forEach(a => {
+          //   console.log('[DEBUG][Firsts][D1Raid] Including completed raid activity:', {
+          //     period: a.period,
+          //     referenceId: a.activityDetails.referenceId,
+          //     completed: a.values?.completed?.basic?.value,
+          //     characterId: a.characterId
+          //   });
+          // });
           allD1RaidActivities.push(...raidActivities);
         }
       }
       allD1RaidActivities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
-      console.log('[DEBUG][D1Raids] All D1 raid activities:', allD1RaidActivities.map(a => ({
-        period: a.period,
-        referenceId: a.activityDetails.referenceId,
-        name: this.manifest.getActivityName(a.activityDetails.referenceId, true),
-        completed: a.values?.completed?.basic?.value,
-        characterId: a.characterId
-      })));
+      // console.log('[DEBUG][D1Raids] All D1 raid activities:', allD1RaidActivities.map(a => ({
+      //   period: a.period,
+      //   referenceId: a.activityDetails.referenceId,
+      //   name: this.manifest.getActivityName(a.activityDetails.referenceId, true),
+      //   completed: a.values?.completed?.basic?.value,
+      //   characterId: a.characterId
+      // })));
       // <--- END INSERT
       
-      console.log('[GuardianFirsts][DEBUG] Starting calculateAccountStats with players:', this.selectedPlayers);
+      // console.log('[GuardianFirsts][DEBUG] Starting calculateAccountStats with players:', this.selectedPlayers);
       
       for (const player of this.selectedPlayers) {
         const charIds = this.getAllCharacterIdsForPlayer(player);
-        console.log(`[GuardianFirsts][DEBUG] Found ${charIds.length} characters for player ${player.displayName}:`, charIds);
+        // console.log(`[GuardianFirsts][DEBUG] Found ${charIds.length} characters for player ${player.displayName}:`, charIds);
         
         const completionsByFamily: { [family: string]: ActivityFirstCompletion } = {};
         for (const characterId of charIds) {
-          console.log(`[GuardianFirsts][DEBUG] Processing character ${characterId} for player ${player.displayName}`);
+          // console.log(`[GuardianFirsts][DEBUG] Processing character ${characterId} for player ${player.displayName}`);
           const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
-          console.log(`[GuardianFirsts][DEBUG] Found ${firsts.firstCompletions.length} first completions for character ${characterId}`);
+          // console.log(`[GuardianFirsts][DEBUG] Found ${firsts.firstCompletions.length} first completions for character ${characterId}`);
           for (const completion of firsts.firstCompletions) {
             if (completion.completed !== 1) continue; // Only consider completions!
             const family = completion.name;
@@ -1461,11 +1492,11 @@ export class PlayerSearchComponent implements OnInit {
               completionsByFamily[family] = {
                 ...completion
               };
-              console.log(`[GuardianFirsts][DEBUG] Updated earliest completion for ${family} to ${completion.completionDate}`);
+              // console.log(`[GuardianFirsts][DEBUG] Updated earliest completion for ${family} to ${completion.completionDate}`);
             }
           }
         }
-        console.log(`[GuardianFirsts][DEBUG] Final completions for player ${player.displayName}:`, Object.values(completionsByFamily));
+        // console.log(`[GuardianFirsts][DEBUG] Final completions for player ${player.displayName}:`, Object.values(completionsByFamily));
         allFirstCompletions.push(...Object.values(completionsByFamily));
       }
 
@@ -1475,11 +1506,11 @@ export class PlayerSearchComponent implements OnInit {
         return new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime();
       });
       
-      console.log('[GuardianFirsts][UI] Final guardianFirsts array:', this.guardianFirsts);
-      console.log('[GuardianFirsts][UI] Raids for D1:', this.getGuardianFirstRaidsForGame('D1'));
-      console.log('[GuardianFirsts][UI] Raids for D2:', this.getGuardianFirstRaidsForGame('D2'));
-      console.log('[GuardianFirsts][UI] Dungeons for D1:', this.getGuardianFirstDungeonsForGame('D1'));
-      console.log('[GuardianFirsts][UI] Dungeons for D2:', this.getGuardianFirstDungeonsForGame('D2'));
+      // console.log('[GuardianFirsts][UI] Final guardianFirsts array:', this.guardianFirsts);
+      // console.log('[GuardianFirsts][UI] Raids for D1:', this.getGuardianFirstRaidsForGame('D1'));
+      // console.log('[GuardianFirsts][UI] Raids for D2:', this.getGuardianFirstRaidsForGame('D2'));
+      // console.log('[GuardianFirsts][UI] Dungeons for D1:', this.getGuardianFirstDungeonsForGame('D1'));
+      // console.log('[GuardianFirsts][UI] Dungeons for D2:', this.getGuardianFirstDungeonsForGame('D2'));
       
       this.cdr.detectChanges();
 
@@ -1732,26 +1763,6 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
-  // Fetch and cache SVG for activity type
-  fetchActivityTypeIcon(type: string, isD1: boolean): void {
-    const key = `${type}_${isD1}`;
-    if (!this.activityTypeIcons[key]) {
-      this.activityIconService.getActivityIconSvg(type, isD1).subscribe(svg => {
-        this.activityTypeIcons[key] = svg;
-      });
-    }
-  }
-
-  // Helper to get SVG for template
-  getActivityTypeIconSvg(type: string, isD1: boolean): SafeHtml | null {
-    const key = `${type}_${isD1}`;
-    if (!this.activityTypeIcons[key]) {
-      this.fetchActivityTypeIcon(type, isD1);
-      return null;
-    }
-    return this.activityTypeIcons[key];
-  }
-
   formatTime(dateString: string): string {
     return this.timezoneService.formatTime(dateString);
   }
@@ -1847,61 +1858,44 @@ export class PlayerSearchComponent implements OnInit {
 
   /**
    * Helper method to get all activities for a player with caching.
-   * @param membershipId The player's membership ID
-   * @returns Array of activities
+   * Handles D1/D2 characterId differences: D1 uses char.characterBase.characterId, D2 uses char.characterId.
+   * Always check both to avoid regressions if the data shape changes.
    */
-  private getPlayerActivities(membershipId: string): ActivityHistory[] {
-    const cacheKey = `player-${membershipId}`;
-    const cached = this.activityCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      return cached.activities;
+  private async getPlayerActivities(membershipId: string): Promise<StoredActivity[]> {
+    // Check cache first
+    const cachedActivities = this.activitiesCache.get(membershipId);
+    if (cachedActivities) {
+      console.log('[DEBUG] Using cached activities for player:', membershipId);
+      return cachedActivities;
     }
-    // Aggregate activities for all characters
-    const charIds = (this.characters[membershipId] || []).map((char: any) => char.characterId || char.characterBase?.characterId);
-    let activities: ActivityHistory[] = [];
-    for (const charId of charIds) {
-      const key = `activities-${membershipId}-${charId}`;
-      activities = activities.concat(this.activities[key] || []);
+
+    // Get all characters for the player
+    const characters = this.characters[membershipId] || [];
+    if (characters.length === 0) {
+      console.log('[DEBUG] No characters found for player:', membershipId);
+      return [];
     }
-    this.activityCache.set(cacheKey, {
-      activities,
-      timestamp: Date.now(),
-      type: 'all',
-      game: this.isD1Player({ membershipId } as PlayerSearchResult) ? 'D1' : 'D2'
+
+    // Get activities for all characters in parallel
+    // D1: characterBase.characterId, D2: characterId
+    const activitiesPromises = characters.map(async (character: any) => {
+      const charId = character.characterId || character.characterBase?.characterId;
+      const game = character.game || 'D2'; // Default to D2 if not specified
+      return this.activityDb.getActivitiesByGame(membershipId, charId, game);
     });
-    return activities;
-  }
 
-  // Update processing when activities change
-  private processActivities(activities: ActivityHistory[], character: CharacterWithGame): void {
-    // Store activities in the activities map
-    const key = `activities-${character.membershipId}-${character.characterId}`;
-    this.activities[key] = activities;
+    const activitiesArrays = await Promise.all(activitiesPromises);
+    const allActivities = activitiesArrays.flat();
+
+    // Cache the results
+    this.activitiesCache.set(membershipId, allActivities);
     
-    // Process and group all activities
-    this.processAndGroupActivities();
-    
-    // Update the UI
-    this.cdr.detectChanges();
+    return allActivities;
   }
 
-  // Add method to clear all activities from the database
-  async clearAllActivitiesFromDb() {
-    if (!confirm('Are you sure you want to clear all activities from the database? This cannot be undone.')) return;
-    await this.activityDb.clearAllActivities();
-    this.activities = {};
-    this.clearCache();
-    this.accountStats = {
-      totalTime: 0,
-      totalActivityTime: 0,
-      totalActivityCount: 0,
-      perType: {}
-    };
-    this.cdr.detectChanges();
-    alert('All activities have been cleared from the database.');
-  }
-
-  // Centralized method to get all activities for selected players and date
+  /**
+   * Retrieves all filtered activities for the selected date and players.
+   */
   private async getAllFilteredActivitiesForDate(): Promise<ActivityWithMembership[]> {
     if (!this.selectedDate) {
       return [];
@@ -1916,23 +1910,99 @@ export class PlayerSearchComponent implements OnInit {
     }
 
     const [month, day] = this.selectedDate.split('-').map(Number);
+    console.log('[DEBUG][D1] Processing date:', { month, day, selectedDate: this.selectedDate });
+    
     const allFilteredActivities: ActivityWithMembership[] = [];
 
     // Get all activities for selected players in parallel
     const playerActivitiesPromises = this.selectedPlayers.map(async player => {
-      const playerActivities = this.getPlayerActivities(player.membershipId);
-      console.log(`[DEBUG] [Filter] Player ${player.displayName} (${player.membershipId}) has ${playerActivities.length} activities in DB`);
+      console.log('[DEBUG][D1] Processing player:', { 
+        displayName: player.displayName, 
+        membershipId: player.membershipId,
+        game: player.game,
+        isD1: this.isD1Player(player)
+      });
       
-      return playerActivities
-        .filter(activity => this.isActivityOnSelectedDate(activity))
-        .map(activity => ({
-          ...activity,
-          membershipId: player.membershipId,
-          displayName: player.displayName,
-          platform: player.platform,
+      // Use the new optimized query methods based on activity type
+      let playerActivities: StoredActivity[] = [];
+      
+      if (this.selectedActivityType.label === 'All') {
+        // Get all activities for the date
+        const charIds = (this.characters[player.membershipId] || []).map((char: any) => char.characterId || char.characterBase?.characterId);
+        console.log('[DEBUG][D1] Found character IDs:', { 
+          player: player.displayName, 
+          charIds,
+          characters: this.characters[player.membershipId]
+        });
+        
+        const activitiesPromises = charIds.map(async charId => {
+          console.log('[DEBUG][D1] Fetching activities for character:', {
+            player: player.displayName,
+            charId,
+            membershipId: player.membershipId,
+            month,
+            day
+          });
+          
+          const activities = await this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
+          
+          // Debug log for D1 activities
+          if (player.game === 'D1') {
+            console.log(`[DEBUG][D1] Activities for ${player.displayName} (${player.membershipId}) character ${charId} on ${month}-${day}:`, {
+              count: activities.length,
+              activities: activities.map(a => ({
+                period: a.period,
+                mode: a.activityDetails?.mode,
+                referenceId: a.activityDetails?.referenceId,
+                instanceId: a.activityDetails?.instanceId
+              }))
+            });
+          }
+          return activities;
+        });
+        const activitiesArrays = await Promise.all(activitiesPromises);
+        playerActivities = activitiesArrays.flat();
+      } else {
+        // Get activities filtered by mode and date
+        const startDate = new Date(Date.UTC(2014, month - 1, day, 0, 0, 0));
+        const endDate = new Date(Date.UTC(2030, month - 1, day, 23, 59, 59));
+        const mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;
+        console.log('[DEBUG][D1] Filtering by mode:', {
+          player: player.displayName,
           game: player.game,
-          iconPath: this.manifest.getActivityIcon(activity.activityDetails?.referenceId, player.game === 'D1')
-        }));
+          mode,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        });
+        
+        playerActivities = await this.activityDb.getActivitiesByModeAndDate(
+          player.membershipId,
+          mode ?? 0,
+          startDate,
+          endDate
+        );
+      }
+
+      if (player.game === 'D1') {
+        console.log(`[DEBUG][D1] All filtered D1 activities before grouping for ${player.displayName}:`, {
+          count: playerActivities.length,
+          activities: playerActivities.map(a => ({
+            period: a.period,
+            mode: a.activityDetails?.mode,
+            referenceId: a.activityDetails?.referenceId,
+            instanceId: a.activityDetails?.instanceId
+          }))
+        });
+      }
+      
+      return playerActivities.map(activity => ({
+        ...activity,
+        membershipId: player.membershipId,
+        displayName: player.displayName,
+        platform: player.platform,
+        game: player.game,
+        iconPath: this.manifest.getActivityIcon(activity.activityDetails?.referenceId, player.game === 'D1')
+      }));
     });
 
     const playerFilteredActivities = await Promise.all(playerActivitiesPromises);
@@ -1951,35 +2021,15 @@ export class PlayerSearchComponent implements OnInit {
     // Sort by period (descending)
     dedupedActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
     
+    // Debug log: count of D1 activities for this date
+    const d1Count = dedupedActivities.filter(a => a.game === 'D1').length;
+    console.log(`[DEBUG][D1] Total deduped D1 activities for ${this.selectedDate}:`, d1Count);
+
     // Cache the filtered activities
     this.filteredActivitiesCache.set(cacheKey, dedupedActivities);
     
     this.filteredActivitiesForDate = dedupedActivities;
     return dedupedActivities;
-  }
-
-  // Add method to clear filtered activities cache
-  private clearFilteredActivitiesCache(): void {
-    this.filteredActivitiesCache.clear();
-  }
-
-  // Add method to open external PGCR
-  openExternalPGCR(activity: ActivityHistory, isD1: boolean) {
-    const instanceId = activity.activityDetails?.instanceId;
-    if (!instanceId) return;
-    const game = isD1 ? 'destiny1' : 'destiny2';
-    window.open(`https://pgcr.eververse.trade/${game}/${instanceId}`, '_blank', 'noopener');
-  }
-
-  handleImageError(event: Event, isD1: boolean): void {
-    const imgElement = event.target as HTMLImageElement;
-    // Prevent infinite loop: only set if not already the fallback
-    if (!imgElement.src.includes('/assets/icons/activities/ghost.png')) {
-      imgElement.src = '/assets/icons/activities/ghost.png';
-    } else {
-      // Remove error handler to prevent further loops
-      imgElement.onerror = null;
-    }
   }
 
   // Helper for Guardian Firsts template
@@ -2058,7 +2108,7 @@ export class PlayerSearchComponent implements OnInit {
         return raidImage;
       }
       // Then try activity type icon
-      return this.getActivityTypeIconSvg(first.type, true);
+      return this.activityIconService.getActivityIconPath(first.type, true);
     }
     // For D2, try PGCR image first
     if (first.referenceId) {
@@ -2067,7 +2117,7 @@ export class PlayerSearchComponent implements OnInit {
         return 'https://www.bungie.net' + pgcrImage;
     }
     // Fallback to activity type icon
-    return this.getActivityTypeIconSvg(first.type, false);
+    return this.activityIconService.getActivityIconPath(first.type, false);
   }
 
   groupActivitiesByType(activities: any[]): ActivityGroup[] {
@@ -2103,10 +2153,9 @@ export class PlayerSearchComponent implements OnInit {
     return totalDuration / activities.length / 60; // Convert to minutes
   }
 
-  public getActivityImage(activity: any, isD1: boolean): string | SafeHtml | null {
+  public getActivityImage(activity: any, isD1: boolean): string | null {
     if (!activity) return null;
     const referenceId = activity.activityDetails?.referenceId;
-    
     if (isD1) {
       // For D1, try raid image first
       if (referenceId) {
@@ -2119,11 +2168,10 @@ export class PlayerSearchComponent implements OnInit {
       const mode = activity.activityDetails?.mode;
       if (mode !== undefined) {
         const type = this.getActivityType(mode);
-        return this.getActivityTypeIconSvg(type, true);
+        return this.activityIconService.getActivityIconPath(type, true);
       }
       return null;
     }
-
     // For D2, try PGCR image first
     if (referenceId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(referenceId, false);
@@ -2134,7 +2182,7 @@ export class PlayerSearchComponent implements OnInit {
     const mode = activity.activityDetails?.mode;
     if (mode !== undefined) {
       const type = this.getActivityType(mode);
-      return this.getActivityTypeIconSvg(type, false);
+      return this.activityIconService.getActivityIconPath(type, false);
     }
     return null;
   }
@@ -2163,41 +2211,89 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async loadPlayerTitles(player: PlayerSearchDisplay) {
-    console.log('[DEBUG][LoadTitles] ===== LOADING TITLES =====');
-    console.log('[DEBUG][LoadTitles] Loading titles for player:', player.displayName);
-    
     try {
+      // Log the raw API response
       const response = await firstValueFrom(this.bungieService.getPlayerTitles(player.membershipType, player.membershipId));
-      console.log('[DEBUG][Titles] Bungie API response:', response);
-      // Extract records from both profileRecords and characterRecords
+      console.log('[DEBUG] Raw API response:', response);
+
+      // Log the keys of the raw profileRecords.data.records object
+      if (response.Response && response.Response.profileRecords && response.Response.profileRecords.data && response.Response.profileRecords.data.records) {
+        console.log('[DEBUG] Raw profileRecords.data.records keys:', Object.keys(response.Response.profileRecords.data.records));
+        console.log('[DEBUG] Raw profileRecords.data.records[126238604]:', response.Response.profileRecords.data.records['126238604']);
+      }
+
+      // Extract and log profileRecords
       const profileRecords = (response.Response?.profileRecords as ProfileRecordsResponse)?.data?.records || {};
+      console.log('[DEBUG] profileRecords keys:', Object.keys(profileRecords));
+      console.log('[DEBUG] profileRecords[126238604]:', profileRecords['126238604']);
+
+      // Extract and log characterRecords
       const characterRecords = response.Response?.characterRecords?.data?.records || {};
+      console.log('[DEBUG] characterRecords keys:', Object.keys(characterRecords));
+      console.log('[DEBUG] characterRecords[126238604]:', characterRecords['126238604']);
+
+      // Merge and log merged records
       const records = { ...profileRecords, ...characterRecords };
-      // Get all possible D2 titles from manifest
+      console.log('[DEBUG] Merged records keys:', Object.keys(records));
+      console.log('[DEBUG] Merged records[126238604]:', records['126238604']);
+      (window as any).d2TitleRecords = records;
+
+      // Debug: Log all record hashes and check for 2023/2024 MoT
+      console.log('[DEBUG] All record hashes:', Object.keys(records));
+      console.log('[DEBUG] Record for 126238604 (2024 MoT):', records['126238604']);
+      console.log('[DEBUG] Record for 3175660257 (2023 MoT):', records['3175660257']);
+
+      // Fetch presentation node progressions for this player
+      let presentationNodeProgressions: any = null;
+      try {
+        const nodeResp = await firstValueFrom(this.bungieService.getPresentationNodeProgressions(player.membershipType, player.membershipId));
+        presentationNodeProgressions = nodeResp.Response?.presentationNodeProgressions?.data?.presentationNodes || {};
+        // Debug: Log all presentation node hashes and check for 2023/2024 MoT
+        console.log('[MoT][DEBUG] All presentation node hashes:', Object.keys(presentationNodeProgressions));
+      } catch (e) {
+        presentationNodeProgressions = {};
+      }
+
       const allTitleRecords = this.manifest.getAllD2TitleRecordsLoose();
-      console.log('[DEBUG][Titles] Found', allTitleRecords.length, 'title records (loose filter)');
-      console.log('[DEBUG][Titles] Manifest title records:', allTitleRecords);
-      const allTitleHashes = allTitleRecords.map((record: any) => String(record.hash));
-      // De-duplicate titles by normalized name, prefer earned version
       const titleMap = new Map<string, PlayerTitle>();
       for (const titleDef of allTitleRecords) {
         const hashStr = String(titleDef.hash);
-        console.log(`[DEBUG][LoadTitles] Processing title: ${titleDef.displayProperties?.name || 'Unknown'} (${hashStr})`);
-        
-        const record = records[hashStr];
+        let record = records[hashStr]; // Always use string key
         if (!titleDef || !titleDef.titleInfo || !titleDef.titleInfo.hasTitle) {
-          console.log(`[DEBUG][LoadTitles] Skipping title ${hashStr} - missing required data`);
           continue;
         }
-
-        // Log gilding info
-        const gildingTrackingHash = titleDef.titleInfo?.gildingTrackingRecordHash;
-        console.log(`[DEBUG][LoadTitles] Title ${titleDef.displayProperties?.name} gilding info:`, {
-          gildingTrackingHash,
-          hasGildingTracking: !!gildingTrackingHash,
-          gildedTitleImage: titleDef.titleInfo?.gildedTitleImage
-        });
-
+        const titleName = titleDef.titleInfo?.titlesByGender?.Male ||
+                         titleDef.titleInfo?.titlesByGender?.Female ||
+                         Object.values(titleDef.titleInfo?.titlesByGender || {})[0] ||
+                         titleDef.displayProperties.name;
+        const normalizedTitleName = (titleName || '').toLowerCase().trim();
+        const isMoT = normalizedTitleName.includes('moment of triumph') || 
+                      normalizedTitleName.includes('mmxx');
+        // Debug: Log sealPresentationNodeHash for MoT titles
+        if (isMoT) {
+          console.log(`[MoT][DEBUG] Title: ${titleName}, sealPresentationNodeHash:`, titleDef.sealPresentationNodeHash);
+          console.log(`[MoT][DEBUG] Manifest hash:`, hashStr, 'Record:', record);
+        }
+        // Determine if completed
+        let isCompleted = false;
+        if (record) {
+          if (isMoT) {
+            // For MoT titles, check state === 67
+            isCompleted = record.state === 67;
+            console.log(`[MoT][DEBUG] Title ${titleName} state:`, record.state, 'isCompleted:', isCompleted);
+          } else {
+            if (record.completed) {
+              isCompleted = true;
+            } else if (record.objectives && record.objectives.length > 0) {
+              isCompleted = !!record.objectives[0]?.complete;
+            }
+          }
+        } else if (isMoT && titleDef.sealPresentationNodeHash && presentationNodeProgressions) {
+          // If no record, check presentation node completion
+          const nodeHash = String(titleDef.sealPresentationNodeHash);
+          console.log(`[MoT][DEBUG] Checking nodeHash for ${titleName}:`, nodeHash, presentationNodeProgressions[nodeHash]);
+          isCompleted = !!presentationNodeProgressions[nodeHash]?.complete;
+        }
         let sealImagePath = this.manifest.getSealIconByRecordHash(hashStr);
         if (!sealImagePath && titleDef.titleInfo.sealImage) {
           sealImagePath = titleDef.titleInfo.sealImage.startsWith('http')
@@ -2212,66 +2308,32 @@ export class PlayerSearchComponent implements OnInit {
         if (!sealImagePath) {
           sealImagePath = '/assets/icons/activities/ghost.png';
         }
-        let gildedSealImagePath = titleDef.titleInfo.gildedTitleImage;
-        if (gildedSealImagePath) {
-          gildedSealImagePath = gildedSealImagePath.startsWith('http')
-            ? gildedSealImagePath
-            : 'https://www.bungie.net' + gildedSealImagePath;
-        }
-        const titleName =
-          titleDef.titleInfo?.titlesByGender?.Male ||
-          titleDef.titleInfo?.titlesByGender?.Female ||
-          Object.values(titleDef.titleInfo?.titlesByGender || {})[0] ||
-          titleDef.displayProperties.name;
-        const normalizedTitleName = (titleName || '').toLowerCase().trim();
-        // Determine if completed
-        let isCompleted = false;
-        if (record) {
-          isCompleted = !!record.completed ||
-            !!(record.objectives && record.objectives.length > 0 && record.objectives.every((obj: any) => !!obj.complete));
-        }
-        // Gilded seal support
-        let gildedCount = 0;
-        let currentlyGilded = false;
-        if (gildingTrackingHash) {
-          const gildingRecord = records[String(gildingTrackingHash)];
-          console.log(`[DEBUG][LoadTitles] Found gilding record for ${titleDef.displayProperties?.name}:`, gildingRecord);
-          const status = this.getGildedStatus(gildingRecord, gildingTrackingHash);
-          gildedCount = status.gildedCount;
-          currentlyGilded = status.currentlyGilded;
-          console.log(`[DEBUG][LoadTitles] Gilding status for ${titleDef.displayProperties?.name}:`, {
-            gildedCount,
-            currentlyGilded
-          });
-        }
         const playerTitle: PlayerTitle = {
           titleHash: parseInt(hashStr),
           name: titleName,
           description: titleDef.displayProperties.description,
           iconPath: sealImagePath,
           sealImagePath: sealImagePath,
-          gildedSealImagePath: gildedSealImagePath,
+          gildedSealImagePath: titleDef.titleInfo.gildedTitleImage,
           isEquipped: record ? record.state === 67 : false,
           legacy: !!titleDef.titleInfo.legacy,
           locked: !isCompleted,
-          gildedCount,
-          currentlyGilded
+          gildedCount: 0,
+          currentlyGilded: false
         };
-        // Only keep the earned version if any variant is earned
-        if (!titleMap.has(normalizedTitleName) || (!titleMap.get(normalizedTitleName) || titleMap.get(normalizedTitleName)!.locked) && !playerTitle.locked) {
-          titleMap.set(normalizedTitleName, playerTitle);
+        // Use hashStr as the key to ensure uniqueness
+        if (!titleMap.has(hashStr) || 
+            (!titleMap.get(hashStr) || titleMap.get(hashStr)!.locked) && 
+            !playerTitle.locked) {
+          titleMap.set(hashStr, playerTitle);
         }
       }
       const titles: PlayerTitle[] = Array.from(titleMap.values());
-      console.log('[DEBUG][Titles] Final titles array:', titles);
-      // Store titles
       this.playerTitles[player.membershipId] = { 
         titles,
         privacy: (response.Response?.profileRecords as ProfileRecordsResponse)?.data?.privacy || 0,
         error: (response.Response?.profileRecords as ProfileRecordsResponse)?.error || null
       };
-
-      console.log('[DEBUG][LoadTitles] ===== FINISHED LOADING TITLES =====');
     } catch (error) {
       console.error('[Titles] Error loading player titles:', error);
       this.playerTitles[player.membershipId] = { 
@@ -2282,6 +2344,25 @@ export class PlayerSearchComponent implements OnInit {
       this.loadingTitles[player.membershipId] = false;
       this.cdr.detectChanges();
     }
+  }
+
+  // Add a method to get the raw record data for a title (for MoT debug UI)
+  getRawTitleRecord(title: PlayerTitle): any {
+    const id = this.getSelectedPlayerId();
+    if (!id) return null;
+    const hash = String(title.titleHash);
+    // MoT fallback hashes
+    const motFallbackHashes: { [titleHash: string]: string } = {
+      '126238604': '2346605777',    // MMXXIV (2024)
+      '3175660257': '2996009922',  // MMXXIII (2023)
+    };
+    const records = (window as any).d2TitleRecords;
+    if (!records) return null;
+    // If MoT and no record, use fallback
+    if ((title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx')) && !records[hash] && motFallbackHashes[hash]) {
+      return records[motFallbackHashes[hash]] || null;
+    }
+    return records[hash] || null;
   }
 
   getLoadingMessage(): string {
@@ -2350,7 +2431,9 @@ export class PlayerSearchComponent implements OnInit {
   // 1. Store all characterIds for each player
   // Add a helper to get all characterIds for a player
   private getAllCharacterIdsForPlayer(player: PlayerSearchDisplay): string[] {
-    return (this.characters[player.membershipId] || []).map((char: any) => char.characterId || char.characterBase?.characterId);
+    return (this.characters[player.membershipId] || []).map((char: any) =>
+      char.characterId || char.characterBase?.characterId
+    );
   }
 
   // Helper function as a class method
@@ -2408,8 +2491,18 @@ export class PlayerSearchComponent implements OnInit {
     const legacy: PlayerTitle[] = [];
 
     for (const title of titles) {
+      const isMoT = title.name.toLowerCase().includes('moment of triumph') || 
+                    title.name.toLowerCase().includes('mmxx');
+      
       if (title.legacy) {
         legacy.push(title);
+      } else if (isMoT) {
+        // For MoT titles, only check if they're locked
+        if (!title.locked) {
+          unlocked.push(title);
+        } else {
+          locked.push(title);
+        }
       } else if (title.currentlyGilded && !title.locked) {
         gilded.push(title);
       } else if (!title.locked) {
@@ -2420,6 +2513,8 @@ export class PlayerSearchComponent implements OnInit {
     }
     // Sort gilded by count descending
     gilded.sort((a, b) => (b.gildedCount ?? 0) - (a.gildedCount ?? 0));
+    // Sort legacy by name
+    legacy.sort((a, b) => a.name.localeCompare(b.name));
     return { gilded, unlocked, locked, legacy };
   }
 
@@ -2473,47 +2568,78 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
-  // Returns the preferred icon path (SVG first, then PNG from mapping)
-  getPreferredActivityIconPath(type: string, isD1: boolean): string {
-    const normalizedType = type.toLowerCase().replace(/\s+/g, '-');
-    const game = isD1 ? 'd1' : 'd2';
-    const iconService = (this as any).activityIconService;
-    if (iconService && iconService.ICON_PATHS && iconService.ICON_PATHS[game]) {
-      const svgPath = iconService.ICON_PATHS[game][normalizedType];
-      const pngPath = iconService.ICON_PATHS[game][`${normalizedType}-png`];
-      const fallback = iconService.ICON_PATHS.default;
-      console.log('Icon lookup:', { type, normalizedType, game, svgPath, pngPath, fallback });
-      if (svgPath) return svgPath;
-      if (pngPath) return pngPath;
-      return fallback;
-    }
-    return `assets/icons/activities/${game}/${normalizedType}.svg`;
+  private clearFilteredActivitiesCache(): void {
+    this.filteredActivitiesCache.clear();
   }
 
-  // Handles icon load errors and falls back to PNG or ghost using mapping
-  onIconError(event: Event, type: string, isD1: boolean) {
-    const img = event.target as HTMLImageElement;
-    const normalizedType = type.toLowerCase().replace(/\s+/g, '-');
-    const game = isD1 ? 'd1' : 'd2';
-    const iconService = (this as any).activityIconService;
-    if (iconService && iconService.ICON_PATHS && iconService.ICON_PATHS[game]) {
-      // If currently SVG, try PNG
-      if (img.src.endsWith('.svg')) {
-        const pngPath = iconService.ICON_PATHS[game][`${normalizedType}-png`];
-        if (pngPath) {
-          img.src = pngPath;
-          return;
-        }
-      }
-      // Fallback to ghost
-      img.src = iconService.ICON_PATHS.default;
-      return;
-    }
-    // Fallback to old logic
-    if (!img.src.endsWith('.png')) {
-      img.src = `assets/icons/activities/${game}/${normalizedType}.png`;
+  openExternalPGCR(activity: ActivityHistory, isD1: boolean) {
+    const instanceId = activity.activityDetails?.instanceId;
+    if (!instanceId) return;
+    const game = isD1 ? 'destiny1' : 'destiny2';
+    window.open(`https://pgcr.eververse.trade/${game}/${instanceId}`, '_blank', 'noopener');
+  }
+
+  handleImageError(event: Event, isD1: boolean): void {
+    const imgElement = event.target as HTMLImageElement;
+    // Prevent infinite loop: only set if not already the fallback
+    if (!imgElement.src.includes('/assets/icons/activities/ghost.png')) {
+      imgElement.src = '/assets/icons/activities/ghost.png';
     } else {
-      img.src = 'assets/icons/activities/ghost.png';
+      // Remove error handler to prevent further loops
+      imgElement.onerror = null;
+    }
+  }
+
+  async clearAllActivitiesFromDb() {
+    if (!confirm('Are you sure you want to clear all activities from the database? This cannot be undone.')) return;
+    await this.activityDb.clearAllActivities();
+    this.activities = {};
+    this.clearCache();
+    this.accountStats = {
+      totalTime: 0,
+      totalActivityTime: 0,
+      totalActivityCount: 0,
+      perType: {}
+    };
+    this.cdr.detectChanges();
+    alert('All activities have been cleared from the database.');
+  }
+
+  // Add this method to trigger activity refresh only when Search is clicked
+  onDateSearch() {
+    this.onDateSelect(this.selectedMonth.toString(), this.selectedDay.toString());
+  }
+
+  // Debug: Get all record hashes from d2TitleRecords
+  getAllRecordHashes(): string[] {
+    const records = (window as any).d2TitleRecords;
+    return records ? Object.keys(records) : [];
+  }
+
+  // Debug: Get a record by hash
+  getRecordByHash(hash: string): any {
+    const records = (window as any).d2TitleRecords;
+    return records ? records[hash] : null;
+  }
+
+
+  getFilteredRecordHashes(): string[] {
+    const filter = this.recordHashFilter.trim().toLowerCase();
+    if (!filter) return this.getAllRecordHashes();
+    return this.getAllRecordHashes().filter(hash => {
+      if (hash.includes(filter)) return true;
+      const record = this.getRecordByHash(hash);
+      return record && JSON.stringify(record).toLowerCase().includes(filter);
+    });
+  }
+
+  // Public method to trigger the minimal Bungie API test for the selected player
+  public runProfileRecordsTest() {
+    if (this.selectedPlayers.length > 0) {
+      const player = this.selectedPlayers[0];
+      testBungieProfileRecords(this.bungieService, player.membershipType, player.membershipId);
+    } else {
+      console.warn('[TEST] No player selected for test.');
     }
   }
 }

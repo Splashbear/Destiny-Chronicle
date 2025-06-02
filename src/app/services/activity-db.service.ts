@@ -194,7 +194,7 @@ export class ActivityDbService extends Dexie {
       }).upgrade(tx => {
         console.log('[Dexie] Upgrading to version 3');
         // Add game field to existing activities
-        return tx.activities.toCollection().modify(activity => {
+        return tx.table('activities').toCollection().modify((activity: any) => {
           activity.game = activity.activityDetails?.mode >= 4 ? 'D2' : 'D1';
         });
       });
@@ -242,23 +242,35 @@ export class ActivityDbService extends Dexie {
 
   async getActivitiesByDate(membershipId: string, characterId: string, month: number, day: number, year?: number): Promise<StoredActivity[]> {
     try {
-      // console.log(`[Dexie] Getting activities for ${membershipId}/${characterId} on ${month}/${day}${year ? `/${year}` : ' (all years)'}`);
-      
-      // Create date range for the specified day
-      const startDate = new Date(Date.UTC(year || 2014, month - 1, day, 0, 0, 0));
-      const endDate = new Date(Date.UTC(year || 2030, month - 1, day, 23, 59, 59));
-      
-      // Use compound index for efficient date-based querying
+      // Defensive check
+      if (!membershipId || !characterId || !month || !day) {
+        console.error('[Dexie] Invalid key for getActivitiesByDate:', { membershipId, characterId, month, day });
+        return [];
+      }
+
+      // Get all activities for the character
       const activities = await this.activities
-        .where('[period+membershipId+characterId]')
-        .between(
-          [startDate.toISOString(), membershipId, characterId],
-          [endDate.toISOString(), membershipId, characterId]
-        )
+        .where({ membershipId, characterId })
         .toArray();
-      
-      // console.log(`[Dexie] Found ${activities.length} activities for date range`);
-      return activities;
+
+      // Filter activities to match the exact month and day
+      return activities.filter(activity => {
+        if (!activity.period) return false;
+        const activityDate = new Date(activity.period);
+        const activityMonth = activityDate.getUTCMonth() + 1; // Convert 0-11 to 1-12
+        const activityDay = activityDate.getUTCDate();
+        const activityYear = activityDate.getUTCFullYear();
+
+        // If year is specified, also check the year
+        if (year) {
+          return activityMonth === month && 
+                 activityDay === day && 
+                 activityYear === year;
+        }
+
+        // Otherwise just check month and day
+        return activityMonth === month && activityDay === day;
+      });
     } catch (error) {
       console.error('[Dexie] Error getting activities by date:', error);
       throw error;
@@ -395,20 +407,20 @@ export class ActivityDbService extends Dexie {
       if (!family) continue;
       const completed = activity.values?.completed?.basic?.value ?? 0;
       if (completed !== 1) {
-        console.log('[DEBUG][Firsts][Skip] Not a completion:', {
-          name: this.manifest.getActivityName(activityHash, game === 'D1'),
-          completed,
-          period: activity.period,
-          referenceId: activityHash
-        });
+        // console.log('[DEBUG][Firsts][Skip] Not a completion:', {
+        //   name: this.manifest.getActivityName(activityHash, game === 'D1'),
+        //   completed,
+        //   period: activity.period,
+        //   referenceId: activityHash
+        // });
         continue;
       }
-      console.log('[DEBUG][Firsts][Candidate]', {
-        name: this.manifest.getActivityName(activityHash, game === 'D1'),
-        completed,
-        period: activity.period,
-        referenceId: activityHash
-      });
+      // console.log('[DEBUG][Firsts][Candidate]', {
+      //   name: this.manifest.getActivityName(activityHash, game === 'D1'),
+      //   completed,
+      //   period: activity.period,
+      //   referenceId: activityHash
+      // });
       if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
         firstsByFamily[family] = {
           name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
@@ -423,13 +435,13 @@ export class ActivityDbService extends Dexie {
           membershipId,
           completed
         };
-        console.log('[DEBUG][Firsts][Pick]', {
-          family,
-          name: this.manifest.getActivityName(activityHash, game === 'D1'),
-          completed,
-          period: activity.period,
-          referenceId: activityHash
-        });
+        // console.log('[DEBUG][Firsts][Pick]', {
+        //   family,
+        //   name: this.manifest.getActivityName(activityHash, game === 'D1'),
+        //   completed,
+        //   period: activity.period,
+        //   referenceId: activityHash
+        // });
       }
     }
     const firstCompletions: ActivityFirstCompletion[] = Object.values(firstsByFamily);
@@ -598,8 +610,8 @@ export class ActivityDbService extends Dexie {
   async getUnvalidatedActivitiesByCharacter(membershipId: string, characterId: string): Promise<StoredActivity[]> {
     try {
       return await this.activities
-        .where('[validated+membershipId+characterId]')
-        .equals([false, membershipId, characterId])
+        .where({ membershipId, characterId })
+        .filter((activity: any) => activity.validated === false)
         .toArray();
     } catch (error) {
       console.error('[Dexie] Error getting unvalidated activities:', error);

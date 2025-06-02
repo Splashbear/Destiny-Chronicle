@@ -151,7 +151,8 @@ export class BungieApiService {
   }
 
   getPlayerTitles(membershipType: number, membershipId: string): Observable<BungieResponse<TitleResponse>> {
-    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900`;
+    const cacheBuster = Math.floor(Math.random() * 1e9);
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900&_cb=${cacheBuster}`;
     return this.http.get<BungieResponse<TitleResponse>>(url, {
       headers: this.getHeaders()
     }).pipe(
@@ -452,6 +453,23 @@ export class BungieApiService {
     return this.http.get(url).pipe(
       map((response: any) => response.Response),
       catchError(this.handleError)
+    );
+  }
+
+  /**
+   * Fetches presentation node progressions (component 1005) for a player.
+   * @param membershipType The membership type (1=Xbox, 2=PSN, 3=Steam, etc.)
+   * @param membershipId The player's membership ID
+   */
+  getPresentationNodeProgressions(membershipType: number, membershipId: string): Observable<any> {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=1005`;
+    return this.http.get<BungieResponse<any>>(url, {
+      headers: this.getHeaders()
+    }).pipe(
+      catchError(error => {
+        console.error('[DEBUG] Error fetching presentation node progressions:', error);
+        return throwError(() => error);
+      })
     );
   }
 

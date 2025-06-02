@@ -66,11 +66,10 @@
           </div>
         </div>
         <!-- Date Picker -->
-        <div *ngIf="dbReady && !loadingActivities[selectedDate]" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:basis-1/3 min-w-0">
+        <div *ngIf="selectedPlayers.length > 0 && dbReady && !loadingActivities[selectedDate]" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:basis-1/3 min-w-0">
           <h2 class="text-xl font-bold text-white mb-4">Date</h2>
           <div class="flex flex-row gap-2">
-            <select #monthSelect [value]="currentMonth" 
-                    (change)="onDateSelect(monthSelect.value, daySelect.value)"
+            <select [(ngModel)]="selectedMonth"
                     class="w-32 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
               <option value="1">January</option>
               <option value="2">February</option>
@@ -85,11 +84,11 @@
               <option value="11">November</option>
               <option value="12">December</option>
             </select>
-            <select #daySelect [value]="currentDay" 
-                    (change)="onDateSelect(monthSelect.value, daySelect.value)"
+            <select [(ngModel)]="selectedDay"
                     class="w-24 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
-              <option *ngFor="let day of getDaysForMonth(monthSelect.value)" [value]="day">{{day}}</option>
+              <option *ngFor="let day of getDaysForMonth(selectedMonth.toString())" [value]="day">{{day}}</option>
             </select>
+            <button (click)="onDateSearch()" class="bg-blue-600 text-white py-1.5 px-3 text-sm rounded">Search</button>
           </div>
         </div>
       </div>
@@ -167,15 +166,13 @@
                 <div class="flex flex-wrap gap-6">
                   <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[220px]">
                     <div class="flex items-center mb-2 gap-3">
-                      <img class="activity-icon"
-                           [src]="getPreferredActivityIconPath(typeGroup.type, typeGroup.isD1)"
-                           (error)="onIconError($event, typeGroup.type, typeGroup.isD1)"
-                           [alt]="typeGroup.type + ' icon'" />
                       <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
                         <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
                         <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
                       </ng-container>
-                      <span class="font-semibold text-slate-200 text-lg ml-2">{{ typeGroup.name }}</span>
+                      <span class="font-semibold text-slate-200 text-lg ml-2">
+                        {{ typeGroup.name }}<span *ngIf="typeGroup.type"> / {{ typeGroup.type | titlecase }}</span>
+                      </span>
                     </div>
                     <div class="grid grid-cols-1 gap-2">
                       <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
@@ -286,7 +283,32 @@
 
         <!-- Titles & Seals Tab -->
         <div *ngIf="activeTab === 'titles' && selectedPlayers.length > 0 && hasD2Player()" class="space-y-6">
+          <button (click)="runProfileRecordsTest()" class="bg-blue-700 text-white px-4 py-2 rounded mb-4">Run Profile Records Test</button>
           <div *ngFor="let player of selectedPlayers" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+            <!-- Debug: List all available record hashes -->
+            <div class="mb-4 p-2 bg-slate-900/80 rounded">
+              <details>
+                <summary class="text-xs text-yellow-200 cursor-pointer">Debug: All Available Record Hashes ({{ getAllRecordHashes().length }})</summary>
+                <input
+                  type="text"
+                  [(ngModel)]="recordHashFilter"
+                  placeholder="Filter by hash or content..."
+                  class="w-full mb-2 px-2 py-1 text-xs bg-slate-800 text-slate-200 rounded border border-slate-600"
+                />
+                <div class="max-h-64 overflow-y-auto mt-2">
+                  <div *ngFor="let hash of getFilteredRecordHashes()" class="mb-2">
+                    <details>
+                      <summary class="text-xs text-blue-300 cursor-pointer">Hash: {{ hash }}</summary>
+                      <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRecordByHash(hash) | json }}</pre>
+                    </details>
+                  </div>
+                  <div *ngIf="getFilteredRecordHashes().length === 0" class="text-xs text-slate-400 mt-2">
+                    No records match your filter.
+                  </div>
+                </div>
+              </details>
+            </div>
+            <!-- End Debug Section -->
             <div class="flex items-center justify-between mb-2">
               <h3 class="text-lg font-bold text-yellow-300 tracking-wide">
                 {{ player.displayName }}'s Titles
@@ -334,6 +356,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <ng-container *ngFor="let title of getOrganizedTitles(player).gilded; trackBy: trackByTitleHash">
                     <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
+                      <details class="bg-slate-900/80 rounded p-2 mt-2">
+                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
+                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
+                      </details>
+                    </div>
                   </ng-container>
                 </div>
               </div>
@@ -343,6 +371,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <ng-container *ngFor="let title of getOrganizedTitles(player).unlocked; trackBy: trackByTitleHash">
                     <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
+                      <details class="bg-slate-900/80 rounded p-2 mt-2">
+                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
+                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
+                      </details>
+                    </div>
                   </ng-container>
                 </div>
               </div>
@@ -352,6 +386,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <ng-container *ngFor="let title of getOrganizedTitles(player).locked; trackBy: trackByTitleHash">
                     <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
+                      <details class="bg-slate-900/80 rounded p-2 mt-2">
+                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
+                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
+                      </details>
+                    </div>
                   </ng-container>
                 </div>
               </div>
@@ -361,6 +401,12 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <ng-container *ngFor="let title of getOrganizedTitles(player).legacy; trackBy: trackByTitleHash">
                     <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
+                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
+                      <details class="bg-slate-900/80 rounded p-2 mt-2">
+                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
+                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
+                      </details>
+                    </div>
                   </ng-container>
                 </div>
               </div>

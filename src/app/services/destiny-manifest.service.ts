@@ -47,7 +47,6 @@ export class DestinyManifestService {
   async getTitleDefinition(hash: string): Promise<any> {
     const definition = this.titleDefs[hash];
     if (!definition) {
-      console.warn('[Titles] No definition found for title hash:', hash);
       return null;
     }
     return definition;
@@ -114,15 +113,15 @@ export class DestinyManifestService {
     const D1_STORY_HASHES = [1584820970, 2393304318, 2393304319, 2393304320]; // Example hashes
     const D1_STRIKE_HASHES = [3604094944, 3604094945, 3604094946]; // Example hashes
     // Add detailed logging for D1 activities (after declarations)
-    if (typeof referenceId !== 'undefined') {
-      console.log(`[DestinyManifestService] getActivityType called for D1 activity:`, {
-        referenceId,
-        mode,
-        isRaidHash: D1_RAID_HASHES.includes(Number(referenceId)),
-        isStoryHash: D1_STORY_HASHES.includes(Number(referenceId)),
-        isStrikeHash: D1_STRIKE_HASHES.includes(Number(referenceId))
-      });
-    }
+    // if (typeof referenceId !== 'undefined') {
+    //   console.log(`[DestinyManifestService] getActivityType called for D1 activity:`, {
+    //     referenceId,
+    //     mode,
+    //     isRaidHash: D1_RAID_HASHES.includes(Number(referenceId)),
+    //     isStoryHash: D1_STORY_HASHES.includes(Number(referenceId)),
+    //     isStrikeHash: D1_STRIKE_HASHES.includes(Number(referenceId))
+    //   });
+    // }
     if (D1_RAID_HASHES.includes(Number(referenceId))) {
       return 'raid';
     }
@@ -164,9 +163,9 @@ export class DestinyManifestService {
     // Fall back to manifest data
     const def = this.activityDefs[referenceId];
     if (!def) {
-      if (typeof referenceId !== 'undefined') {
-        console.warn(`[DestinyManifestService] getActivityType: Unknown activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
-      }
+      // if (typeof referenceId !== 'undefined') {
+      //   console.warn(`[DestinyManifestService] getActivityType: Unknown activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
+      // }
       return 'other';
     }
     // Destiny 2: Use activityTypeHash or activityModeTypes
@@ -186,7 +185,9 @@ export class DestinyManifestService {
     if (typeHash === 1234567890 || modeTypes.includes(90) || modeTypes.includes(91)) return 'exotic-mission';
     if (typeHash === 987654321 || modeTypes.includes(92) || modeTypes.includes(93)) return 'seasonal-event';
     // If still falling through to 'other', log it
-    console.warn(`[DestinyManifestService] getActivityType: Unmapped activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
+    // if (typeof referenceId !== 'undefined') {
+    //   console.warn(`[DestinyManifestService] getActivityType: Unmapped activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
+    // }
     return 'other';
   }
 
@@ -282,8 +283,8 @@ export class DestinyManifestService {
         name: node.displayProperties?.name,
         description: node.displayProperties?.description,
       }));
-    console.log('D2 Titles:', titles);
-    console.log('Total D2 Titles:', titles.length);
+    // console.log('D2 Titles:', titles);
+    // console.log('Total D2 Titles:', titles.length);
   }
 
   /**
@@ -294,7 +295,7 @@ export class DestinyManifestService {
       if (loaded) {
         this.debugListAllD2Titles();
       } else {
-        console.warn('Manifest not loaded yet.');
+        // console.warn('Manifest not loaded yet.');
       }
     });
   }
