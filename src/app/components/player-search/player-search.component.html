@@ -109,12 +109,6 @@
                     class="px-4 py-2 border-b-2 border-transparent hover:text-blue-300 transition-colors">
               Guardian Firsts
             </button>
-            <button (click)="activeTab = 'titles'"
-                    [class.text-blue-400]="activeTab === 'titles'"
-                    [class.border-blue-400]="activeTab === 'titles'"
-                    class="px-4 py-2 border-b-2 border-transparent hover:text-blue-300 transition-colors">
-              Titles
-            </button>
           </div>
         </div>
 
@@ -153,7 +147,6 @@
           </div>
           <div *ngIf="loadingActivities[selectedDate]" class="flex justify-center items-center py-8">
             <app-loading-progress [progress]="loadingProgress"></app-loading-progress>
-            <span class="text-slate-300 text-lg">{{ getLoadingMessage() }}</span>
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && (groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0)"
                class="space-y-6 w-full min-w-0">
@@ -197,6 +190,31 @@
         <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0" class="space-y-6">
           <div *ngFor="let player of selectedPlayers" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
             <h3 class="text-lg font-semibold text-white mb-4">{{ player.displayName }}'s Guardian Firsts</h3>
+            <!-- First Ever Activity Card (moved to top) -->
+            <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
+              <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
+              <ng-container *ngIf="firstEverActivity as first">
+                <div class="relative">
+                  <ng-container *ngIf="getActivityImage(first, isD1Player(player)) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ getActivityName(first, isD1Player(player)) }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCR(first, isD1Player(player))"
+                         class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(first.period) }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </ng-container>
+              <ng-container *ngIf="!firstEverActivity">
+                <span class="block p-4">No activities found.</span>
+              </ng-container>
+            </div>
             <!-- D1 Firsts -->
             <ng-container *ngIf="isD1Player(player)">
               <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
@@ -210,14 +228,13 @@
                     <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                     <div class="absolute bottom-0 left-0 right-0 p-3">
                       <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
-                      <div class="text-sm text-slate-300">{{ formatDateTime(first.completionDate) }}</div>
+                      <div class="text-sm text-slate-300">
+                        <a (click)="openExternalPGCRForFirst(first)"
+                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                          {{ formatDateTime(first.completionDate) }}
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                  <div class="p-3 border-t border-slate-600/50">
-                    <button (click)="openExternalPGCRForFirst(first)"
-                            class="w-full bg-blue-600 text-white py-1.5 px-3 text-sm rounded hover:bg-blue-700 transition-colors">
-                      View PGCR
-                    </button>
                   </div>
                 </div>
               </div>
@@ -238,14 +255,13 @@
                     <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                     <div class="absolute bottom-0 left-0 right-0 p-3">
                       <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
-                      <div class="text-sm text-slate-300">{{ formatDateTime(first.completionDate) }}</div>
+                      <div class="text-sm text-slate-300">
+                        <a (click)="openExternalPGCRForFirst(first)"
+                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                          {{ formatDateTime(first.completionDate) }}
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                  <div class="p-3 border-t border-slate-600/50">
-                    <button (click)="openExternalPGCRForFirst(first)"
-                            class="w-full bg-blue-600 text-white py-1.5 px-3 text-sm rounded hover:bg-blue-700 transition-colors">
-                      View PGCR
-                    </button>
                   </div>
                 </div>
               </div>
@@ -263,14 +279,13 @@
                     <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                     <div class="absolute bottom-0 left-0 right-0 p-3">
                       <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
-                      <div class="text-sm text-slate-300">{{ formatDateTime(first.completionDate) }}</div>
+                      <div class="text-sm text-slate-300">
+                        <a (click)="openExternalPGCRForFirst(first)"
+                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                          {{ formatDateTime(first.completionDate) }}
+                        </a>
+                      </div>
                     </div>
-                  </div>
-                  <div class="p-3 border-t border-slate-600/50">
-                    <button (click)="openExternalPGCRForFirst(first)"
-                            class="w-full bg-blue-600 text-white py-1.5 px-3 text-sm rounded hover:bg-blue-700 transition-colors">
-                      View PGCR
-                    </button>
                   </div>
                 </div>
               </div>
@@ -278,146 +293,6 @@
                 No dungeon firsts found for D2.
               </div>
             </ng-container>
-          </div>
-        </div>
-
-        <!-- Titles & Seals Tab -->
-        <div *ngIf="activeTab === 'titles' && selectedPlayers.length > 0 && hasD2Player()" class="space-y-6">
-          <button (click)="runProfileRecordsTest()" class="bg-blue-700 text-white px-4 py-2 rounded mb-4">Run Profile Records Test</button>
-          <div *ngFor="let player of selectedPlayers" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
-            <!-- Debug: List all available record hashes -->
-            <div class="mb-4 p-2 bg-slate-900/80 rounded">
-              <details>
-                <summary class="text-xs text-yellow-200 cursor-pointer">Debug: All Available Record Hashes ({{ getAllRecordHashes().length }})</summary>
-                <input
-                  type="text"
-                  [(ngModel)]="recordHashFilter"
-                  placeholder="Filter by hash or content..."
-                  class="w-full mb-2 px-2 py-1 text-xs bg-slate-800 text-slate-200 rounded border border-slate-600"
-                />
-                <div class="max-h-64 overflow-y-auto mt-2">
-                  <div *ngFor="let hash of getFilteredRecordHashes()" class="mb-2">
-                    <details>
-                      <summary class="text-xs text-blue-300 cursor-pointer">Hash: {{ hash }}</summary>
-                      <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRecordByHash(hash) | json }}</pre>
-                    </details>
-                  </div>
-                  <div *ngIf="getFilteredRecordHashes().length === 0" class="text-xs text-slate-400 mt-2">
-                    No records match your filter.
-                  </div>
-                </div>
-              </details>
-            </div>
-            <!-- End Debug Section -->
-            <div class="flex items-center justify-between mb-2">
-              <h3 class="text-lg font-bold text-yellow-300 tracking-wide">
-                {{ player.displayName }}'s Titles
-                <span class="ml-2 text-xs font-normal text-slate-300">({{ getPlayerTitles(player).length }} out of {{ manifest.getTotalD2Titles() }} Titles)</span>
-              </h3>
-              <span class="px-2 py-1 text-xs rounded bg-slate-600 text-white">
-                {{ player.platform }}
-              </span>
-            </div>
-            <div *ngIf="loadingTitles[player.membershipId]" class="text-center py-2">
-              <div class="animate-spin w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-2"></div>
-              <p class="text-slate-300 text-sm">Loading titles...</p>
-            </div>
-            <div *ngIf="!loadingTitles[player.membershipId] && hasTitles(player)">
-              <!-- Title Card Template -->
-              <ng-template #titleCard let-title>
-                <div class="bg-slate-700/50 rounded-lg p-4 flex items-center gap-4" [ngClass]="{'opacity-40 grayscale': title.locked}">
-                  <img 
-                    [src]="getSealImageInfo(title).src"
-                    [alt]="getSealImageInfo(title).alt"
-                    [ngClass]="getSealImageInfo(title).cssClass"
-                    class="w-auto object-contain rounded shadow"
-                    (error)="handleImageError($event, false)"
-                    loading="lazy"
-                  >
-                  <div class="flex-1">
-                    <h4 class="text-yellow-200 font-semibold text-lg flex items-center gap-2">
-                      {{ title.name }}
-                      <span *ngIf="title.currentlyGilded" class="ml-2 px-2 py-0.5 text-xs rounded bg-yellow-600 text-white font-bold uppercase tracking-wide">
-                        Gilded
-                      </span>
-                      <span *ngIf="(title.gildedCount ?? 0) > 0" class="ml-2 px-2 py-0.5 text-xs rounded bg-yellow-400 text-black font-bold">
-                        ×{{ title.gildedCount ?? 0 }}
-                      </span>
-                      <span *ngIf="title.legacy" class="ml-2 px-2 py-0.5 text-xs rounded bg-red-600 text-white font-bold uppercase tracking-wide">Legacy</span>
-                      <span *ngIf="title.locked" class="ml-2 px-2 py-0.5 text-xs rounded bg-slate-500 text-white font-bold uppercase tracking-wide">Locked</span>
-                    </h4>
-                    <div class="text-slate-300 text-sm mt-1">{{ title.description }}</div>
-                  </div>
-                </div>
-              </ng-template>
-              <!-- Gilded -->
-              <div *ngIf="getOrganizedTitles(player).gilded.length > 0" class="mb-4">
-                <h4 class="text-yellow-400 font-bold mb-2">Gilded Titles</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <ng-container *ngFor="let title of getOrganizedTitles(player).gilded; trackBy: trackByTitleHash">
-                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
-                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
-                      <details class="bg-slate-900/80 rounded p-2 mt-2">
-                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
-                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
-                      </details>
-                    </div>
-                  </ng-container>
-                </div>
-              </div>
-              <!-- Unlocked -->
-              <div *ngIf="getOrganizedTitles(player).unlocked.length > 0" class="mb-4">
-                <h4 class="text-green-400 font-bold mb-2">Unlocked Titles</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <ng-container *ngFor="let title of getOrganizedTitles(player).unlocked; trackBy: trackByTitleHash">
-                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
-                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
-                      <details class="bg-slate-900/80 rounded p-2 mt-2">
-                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
-                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
-                      </details>
-                    </div>
-                  </ng-container>
-                </div>
-              </div>
-              <!-- Locked -->
-              <div *ngIf="getOrganizedTitles(player).locked.length > 0" class="mb-4">
-                <h4 class="text-slate-400 font-bold mb-2">Locked Titles</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <ng-container *ngFor="let title of getOrganizedTitles(player).locked; trackBy: trackByTitleHash">
-                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
-                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
-                      <details class="bg-slate-900/80 rounded p-2 mt-2">
-                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
-                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
-                      </details>
-                    </div>
-                  </ng-container>
-                </div>
-              </div>
-              <!-- Legacy -->
-              <div *ngIf="getOrganizedTitles(player).legacy.length > 0" class="mt-8">
-                <h4 class="text-red-400 font-bold mb-2">No Longer Available</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <ng-container *ngFor="let title of getOrganizedTitles(player).legacy; trackBy: trackByTitleHash">
-                    <ng-container *ngTemplateOutlet="titleCard; context: {$implicit: title}"></ng-container>
-                    <div *ngIf="title.name && (title.name.toLowerCase().includes('moment of triumph') || title.name.toLowerCase().includes('mmxx'))">
-                      <details class="bg-slate-900/80 rounded p-2 mt-2">
-                        <summary class="text-xs text-yellow-300 cursor-pointer">Debug: Raw Record Data for {{ title.name }}</summary>
-                        <pre class="text-xs text-slate-200 bg-slate-800 rounded p-2 overflow-x-auto">{{ getRawTitleRecord(title) | json }}</pre>
-                      </details>
-                    </div>
-                  </ng-container>
-                </div>
-              </div>
-            </div>
-            <div *ngIf="!loadingTitles[player.membershipId] && !hasTitles(player)" class="text-center text-slate-400 py-2">
-              <span>No titles found for this player.</span>
-              <span class="block text-xs text-slate-500 mt-1">[Debug: No title records loaded]</span>
-            </div>
-            <span style="color: red; font-size: 12px;">
-              LOADPLAYER DEBUG: {{ player.displayName }} | {{ player.membershipId }}
-            </span>
           </div>
         </div>
       </div>
@@ -517,16 +392,4 @@
     title="This will remove all stored activity data from your browser.">
     Clear Activity Database
   </button>
-</div>
-
-<!-- Add styles for the new image sizes -->
-<style>
-  .gilded-seal-img {
-    height: 80px;
-    max-width: 80px;
-  }
-  .regular-seal-img {
-    height: 64px;
-    max-width: 64px;
-  }
-</style> 
+</div> 
