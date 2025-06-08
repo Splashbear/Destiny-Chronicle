@@ -25,26 +25,42 @@ export class DestinyManifestService {
       // Step 1: Get manifest metadata
       const manifestMeta: any = await firstValueFrom(this.http.get('https://www.bungie.net/Platform/Destiny2/Manifest/'));
       const enPath = manifestMeta.Response.jsonWorldComponentContentPaths.en;
-      
+      if (!enPath) {
+        throw new Error('Manifest metadata missing en path');
+      }
       // Step 2: Get activity, title, and presentation node definitions
-      const [activityDefs, titleDefsRaw, presentationNodesRaw] = await Promise.all([
+      const [activityDefsRaw, titleDefsRaw, presentationNodesRaw] = await Promise.all([
         firstValueFrom(this.http.get('https://www.bungie.net' + enPath.DestinyActivityDefinition)),
         firstValueFrom(this.http.get('https://www.bungie.net' + enPath.DestinyRecordDefinition)),
         firstValueFrom(this.http.get('https://www.bungie.net' + enPath.DestinyPresentationNodeDefinition))
       ]);
-      this.activityDefs = activityDefs;
+      // Defensive: handle both possible structures
+      this.activityDefs = (activityDefsRaw as any).DestinyActivityDefinition || activityDefsRaw;
       this.titleDefs = (titleDefsRaw as any).DestinyRecordDefinition || titleDefsRaw;
       this.presentationNodes = (presentationNodesRaw as any).DestinyPresentationNodeDefinition || presentationNodesRaw;
+      if (!this.activityDefs || Object.keys(this.activityDefs).length === 0) {
+        throw new Error('Activity definitions failed to load');
+      }
+      if (!this.titleDefs || Object.keys(this.titleDefs).length === 0) {
+        throw new Error('Title definitions failed to load');
+      }
+      if (!this.presentationNodes || Object.keys(this.presentationNodes).length === 0) {
+        throw new Error('Presentation nodes failed to load');
+      }
       (window as any).titleDefs = this.titleDefs; // Expose for browser debugging
       (window as any).presentationNodes = this.presentationNodes; // Expose for browser debugging
       this.manifestLoaded.next(true);
+      console.log('[Manifest] Successfully loaded Destiny 2 manifest.');
     } catch (error) {
-      console.error('Error loading D2 manifest:', error);
+      console.error('[Manifest] Error loading D2 manifest:', error);
       this.manifestLoaded.next(false);
     }
   }
 
   async getTitleDefinition(hash: string): Promise<any> {
+    if (!this.manifestLoaded.value) {
+      await this.isLoaded().toPromise();
+    }
     const definition = this.titleDefs[hash];
     if (!definition) {
       return null;
@@ -53,6 +69,9 @@ export class DestinyManifestService {
   }
 
   getActivityName(referenceId: string | number, isD1: boolean = false): string {
+    if (!this.manifestLoaded.value) {
+      return 'Loading...';
+    }
     if (!referenceId) return 'Unknown Activity';
     if (isD1) {
       return this.d1Manifest.getActivityName(referenceId);
@@ -62,6 +81,9 @@ export class DestinyManifestService {
   }
 
   getActivityIcon(referenceId: string | number, isD1: boolean = false): string {
+    if (!this.manifestLoaded.value) {
+      return '';
+    }
     if (isD1) {
       return this.d1Manifest.getActivityIcon(referenceId);
     }
@@ -333,5 +355,26 @@ export class DestinyManifestService {
         record.titleInfo &&
         record.titleInfo.hasTitle
     );
+  }
+
+  /**
+   * Public getter for manifest loaded state (synchronous)
+   */
+  public get isLoadedSync(): boolean {
+    return this.manifestLoaded.value;
+  }
+
+  /**
+   * Public getter for presentation nodes
+   */
+  public getPresentationNodes(): any {
+    return this.presentationNodes;
+  }
+
+  /**
+   * Public getter for titleDefs
+   */
+  public getTitleDefs(): any {
+    return this.titleDefs;
   }
 } 

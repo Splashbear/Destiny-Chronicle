@@ -50,6 +50,7 @@ interface TitleRecord {
     completionValue?: number;
   }>;
   state: number;
+  completedCount?: number;
 }
 
 interface TitleResponse {
