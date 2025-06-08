@@ -97,17 +97,23 @@
         <!-- Tab Navigation -->
         <div class="mb-6">
           <div class="flex space-x-4 border-b border-slate-700">
-            <button (click)="activeTab = 'activities'" 
+            <button (click)="onTabChange('activities')" 
                     [class.text-blue-400]="activeTab === 'activities'"
                     [class.border-blue-400]="activeTab === 'activities'"
                     class="px-4 py-2 border-b-2 border-transparent hover:text-blue-300 transition-colors">
               Activities
             </button>
-            <button (click)="activeTab = 'firsts'"
+            <button (click)="onTabChange('firsts')"
                     [class.text-blue-400]="activeTab === 'firsts'"
                     [class.border-blue-400]="activeTab === 'firsts'"
                     class="px-4 py-2 border-b-2 border-transparent hover:text-blue-300 transition-colors">
               Guardian Firsts
+            </button>
+            <button (click)="onTabChange('titles')"
+                    [class.text-blue-400]="activeTab === 'titles'"
+                    [class.border-blue-400]="activeTab === 'titles'"
+                    class="px-4 py-2 border-b-2 border-transparent hover:text-blue-300 transition-colors">
+              Titles
             </button>
           </div>
         </div>
@@ -295,6 +301,35 @@
             </ng-container>
           </div>
         </div>
+
+        <!-- Only show the Titles tab if the selected game is D2 -->
+        <ng-container *ngIf="selectedGame === 'D2'">
+          <!-- Titles Tab -->
+          <div *ngIf="activeTab === 'titles' && selectedPlayers.length > 0" class="space-y-6">
+            <div *ngFor="let player of selectedPlayers" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4">{{ player.displayName }}'s Titles</h3>
+              <div *ngIf="playerTitles[player.membershipId]?.length > 0; else noTitles">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div *ngFor="let title of playerTitles[player.membershipId]" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3">
+                    <img *ngIf="title.icon" [src]="title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" />
+                    <div>
+                      <div class="font-bold text-yellow-300 text-lg flex items-center gap-2">
+                        {{ title.name }}
+                        <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
+                        <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
+                      </div>
+                      <div *ngIf="title.locked" class="text-red-400 text-sm font-semibold">Locked</div>
+                      <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available for this title</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <ng-template #noTitles>
+                <div class="text-slate-400">No titles found for this player.</div>
+              </ng-template>
+            </div>
+          </div>
+        </ng-container>
       </div>
       <!-- Left Sidebar: On This Day -->
       <div class="col-span-12 xl:col-span-3 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">

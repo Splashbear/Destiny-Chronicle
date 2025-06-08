@@ -155,6 +155,7 @@ interface TitleRecord {
   completed: boolean;
   objectives?: TitleObjective[];
   state: number;
+  completedCount?: number;
 }
 
 interface ProfileRecordsResponse {
@@ -167,24 +168,24 @@ interface ProfileRecordsResponse {
 
 // Mapping of title names (lowercase) to standardized gilded seal image paths
 const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
-  'glorious': '/assets/gilded-seals/Glorious-Gilded.png',
-  'conqueror': '/assets/gilded-seals/Conqueror-Gilded.png',
-  'dredgen': '/assets/gilded-seals/Dredgen-Gilded.png',
-  'deadeye': '/assets/gilded-seals/Deadeye-Gilded.png',
-  'unbroken': '/assets/gilded-seals/Unbroken-Gilded.png',
-  'flawless': '/assets/gilded-seals/Flawless-Gilded.png',
-  'ghost writer': '/assets/gilded-seals/Ghost-Writer-Gilded.png',
-  'star baker': '/assets/gilded-seals/Star-Baker-Gilded.png',
-  'flamekeeper': '/assets/gilded-seals/Flamekeeper-Gilded.png',
-  'champ': '/assets/gilded-seals/Champ-Gilded.png',
-  'iron lord': '/assets/gilded-seals/Iron-Lord-Gilded.png',
-  'reveler': '/assets/gilded-seals/Reveler-Gilded.png',
-  'heavy metal': '/assets/gilded-seals/Heavy-Metal.png'
+  'conqueror': 'assets/gilded-seals/Conqueror-Gilded.png',
+  'flawless': 'assets/gilded-seals/Flawless-Gilded.png',
+  'heavymetal': 'assets/gilded-seals/Heavy-Metal-Gilded.png',
+  'dredgen': 'assets/gilded-seals/Dredgen-Gilded.png',
+  'deadeye': 'assets/gilded-seals/Deadeye-Gilded.png',
+  'champ': 'assets/gilded-seals/Champ-Gilded.png',
+  'ghostwriter': 'assets/gilded-seals/Ghost-Writer-Gilded.png',
+  'glorious': 'assets/gilded-seals/Glorious-Gilded.png',
+  'flamekeeper': 'assets/gilded-seals/Flamekeeper-Gilded.png',
+  'ironlord': 'assets/gilded-seals/Iron-Lord-Gilded.png',
+  'reveler': 'assets/gilded-seals/Reveler-Gilded.png',
+  'starbaker': 'assets/gilded-seals/Star-Baker-Gilded.png',
+  'unbroken': 'assets/gilded-seals/Unbroken-Gilded.png'
 };
 
 // Utility to normalize title names for mapping
 function normalizeTitleName(name: string): string {
-  return name.trim().toLowerCase();
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 // Minimal standalone function to test Bungie API response for profileRecords
@@ -213,6 +214,18 @@ async function testBungieProfileRecords(bungieService: any, membershipType: numb
 function getCharacterId(char: any): string | undefined {
   return char.characterId || char.characterBase?.characterId;
 }
+
+// Special handling for legacy and current Conqueror/Flawless titles
+const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHash?: number } } = {
+  1376640684: { name: 'Conqueror (Season of the Worthy)' },
+  581214566: { name: 'Conqueror (Season of the Hunt)' },
+  3212358005: { name: 'Conqueror (Season of Arrivals)' },
+  1276693937: { name: 'Flawless (Season of the Hunt)' },
+  3251218484: { name: 'Flawless (Season of Arrivals)' },
+  2086100423: { name: 'Flawless (Season of the Worthy)' },
+  3776992251: { name: 'Conqueror', gildingTrackingRecordHash: 1715149073 }, // Current
+  1733555826: { name: 'Flawless', gildingTrackingRecordHash: 2506618338 },   // Current
+};
 
 @Component({
   selector: 'app-player-search',
@@ -299,6 +312,7 @@ export class PlayerSearchComponent implements OnInit {
   private presentationNodeCompletion: { [hash: string]: boolean } = {};
   // Add property at the top of the class
   firstEverActivity: ActivityHistory | undefined;
+  motDebug: { [membershipId: string]: any } = {};
 
   constructor(
     private bungieService: BungieApiService,
@@ -2405,5 +2419,182 @@ export class PlayerSearchComponent implements OnInit {
   private async setFirstEverActivityFromDb() {
     this.firstEverActivity = await this.computeFirstEverActivityForSelectedPlayerFromDb();
     this.cdr.detectChanges();
+  }
+
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
+    this.activeTab = tab;
+    if (tab === 'titles' && this.selectedPlayers.length > 0) {
+      for (const player of this.selectedPlayers) {
+        if (!this.playerTitles[player.membershipId]) {
+          this.loadingTitles[player.membershipId] = true;
+          try {
+            if (!this.manifest.isLoadedSync) {
+              await this.manifest.isLoaded().toPromise();
+            }
+            const presentationNodes = this.manifest.getPresentationNodes();
+            // Hashes for current and legacy titles
+            const currentTitlesHash = 616318467;
+            const legacyTitlesHash = 1881970629;
+            const getChildNodes = (parentHash: number) => {
+              const parentNode = presentationNodes[parentHash];
+              if (!parentNode || !parentNode.children || !Array.isArray(parentNode.children.presentationNodes)) return [];
+              return parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean);
+            };
+            const currentTitleNodes = getChildNodes(currentTitlesHash);
+            const legacyTitleNodes = getChildNodes(legacyTitlesHash);
+            // Gather all title nodes (current + legacy)
+            const titleParentHashes = [616318467, 1881970629]; // Current and Legacy Titles
+            let allTitleNodes: any[] = [];
+            for (const parentHash of titleParentHashes) {
+              const parentNode = presentationNodes[parentHash];
+              if (!parentNode || !parentNode.children || !Array.isArray(parentNode.children.presentationNodes)) continue;
+              allTitleNodes.push(...parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean));
+            }
+            // Get player records
+            const response = await firstValueFrom(this.bungieService.getPlayerTitles(player.membershipType, player.membershipId));
+            const records = response.Response?.profileRecords?.data?.records || {};
+            const charRecords = response.Response?.characterRecords?.data as { [characterId: string]: { records?: { [key: string]: TitleRecord } } } || {};
+            // Debug: Output player records
+            console.log('[TITLES DEBUG] Player Records:', records);
+            // Debug: Print all completionRecordHash values from manifest title nodes
+            for (const node of allTitleNodes) {
+              if (!node || !node.completionRecordHash) continue;
+              let hasRecord = !!records[node.completionRecordHash];
+              if (!hasRecord) {
+                // Check all character records for this hash
+                for (const charId of Object.keys(charRecords)) {
+                  const charRecordObj = charRecords[charId];
+                  if (charRecordObj?.records && charRecordObj.records[node.completionRecordHash]) {
+                    hasRecord = true;
+                    console.warn(`[TITLES DEBUG] Manifest node: ${node.displayProperties?.name} (completionRecordHash: ${node.completionRecordHash}) - FOUND in characterRecords for characterId: ${charId}`);
+                    break;
+                  }
+                }
+              }
+              if (!hasRecord) {
+                console.log(`[TITLES DEBUG] Manifest node: ${node.displayProperties?.name} (completionRecordHash: ${node.completionRecordHash}) - In player records: false`);
+              }
+            }
+            // Build a single list of titles (show all manifest nodes, even if no record)
+            const titleMap: { [key: string]: any } = {};
+            for (const node of allTitleNodes) {
+              if (!node || !node.completionRecordHash) {
+                console.warn('[TITLES DEBUG] Skipping node with missing completionRecordHash:', node);
+                continue;
+              }
+              let record = records[node.completionRecordHash];
+              let foundInCharacter = false;
+              if (!record) {
+                for (const charId of Object.keys(charRecords)) {
+                  const charRecordObj = charRecords[charId];
+                  if (charRecordObj?.records && charRecordObj.records[node.completionRecordHash]) {
+                    record = charRecordObj.records[node.completionRecordHash];
+                    foundInCharacter = true;
+                    break;
+                  }
+                }
+              }
+              // Get the DestinyRecordDefinition for the completionRecordHash
+              const recordDef = this.manifest.getTitleDefs()[node.completionRecordHash];
+              // Prefer special mapping name if present
+              const special = SPECIAL_TITLES[node.completionRecordHash];
+              let displayName = special ? special.name : (recordDef?.titleInfo?.titlesByGender?.Male || node.displayProperties?.name || 'Unknown');
+              // Use Bungie bitmask for completion if record exists
+              const isCompleted = record ? ((record.state & 1) !== 0) : false;
+              // Gilding logic for all eligible titles
+              let isGilded = false;
+              let timesGilded = 0;
+              let gildedIcon: string | undefined = undefined;
+              let mappingExists = false;
+              // Use special-case hash for current Conqueror/Flawless, otherwise manifest's hash
+              let gildingTrackingHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
+              let isGildable = !!gildingTrackingHash;
+              if (isGildable && isCompleted) {
+                const normalized = this.normalizeTitleName(displayName);
+                mappingExists = !!this.GILDED_SEAL_IMAGE_MAP[normalized];
+                // Look up the gilding tracking record in both profile and character records
+                let gildingRecord = records[gildingTrackingHash];
+                if (!gildingRecord) {
+                  for (const charId of Object.keys(charRecords)) {
+                    const charRecordObj = charRecords[charId];
+                    if (charRecordObj?.records && charRecordObj.records[gildingTrackingHash]) {
+                      gildingRecord = charRecordObj.records[gildingTrackingHash];
+                      break;
+                    }
+                  }
+                }
+                if (gildingRecord) {
+                  timesGilded = gildingRecord.completedCount || 0;
+                  isGilded = timesGilded > 0;
+                  if (isGilded && mappingExists) {
+                    gildedIcon = this.GILDED_SEAL_IMAGE_MAP[normalized];
+                  }
+                  console.log(`[TITLES DEBUG] Gilded status for ${displayName}: isGilded=${isGilded}, timesGilded=${timesGilded}, gildedIcon=${gildedIcon}`);
+                } else {
+                  console.warn(`[TITLES DEBUG] No valid gildingRecord for ${displayName}`);
+                }
+              } else if (isGildable && !isCompleted) {
+                // If not completed, do not show gilded info
+                console.log(`[TITLES DEBUG] ${displayName} is not completed, skipping gilded info.`);
+              }
+              // Debug: Output each title's record and completion logic
+              console.log('[TITLES DEBUG] Seal:', displayName, 'completionRecordHash:', node.completionRecordHash, 'State:', record?.state, 'Completed:', isCompleted, foundInCharacter ? '(Found in characterRecords)' : '');
+              // Use a unique key for deduplication: displayName + completionRecordHash
+              const uniqueKey = `${displayName}#${node.completionRecordHash}`;
+              if (!titleMap[uniqueKey]) {
+                titleMap[uniqueKey] = {
+                  name: displayName,
+                  icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+                  completed: isCompleted,
+                  isGilded,
+                  timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
+                  gildedIcon: (isGilded && gildedIcon) ? gildedIcon : undefined,
+                  locked: !isCompleted,
+                  missingRecord: !record
+                };
+              }
+            }
+            // Split into completed and locked, then sort
+            const allTitles = Object.values(titleMap);
+            const completed = allTitles.filter(t => t.completed).sort((a, b) => a.name.localeCompare(b.name));
+            const locked = allTitles.filter(t => !t.completed).sort((a, b) => a.name.localeCompare(b.name));
+            this.playerTitles[player.membershipId] = [...completed, ...locked];
+            // Debug: Print all record hashes for the current user
+            const motHashes = ['126238604', '3175660257']; // MoT 2024, 2023
+            const recordKeys = Object.keys(records);
+            console.log('[TITLES DEBUG] All player record hashes:', recordKeys);
+            for (const motHash of motHashes) {
+              let found = !!records[motHash];
+              if (!found) {
+                for (const charId of Object.keys(charRecords)) {
+                  const charRecordObj = charRecords[charId];
+                  if (charRecordObj?.records && charRecordObj.records[motHash]) {
+                    found = true;
+                    console.warn(`[TITLES DEBUG] MoT record FOUND in characterRecords for hash: ${motHash} (characterId: ${charId})`);
+                    break;
+                  }
+                }
+              }
+              if (!found) {
+                console.warn(`[TITLES DEBUG] MoT record missing for hash: ${motHash}`);
+              } else {
+                console.log(`[TITLES DEBUG] MoT record found for hash: ${motHash}`);
+              }
+            }
+            // Add MoT 2024 debug info for this player
+            this.motDebug[player.membershipId] = records['126238604'] || null;
+          } catch (err) {
+            this.playerTitles[player.membershipId] = { current: [], legacy: [] };
+          } finally {
+            this.loadingTitles[player.membershipId] = false;
+            this.cdr.markForCheck();
+          }
+        }
+      }
+    }
+  }
+
+  isRecordCompleted(record: any): boolean {
+    return !!record && (record.state & 1) !== 0;
   }
 }
