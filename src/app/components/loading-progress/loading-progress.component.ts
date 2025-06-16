@@ -22,20 +22,25 @@ export interface LoadingProgress {
   styles: [`
     .loading-progress {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: rgba(0,0,0,0.8);
-      color: white;
-      padding: 1rem;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 1.5rem 2rem;
+      border-radius: 0.75rem;
+      min-width: 260px;
+      text-align: center;
       z-index: 1000;
+      box-shadow: 0 0 10px rgba(0,0,0,0.6);
     }
     .progress-bar {
-      height: 4px;
+      height: 10px;
+      width: 100%;
       background: #333;
-      border-radius: 2px;
+      border-radius: 5px;
       overflow: hidden;
-      margin-bottom: 0.5rem;
+      margin-bottom: 1rem;
     }
     .progress {
       height: 100%;
@@ -43,7 +48,7 @@ export interface LoadingProgress {
       transition: width 0.3s ease;
     }
     .message {
-      font-size: 0.9rem;
+      font-size: 1rem;
       text-align: center;
     }
   `]

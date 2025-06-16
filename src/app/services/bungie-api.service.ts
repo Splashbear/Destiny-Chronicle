@@ -128,8 +128,9 @@ export class BungieApiService {
   }
 
   getLinkedProfiles(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/LinkedProfiles/?getAllMemberships=true`;
     return this.http.get(
-      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/LinkedProfiles/`,
+      url,
       { headers: this.getHeaders() }
     ).pipe(
       catchError(error => {

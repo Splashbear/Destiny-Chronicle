@@ -14,6 +14,7 @@ export interface ActivityHistory {
     timePlayedSeconds?: { basic: { value: number } };
     team?: { basic: { value: number } };
     standing?: { basic: { value: number } };
+    playerCount?: { basic: { value: number } };
   };
   validated?: boolean;
   validatedAt?: string;

@@ -6,6 +6,12 @@ import { DestinyManifestService } from './destiny-manifest.service';
 import { BungieApiService } from './bungie-api.service';
 import { firstValueFrom } from 'rxjs';
 import { BungieMembershipType } from 'bungie-api-ts/user';
+import { HttpClient } from '@angular/common/http';
+import { Observable, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
+import { Activity } from '../models/activity.model';
+import { PGCRCacheService } from './pgcr-cache.service';
+import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 
 export interface StoredActivity extends ActivityHistory {
   membershipId: string;
@@ -27,7 +33,9 @@ export interface FavoriteAccount {
   lastUpdated: string; // ISO date
 }
 
-@Injectable({ providedIn: 'root' })
+@Injectable({
+  providedIn: 'root'
+})
 export class ActivityDbService extends Dexie {
   activities!: Table<StoredActivity, number>;
   favorites!: Table<FavoriteAccount, string>;
@@ -166,7 +174,9 @@ export class ActivityDbService extends Dexie {
 
   constructor(
     private manifest: DestinyManifestService,
-    private bungieService: BungieApiService
+    private bungieService: BungieApiService,
+    private pgcrCacheService: PGCRCacheService,
+    private http: HttpClient
   ) {
     super('DestinyChronicleDb');
     try {
@@ -415,12 +425,25 @@ export class ActivityDbService extends Dexie {
         // });
         continue;
       }
-      // console.log('[DEBUG][Firsts][Candidate]', {
-      //   name: this.manifest.getActivityName(activityHash, game === 'D1'),
-      //   completed,
-      //   period: activity.period,
-      //   referenceId: activityHash
-      // });
+
+      // Check for solo and flawless status
+      let isSolo = false;
+      let isSoloFlawless = false;
+      
+      if (game === 'D2' && type === 'dungeon') {
+        const pgcr = await this.pgcrCacheService.getD2PGCR(activity.activityDetails.instanceId);
+        if (pgcr) {
+          // Check if solo (only one player)
+          const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
+          isSolo = uniquePlayers.size === 1;
+          
+          // Check if flawless (no deaths)
+          if (isSolo) {
+            isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
+          }
+        }
+      }
+
       if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
         firstsByFamily[family] = {
           name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
@@ -433,15 +456,10 @@ export class ActivityDbService extends Dexie {
           mode: activity.activityDetails.mode,
           characterId,
           membershipId,
-          completed
+          completed,
+          isSolo,
+          isSoloFlawless
         };
-        // console.log('[DEBUG][Firsts][Pick]', {
-        //   family,
-        //   name: this.manifest.getActivityName(activityHash, game === 'D1'),
-        //   completed,
-        //   period: activity.period,
-        //   referenceId: activityHash
-        // });
       }
     }
     const firstCompletions: ActivityFirstCompletion[] = Object.values(firstsByFamily);
@@ -494,7 +512,8 @@ export class ActivityDbService extends Dexie {
         ...activity,
         characterId,
         validated: false,
-        validatedAt: null
+        validatedAt: null,
+        game: (activity.activityDetails?.mode ?? 0) >= 4 ? 'D2' : 'D1'
       }));
 
       await this.addActivities(activitiesToStore);
@@ -617,5 +636,93 @@ export class ActivityDbService extends Dexie {
       console.error('[Dexie] Error getting unvalidated activities:', error);
       throw error;
     }
+  }
+
+  /**
+   * Determines if an activity qualifies as a completion. Bungie's activity history sets
+   * `values.completed.basic.value === 1` for a successfully finished activity.
+   */
+  private isCompletion(activity: StoredActivity): boolean {
+    return (activity.values?.completed?.basic?.value ?? 0) === 1;
+  }
+
+  /** Returns true when the activity was completed solo (playerCount === 1). */
+  private isSolo(activity: StoredActivity): boolean {
+    return (activity.values?.playerCount?.basic?.value ?? 0) === 1;
+  }
+
+  /** Returns true when the activity was completed solo and flawless (no deaths). */
+  private isSoloFlawless(activity: StoredActivity): boolean {
+    return this.isSolo(activity) && (activity.values?.deaths?.basic?.value ?? 1) === 0;
+  }
+
+  /**
+   * Checks if the provided referenceId corresponds to a Dungeon.
+   * It relies on DestinyManifestService.getActivityType so that
+   * it stays accurate as new dungeons are added.
+   */
+  private isDungeon(referenceId: string | number, mode?: number): boolean {
+    const type = this.manifest.getActivityType(referenceId, mode);
+    return type === 'dungeon';
+  }
+
+  /**
+   * Returns the first solo and solo-flawless dungeon completions per dungeon family
+   * for the specified Destiny 2 account (all characters).
+   *
+   * This method performs an in-memory scan—no extra API calls.
+   */
+  async getDungeonSoloFirsts(membershipId: string): Promise<DungeonSoloFirst[]> {
+    // Gather all stored activities for this player (all characters) limited to Destiny 2.
+    const activities = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .toArray();
+
+    // Sort by period ascending so the earliest completions are encountered first.
+    activities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
+
+    const firstsMap = new Map<string, { firstSolo?: StoredActivity; firstFlawless?: StoredActivity }>();
+
+    for (const activity of activities) {
+      // We only care about completed dungeon runs.
+      if (!this.isCompletion(activity)) continue;
+
+      const { referenceId, mode } = activity.activityDetails;
+      if (!this.isDungeon(referenceId, mode)) continue;
+
+      const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
+      if (!family) continue; // Unknown / unmapped dungeon hash.
+
+      let entry = firstsMap.get(family);
+      if (!entry) {
+        entry = {};
+        firstsMap.set(family, entry);
+      }
+
+      // Determine solo / flawless status.
+      const solo = this.isSolo(activity);
+      const flawless = this.isSoloFlawless(activity);
+
+      if (solo && !entry.firstSolo) {
+        entry.firstSolo = activity;
+      }
+      if (flawless && !entry.firstFlawless) {
+        entry.firstFlawless = activity;
+      }
+
+      // Early exit optimisation: if we already have both firsts we can skip further processing for this family.
+      if (entry.firstSolo && entry.firstFlawless) {
+        continue;
+      }
+    }
+
+    // Convert to the public model.
+    const result: DungeonSoloFirst[] = [];
+    firstsMap.forEach((value, key) => {
+      result.push({ family: key, firstSolo: value.firstSolo, firstFlawless: value.firstFlawless });
+    });
+
+    return result;
   }
 } 

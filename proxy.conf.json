@@ -1,0 +1,10 @@
+{
+  "/api/lowman": {
+    "target": "https://api.lowman-central.com",
+    "secure": true,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/api/lowman": ""
+    }
+  }
+} 

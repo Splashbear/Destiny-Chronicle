@@ -10,6 +10,8 @@ export interface ActivityFirstCompletion {
   characterId: string;
   membershipId: string;
   completed: number;
+  isSolo?: boolean;
+  isSoloFlawless?: boolean;
 }
 
 export interface GuardianFirsts {

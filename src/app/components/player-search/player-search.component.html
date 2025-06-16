@@ -54,6 +54,10 @@
                 <option value="Xbox">Xbox</option>
                 <option value="PlayStation">PlayStation</option>
               </select>
+              <label class="flex items-center gap-1 text-xs text-slate-300">
+                <input type="checkbox" [(ngModel)]="includeLinkedAccounts" class="form-checkbox">
+                Include linked
+              </label>
               <button (click)="addPlayer()" 
                       [disabled]="!searchUsername || (selectedGame === 'D1' && !selectedPlatform)"
                       class="bg-blue-600 text-white py-1.5 px-3 text-sm rounded">
@@ -151,7 +155,7 @@
               </div>
             </div>
           </div>
-          <div *ngIf="loadingActivities[selectedDate]" class="flex justify-center items-center py-8">
+          <div *ngIf="loadingProgress" class="flex justify-center items-center py-8">
             <app-loading-progress [progress]="loadingProgress"></app-loading-progress>
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && (groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0)"
@@ -194,112 +198,187 @@
 
         <!-- Guardian Firsts Tab -->
         <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0" class="space-y-6">
-          <div *ngFor="let player of selectedPlayers" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
-            <h3 class="text-lg font-semibold text-white mb-4">{{ player.displayName }}'s Guardian Firsts</h3>
-            <!-- First Ever Activity Card (moved to top) -->
-            <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
-              <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
-              <ng-container *ngIf="firstEverActivity as first">
+          <!-- Aggregated Firsts across all linked accounts -->
+          <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ selectedPlayers[0].displayName }}'s Guardian Firsts (All Platforms)</h3>
+            <!-- D2 Raids Aggregate -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2">D2 Raids</h4>
+            <div *ngIf="getAggregateRaids('D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div *ngFor="let first of getAggregateRaids('D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
                 <div class="relative">
-                  <ng-container *ngIf="getActivityImage(first, isD1Player(player)) as img">
+                  <ng-container *ngIf="getFirstCompletionImage(first) as img">
                     <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
                     <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
                   </ng-container>
                   <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                   <div class="absolute bottom-0 left-0 right-0 p-3">
-                    <h6 class="text-white font-medium truncate">{{ getActivityName(first, isD1Player(player)) }}</h6>
+                    <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
                     <div class="text-sm text-slate-300">
-                      <a (click)="openExternalPGCR(first, isD1Player(player))"
-                         class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
-                        {{ formatDateTime(first.period) }}
+                      <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(first.completionDate) }}
                       </a>
                     </div>
                   </div>
+                  <div class="absolute top-1 right-1 text-white text-lg">
+                    <i [class]="getPlatformIconForFirst($any(first))"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="getAggregateRaids('D2').length === 0" class="text-center text-slate-400 py-2">No raid firsts found for D2.</div>
+
+            <!-- D2 Dungeons Aggregate -->
+            <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
+            <div *ngIf="getAggregateDungeons('D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div *ngFor="let first of getAggregateDungeons('D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
+                <div class="relative">
+                  <ng-container *ngIf="getFirstCompletionImage(first) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(first.completionDate) }}
+                      </a>
+                    </div>
+                  </div>
+                  <div class="absolute top-1 right-1 text-white text-lg">
+                    <i [class]="getPlatformIconForFirst($any(first))"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="getAggregateDungeons('D2').length === 0" class="text-center text-slate-400 py-2">No dungeon firsts found for D2.</div>
+          </div>
+          <ng-container *ngFor="let player of selectedPlayers">
+            <div *ngIf="!player.isPrimary || selectedPlayers.length === 1" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+              <h3 class="text-lg font-semibold text-white mb-4">{{ player.displayName }}'s Guardian Firsts</h3>
+              <!-- First Ever Activity Card (moved to top) -->
+              <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
+                <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
+                <ng-container *ngIf="firstEverActivity as first">
+                  <div class="relative">
+                    <ng-container *ngIf="getActivityImage(first, isD1Player(player)) as img">
+                      <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                      <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                    </ng-container>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-3">
+                      <h6 class="text-white font-medium truncate">{{ getActivityName(first, isD1Player(player)) }}</h6>
+                      <div class="text-sm text-slate-300">
+                        <a (click)="openExternalPGCR(first, isD1Player(player))"
+                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                          {{ formatDateTime(first.period) }}
+                        </a>
+                      </div>
+                    </div>
+                    <!-- platform icon omitted for first-ever activity (different type) -->
+                  </div>
+                </ng-container>
+                <ng-container *ngIf="!firstEverActivity">
+                  <span class="block p-4">No activities found.</span>
+                </ng-container>
+              </div>
+              <!-- D1 Firsts -->
+              <ng-container *ngIf="isD1Player(player)">
+                <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
+                <div *ngIf="getPlayerRaids(player,'D1').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                  <div *ngFor="let first of getPlayerRaids(player,'D1')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
+                    <div class="relative">
+                      <ng-container *ngIf="getFirstCompletionImage(first) as img">
+                        <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                        <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                      </ng-container>
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                      <div class="absolute bottom-0 left-0 right-0 p-3">
+                        <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
+                        <div class="text-sm text-slate-300">
+                          <a (click)="openExternalPGCRForFirst(first)"
+                             class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                            {{ formatDateTime(first.completionDate) }}
+                          </a>
+                        </div>
+                      </div>
+                      <div class="absolute top-1 right-1 text-white text-lg">
+                        <i [class]="getPlatformIconForFirst($any(first))"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div *ngIf="getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
+                  No raid firsts found for D1.
                 </div>
               </ng-container>
-              <ng-container *ngIf="!firstEverActivity">
-                <span class="block p-4">No activities found.</span>
+              <!-- D2 Firsts -->
+              <ng-container *ngIf="!isD1Player(player)">
+                <h4 class="text-md font-semibold text-yellow-300 mb-2">D2 Raids</h4>
+                <div *ngIf="getPlayerRaids(player,'D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                  <div *ngFor="let first of getPlayerRaids(player,'D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
+                    <div class="relative">
+                      <ng-container *ngIf="getFirstCompletionImage(first) as img">
+                        <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                        <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                      </ng-container>
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                      <div class="absolute bottom-0 left-0 right-0 p-3">
+                        <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
+                        <div class="text-sm text-slate-300">
+                          <a (click)="openExternalPGCRForFirst(first)"
+                             class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                            {{ formatDateTime(first.completionDate) }}
+                          </a>
+                        </div>
+                      </div>
+                      <div class="absolute top-1 right-1 text-white text-lg">
+                        <i [class]="getPlatformIconForFirst($any(first))"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div *ngIf="getPlayerRaids(player,'D2').length === 0" class="text-center text-slate-400 py-2">
+                  No raid firsts found for D2.
+                </div>
+                <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
+                <div *ngIf="getPlayerDungeons(player,'D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div *ngFor="let first of getPlayerDungeons(player,'D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
+                    <div class="relative">
+                      <ng-container *ngIf="getFirstCompletionImage(first) as img">
+                        <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                        <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                      </ng-container>
+                      <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                      <div class="absolute bottom-0 left-0 right-0 p-3">
+                        <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
+                        <div class="text-sm text-slate-300">
+                          <a (click)="openExternalPGCRForFirst(first)"
+                             class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                            {{ formatDateTime(first.completionDate) }}
+                          </a>
+                          <!-- Solo/Flawless links -->
+                          <ng-container *ngIf="getSoloFirstForFirst(first) as sf">
+                            <div class="flex flex-col gap-0.5 text-xs mt-1">
+                              <ng-container *ngIf="sf.firstSolo">
+                                <a (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-300 underline">Solo – {{ formatDate(sf.firstSolo.period) }}</a>
+                              </ng-container>
+                              <ng-container *ngIf="sf.firstFlawless">
+                                <a (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-purple-400 hover:text-purple-300 underline">Flawless – {{ formatDate(sf.firstFlawless.period) }}</a>
+                              </ng-container>
+                            </div>
+                          </ng-container>
+                        </div>
+                      </div>
+                      <div class="absolute top-1 right-1 text-white text-lg">
+                        <i [class]="getPlatformIconForFirst($any(first))"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </ng-container>
             </div>
-            <!-- D1 Firsts -->
-            <ng-container *ngIf="isD1Player(player)">
-              <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
-              <div *ngIf="getGuardianFirstRaidsForGame('D1').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <div *ngFor="let first of getGuardianFirstRaidsForGame('D1')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
-                  <div class="relative">
-                    <ng-container *ngIf="getFirstCompletionImage(first) as img">
-                      <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
-                      <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
-                    </ng-container>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                    <div class="absolute bottom-0 left-0 right-0 p-3">
-                      <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
-                      <div class="text-sm text-slate-300">
-                        <a (click)="openExternalPGCRForFirst(first)"
-                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
-                          {{ formatDateTime(first.completionDate) }}
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div *ngIf="getGuardianFirstRaidsForGame('D1').length === 0" class="text-center text-slate-400 py-2">
-                No raid firsts found for D1.
-              </div>
-            </ng-container>
-            <!-- D2 Firsts -->
-            <ng-container *ngIf="!isD1Player(player)">
-              <h4 class="text-md font-semibold text-yellow-300 mb-2">D2 Raids</h4>
-              <div *ngIf="getGuardianFirstRaidsForGame('D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <div *ngFor="let first of getGuardianFirstRaidsForGame('D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
-                  <div class="relative">
-                    <ng-container *ngIf="getFirstCompletionImage(first) as img">
-                      <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
-                      <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
-                    </ng-container>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                    <div class="absolute bottom-0 left-0 right-0 p-3">
-                      <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
-                      <div class="text-sm text-slate-300">
-                        <a (click)="openExternalPGCRForFirst(first)"
-                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
-                          {{ formatDateTime(first.completionDate) }}
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div *ngIf="getGuardianFirstRaidsForGame('D2').length === 0" class="text-center text-slate-400 py-2">
-                No raid firsts found for D2.
-              </div>
-              <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
-              <div *ngIf="getGuardianFirstDungeonsForGame('D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div *ngFor="let first of getGuardianFirstDungeonsForGame('D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
-                  <div class="relative">
-                    <ng-container *ngIf="getFirstCompletionImage(first) as img">
-                      <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
-                      <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
-                    </ng-container>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
-                    <div class="absolute bottom-0 left-0 right-0 p-3">
-                      <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
-                      <div class="text-sm text-slate-300">
-                        <a (click)="openExternalPGCRForFirst(first)"
-                           class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
-                          {{ formatDateTime(first.completionDate) }}
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div *ngIf="getGuardianFirstDungeonsForGame('D2').length === 0" class="text-center text-slate-400 py-2">
-                No dungeon firsts found for D2.
-              </div>
-            </ng-container>
-          </div>
+          </ng-container>
         </div>
 
         <!-- Only show the Titles tab if the selected game is D2 -->

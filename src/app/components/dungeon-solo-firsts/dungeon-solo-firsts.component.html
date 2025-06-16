@@ -1,0 +1,17 @@
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  <ng-container *ngFor="let first of solos; trackBy: trackByFamily">
+    <div class="bg-slate-700/50 rounded-lg p-4 flex flex-col gap-2 hover:bg-slate-700/70 transition-colors">
+      <div class="text-lg font-semibold text-yellow-300">{{ first.family }}</div>
+      <div class="text-sm text-slate-300" *ngIf="first.firstSolo">
+        <span class="text-blue-400 font-semibold">Solo</span>
+        &nbsp;•&nbsp;
+        {{ format(first.firstSolo.period) }}
+      </div>
+      <div class="text-sm text-slate-300" *ngIf="first.firstFlawless">
+        <span class="text-purple-400 font-semibold">Flawless</span>
+        &nbsp;•&nbsp;
+        {{ format(first.firstFlawless.period) }}
+      </div>
+    </div>
+  </ng-container>
+</div> 

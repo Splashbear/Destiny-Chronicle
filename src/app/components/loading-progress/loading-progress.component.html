@@ -1,0 +1,31 @@
+<div class="loading-progress" *ngIf="progress">
+  <div class="loading-bar" [style.width.%]="progress.percentage"></div>
+  <p class="loading-message">{{ progress.message }}</p>
+</div>
+
+<style>
+.loading-progress {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  z-index: 1000;
+}
+
+.loading-bar {
+  height: 20px;
+  background-color: #4CAF50;
+  border-radius: 10px;
+  transition: width 0.3s;
+}
+
+.loading-message {
+  margin-top: 10px;
+  font-size: 16px;
+}
+</style> 

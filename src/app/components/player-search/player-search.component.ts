@@ -19,6 +19,9 @@ import type { ActivityIconType } from '../../services/activity-icon.service';
 import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
+import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
+import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
+import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
 
 interface ActivityEntry {
   game: string;
@@ -73,7 +76,11 @@ const ACTIVITY_TYPE_REFERENCE_IDS: { [type: string]: number } = {
 };
 
 // Add extended type for display
-type PlayerSearchDisplay = PlayerSearchResult & { game: 'D1' | 'D2'; platform: string };
+interface PlayerSearchDisplay extends PlayerSearchResult {
+  game: 'D1' | 'D2';
+  platform: string;
+  isPrimary?: boolean;
+}
 
 // PvP mode name lookup
 export const PVP_MODE_NAMES: { [mode: number]: string } = {
@@ -230,7 +237,7 @@ const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHas
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingProgressComponent],
+  imports: [CommonModule, FormsModule, LoadingProgressComponent, DungeonSoloFirstsComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -313,6 +320,35 @@ export class PlayerSearchComponent implements OnInit {
   // Add property at the top of the class
   firstEverActivity: ActivityHistory | undefined;
   motDebug: { [membershipId: string]: any } = {};
+  dungeonSoloFirsts: { [membershipId: string]: DungeonSoloFirst[] } = {};
+  loadingDungeonSoloFirsts: { [membershipId: string]: boolean } = {};
+  /** Stores firsts per membershipId */
+  guardianFirstsMap: { [membershipId: string]: ActivityFirstCompletion[] } = {};
+  /** Aggregated (all-platform) firsts across selected players */
+  aggregateGuardianFirsts: ActivityFirstCompletion[] = [];
+  includeLinkedAccounts: boolean = true;
+  /** Cached seconds played per membershipId (from Wasted on Destiny or Bungie fallback) */
+  private wastedTimes: { [membershipId: string]: number } = {};
+  /** Running count of how many activities have been processed in the current load session */
+  private overallActivitiesProcessed: number = 0;
+  /** Helper to get earliest first per activity name across all players */
+  private getEarliestFirsts(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
+    const map = new Map<string, ActivityFirstCompletion>();
+    for (const first of list) {
+      const key = first.name;
+      if (!map.has(key) || new Date(first.completionDate).getTime() < new Date(map.get(key)!.completionDate).getTime()) {
+        map.set(key, first);
+      }
+    }
+    return Array.from(map.values());
+  }
+  /** Aggregated solo/flawless lookup for aggregated first cards */
+  getSoloFirstForFirst(first: ActivityFirstCompletion): DungeonSoloFirst | undefined {
+    if (!first?.membershipId) return undefined;
+    const player = this.selectedPlayers.find(p => p.membershipId === first.membershipId);
+    if (!player) return undefined;
+    return this.getDungeonSoloFirstForPlayer(player, first.name);
+  }
 
   constructor(
     private bungieService: BungieApiService,
@@ -322,7 +358,8 @@ export class PlayerSearchComponent implements OnInit {
     private pgcrCacheService: PGCRCacheService,
     private activityDb: ActivityDbService,
     private timezoneService: TimezoneService,
-    private activityIconService: ActivityIconService
+    private activityIconService: ActivityIconService,
+    private wastedService: WastedOnDestinyService
   ) {
     (window as any).activityDbService = this.activityDb;
   }
@@ -548,10 +585,38 @@ export class PlayerSearchComponent implements OnInit {
     const displayPlayer: PlayerSearchDisplay = {
       ...player,
       game: (player as any).game || this.selectedGame,
-      platform: this.getPlatformName(player.membershipType)
+      platform: this.getPlatformName(player.membershipType),
+      isPrimary: true
     };
-    this.selectedPlayers = [displayPlayer]; // Replace instead of push
+    this.selectedPlayers = [displayPlayer];
     this.selectedCharacterIds[player.membershipId] = undefined;
+
+    // Fetch linked profiles if enabled
+    if (this.includeLinkedAccounts) {
+      try {
+        const linkedResp = await firstValueFrom(this.bungieService.getLinkedProfiles(player.membershipType, player.membershipId));
+        const linkedProfiles = linkedResp?.Response?.profiles || [];
+        for (const prof of linkedProfiles) {
+          if (prof.isCrossSavePrimary) continue; // skip primary (already included)
+          if (!prof.isPublic) continue; // respect privacy
+          const legacyPlayer: PlayerSearchDisplay = {
+            displayName: player.displayName,
+            membershipId: prof.membershipId,
+            membershipType: prof.membershipType,
+            game: 'D2',
+            platform: this.getPlatformName(prof.membershipType),
+            isPrimary: false
+          } as any;
+          // Deduplicate
+          if (!this.selectedPlayers.some(p => p.membershipId === legacyPlayer.membershipId)) {
+            this.selectedPlayers.push(legacyPlayer);
+            this.selectedCharacterIds[legacyPlayer.membershipId] = undefined;
+          }
+        }
+      } catch (err) {
+        console.warn('[LinkedProfiles] Failed to load linked profiles:', err);
+      }
+    }
 
     // Ensure a date is selected
     if (!this.selectedDate) {
@@ -564,11 +629,29 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
 
     try {
-      // Parallel loading of activities, titles, and firsts
-      await Promise.all([
-        this.loadCharacterHistory(displayPlayer),
-        this.loadGuardianFirsts(displayPlayer)
-      ]);
+      // Reset running counter for progress UI
+      this.overallActivitiesProcessed = 0;
+
+      // Parallel loading of activities, titles, and firsts for each selected player (primary + linked)
+      const loadPromises: Promise<void>[] = [];
+      for (const pl of this.selectedPlayers) {
+        // Load character history first, then guardian firsts for that character
+        loadPromises.push(
+          this.loadCharacterHistory(pl)
+            .then(() => this.loadGuardianFirsts(pl))
+            .then(() => this.loadDungeonSoloFirsts(pl))
+            .catch(err => {
+              console.warn('[LoadCharacterHistory/Firsts] Skipped due to error for', pl.membershipId, err);
+            })
+        );
+        // Wasted time can load in parallel
+        loadPromises.push(
+          this.loadWastedTime(pl).catch(err => {
+            console.warn('[LoadWastedTime] Skipped due to error for', pl.membershipId, err);
+          })
+        );
+      }
+      await Promise.all(loadPromises);
       // After loading character history, trigger activity loading if we have a date selected
       if (this.selectedDate) {
         await this.loadAllFilteredActivities();
@@ -644,6 +727,11 @@ export class PlayerSearchComponent implements OnInit {
         this.error[key] = 'Bungie API is temporarily unavailable. Please try again in a few minutes.';
       } else {
         this.error[key] = 'Error loading character history';
+      }
+      // Swallow 5xx errors so linked accounts that are disabled don't break flow
+      if (error.status && error.status >= 500) {
+        console.warn('[loadCharacterHistory] Ignoring server error for', player.membershipId);
+        return;
       }
       throw error;
     } finally {
@@ -1089,21 +1177,13 @@ export class PlayerSearchComponent implements OnInit {
             !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
           );
 
-          if (uniqueNewActivities.length > 0) {
-            newActivities = newActivities.concat(uniqueNewActivities);
-            await this.processActivityBatch(uniqueNewActivities, character);
-            // Progressive update: update UI after each batch
-            this.processAndGroupActivities();
-            // Also update filtered activities and UI for the current date
-            await this.loadAllFilteredActivities();
-          }
+          // Count every activity we fetched toward the progress display, even if it was already cached
+          this.overallActivitiesProcessed += storedActivities.length;
 
-          // Update loading progress
+          // Emit progress before heavy processing so user sees immediate feedback
           this.updateLoadingProgress(
-            character.characterId, 
-            ((page + 1) / (page + 2)) * 100,
-            page + 1,
-            newActivities.length
+            character.characterId,
+            ((page + 1) / (page + 2)) * 100
           );
           
           page++;
@@ -1123,14 +1203,12 @@ export class PlayerSearchComponent implements OnInit {
 
   private updateLoadingProgress(
     characterId: string,
-    progress: number,
-    totalPages: number,
-    totalActivities: number
+    progress: number
   ): void {
     this.loadingProgress = {
       characterId,
       progress,
-      message: `Loading activities: ${progress.toFixed(0)}% (${totalActivities} activities found)`
+      message: `Processed ${this.overallActivitiesProcessed} activities...`
     };
     this.cdr.detectChanges();
   }
@@ -1515,8 +1593,26 @@ export class PlayerSearchComponent implements OnInit {
       
       this.cdr.detectChanges();
 
-      // Calculate total activity time
-      totalActivityTime = Object.values(perType).reduce((sum, stats) => sum + stats.time, 0);
+      // Build per-type stats from all stored activities
+      for (const key of Object.keys(this.activities)) {
+        const list = this.activities[key] || [];
+        for (const act of list) {
+          const typeName = this.manifest.getActivityType(act.activityDetails.referenceId, act.activityDetails.mode);
+          const allowedTypes = ['raid','dungeon','strike','nightfall','crucible','gambit','other'];
+          const safeType = allowedTypes.includes(typeName) ? typeName : 'other';
+          if (!perType[safeType]) perType[safeType] = { count: 0, time: 0 };
+          perType[safeType].count++;
+          perType[safeType].time += this.getActivityDurationSeconds(act);
+        }
+      }
+
+      // Pull total playtime (seconds) from cached wastedTimes
+      for (const pl of this.selectedPlayers) {
+        totalTime += this.wastedTimes[pl.membershipId] || 0;
+      }
+
+      // Total activity time now derived from perType map
+      totalActivityTime = Object.values(perType).reduce((sum, s) => sum + s.time, 0);
       
       this.accountStats = {
         totalTime,
@@ -2225,13 +2321,114 @@ export class PlayerSearchComponent implements OnInit {
         const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
         allFirsts.push(...firsts.firstCompletions);
       }
-      // Optionally deduplicate and sort
-      this.guardianFirsts = allFirsts.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
+      const sorted = allFirsts.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
+      // store per-player list
+      this.guardianFirstsMap[player.membershipId] = sorted;
+      // recompute aggregate list (dedup by name + game + type)
+      const aggregate: ActivityFirstCompletion[] = [];
+      const seen = new Set<string>();
+      Object.values(this.guardianFirstsMap).forEach(list => {
+        for (const f of list) {
+          const key = `${f.game}|${f.type}|${f.name}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            aggregate.push(f);
+          }
+        }
+      });
+      this.aggregateGuardianFirsts = aggregate.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
+      // Default existing property points to aggregate so legacy helpers keep working
+      this.guardianFirsts = this.aggregateGuardianFirsts;
     } catch (error) {
       console.error('[Firsts] Error loading guardian firsts:', error);
+      this.guardianFirstsMap[player.membershipId] = [];
+      this.aggregateGuardianFirsts = [];
       this.guardianFirsts = [];
     } finally {
       this.loadingGuardianFirsts = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Per-player helper variants (platform-specific) */
+  private getFirstsForPlayer(player: PlayerSearchDisplay): ActivityFirstCompletion[] {
+    return this.guardianFirstsMap[player.membershipId] || [];
+  }
+
+  getPlayerRaids(player: PlayerSearchDisplay, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const list = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === game);
+    return this.sortRaids(list, game);
+  }
+
+  getPlayerDungeons(player: PlayerSearchDisplay, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const list = this.getFirstsForPlayer(player).filter(f => f.type === 'dungeon' && f.game === game);
+    if (game === 'D1') return [];
+    return this.sortDungeons(list);
+  }
+
+  /** Aggregate helpers */
+  getAggregateRaids(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const earliest = this.getEarliestFirsts(this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'raid'));
+    return this.sortRaids(earliest, game);
+  }
+
+  getAggregateDungeons(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const earliest = this.getEarliestFirsts(this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'dungeon'));
+    return this.sortDungeons(earliest);
+  }
+
+  private sortRaids(list: ActivityFirstCompletion[], game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const releaseOrder = game === 'D1' ? [
+      'Vault of Glass',
+      "Crota's End",
+      "King's Fall",
+      'Wrath of the Machine'
+    ] : [
+      'Leviathan',
+      'Leviathan, Eater of Worlds',
+      'Leviathan, Spire of Stars',
+      'Last Wish',
+      'Scourge of the Past',
+      'Crown of Sorrow',
+      'Garden of Salvation',
+      'Deep Stone Crypt',
+      'Vault of Glass',
+      "King's Fall",
+      'Vow of the Disciple',
+      'Root of Nightmares',
+      "Crota's End",
+      "Salvation's Edge"
+    ];
+    return list.slice().sort((a, b) => releaseOrder.indexOf(a.name) - releaseOrder.indexOf(b.name));
+  }
+
+  private sortDungeons(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
+    const releaseOrder = [
+      'The Shattered Throne',
+      'Pit of Heresy',
+      'Prophecy',
+      'Grasp of Avarice',
+      'Duality',
+      'Spire of the Watcher',
+      'Ghosts of the Deep',
+      "Warlord's Ruin",
+      "Vesper's Host",
+      "Sundered Doctrine"
+    ];
+    return list.slice().sort((a, b) => releaseOrder.indexOf(a.name) - releaseOrder.indexOf(b.name));
+  }
+
+  /** Loads first solo / solo-flawless completions for all dungeons for the given player. */
+  private async loadDungeonSoloFirsts(player: PlayerSearchDisplay): Promise<void> {
+    this.loadingDungeonSoloFirsts[player.membershipId] = true;
+    try {
+      const data = await this.activityDb.getDungeonSoloFirsts(player.membershipId);
+      this.dungeonSoloFirsts[player.membershipId] = data;
+    } catch (error) {
+      console.error('[SoloFirsts] Error loading dungeon solos:', error);
+      this.dungeonSoloFirsts[player.membershipId] = [];
+    } finally {
+      this.loadingDungeonSoloFirsts[player.membershipId] = false;
       this.cdr.detectChanges();
     }
   }
@@ -2596,5 +2793,87 @@ export class PlayerSearchComponent implements OnInit {
 
   isRecordCompleted(record: any): boolean {
     return !!record && (record.state & 1) !== 0;
+  }
+
+  /** Returns the DungeonSoloFirst entry matching the given family for the player, or undefined. */
+  private getDungeonSoloFirstForPlayerExact(player: PlayerSearchDisplay, family: string): DungeonSoloFirst | undefined {
+    return this.dungeonSoloFirsts[player.membershipId]?.find(d => d.family === family);
+  }
+
+  openExternalPGCRFromStored(activity: any) {
+    if (!activity) return;
+    const instanceId = activity.activityDetails?.instanceId;
+    if (!instanceId) return;
+    this.openExternalPGCR(activity as any, false);
+  }
+
+  private formatDateSolo(dateStr: string | Date | undefined): string {
+    if (typeof dateStr === 'string') {
+      return this.formatDate(dateStr);
+    }
+    if (dateStr instanceof Date) {
+      return this.formatDate(dateStr.toISOString());
+    }
+    return '';
+  }
+
+  /**
+   * Returns the DungeonSoloFirst entry whose family name is contained within the provided label.
+   * This tolerates labels like "Pit of Heresy: Normal" by fuzzy-matching against the canonical
+   * family name ("Pit of Heresy").
+   */
+  getDungeonSoloFirstForPlayer(player: PlayerSearchDisplay, label: string): DungeonSoloFirst | undefined {
+    const list = this.dungeonSoloFirsts[player.membershipId];
+    if (!list) return undefined;
+    const lower = label.toLowerCase();
+    return list.find(d => lower.includes(d.family.toLowerCase()));
+  }
+
+  getPlatformIconForFirst(first: { membershipId?: string }): string {
+    const pl = first && first.membershipId ? this.selectedPlayers.find(p => p.membershipId === first.membershipId) : undefined;
+    return this.getPlatformIcon(pl?.membershipType ?? 0);
+  }
+
+  /**
+   * Loads playtime from WastedOnDestiny (or falls back to Bungie profile minutes) and caches it.
+   */
+  private async loadWastedTime(player: PlayerSearchDisplay): Promise<void> {
+    const id = player.membershipId;
+    if (this.wastedTimes[id] !== undefined) return; // already fetched
+    try {
+      const response = await firstValueFrom(this.wastedService.getProfile(id));
+      let seconds = 0;
+      // Attempt common response shapes
+      if (response?.data?.characters) {
+        const chars = Object.values(response.data.characters) as any[];
+        for (const ch of chars) {
+          if (typeof ch.timePlayedSeconds === 'number') seconds += ch.timePlayedSeconds;
+          else if (typeof ch.minutesPlayed === 'number') seconds += ch.minutesPlayed * 60;
+          else if (typeof ch.minutesPlayedTotal === 'number') seconds += ch.minutesPlayedTotal * 60;
+        }
+      }
+      if (!seconds && typeof response?.data?.timePlayedSeconds === 'number') {
+        seconds = response.data.timePlayedSeconds;
+      }
+      // Fallback to Bungie profile if API didn't give anything usable
+      if (!seconds) {
+        try {
+          const bungieProfile = await firstValueFrom(this.bungieService.getProfile(player.membershipType, id));
+          const charsData = Object.values(bungieProfile?.Response?.characters?.data || {}) as any[];
+          for (const ch of charsData) {
+            if (ch.minutesPlayedTotal) seconds += Number(ch.minutesPlayedTotal) * 60;
+          }
+        } catch (e) {
+          console.warn('[loadWastedTime] Bungie fallback failed', e);
+        }
+      }
+      this.wastedTimes[id] = seconds;
+    } catch (err) {
+      console.warn('[loadWastedTime] Failed for', id, err);
+      this.wastedTimes[id] = 0;
+    } finally {
+      // Recompute stats now that we may have new data
+      this.calculateAccountStats();
+    }
   }
 }
