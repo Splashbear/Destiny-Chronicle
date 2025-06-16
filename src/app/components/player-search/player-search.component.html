@@ -179,6 +179,7 @@
                     </div>
                     <div class="grid grid-cols-1 gap-2">
                       <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
+                        <i [class]="getPlatformIcon(activity.membershipType)" class="text-lg"></i>
                         <a (click)="openExternalPGCR(activity, activity.game === 'D1')"
                            class="flex-1 text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
                           {{ formatTime(activity.period) }}
@@ -254,7 +255,7 @@
             <div *ngIf="getAggregateDungeons('D2').length === 0" class="text-center text-slate-400 py-2">No dungeon firsts found for D2.</div>
           </div>
           <ng-container *ngFor="let player of selectedPlayers">
-            <div *ngIf="!player.isPrimary || selectedPlayers.length === 1" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+            <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
               <h3 class="text-lg font-semibold text-white mb-4">{{ player.displayName }}'s Guardian Firsts</h3>
               <!-- First Ever Activity Card (moved to top) -->
               <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">

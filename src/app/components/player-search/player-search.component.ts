@@ -20,7 +20,6 @@ import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
 import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
-import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
 import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
 
 interface ActivityEntry {
@@ -32,6 +31,7 @@ interface ActivityEntry {
 
 interface ActivityWithMembership extends ActivityHistory {
   membershipId: string;
+  membershipType: number; // NEW: platform id to support icon rendering
   displayName: string;
   platform: string;
   game: 'D1' | 'D2';
@@ -237,7 +237,7 @@ const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHas
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingProgressComponent, DungeonSoloFirstsComponent],
+  imports: [CommonModule, FormsModule, LoadingProgressComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -2098,6 +2098,7 @@ export class PlayerSearchComponent implements OnInit {
       return playerActivities.map(activity => ({
         ...activity,
         membershipId: player.membershipId,
+        membershipType: player.membershipType,
         displayName: player.displayName,
         platform: player.platform,
         game: player.game,
