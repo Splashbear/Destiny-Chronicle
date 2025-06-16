@@ -130,16 +130,16 @@
               <h3 class="text-lg font-semibold text-white mb-2">Account Summary</h3>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="stat-item">
-                  <strong>Total Time Played</strong>
-                  <span>{{ formatDuration(accountStats.totalTime) }}</span>
+                  <strong>Total Time Played:</strong>
+                  <span class="ml-1">{{ formatDuration(accountStats.totalTime) }}</span>
                 </div>
                 <div class="stat-item">
-                  <strong>Total Activity Time</strong>
-                  <span>{{ formatDuration(accountStats.totalActivityTime) }}</span>
+                  <strong>Total Seals:</strong>
+                  <span class="ml-1">{{ accountStats.totalSeals || 0 }}</span>
                 </div>
                 <div class="stat-item">
-                  <strong>Total Activities</strong>
-                  <span>{{ accountStats.totalActivityCount }}</span>
+                  <strong>Total Activities:</strong>
+                  <span class="ml-1">{{ accountStats.totalActivityCount }}</span>
                 </div>
               </div>
               <div class="activity-type-stats mt-4">
@@ -151,6 +151,23 @@
                       {{ formatDuration(getPerTypeStats(type).time) }}
                     </span>
                   </ng-container>
+                </div>
+              </div>
+              <!-- Per-Platform Breakdown -->
+              <div *ngIf="perPlatformStats.length > 0" class="platform-breakdown mt-6">
+                <h4 class="text-md font-semibold text-white mb-2">Per-Platform Breakdown</h4>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div *ngFor="let plat of perPlatformStats" class="bg-slate-700/50 rounded-lg p-3">
+                    <div class="flex items-center gap-2 mb-2">
+                      <i [class]="getPlatformIcon(getPlatformId(plat.platform))" class="text-lg"></i>
+                      <span class="font-semibold text-slate-200">{{ plat.platform }}</span>
+                    </div>
+                    <div class="text-sm text-slate-300">
+                      <div><strong>Time:</strong> {{ formatDuration(plat.totalTime) }}</div>
+                      <div><strong>Activities:</strong> {{ plat.totalActivities }}</div>
+                      <div><strong>Seals:</strong> {{ plat.totalSeals }}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -180,10 +197,10 @@
                     <div class="grid grid-cols-1 gap-2">
                       <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
                         <i [class]="getPlatformIcon(activity.membershipType)" class="text-lg"></i>
-                        <a (click)="openExternalPGCR(activity, activity.game === 'D1')"
-                           class="flex-1 text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
                           {{ formatTime(activity.period) }}
                         </a>
+                        <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }} ({{ activity.platform }})</span>
                       </div>
                     </div>
                   </div>
@@ -219,6 +236,7 @@
                         {{ formatDateTime(first.completionDate) }}
                       </a>
                     </div>
+                    <div class="text-xs text-slate-400">{{ getPlatformNameForFirst(first) }}</div>
                   </div>
                   <div class="absolute top-1 right-1 text-white text-lg">
                     <i [class]="getPlatformIconForFirst($any(first))"></i>
@@ -245,6 +263,7 @@
                         {{ formatDateTime(first.completionDate) }}
                       </a>
                     </div>
+                    <div class="text-xs text-slate-400">{{ getPlatformNameForFirst(first) }}</div>
                   </div>
                   <div class="absolute top-1 right-1 text-white text-lg">
                     <i [class]="getPlatformIconForFirst($any(first))"></i>
@@ -256,7 +275,10 @@
           </div>
           <ng-container *ngFor="let player of selectedPlayers">
             <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
-              <h3 class="text-lg font-semibold text-white mb-4">{{ player.displayName }}'s Guardian Firsts</h3>
+              <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <i [class]="getPlatformIcon(player.membershipType)" class="text-xl"></i>
+                <span>{{ player.displayName }}'s Guardian Firsts ({{ player.platform }})</span>
+              </h3>
               <!-- First Ever Activity Card (moved to top) -->
               <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
                 <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
@@ -302,6 +324,7 @@
                             {{ formatDateTime(first.completionDate) }}
                           </a>
                         </div>
+                        <div class="text-xs text-slate-400">{{ getPlatformNameForFirst(first) }}</div>
                       </div>
                       <div class="absolute top-1 right-1 text-white text-lg">
                         <i [class]="getPlatformIconForFirst($any(first))"></i>
@@ -332,6 +355,7 @@
                             {{ formatDateTime(first.completionDate) }}
                           </a>
                         </div>
+                        <div class="text-xs text-slate-400">{{ getPlatformNameForFirst(first) }}</div>
                       </div>
                       <div class="absolute top-1 right-1 text-white text-lg">
                         <i [class]="getPlatformIconForFirst($any(first))"></i>
@@ -370,6 +394,7 @@
                             </div>
                           </ng-container>
                         </div>
+                        <div class="text-xs text-slate-400">{{ getPlatformNameForFirst(first) }}</div>
                       </div>
                       <div class="absolute top-1 right-1 text-white text-lg">
                         <i [class]="getPlatformIconForFirst($any(first))"></i>
@@ -419,7 +444,7 @@
           <div *ngIf="!loadingActivities[selectedDate] && groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0">
             <div class="space-y-4">
               <div *ngFor="let account of groupedActivitiesByAccount" class="bg-slate-900 rounded-lg p-4">
-                <h4 class="text-white font-medium mb-2">{{ account.displayName }}</h4>
+                <h4 class="text-white font-medium mb-2">{{ account.displayName }} ({{ account.platform }})</h4>
                 <div class="text-sm text-slate-400">
                   <div *ngFor="let yearGroup of account.yearGroups" class="mb-2">
                     <div class="font-medium text-slate-300">{{ yearGroup.year }}</div>
