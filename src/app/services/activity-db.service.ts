@@ -725,4 +725,10 @@ export class ActivityDbService extends Dexie {
 
     return result;
   }
+
+  /** Returns how many activities we have stored for the given list of membershipIds */
+  async countActivitiesForMemberships(membershipIds: string[]): Promise<number> {
+    if (!membershipIds?.length) return 0;
+    return this.activities.where('membershipId').anyOf(membershipIds).count();
+  }
 } 

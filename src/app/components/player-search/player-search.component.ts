@@ -234,6 +234,14 @@ const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHas
   1733555826: { name: 'Flawless', gildingTrackingRecordHash: 2506618338 },   // Current
 };
 
+// Aggregated statistics per platform (e.g., Xbox, PlayStation, Steam)
+interface PlatformStats {
+  platform: string;
+  totalTime: number;
+  totalActivities: number;
+  totalSeals: number;
+}
+
 @Component({
   selector: 'app-player-search',
   standalone: true,
@@ -275,7 +283,7 @@ export class PlayerSearchComponent implements OnInit {
   crossSavePlayer: PlayerSearchDisplay | null = null;
   loadingActivities: { [key: string]: boolean } = {};
   groupedActivitiesByAccount: any[] = [];
-  private processedActivities: YearGroup[] = [];
+  private processedActivities: any[] = [];
   loadingProgress: LoadingProgress | null = null;
   private readonly BATCH_SIZE = 50;
   private readonly MAX_RETRIES = 3;
@@ -289,11 +297,13 @@ export class PlayerSearchComponent implements OnInit {
     totalTime: number;
     totalActivityTime: number;
     totalActivityCount: number;
+    totalSeals?: number;
     perType: { [type: string]: { count: number, time: number } };
   } = {
     totalTime: 0,
     totalActivityTime: 0,
     totalActivityCount: 0,
+    totalSeals: 0,
     perType: {}
   };
   private filteredActivitiesForDate: ActivityWithMembership[] = [];
@@ -349,6 +359,8 @@ export class PlayerSearchComponent implements OnInit {
     if (!player) return undefined;
     return this.getDungeonSoloFirstForPlayer(player, first.name);
   }
+  private wastedSeals: { [membershipId: string]: number } = {};
+  perPlatformStats: PlatformStats[] = [];
 
   constructor(
     private bungieService: BungieApiService,
@@ -576,6 +588,7 @@ export class PlayerSearchComponent implements OnInit {
       totalTime: 0,
       totalActivityTime: 0,
       totalActivityCount: 0,
+      totalSeals: 0,
       perType: {}
     };
     this.guardianFirsts = [];
@@ -598,7 +611,7 @@ export class PlayerSearchComponent implements OnInit {
         const linkedProfiles = linkedResp?.Response?.profiles || [];
         for (const prof of linkedProfiles) {
           if (prof.isCrossSavePrimary) continue; // skip primary (already included)
-          if (!prof.isPublic) continue; // respect privacy
+          // include profile even if private; API will 403 and we will just log it later
           const legacyPlayer: PlayerSearchDisplay = {
             displayName: player.displayName,
             membershipId: prof.membershipId,
@@ -1033,6 +1046,8 @@ export class PlayerSearchComponent implements OnInit {
       });
       
       await this.activityDb.addActivities(storedActivities);
+      // Update totals in background (no await to avoid slowing batch loop)
+      this.calculateAccountStats();
       console.log(`[DEBUG] Stored ${storedActivities.length} new activities for character ${character.characterId} (${character.game})`);
       this.cdr.detectChanges();
     }
@@ -1170,7 +1185,8 @@ export class PlayerSearchComponent implements OnInit {
             membershipId: character.membershipId,
             characterId: character.characterId,
             instanceId: activity.activityDetails?.instanceId,
-            mode: activity.activityDetails?.mode
+            mode: activity.activityDetails?.mode,
+            game: character.game // ensure we persist which game this activity belongs to
           }));
 
           const uniqueNewActivities = storedActivities.filter(activity => 
@@ -1179,6 +1195,13 @@ export class PlayerSearchComponent implements OnInit {
 
           // Count every activity we fetched toward the progress display, even if it was already cached
           this.overallActivitiesProcessed += storedActivities.length;
+
+          // Persist any new, unique activities to IndexedDB
+          if (uniqueNewActivities.length > 0) {
+            await this.activityDb.addActivities(uniqueNewActivities);
+            // keep local cache in sync to avoid duplicate inserts on subsequent pages/modes
+            dbActivities.push(...uniqueNewActivities);
+          }
 
           // Emit progress before heavy processing so user sees immediate feedback
           this.updateLoadingProgress(
@@ -1314,7 +1337,14 @@ export class PlayerSearchComponent implements OnInit {
       const activities = await this.getAllFilteredActivitiesForDate();
       if (loadToken !== this.currentLoadToken) return; // Abort if a newer load started
 
+      // Ensure Destiny manifest has finished loading so that activity names/types resolve properly
+      if (!this.manifest.isLoadedSync) {
+        await this.manifest.isLoaded().toPromise();
+      }
+
       this.processAndGroupActivities();
+      this.updateActivityDisplay();
+      // Recalculate account-level statistics now that filtered activities are available
       await this.calculateAccountStats();
     } catch (error) {
       // handle error
@@ -1332,15 +1362,21 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   getPlatformName(membershipType: number | undefined): string {
-    if (membershipType === undefined) return 'Unknown';
     switch (membershipType) {
-      case 1: return 'Xbox';
-      case 2: return 'PlayStation';
-      case 3: return 'Steam';
-      case 4: return 'Battle.net';
-      case 5: return 'Stadia';
-      case 6: return 'Epic';
-      default: return 'Unknown';
+      case 1:
+        return 'Xbox';
+      case 2:
+        return 'PlayStation';
+      case 3:
+        return 'Steam';
+      case 4:
+        return 'Blizzard';
+      case 5:
+        return 'Stadia';
+      case 6:
+        return 'Epic';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -1611,15 +1647,47 @@ export class PlayerSearchComponent implements OnInit {
         totalTime += this.wastedTimes[pl.membershipId] || 0;
       }
 
-      // Total activity time now derived from perType map
+      // Total activity time: if we have actual duration from stored activities use it, otherwise fall back to totalTime
       totalActivityTime = Object.values(perType).reduce((sum, s) => sum + s.time, 0);
-      
+      if (!totalActivityTime) {
+        totalActivityTime = totalTime;
+      }
+
+      // Total activities — count directly from IndexedDB for accuracy
+      const totalActivities = await this.activityDb.countActivitiesForMemberships(this.selectedPlayers.map(p => p.membershipId));
+
+      // Aggregate seals from WoD
+      let totalSeals = 0;
+      for (const pl of this.selectedPlayers) {
+        totalSeals += this.wastedSeals[pl.membershipId] || 0;
+      }
+
+      // Build per-platform stats
+      const platformStatsMap: { [platform: string]: PlatformStats } = {};
+      for (const pl of this.selectedPlayers) {
+        const platformName = pl.platform;
+        const time = this.wastedTimes[pl.membershipId] || 0;
+        const seals = this.wastedSeals[pl.membershipId] || 0;
+        const acts = await this.activityDb.countActivitiesForMemberships([pl.membershipId]);
+
+        if (!platformStatsMap[platformName]) {
+          platformStatsMap[platformName] = { platform: platformName, totalTime: 0, totalActivities: 0, totalSeals: 0 };
+        }
+        const s = platformStatsMap[platformName];
+        s.totalTime += time;
+        s.totalActivities += acts;
+        s.totalSeals += seals;
+      }
+      this.perPlatformStats = Object.values(platformStatsMap);
+
+      // Extend accountStats to include seals
       this.accountStats = {
         totalTime,
         totalActivityTime,
-        totalActivityCount: Object.values(perType).reduce((sum, stats) => sum + stats.count, 0),
+        totalActivityCount: totalActivities,
+        totalSeals,
         perType: { ...perType }
-      };
+      } as any;
     } catch (error) {
       console.error('[GuardianFirsts][ERROR] Error in calculateAccountStats:', error);
     } finally {
@@ -2465,6 +2533,7 @@ export class PlayerSearchComponent implements OnInit {
       totalTime: 0,
       totalActivityTime: 0,
       totalActivityCount: 0,
+      totalSeals: 0,
       perType: {}
     };
     this.cdr.detectChanges();
@@ -2835,6 +2904,12 @@ export class PlayerSearchComponent implements OnInit {
     return this.getPlatformIcon(pl?.membershipType ?? 0);
   }
 
+  /** Returns readable platform string for a Guardian First entry */
+  getPlatformNameForFirst(first: { membershipId?: string }): string {
+    const pl = first && first.membershipId ? this.selectedPlayers.find(p => p.membershipId === first.membershipId) : undefined;
+    return pl?.platform || '';
+  }
+
   /**
    * Loads playtime from WastedOnDestiny (or falls back to Bungie profile minutes) and caches it.
    */
@@ -2844,6 +2919,7 @@ export class PlayerSearchComponent implements OnInit {
     try {
       const response = await firstValueFrom(this.wastedService.getProfile(id));
       let seconds = 0;
+      let sealCount = 0;
       // Attempt common response shapes
       if (response?.data?.characters) {
         const chars = Object.values(response.data.characters) as any[];
@@ -2853,8 +2929,8 @@ export class PlayerSearchComponent implements OnInit {
           else if (typeof ch.minutesPlayedTotal === 'number') seconds += ch.minutesPlayedTotal * 60;
         }
       }
-      if (!seconds && typeof response?.data?.timePlayedSeconds === 'number') {
-        seconds = response.data.timePlayedSeconds;
+      if (!seconds && typeof response?.timePlayed === 'number') {
+        seconds = response.timePlayed;
       }
       // Fallback to Bungie profile if API didn't give anything usable
       if (!seconds) {
@@ -2868,7 +2944,13 @@ export class PlayerSearchComponent implements OnInit {
           console.warn('[loadWastedTime] Bungie fallback failed', e);
         }
       }
+      // Try activity count fields that WoD returns
+      if (typeof response?.seals === 'number') {
+        sealCount = response.seals;
+      }
+
       this.wastedTimes[id] = seconds;
+      this.wastedSeals[id] = sealCount;
     } catch (err) {
       console.warn('[loadWastedTime] Failed for', id, err);
       this.wastedTimes[id] = 0;
@@ -2876,5 +2958,17 @@ export class PlayerSearchComponent implements OnInit {
       // Recompute stats now that we may have new data
       this.calculateAccountStats();
     }
+  }
+
+  /** Map a platform string (Xbox, PlayStation, Steam, etc.) to Bungie membershipType so we can reuse getPlatformIcon */
+  getPlatformId(platform: string): number {
+    const p = platform.toLowerCase();
+    if (p.includes('xbox')) return 1;
+    if (p.includes('playstation') || p.includes('psn') || p.includes('ps')) return 2;
+    if (p.includes('steam') || p.includes('pc')) return 3;
+    if (p.includes('blizzard') || p.includes('battlenet')) return 4;
+    if (p.includes('stadia')) return 5;
+    if (p.includes('epic')) return 6;
+    return 0;
   }
 }
