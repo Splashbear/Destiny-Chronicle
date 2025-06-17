@@ -291,6 +291,32 @@
               </div>
             </div>
             <div *ngIf="getAggregateDungeons('D2').length === 0" class="text-center text-slate-400 py-2">No dungeon firsts found for D2.</div>
+
+            <!-- D1 Raids Aggregate -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D1 Raids</h4>
+            <div *ngIf="getAggregateRaids('D1').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div *ngFor="let first of getAggregateRaids('D1')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
+                <div class="relative">
+                  <ng-container *ngIf="getFirstCompletionImage(first) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(first.completionDate) }}
+                      </a>
+                    </div>
+                  </div>
+                  <div class="absolute top-1 right-1">
+                    <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-5 h-5" alt="platform" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="getAggregateRaids('D1').length === 0" class="text-center text-slate-400 py-2">No raid firsts found for D1.</div>
           </div>
           <ng-container *ngIf="activeFirstsTab !== 'all'">
             <ng-container *ngFor="let player of selectedPlayers">
