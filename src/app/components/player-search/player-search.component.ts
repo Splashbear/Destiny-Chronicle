@@ -439,6 +439,7 @@ export class PlayerSearchComponent implements OnInit {
   // UI state for title view
   titleSort: 'alpha' | 'release' = 'alpha';
   titleFilter: 'all' | 'current' | 'legacy' = 'all';
+  loadingTitlesOverall = false;
 
   get displayTitles(): any[] {
     let list = this.aggregatedTitles;
@@ -2807,6 +2808,7 @@ export class PlayerSearchComponent implements OnInit {
   async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
     this.activeTab = tab;
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
+      this.loadingTitlesOverall = true;
       for (const player of this.selectedPlayers) {
         if (!this.playerTitles[player.membershipId]) {
           this.loadingTitles[player.membershipId] = true;
@@ -3032,6 +3034,7 @@ export class PlayerSearchComponent implements OnInit {
       }
 
       this.aggregatedTitles = Array.from(aggMap.values()).sort((a,b)=>a.name.localeCompare(b.name));
+      this.loadingTitlesOverall = false;
       this.cdr.detectChanges();
     }
   }
