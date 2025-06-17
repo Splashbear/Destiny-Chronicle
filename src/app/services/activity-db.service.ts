@@ -209,6 +209,16 @@ export class ActivityDbService extends Dexie {
         });
       });
 
+      // Version 4 – add membershipType index so we can query by platform quickly
+      this.version(4).stores({
+        activities: '++id, membershipId, membershipType, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
+                   '[membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId], ' +
+                   '[game+membershipId+characterId], membershipType',
+        favorites: 'membershipId, game'
+      }).upgrade(tx => {
+        console.log('[Dexie] Upgrading to version 4 (membershipType index)');
+      });
+
       this.activities = this.table('activities');
       this.favorites = this.table('favorites');
       // console.log('[Dexie] ActivityDbService initialized successfully');
@@ -730,5 +740,13 @@ export class ActivityDbService extends Dexie {
   async countActivitiesForMemberships(membershipIds: string[]): Promise<number> {
     if (!membershipIds?.length) return 0;
     return this.activities.where('membershipId').anyOf(membershipIds).count();
+  }
+
+  /**
+   * Returns all activities played on the specified platform (membershipType).
+   * 1 = Xbox, 2 = PlayStation, 3 = Steam, 4 = Blizzard, 5 = Stadia, 6 = Epic
+   */
+  async getActivitiesByPlatform(membershipType: number): Promise<StoredActivity[]> {
+    return this.activities.where('membershipType').equals(membershipType).toArray();
   }
 } 
