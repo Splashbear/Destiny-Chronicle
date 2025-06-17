@@ -453,9 +453,9 @@
             </div>
             <div *ngIf="!loadingTitlesOverall || aggregatedTitles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div *ngFor="let title of displayTitles" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3 relative" [ngClass]="{'text-slate-400': title.legacy && titleFilter==='legacy'}">
-                <img *ngIf="title.icon" [src]="(titleFilter==='legacy' && title.legacy && title.altIcon) ? title.altIcon : title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" />
+                <img *ngIf="title.icon" [src]="(titleFilter==='legacy' && title.legacy && title.altIcon) ? title.altIcon : title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" [ngClass]="{'grayscale opacity-70': titleFilter==='legacy' && title.legacy && !title.altIcon}" />
                 <div>
-                  <div class="font-bold text-lg flex items-center gap-2" [ngClass]="titleFilter==='legacy' && title.legacy ? 'text-slate-300' : 'text-yellow-300'">
+                  <div class="font-bold text-lg flex items-center gap-2" [ngClass]="{'text-slate-300': titleFilter==='legacy' && title.legacy, 'text-yellow-300': !(titleFilter==='legacy' && title.legacy)}">
                     {{ title.name }}
                     <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
                     <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
