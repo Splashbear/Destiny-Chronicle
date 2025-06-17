@@ -431,26 +431,37 @@
         <ng-container *ngIf="selectedGame === 'D2'">
           <!-- Titles Tab -->
           <div *ngIf="activeTab === 'titles' && aggregatedTitles.length > 0" class="space-y-6">
-            <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
-              <h3 class="text-lg font-semibold text-white mb-4">Titles (Cross-Save Account)</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div *ngFor="let title of aggregatedTitles" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3 relative">
-                  <img *ngIf="title.icon" [src]="title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" />
-                  <div>
-                    <div class="font-bold text-yellow-300 text-lg flex items-center gap-2">
-                      {{ title.name }}
-                      <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
-                      <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
-                    </div>
-                    <div *ngIf="title.locked" class="text-red-400 text-sm font-semibold">Locked</div>
-                    <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
+              <div class="flex items-center gap-3">
+                <select [(ngModel)]="titleSort" class="bg-slate-700 text-sm text-white rounded px-2 py-1 border border-slate-600">
+                  <option value="alpha">Alphabetical</option>
+                  <option value="release">Newest First</option>
+                </select>
+                <div class="flex gap-1 text-xs">
+                  <button (click)="titleFilter='all'" [class.bg-blue-600]="titleFilter==='all'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">All</button>
+                  <button (click)="titleFilter='current'" [class.bg-blue-600]="titleFilter==='current'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">Current</button>
+                  <button (click)="titleFilter='legacy'" [class.bg-blue-600]="titleFilter==='legacy'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">Legacy</button>
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div *ngFor="let title of displayTitles" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3 relative" [ngClass]="{'text-slate-400': title.legacy && titleFilter==='legacy'}">
+                <img *ngIf="title.icon" [src]="(titleFilter==='legacy' && title.legacy && title.altIcon) ? title.altIcon : title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" />
+                <div>
+                  <div class="font-bold text-yellow-300 text-lg flex items-center gap-2">
+                    {{ title.name }}
+                    <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
+                    <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
                   </div>
-                  <!-- Holder icons -->
-                  <div class="absolute top-1 right-1 flex gap-1" *ngIf="title.holders?.length">
-                    <ng-container *ngFor="let h of title.holders">
-                      <img [src]="getPlatformIconUrl(getPlatformId(h.platform))" class="w-4 h-4" [title]="h.displayName" />
-                    </ng-container>
-                  </div>
+                  <div *ngIf="title.locked" class="text-red-400 text-sm font-semibold">Locked</div>
+                  <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
+                </div>
+                <!-- Holder icons -->
+                <div class="absolute top-1 right-1 flex gap-1" *ngIf="title.holders?.length">
+                  <ng-container *ngFor="let h of title.holders">
+                    <img [src]="getPlatformIconUrl(getPlatformId(h.platform))" class="w-4 h-4" [title]="h.displayName" />
+                  </ng-container>
                 </div>
               </div>
             </div>

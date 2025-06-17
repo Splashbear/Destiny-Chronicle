@@ -234,6 +234,77 @@ const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHas
   1733555826: { name: 'Flawless', gildingTrackingRecordHash: 2506618338 },   // Current
 };
 
+// Explicit release order mapping (higher = newer)
+const RELEASE_ORDER: { [normalized: string]: number } = {
+  'cursebreaker': 1,
+  'dredgen': 1,
+  'wayfarer': 1,
+  'mmxix mot': 4,
+  'chronicler': 1,
+  'undying': 6,
+  'blacksmith': 2,
+  'savior': 7,
+  'almighty': 8,
+  'enlightened': 5,
+  'reckoner': 3,
+  'shadow': 3,
+  'mmxx mot': 9,
+  'harbinger': 6,
+  'forerunner': 10,
+  'descendant': 12,
+  'warden': 11,
+  'splintered': 11,
+  'chosen': 13,
+  'rivensbane': 1,
+  'splicer': 14,
+  'conqueror': 8,
+  'deadeye': 15,
+  'realmw alker': 15,
+  'fatebreaker': 16,
+  'mmxxi mot': 17,
+  'vidmaster': 17,
+  'risen': 18,
+  'gumshoe': 18,
+  'iron lord': 19,
+  'reaper': 19,
+  'flamekeeper': 20,
+  'ghost writer': 22,
+  'scallywag': 21,
+  'star baker': 22,
+  'mmxxii mot': 23,
+  'seraph': 23,
+  'virtual fighter': 24,
+  'glorious': 23,
+  'queensguard': 24,
+  'reveler': 20,
+  'champ': 25,
+  'discerptor': 19,
+  'aquanaut': 25,
+  'wanted': 23,
+  'haruspex': 26,
+  'disciple-slayer': 18,
+  'wishbearer': 27,
+  'mmxxiii mot': 28,
+  'dream warrior': 24,
+  'ghoul': 24,
+  'brave': 29,
+  'godslayer': 29,
+  'kingslayer': 21,
+  'swordbearer': 26,
+  'transcendent': 30,
+  'legend': 31,
+  'intrepid': 30,
+  'slayer baron': 33,
+  'wrathbearer': 27,
+  'iconoclast': 30,
+  'unleashed': 34,
+  'heretic': 35,
+  'delver': 35,
+  'mmxxiv mot': 32,
+  'eternal': 36,
+  'heavy metal': 36,
+};
+
 // Aggregated statistics per platform (e.g., Xbox, PlayStation, Steam)
 interface PlatformStats {
   platform: string;
@@ -365,6 +436,21 @@ export class PlayerSearchComponent implements OnInit {
   perPlatformStats: PlatformStats[] = [];
   firstEverActivities: { [membershipId: string]: ActivityHistory | undefined } = {};
   aggregatedTitles: any[] = [];
+  // UI state for title view
+  titleSort: 'alpha' | 'release' = 'alpha';
+  titleFilter: 'all' | 'current' | 'legacy' = 'all';
+
+  get displayTitles(): any[] {
+    let list = this.aggregatedTitles;
+    if (this.titleFilter !== 'all') {
+      const wantLegacy = this.titleFilter === 'legacy';
+      list = list.filter(t => t.legacy === wantLegacy);
+    }
+    if (this.titleSort === 'release') {
+      return [...list].sort((a: any, b: any) => (b.releaseRank ?? 0) - (a.releaseRank ?? 0));
+    }
+    return [...list].sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }
 
   constructor(
     private bungieService: BungieApiService,
@@ -2796,6 +2882,7 @@ export class PlayerSearchComponent implements OnInit {
               // Prefer special mapping name if present
               const special = SPECIAL_TITLES[node.completionRecordHash] || SPECIAL_TITLES[node.hash];
               let displayName = special ? special.name : (recordDef?.titleInfo?.titlesByGender?.Male || node.displayProperties?.name || 'Unknown');
+              const normalizedName = this.normalizeTitleName(displayName);
               // Use Bungie bitmask for completion if record exists
               const isCompleted = record ? ((record.state & 1) !== 0) : false;
               // Gilding logic for all eligible titles
@@ -2807,8 +2894,8 @@ export class PlayerSearchComponent implements OnInit {
               let gildingTrackingHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
               let isGildable = !!gildingTrackingHash;
               if (isGildable && isCompleted) {
-                const normalized = this.normalizeTitleName(displayName);
-                mappingExists = !!this.GILDED_SEAL_IMAGE_MAP[normalized];
+                const normalizedName = this.normalizeTitleName(displayName);
+                mappingExists = !!this.GILDED_SEAL_IMAGE_MAP[normalizedName];
                 // Look up the gilding tracking record in both profile and character records
                 let gildingRecord = records[gildingTrackingHash];
                 if (!gildingRecord) {
@@ -2824,7 +2911,7 @@ export class PlayerSearchComponent implements OnInit {
                   timesGilded = gildingRecord.completedCount || 0;
                   isGilded = timesGilded > 0;
                   if (isGilded && mappingExists) {
-                    gildedIcon = this.GILDED_SEAL_IMAGE_MAP[normalized];
+                    gildedIcon = this.GILDED_SEAL_IMAGE_MAP[normalizedName];
                   }
                   console.log(`[TITLES DEBUG] Gilded status for ${displayName}: isGilded=${isGilded}, timesGilded=${timesGilded}, gildedIcon=${gildedIcon}`);
                 } else {
@@ -2848,7 +2935,11 @@ export class PlayerSearchComponent implements OnInit {
                   timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
                   gildedIcon: (isGilded && gildedIcon) ? gildedIcon : undefined,
                   locked: !isCompleted,
-                  missingRecord: !record
+                  missingRecord: !record,
+                  altIcon: (node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames && node.iconSequences[1].frames.length > 0) ? `https://www.bungie.net${node.iconSequences[1].frames[0]}` : undefined,
+                  legacy: (node.parentNodeHashes || []).includes(1881970629),
+                  releaseRank: RELEASE_ORDER[normalizedName] || 0,
+                  normalized: normalizedName,
                 };
               }
             }
