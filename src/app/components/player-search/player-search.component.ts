@@ -317,6 +317,8 @@ export class PlayerSearchComponent implements OnInit {
   apiAvailable: boolean = true;
   dbReady: boolean = false;
   activeTab: 'activities' | 'firsts' | 'titles' = 'activities';
+  activeFirstsTab: string = 'all';
+  platformTabs: string[] = [];
   playerTitles: { [key: string]: any } = {};
   loadingTitles: { [key: string]: boolean } = {};
   activityTypeIcons: { [key: string]: SafeHtml } = {};
@@ -361,6 +363,8 @@ export class PlayerSearchComponent implements OnInit {
   }
   private wastedSeals: { [membershipId: string]: number } = {};
   perPlatformStats: PlatformStats[] = [];
+  firstEverActivities: { [membershipId: string]: ActivityHistory | undefined } = {};
+  aggregatedTitles: any[] = [];
 
   constructor(
     private bungieService: BungieApiService,
@@ -374,6 +378,14 @@ export class PlayerSearchComponent implements OnInit {
     private wastedService: WastedOnDestinyService
   ) {
     (window as any).activityDbService = this.activityDb;
+    this.updatePlatformTabs();
+  }
+
+  private updatePlatformTabs() {
+    this.platformTabs = Array.from(new Set(this.selectedPlayers.map(p => p.platform)));
+    if (!this.platformTabs.includes(this.activeFirstsTab) && this.activeFirstsTab !== 'all') {
+      this.activeFirstsTab = 'all';
+    }
   }
 
   async ngOnInit() {
@@ -1991,6 +2003,7 @@ export class PlayerSearchComponent implements OnInit {
     // Recalculate account stats when a player is removed
     this.calculateAccountStats();
     this.cdr.detectChanges();
+    this.updatePlatformTabs();
   }
 
   private async getFilteredActivitiesFromDb(
@@ -2367,16 +2380,29 @@ export class PlayerSearchComponent implements OnInit {
     return a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
   }
 
-  getPlatformIcon(membershipType: number): string {
+  /** Returns local SVG icon path for the given platform */
+  getPlatformIconUrl(membershipType: number): string {
     switch (membershipType) {
-      case 1: return 'fab fa-xbox';
-      case 2: return 'fab fa-playstation';
-      case 3: return 'fab fa-steam';
-      case 4: return 'fab fa-battle-net';
-      case 5: return 'fab fa-google';
-      case 6: return 'fab fa-epic-games';
-      default: return 'fas fa-question';
+      case 1:
+        return 'assets/icons/platforms/xbox.png';
+      case 2:
+        return 'assets/icons/platforms/ps.png';
+      case 3:
+        return 'assets/icons/platforms/steam.png';
+      case 4:
+        return 'assets/icons/platforms/blizzard.svg';
+      case 5:
+        return 'assets/icons/platforms/stadia.png';
+      case 6:
+        return 'assets/icons/platforms/egs.png';
+      default:
+        return '';
     }
+  }
+
+  getPlatformIconUrlForFirst(first: { membershipId?: string }): string {
+    const pl = first && first.membershipId ? this.selectedPlayers.find(p => p.membershipId === first.membershipId) : undefined;
+    return this.getPlatformIconUrl(pl?.membershipType ?? 0);
   }
 
   async loadGuardianFirsts(player: PlayerSearchDisplay): Promise<void> {
@@ -2408,13 +2434,17 @@ export class PlayerSearchComponent implements OnInit {
       this.aggregateGuardianFirsts = aggregate.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
       // Default existing property points to aggregate so legacy helpers keep working
       this.guardianFirsts = this.aggregateGuardianFirsts;
+      // Compute first-ever activity for this specific player once firsts are loaded
+      this.firstEverActivities[player.membershipId] = await this.computeFirstEverActivityForPlayer(player);
     } catch (error) {
       console.error('[Firsts] Error loading guardian firsts:', error);
       this.guardianFirstsMap[player.membershipId] = [];
       this.aggregateGuardianFirsts = [];
       this.guardianFirsts = [];
+      this.firstEverActivities[player.membershipId] = undefined;
     } finally {
       this.loadingGuardianFirsts = false;
+      this.updatePlatformTabs();
       this.cdr.detectChanges();
     }
   }
@@ -2764,7 +2794,7 @@ export class PlayerSearchComponent implements OnInit {
               // Get the DestinyRecordDefinition for the completionRecordHash
               const recordDef = this.manifest.getTitleDefs()[node.completionRecordHash];
               // Prefer special mapping name if present
-              const special = SPECIAL_TITLES[node.completionRecordHash];
+              const special = SPECIAL_TITLES[node.completionRecordHash] || SPECIAL_TITLES[node.hash];
               let displayName = special ? special.name : (recordDef?.titleInfo?.titlesByGender?.Male || node.displayProperties?.name || 'Unknown');
               // Use Bungie bitmask for completion if record exists
               const isCompleted = record ? ((record.state & 1) !== 0) : false;
@@ -2810,6 +2840,7 @@ export class PlayerSearchComponent implements OnInit {
               const uniqueKey = `${displayName}#${node.completionRecordHash}`;
               if (!titleMap[uniqueKey]) {
                 titleMap[uniqueKey] = {
+                  hash: node.completionRecordHash,
                   name: displayName,
                   icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
                   completed: isCompleted,
@@ -2858,6 +2889,54 @@ export class PlayerSearchComponent implements OnInit {
           }
         }
       }
+      // After fetching titles for all players, create aggregatedTitles based on main/cross-save account.
+      const mainPlayer = this.selectedPlayers.find(p => p.isPrimary) || this.crossSavePlayer || this.selectedPlayers[0];
+      const mainList = this.playerTitles[mainPlayer.membershipId] || [];
+
+      // Build a map keyed by title name to avoid duplicates and to merge data cleanly
+      const aggMap = new Map<number, any>();
+
+      const addHolder = (titleObj: any, holder: { displayName: string; platform: string }) => {
+        if (!titleObj.holders) titleObj.holders = [];
+        titleObj.holders.push(holder);
+      };
+
+      // Seed with the main account's titles (completed **and** locked)
+      for (const t of mainList as any[]) {
+        // Skip duplicates; prefer a completed version over locked if both exist
+        const existing = aggMap.get(t.hash);
+        if (!existing) {
+          // Clone to avoid mutating original reference
+          const clone = { ...t, holders: [] as { displayName: string; platform: string }[] };
+          if (t.completed) {
+            addHolder(clone, { displayName: mainPlayer.displayName, platform: mainPlayer.platform });
+          }
+          aggMap.set(t.hash, clone);
+        } else if (!existing.completed && t.completed) {
+          // Replace locked placeholder with completed version
+          const clone = { ...t, holders: existing.holders };
+          if (clone.holders.length === 0) {
+            addHolder(clone, { displayName: mainPlayer.displayName, platform: mainPlayer.platform });
+          }
+          aggMap.set(t.hash, clone);
+        }
+      }
+
+      // Merge in completions from linked accounts (only if the title is completed on that account)
+      for (const p of this.selectedPlayers) {
+        if (p.membershipId === mainPlayer.membershipId) continue;
+        const list = this.playerTitles[p.membershipId] || [];
+        for (const t of list as any[]) {
+          if (!t.completed) continue; // only completed titles contribute holders
+          const existing = aggMap.get(t.hash);
+          if (existing) {
+            addHolder(existing, { displayName: p.displayName, platform: p.platform });
+          }
+        }
+      }
+
+      this.aggregatedTitles = Array.from(aggMap.values()).sort((a,b)=>a.name.localeCompare(b.name));
+      this.cdr.detectChanges();
     }
   }
 
@@ -2901,7 +2980,7 @@ export class PlayerSearchComponent implements OnInit {
 
   getPlatformIconForFirst(first: { membershipId?: string }): string {
     const pl = first && first.membershipId ? this.selectedPlayers.find(p => p.membershipId === first.membershipId) : undefined;
-    return this.getPlatformIcon(pl?.membershipType ?? 0);
+    return this.getPlatformIconUrl(pl?.membershipType ?? 0);
   }
 
   /** Returns readable platform string for a Guardian First entry */
@@ -2970,5 +3049,27 @@ export class PlayerSearchComponent implements OnInit {
     if (p.includes('stadia')) return 5;
     if (p.includes('epic')) return 6;
     return 0;
+  }
+
+  /** Returns cached first ever activity for player */
+  getFirstEverForPlayer(player: PlayerSearchDisplay): ActivityHistory | undefined {
+    return this.firstEverActivities[player.membershipId];
+  }
+
+  /** Compute first-ever activity per player */
+  private async computeFirstEverActivityForPlayer(player: PlayerSearchDisplay): Promise<ActivityHistory | undefined> {
+    const charIds = (this.characters[player.membershipId] || [])
+      .map(getCharacterId)
+      .filter((id): id is string => !!id);
+
+    let allActivities: ActivityHistory[] = [];
+    for (const charId of charIds) {
+      const activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, charId);
+      allActivities = allActivities.concat(activities);
+    }
+    const now = new Date();
+    const valid = allActivities.filter(a => new Date(a.period) <= now);
+    if (valid.length === 0) return undefined;
+    return valid.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
   }
 }
