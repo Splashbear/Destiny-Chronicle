@@ -39,6 +39,8 @@
             <div class="flex flex-row gap-2 items-end">
               <input type="text" 
                      [(ngModel)]="searchUsername"
+                     (ngModelChange)="onSearchInput($event)"
+                     (keydown.enter)="addPlayer()"
                      [class.border-red-500]="errorMessage"
                      class="w-40 px-3 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600"
                      placeholder="Username">
@@ -55,7 +57,7 @@
                 <option value="PlayStation">PlayStation</option>
               </select>
               <label class="flex items-center gap-1 text-xs text-slate-300">
-                <input type="checkbox" [(ngModel)]="includeLinkedAccounts" class="form-checkbox">
+                <input type="checkbox" [(ngModel)]="includeLinkedAccounts" (change)="onIncludeLinkedChange()" class="form-checkbox">
                 Include linked
               </label>
               <button (click)="addPlayer()" 

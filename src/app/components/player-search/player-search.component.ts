@@ -10,8 +10,8 @@ import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/l
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
-import { BehaviorSubject, Observable, of } from 'rxjs';
-import { map, shareReplay, switchMap } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
+import { map, shareReplay, switchMap, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
@@ -363,6 +363,7 @@ export class PlayerSearchComponent implements OnInit {
   private filteredActivitiesCache: Map<string, ActivityWithMembership[]> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000;
   private filteredActivities$ = new BehaviorSubject<ActivityHistory[]>([]);
+  private searchTerm$ = new Subject<string>();
   loadingAccountStats = false;
   accountStats: {
     totalTime: number;
@@ -466,6 +467,13 @@ export class PlayerSearchComponent implements OnInit {
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
+
+    // Debounce username input changes (300 ms). No API hit yet; prepares for future live suggestions.
+    this.searchTerm$
+      .pipe(debounceTime(300), distinctUntilChanged())
+      .subscribe(term => {
+        this.searchUsername = term;
+      });
   }
 
   private updatePlatformTabs() {
@@ -2039,15 +2047,6 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  searchPlayer() {
-    if (!this.searchUsername) {
-      this.errorMessage = 'Please enter a username';
-      return;
-    }
-    // TODO: Implement search logic
-    console.log('Searching for player:', this.searchUsername, 'on platform:', this.selectedPlatform);
-  }
-
   async addPlayer() {
     if (!this.searchUsername || !this.selectedGame) {
       this.errorMessage = 'Please enter a username and select a game.';
@@ -3170,5 +3169,58 @@ export class PlayerSearchComponent implements OnInit {
     const valid = allActivities.filter(a => new Date(a.period) <= now);
     if (valid.length === 0) return undefined;
     return valid.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
+  }
+
+  /** Called on every keystroke in the username box */
+  onSearchInput(value: string): void {
+    this.searchTerm$.next(value);
+  }
+
+  /** Handler for toggling the "Include linked accounts" checkbox */
+  onIncludeLinkedChange(): void {
+    if (this.selectedPlayers.length === 0) return;
+
+    const primary = this.selectedPlayers.find(p => p.isPrimary) || this.selectedPlayers[0];
+
+    if (this.includeLinkedAccounts) {
+      this.bungieService
+        .getLinkedProfiles(primary.membershipType as any, primary.membershipId)
+        .pipe(
+          map((resp: any) => resp?.Response?.profiles ?? []),
+          catchError(err => {
+            console.warn('[LinkedProfiles] Failed to load linked profiles on toggle:', err);
+            return of([]);
+          })
+        )
+        .subscribe(profiles => {
+          let changed = false;
+          for (const prof of profiles) {
+            if (prof.isCrossSavePrimary) continue;
+            if (this.selectedPlayers.some(p => p.membershipId === prof.membershipId)) continue;
+            const linked: PlayerSearchDisplay = {
+              displayName: primary.displayName,
+              membershipId: prof.membershipId,
+              membershipType: prof.membershipType,
+              game: 'D2',
+              platform: this.getPlatformName(prof.membershipType),
+              isPrimary: false
+            } as any;
+            this.selectedPlayers.push(linked);
+            this.selectedCharacterIds[linked.membershipId] = undefined;
+            changed = true;
+          }
+          if (changed) {
+            this.updatePlatformTabs();
+            this.cdr.detectChanges();
+          }
+        });
+    } else {
+      const beforeCount = this.selectedPlayers.length;
+      this.selectedPlayers = this.selectedPlayers.filter(p => p.isPrimary);
+      if (this.selectedPlayers.length !== beforeCount) {
+        this.updatePlatformTabs();
+        this.cdr.detectChanges();
+      }
+    }
   }
 }
