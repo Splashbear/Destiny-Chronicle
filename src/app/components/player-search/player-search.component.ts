@@ -2894,7 +2894,6 @@ export class PlayerSearchComponent implements OnInit {
               let gildingTrackingHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
               let isGildable = !!gildingTrackingHash;
               if (isGildable && isCompleted) {
-                const normalizedName = this.normalizeTitleName(displayName);
                 mappingExists = !!this.GILDED_SEAL_IMAGE_MAP[normalizedName];
                 // Look up the gilding tracking record in both profile and character records
                 let gildingRecord = records[gildingTrackingHash];
@@ -2936,7 +2935,13 @@ export class PlayerSearchComponent implements OnInit {
                   gildedIcon: (isGilded && gildedIcon) ? gildedIcon : undefined,
                   locked: !isCompleted,
                   missingRecord: !record,
-                  altIcon: (node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames && node.iconSequences[1].frames.length > 0) ? `https://www.bungie.net${node.iconSequences[1].frames[0]}` : undefined,
+                  altIcon: (() => {
+                    const frames = node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames;
+                    if (frames && frames.length > 0) {
+                      return `https://www.bungie.net${frames[frames.length - 1]}`; // grey/silver variant
+                    }
+                    return undefined;
+                  })(),
                   legacy: (node.parentNodeHashes || []).includes(1881970629),
                   releaseRank: RELEASE_ORDER[normalizedName] || 0,
                   normalized: normalizedName,
