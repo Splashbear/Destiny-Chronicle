@@ -3223,4 +3223,18 @@ export class PlayerSearchComponent implements OnInit {
       }
     }
   }
+
+  /** Returns earliest (first ever) activity across all selected players for the specified game. */
+  getAggregateFirstEver(game: 'D1' | 'D2'): ActivityHistory | undefined {
+    const firsts: ActivityHistory[] = [];
+    for (const pl of this.selectedPlayers) {
+      const isD1 = this.isD1Player(pl);
+      if ((game === 'D1' && isD1) || (game === 'D2' && !isD1)) {
+        const first = this.getFirstEverForPlayer(pl);
+        if (first) firsts.push(first);
+      }
+    }
+    if (firsts.length === 0) return undefined;
+    return firsts.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
+  }
 }

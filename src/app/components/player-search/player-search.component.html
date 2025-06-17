@@ -292,6 +292,31 @@
             </div>
             <div *ngIf="getAggregateDungeons('D2').length === 0" class="text-center text-slate-400 py-2">No dungeon firsts found for D2.</div>
 
+            <!-- First Ever Activity (D1) -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">First Ever Activity (D1)</h4>
+            <ng-container *ngIf="getAggregateFirstEver('D1') as firstD1; else noFirstD1">
+              <div class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors mb-4">
+                <div class="relative">
+                  <ng-container *ngIf="getActivityImage(firstD1, true) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ getActivityName(firstD1, true) }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCR(firstD1, true)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(firstD1.period) }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
+            <ng-template #noFirstD1>
+              <div class="text-center text-slate-400 py-2">No activities found.</div>
+            </ng-template>
+
             <!-- D1 Raids Aggregate -->
             <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D1 Raids</h4>
             <div *ngIf="getAggregateRaids('D1').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
