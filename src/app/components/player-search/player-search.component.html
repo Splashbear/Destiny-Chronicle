@@ -229,8 +229,33 @@
           <!-- Aggregated Firsts across all linked accounts -->
           <div *ngIf="activeFirstsTab==='all'" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
             <h3 class="text-lg font-semibold text-white mb-4">{{ selectedPlayers[0].displayName }}'s Guardian Firsts (All Platforms)</h3>
+            <!-- First Ever Activity (D2) -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">First Ever Activity (D2)</h4>
+            <ng-container *ngIf="getAggregateFirstEver('D2') as firstD2; else noFirstD2">
+              <div class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors mb-4">
+                <div class="relative">
+                  <ng-container *ngIf="getActivityImage(firstD2, false) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ getActivityName(firstD2, false) }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCR(firstD2, false)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(firstD2.period) }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
+            <ng-template #noFirstD2>
+              <div class="text-center text-slate-400 py-2">No activities found.</div>
+            </ng-template>
+
             <!-- D2 Raids Aggregate -->
-            <h4 class="text-md font-semibold text-yellow-300 mb-2">D2 Raids</h4>
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D2 Raids</h4>
             <div *ngIf="getAggregateRaids('D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
               <div *ngFor="let first of getAggregateRaids('D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
                 <div class="relative">
