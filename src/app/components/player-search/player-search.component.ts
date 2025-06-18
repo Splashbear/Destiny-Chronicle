@@ -415,6 +415,8 @@ export class PlayerSearchComponent implements OnInit {
   private wastedTimes: { [membershipId: string]: number } = {};
   /** Running count of how many activities have been processed in the current load session */
   private overallActivitiesProcessed: number = 0;
+  /** Indicates whether the UI has already rendered at least one slice of activities for the selected date. */
+  private initialDisplayShown: boolean = false;
   /** Helper to get earliest first per activity name across all players */
   private getEarliestFirsts(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
     const map = new Map<string, ActivityFirstCompletion>();
@@ -471,7 +473,7 @@ export class PlayerSearchComponent implements OnInit {
     // Debounce username input changes (300 ms). No API hit yet; prepares for future live suggestions.
     this.searchTerm$
       .pipe(debounceTime(300), distinctUntilChanged())
-      .subscribe(term => {
+      .subscribe((term: string) => {
         this.searchUsername = term;
       });
   }
@@ -1308,6 +1310,17 @@ export class PlayerSearchComponent implements OnInit {
             await this.activityDb.addActivities(uniqueNewActivities);
             // keep local cache in sync to avoid duplicate inserts on subsequent pages/modes
             dbActivities.push(...uniqueNewActivities);
+          }
+
+          // Phase-A fast path: as soon as we have at least one activity for the selected date
+          // (month/day match) we trigger a lightweight refresh so the user sees results instantly.
+          if (!this.initialDisplayShown) {
+            const foundToday = storedActivities.some(act => this.isActivityOnSelectedDate(act));
+            if (foundToday) {
+              this.initialDisplayShown = true;
+              // Fire-and-forget – we don't await to avoid stalling further page fetches.
+              this.loadAllFilteredActivities();
+            }
           }
 
           // Emit progress before heavy processing so user sees immediate feedback
