@@ -22,6 +22,7 @@ import { getActivityName } from '../../utils/activity-utils';
 import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
 import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
 import { PlaytimeService } from '../../services/playtime.service';
+import { TitleService } from '../../services/title.service';
 
 interface ActivityEntry {
   game: string;
@@ -483,7 +484,8 @@ export class PlayerSearchComponent implements OnInit {
     private timezoneService: TimezoneService,
     private activityIconService: ActivityIconService,
     private wastedService: WastedOnDestinyService,
-    private playtimeService: PlaytimeService
+    private playtimeService: PlaytimeService,
+    private titleService: TitleService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
