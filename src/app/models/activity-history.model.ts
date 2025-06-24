@@ -19,6 +19,12 @@ export interface ActivityHistory {
   validated?: boolean;
   validatedAt?: string;
   pgcrUnavailable?: boolean;
+
+  /**
+   * Explicit game identifier added at persistence time so components can safely
+   * distinguish Destiny 1 vs Destiny 2 rows without casting.
+   */
+  game?: 'D1' | 'D2';
 }
 
 export interface Character {
