@@ -475,6 +475,42 @@ export class BungieApiService {
     );
   }
 
+  /**
+   * Performs a prefix search against Bungie.net users using the stable endpoint.
+   * Route: POST /User/Search/GlobalName/0/
+   * Body: { displayNamePrefix: "<partialName>" }
+   * Bungie returns an object with Response.searchResults (up to 25 entries).
+   */
+  searchUsersPrefix(term: string): Observable<BungieResponse<any>> {
+    const url = `${this.D2_BASE_URL}/User/Search/GlobalName/0/`;
+    const body = { displayNamePrefix: term };
+    const headers = new HttpHeaders({
+      'X-API-Key': this.API_KEY,
+      'Content-Type': 'application/json'
+    });
+    return this.http.post<BungieResponse<any>>(url, body, { headers }).pipe(
+      catchError(err => {
+        console.error('[BungieApi] Error in searchUsersPrefix:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
+  /**
+   * Fetches all Destiny memberships (D1 + D2, all platforms) tied to a Bungie.net user ID.
+   * The endpoint returns cross-save data and legacy accounts in one payload.
+   * API doc: GET /User/GetMembershipsById/{bungieNetUserId}/254/
+   */
+  getMembershipData(bungieNetUserId: string | number): Observable<BungieResponse<any>> {
+    const url = `${this.D2_BASE_URL}/User/GetMembershipsById/${bungieNetUserId}/254/`;
+    return this.http.get<BungieResponse<any>>(url, { headers: this.getHeaders() }).pipe(
+      catchError(err => {
+        console.error('[BungieApi] Error in getMembershipData:', err);
+        return throwError(() => err);
+      })
+    );
+  }
+
   private handleError(error: HttpErrorResponse) {
     console.error('Bungie API Error:', error);
     let errorMessage = 'An error occurred';
@@ -488,5 +524,19 @@ export class BungieApiService {
     }
     
     return throwError(() => new Error(errorMessage));
+  }
+
+  searchAllGames(searchTerm: string): Observable<[any, PlayerSearchResult[], PlayerSearchResult[]]> {
+    // Destiny 2 search: choose the correct endpoint depending on whether a Bungie name code is present
+    const d2$ = searchTerm.includes('#')
+      ? this.searchD2Player(searchTerm).pipe(catchError(() => of(null)))
+      : this.searchUsersPrefix(searchTerm).pipe(catchError(() => of(null)));
+
+    // Destiny 1 searches for Xbox (1) and PlayStation (2)
+    const d1Xbox$ = this.searchD1Player(searchTerm, 1).pipe(catchError(() => of([])));
+    const d1Psn$  = this.searchD1Player(searchTerm, 2).pipe(catchError(() => of([])));
+
+    // Run them concurrently
+    return forkJoin([d2$, d1Xbox$, d1Psn$]);
   }
 } 

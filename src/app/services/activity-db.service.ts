@@ -387,11 +387,13 @@ export class ActivityDbService extends Dexie {
   }
 
   async getFirstCompletions(membershipId: string, characterId: string, game: 'D1' | 'D2'): Promise<GuardianFirsts> {
-    // Print all D1 raid activities for this user
+    // Fetch all stored activities for this membership/character
     const activities = await this.activities
       .where(['membershipId', 'characterId'])
       .equals([membershipId, characterId])
       .toArray();
+
+    // Helpful debug for D1
     if (game === 'D1') {
       const d1RaidHashes = Object.keys(ActivityDbService.D1_FAMILY_MAP);
       const allD1Raids = activities.filter(a => d1RaidHashes.includes(String(a.activityDetails.referenceId)));
@@ -403,24 +405,35 @@ export class ActivityDbService extends Dexie {
         instanceId: a.activityDetails.instanceId
       })));
     }
+
     // Group by raid/dungeon family and find the first activity for each
     const firstsByFamily: { [family: string]: ActivityFirstCompletion } = {};
+
     for (const activity of activities) {
-      const type = this.manifest.getActivityType(activity.activityDetails.referenceId, activity.activityDetails.mode);
+      const activityHash = String(activity.activityDetails.referenceId);
+
+      // Determine activity type
+      let type = this.manifest.getActivityType(activityHash, activity.activityDetails.mode);
       const allowedTypes = ['raid', 'dungeon', 'strike', 'nightfall', 'crucible', 'gambit', 'other'];
-      const safeType = allowedTypes.includes(type) ? type : 'other';
-      if (game === 'D1') {
-        // Removed: console.log('[GuardianFirsts][DEBUG][TypeCheck]', {
-        //   referenceId: activity.activityDetails.referenceId,
-        //   type,
-        //   mode: activity.activityDetails.mode,
-        //   period: activity.period,
-        //   name: this.manifest.getActivityName(activity.activityDetails.referenceId, true)
-        // });
+      if (!allowedTypes.includes(type)) {
+        type = 'other';
       }
-      // Only consider dungeons for D2
-      if ((game === 'D1' && type !== 'raid') || (game === 'D2' && type !== 'raid' && type !== 'dungeon')) continue;
-      const activityHash = activity.activityDetails.referenceId;
+
+      // --- Game-specific filters ---
+      if (game === 'D1') {
+        // Treat any activity whose referenceId exists in the D1_FAMILY_MAP as a raid
+        if (!ActivityDbService.D1_FAMILY_MAP[activityHash]) {
+          // Not a D1 raid, skip
+          continue;
+        }
+        type = 'raid';
+      } else {
+        // D2: only raids & dungeons
+        if (type !== 'raid' && type !== 'dungeon') {
+          continue;
+        }
+      }
+
       const family = game === 'D2'
         ? ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash]
         : ActivityDbService.D1_FAMILY_MAP[activityHash];
@@ -457,7 +470,7 @@ export class ActivityDbService extends Dexie {
       if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
         firstsByFamily[family] = {
           name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
-          type: safeType as ActivityFirstCompletion['type'],
+          type: type as ActivityFirstCompletion['type'],
           game,
           completionDate: activity.period,
           referenceId: activityHash,
@@ -516,14 +529,15 @@ export class ActivityDbService extends Dexie {
     }
   }
 
-  private async storeActivities(activities: any[], characterId: string): Promise<void> {
+  // Store a batch of activities and explicitly tag them with the correct game
+  private async storeActivities(activities: any[], characterId: string, game: 'D1' | 'D2'): Promise<void> {
     try {
       const activitiesToStore = activities.map(activity => ({
         ...activity,
         characterId,
         validated: false,
         validatedAt: null,
-        game: (activity.activityDetails?.mode ?? 0) >= 4 ? 'D2' : 'D1'
+        game
       }));
 
       await this.addActivities(activitiesToStore);
@@ -553,11 +567,33 @@ export class ActivityDbService extends Dexie {
 
       let activities: any[] = [];
       if (isD1) {
-        // Use the new method for D1 activities
-        const response = await firstValueFrom(
-          this.bungieService.getAllD1Activities(membershipType, membershipId, characterId)
-        );
-        activities = (response as any).data.activities || [];
+        // ---------------- Full D1 pagination ----------------
+        const D1_MODES = [
+          0,1,2,3,4,5,6,10,12,15,16,17,18,19,22,24,25,31,32,37,38,39,40,41,42,43,44,45,46,48,49,50,51,52,53
+        ];
+        const pageSize = 250;
+        for (const mode of D1_MODES) {
+          let page = 0;
+          let hasMore = true;
+          while (hasMore) {
+            let resp: any;
+            try {
+              resp = await firstValueFrom(
+                this.bungieService.getD1ActivityHistory(membershipType, membershipId, characterId, mode, page)
+              );
+            } catch (err) {
+              console.warn(`[D1] fetch failed for mode ${mode} page ${page}`, err);
+              break; // stop this mode on error to avoid infinite loop
+            }
+
+            const pageActs = resp?.data?.activities || [];
+            activities.push(...pageActs);
+
+            // Continue while Bungie signals more AND we received a full page
+            hasMore = resp?.hasMore === true && pageActs.length === pageSize;
+            page++;
+          }
+        }
       } else {
         // Existing D2 activity fetching logic
         const response = await firstValueFrom(
@@ -586,7 +622,7 @@ export class ActivityDbService extends Dexie {
 
       if (newActivities.length > 0) {
         // Store new activities
-        await this.storeActivities(newActivities, characterId);
+        await this.storeActivities(newActivities, characterId, isD1 ? 'D1' : 'D2');
         // console.log('[DEBUG] Successfully stored new activities');
       } else {
         // console.log('[DEBUG] No new activities to store');

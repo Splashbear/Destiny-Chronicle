@@ -26,19 +26,23 @@
             </div>
             <!-- Selected Profiles -->
             <div class="mb-4 flex flex-row flex-wrap gap-2">
-              <div *ngFor="let player of selectedPlayers; let i = index" 
-                   class="flex items-center gap-2 mb-2">
-                <span>{{ player.displayName }} ({{ player.platform }}, {{ player.game }})</span>
-                <button (click)="toggleFavorite(player)" [attr.aria-label]="isFavorite(player) ? 'Unfavorite' : 'Favorite'">
+              <div *ngFor="let player of selectedPlayers; let i = index" class="player-chip">
+                <span class="truncate max-w-[140px]" title="{{ player.displayName }} ({{ player.platform }}, {{ player.game }})">
+                  {{ player.displayName }}
+                  <span class="text-xs text-slate-400">({{ player.platform }}, {{ player.game }})</span>
+                </span>
+                <button (click)="toggleFavorite(player)" [attr.aria-label]="isFavorite(player) ? 'Unfavorite' : 'Favorite'" class="chip-icon">
                   <span [ngClass]="isFavorite(player) ? 'text-yellow-400' : 'text-slate-400'">★</span>
                 </button>
-                <button (click)="removePlayer(i)">Remove</button>
+                <button (click)="removePlayer(i)" aria-label="Remove" class="chip-icon text-red-400 hover:text-red-300">✕</button>
               </div>
             </div>
             <!-- Compact Search Form -->
             <div class="flex flex-row gap-2 items-end">
               <input type="text" 
                      [(ngModel)]="searchUsername"
+                     (ngModelChange)="onSearchInput($event)"
+                     (keydown.enter)="addPlayer()"
                      [class.border-red-500]="errorMessage"
                      class="w-40 px-3 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600"
                      placeholder="Username">
@@ -55,7 +59,7 @@
                 <option value="PlayStation">PlayStation</option>
               </select>
               <label class="flex items-center gap-1 text-xs text-slate-300">
-                <input type="checkbox" [(ngModel)]="includeLinkedAccounts" class="form-checkbox">
+                <input type="checkbox" [(ngModel)]="includeLinkedAccounts" (change)="onIncludeLinkedChange()" class="form-checkbox">
                 Include linked
               </label>
               <button (click)="addPlayer()" 
@@ -156,16 +160,23 @@
               <!-- Per-Platform Breakdown -->
               <div *ngIf="perPlatformStats.length > 0" class="platform-breakdown mt-6">
                 <h4 class="text-md font-semibold text-white mb-2">Per-Platform Breakdown</h4>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div *ngFor="let plat of perPlatformStats" class="bg-slate-700/50 rounded-lg p-3">
-                    <div class="flex items-center gap-2 mb-2">
-                      <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform" />
-                      <span class="font-semibold text-slate-200">{{ plat.platform }}</span>
-                    </div>
-                    <div class="text-sm text-slate-300">
-                      <div><strong>Time:</strong> {{ formatDuration(plat.totalTime) }}</div>
-                      <div><strong>Activities:</strong> {{ plat.totalActivities }}</div>
-                      <div><strong>Seals:</strong> {{ plat.totalSeals }}</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div *ngFor="let plat of perPlatformStats" class="emblem-card relative rounded-lg overflow-hidden shadow-lg h-24">
+                    <img *ngIf="plat.emblemBackground" [src]="'https://www.bungie.net' + plat.emblemBackground" class="absolute inset-0 w-full h-full object-cover" alt="emblem bg" />
+                    <div class="absolute inset-0 bg-black/60"></div>
+                    <div class="absolute bottom-0 left-0 right-0 p-3 flex flex-col gap-0.5 z-10">
+                      <div class="flex items-center justify-between">
+                        <span class="text-slate-100 font-bold truncate">{{ plat.displayName || plat.platform }}</span>
+                        <img *ngIf="plat.emblemIcon" [src]="'https://www.bungie.net' + plat.emblemIcon" class="w-6 h-6 rounded-full border border-slate-300" alt="emblem icon" />
+                      </div>
+                      <div class="flex items-center gap-2 text-slate-300 text-sm">
+                        <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform icon" />
+                        <span>{{ plat.platform }}</span>
+                        <span *ngIf="plat.className">· {{ plat.className }}</span>
+                        <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
+                      </div>
+                      <div class="text-yellow-300 font-mono text-sm">{{ formatDuration(plat.totalTime) }}</div>
+                      <div class="text-xs text-slate-400">{{ plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
                     </div>
                   </div>
                 </div>
@@ -216,6 +227,16 @@
 
         <!-- Guardian Firsts Tab -->
         <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0" class="space-y-6">
+          <!-- Game Tabs (D1 / D2) -->
+          <div class="flex gap-4 mb-4">
+            <button *ngFor="let g of guardianGames"
+                    (click)="setActiveFirstsGame(g)"
+                    [class.text-yellow-400]="activeFirstsGame===g"
+                    [class.border-yellow-400]="activeFirstsGame===g"
+                    class="px-3 py-1 border-b-2 border-transparent hover:text-yellow-300">
+              {{ g === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
+            </button>
+          </div>
           <!-- Platform Tabs -->
           <div class="flex gap-4 mb-4" *ngIf="platformTabs.length > 1">
             <button (click)="activeFirstsTab='all'" [class.text-blue-400]="activeFirstsTab==='all'" class="px-3 py-1 border-b-2 border-transparent hover:text-blue-300" [class.border-blue-400]="activeFirstsTab==='all'">All Platforms</button>
@@ -224,11 +245,43 @@
               <span>{{ plat }}</span>
             </button>
           </div>
+          <!-- Platform Header (only in per-platform view) -->
+          <div *ngIf="activeFirstsTab !== 'all'" class="flex items-center gap-2 mb-6">
+            <img [src]="getPlatformIconUrl(getPlatformId(activeFirstsTab))" class="w-6 h-6" alt="platform icon" />
+            <h3 class="text-xl font-bold text-white">{{ activeFirstsTab }} – Guardian Firsts</h3>
+          </div>
           <!-- Aggregated Firsts across all linked accounts -->
           <div *ngIf="activeFirstsTab==='all'" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
             <h3 class="text-lg font-semibold text-white mb-4">{{ selectedPlayers[0].displayName }}'s Guardian Firsts (All Platforms)</h3>
+            <!-- Destiny 2 Sections -->
+            <ng-container *ngIf="activeFirstsGame==='D2'">
+            <!-- First Ever Activity (D2) -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">First Ever Activity (D2)</h4>
+            <ng-container *ngIf="getAggregateFirstEver('D2') as firstD2; else noFirstD2">
+              <div class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors mb-4">
+                <div class="relative">
+                  <ng-container *ngIf="getActivityImage(firstD2, false) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ getActivityName(firstD2, false) }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCR(firstD2, false)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(firstD2.period) }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
+            <ng-template #noFirstD2>
+              <div class="text-center text-slate-400 py-2">No activities found.</div>
+            </ng-template>
+
             <!-- D2 Raids Aggregate -->
-            <h4 class="text-md font-semibold text-yellow-300 mb-2">D2 Raids</h4>
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D2 Raids</h4>
             <div *ngIf="getAggregateRaids('D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
               <div *ngFor="let first of getAggregateRaids('D2')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
                 <div class="relative">
@@ -289,10 +342,65 @@
               </div>
             </div>
             <div *ngIf="getAggregateDungeons('D2').length === 0" class="text-center text-slate-400 py-2">No dungeon firsts found for D2.</div>
+            </ng-container>
+
+            <!-- Destiny 1 Sections -->
+            <ng-container *ngIf="activeFirstsGame==='D1'">
+            <!-- First Ever Activity (D1) -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">First Ever Activity (D1)</h4>
+            <ng-container *ngIf="getAggregateFirstEver('D1') as firstD1; else noFirstD1">
+              <div class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors mb-4">
+                <div class="relative">
+                  <ng-container *ngIf="getActivityImage(firstD1, true) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ getActivityName(firstD1, true) }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCR(firstD1, true)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(firstD1.period) }}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
+            <ng-template #noFirstD1>
+              <div class="text-center text-slate-400 py-2">No activities found.</div>
+            </ng-template>
+
+            <!-- D1 Raids Aggregate -->
+            <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D1 Raids</h4>
+            <div *ngIf="getAggregateRaids('D1').length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div *ngFor="let first of getAggregateRaids('D1')" class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors">
+                <div class="relative">
+                  <ng-container *ngIf="getFirstCompletionImage(first) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                  </ng-container>
+                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                  <div class="absolute bottom-0 left-0 right-0 p-3">
+                    <h6 class="text-white font-medium truncate">{{ first.name }}</h6>
+                    <div class="text-sm text-slate-300">
+                      <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                        {{ formatDateTime(first.completionDate) }}
+                      </a>
+                    </div>
+                  </div>
+                  <div class="absolute top-1 right-1">
+                    <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-5 h-5" alt="platform" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="getAggregateRaids('D1').length === 0" class="text-center text-slate-400 py-2">No raid firsts found for D1.</div>
+            </ng-container>
           </div>
           <ng-container *ngIf="activeFirstsTab !== 'all'">
             <ng-container *ngFor="let player of selectedPlayers">
-              <ng-container *ngIf="activeFirstsTab===player.platform">
+              <ng-container *ngIf="activeFirstsTab===player.platform && ((activeFirstsGame==='D1' && isD1Player(player)) || (activeFirstsGame==='D2' && !isD1Player(player)))">
                 <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
                   <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
@@ -431,26 +539,43 @@
         <ng-container *ngIf="selectedGame === 'D2'">
           <!-- Titles Tab -->
           <div *ngIf="activeTab === 'titles' && aggregatedTitles.length > 0" class="space-y-6">
-            <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
-              <h3 class="text-lg font-semibold text-white mb-4">Titles (Cross-Save Account)</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div *ngFor="let title of aggregatedTitles" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3 relative">
-                  <img *ngIf="title.icon" [src]="title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" />
-                  <div>
-                    <div class="font-bold text-yellow-300 text-lg flex items-center gap-2">
-                      {{ title.name }}
-                      <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
-                      <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
-                    </div>
-                    <div *ngIf="title.locked" class="text-red-400 text-sm font-semibold">Locked</div>
-                    <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
+              <div class="flex items-center gap-3">
+                <select [(ngModel)]="titleSort" class="bg-slate-700 text-sm text-white rounded px-2 py-1 border border-slate-600">
+                  <option value="alpha">Alphabetical</option>
+                  <option value="release">Newest First</option>
+                </select>
+                <div class="flex gap-1 text-xs">
+                  <button (click)="titleFilter='all'" [class.bg-blue-600]="titleFilter==='all'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">All</button>
+                  <button (click)="titleFilter='current'" [class.bg-blue-600]="titleFilter==='current'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">Current</button>
+                  <button (click)="titleFilter='legacy'" [class.bg-blue-600]="titleFilter==='legacy'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">Legacy</button>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="loadingTitlesOverall && aggregatedTitles.length === 0" class="flex justify-center items-center py-8 w-full">
+              <svg class="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+              </svg>
+            </div>
+            <div *ngIf="!loadingTitlesOverall || aggregatedTitles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div *ngFor="let title of displayTitles" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3 relative" [ngClass]="{'text-slate-400': title.legacy}">
+                <img *ngIf="title.icon" [src]="(title.legacy && title.altIcon) ? title.altIcon : title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" [ngClass]="{'grayscale opacity-70': title.legacy && !title.altIcon}" />
+                <div>
+                  <div class="font-bold text-lg flex items-center gap-2" [ngClass]="{'text-slate-300': title.legacy, 'text-yellow-300': !(title.legacy)}">
+                    {{ title.name }}
+                    <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
+                    <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
                   </div>
-                  <!-- Holder icons -->
-                  <div class="absolute top-1 right-1 flex gap-1" *ngIf="title.holders?.length">
-                    <ng-container *ngFor="let h of title.holders">
-                      <img [src]="getPlatformIconUrl(getPlatformId(h.platform))" class="w-4 h-4" [title]="h.displayName" />
-                    </ng-container>
-                  </div>
+                  <div *ngIf="title.locked" class="text-red-400 text-sm font-semibold">Locked</div>
+                  <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
+                </div>
+                <!-- Holder icons -->
+                <div class="absolute top-1 right-1 flex gap-1" *ngIf="title.holders?.length">
+                  <ng-container *ngFor="let h of title.holders">
+                    <img [src]="getPlatformIconUrl(getPlatformId(h.platform))" class="w-4 h-4" [title]="h.displayName" />
+                  </ng-container>
                 </div>
               </div>
             </div>
@@ -494,6 +619,7 @@
 <div class="modal" [class.show]="showPlatformPicker">
   <div class="modal-content">
     <h2>Select Account</h2>
+    <button class="select-all-button mb-4" (click)="selectAllPlayersInModal()">Select All</button>
     <div class="search-results">
       <!-- Cross Save Option -->
       <div *ngIf="crossSavePlayer" class="result-section">
