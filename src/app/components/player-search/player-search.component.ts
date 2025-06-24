@@ -21,6 +21,7 @@ import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
 import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
 import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
+import { PlaytimeService } from '../../services/playtime.service';
 
 interface ActivityEntry {
   game: string;
@@ -481,7 +482,8 @@ export class PlayerSearchComponent implements OnInit {
     private activityDb: ActivityDbService,
     private timezoneService: TimezoneService,
     private activityIconService: ActivityIconService,
-    private wastedService: WastedOnDestinyService
+    private wastedService: WastedOnDestinyService,
+    private playtimeService: PlaytimeService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -3272,67 +3274,17 @@ export class PlayerSearchComponent implements OnInit {
    */
   private async loadWastedTime(player: PlayerSearchDisplay): Promise<void> {
     const key = this.getPlayerKey(player);
-    if (this.wastedTimes[key] !== undefined) return; // already fetched
-
-    // WoD only has Destiny 2 data. For Destiny 1 we approximate play-time by summing the
-    // `timePlayedSeconds` value of every stored activity for that account.
-    if (player.game === 'D1') {
-      try {
-        const acts = await this.getPlayerActivities(player.membershipId);
-        let seconds = 0;
-        for (const act of acts) {
-          seconds += this.getActivityDurationSeconds(act as any);
-        }
-        this.wastedTimes[key] = seconds;
-      } catch (err) {
-        console.warn('[loadWastedTime] Failed to compute D1 play-time for', key, err);
-        this.wastedTimes[key] = 0;
-      }
-      this.wastedSeals[key] = 0; // D1 has no seals system
-      this.calculateAccountStats();
-      return;
-    }
+    if (this.wastedTimes[key] !== undefined) return; // cached
 
     try {
-      const response = await firstValueFrom(this.wastedService.getProfile(player.membershipId));
-      let seconds = 0;
-      let sealCount = 0;
-      // Attempt common response shapes
-      if (response?.data?.characters) {
-        const chars = Object.values(response.data.characters) as any[];
-        for (const ch of chars) {
-          if (typeof ch.timePlayedSeconds === 'number') seconds += ch.timePlayedSeconds;
-          else if (typeof ch.minutesPlayed === 'number') seconds += ch.minutesPlayed * 60;
-          else if (typeof ch.minutesPlayedTotal === 'number') seconds += ch.minutesPlayedTotal * 60;
-        }
-      }
-      if (!seconds && typeof response?.timePlayed === 'number') {
-        seconds = response.timePlayed;
-      }
-      // Fallback to Bungie profile if API didn't give anything usable
-      if (!seconds) {
-        try {
-          const bungieProfile = await firstValueFrom(this.bungieService.getProfile(player.membershipType, player.membershipId));
-          const charsData = Object.values(bungieProfile?.Response?.characters?.data || {}) as any[];
-          for (const ch of charsData) {
-            if (ch.minutesPlayedTotal) seconds += Number(ch.minutesPlayedTotal) * 60;
-          }
-        } catch (e) {
-          console.warn('[loadWastedTime] Bungie fallback failed', e);
-        }
-      }
-      // Try activity count fields that WoD returns
-      if (typeof response?.seals === 'number') {
-        sealCount = response.seals;
-      }
-
-      this.wastedTimes[key] = seconds;
-      this.wastedSeals[key] = sealCount;
+      const res = await this.playtimeService.getPlaytime(player);
+      this.wastedTimes[key] = res.seconds;
+      this.wastedSeals[key] = res.seals;
     } catch (err) {
-      console.warn('[loadWastedTime] Failed for', key, err);
+      console.warn('[loadWastedTime] playtime service failed', err);
       this.wastedTimes[key] = 0;
+      this.wastedSeals[key] = 0;
     } finally {
-      // Recompute stats now that we may have new data
       this.calculateAccountStats();
     }
   }
