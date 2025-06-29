@@ -33,9 +33,17 @@ module.exports = {
           gambit: '#4caf50',
           dungeon: '#9c27b0',
         },
+        // Destiny-2 UI palette (from destiny-ui-css)
+        'd2-gold':  '#f0e6c8',
+        'd2-slate': '#1d1f23',
+        'd2-red':   '#c42b1c',
+        'd2-blue':  '#2e6db4',
+        'd1-silver': '#b1b5b9',
       },
       fontFamily: {
         destiny: ['Neue Haas Grotesk', 'sans-serif'],
+        'd2-headline': ['"DIN Condensed", Helvetica, Arial, sans-serif'],
+        'd2-body':     ['"Helvetica Neue", Helvetica, Arial, sans-serif'],
       },
       spacing: {
         '72': '18rem',

@@ -1,0 +1,58 @@
+/* Google font for DIN substitute — must come before other rules */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+
+@layer base {
+  @font-face {
+    font-family: 'DIN Condensed';
+    src: local('DIN Condensed');
+    font-display: swap;
+  }
+}
+
+/* ----------------------------------------------------
+   Destiny-2 themed components built with Tailwind @apply
+----------------------------------------------------- */
+@layer components {
+  /* Buttons */
+  .d2-btn {
+    @apply px-4 py-1.5 rounded uppercase tracking-wider font-d2-headline bg-d2-gold text-d2-slate hover:bg-yellow-300 transition-colors;
+  }
+  .d2-btn-outline {
+    @apply px-4 py-1.5 rounded uppercase tracking-wider font-d2-headline border border-d2-gold text-d2-gold hover:bg-d2-gold hover:text-d2-slate transition-colors;
+  }
+
+  /* Tabs */
+  .d2-tab {
+    @apply px-3 py-2 font-d2-headline uppercase tracking-wider text-d2-gold border-b-2 border-transparent hover:border-d2-gold transition-colors;
+  }
+  .d2-tab-active {
+    @apply border-d2-gold text-d2-gold;
+  }
+
+  /* Checkbox */
+  .d2-check {
+    @apply inline-flex items-center cursor-pointer select-none;
+  }
+  .d2-check input[type="checkbox"] {
+    @apply hidden;
+  }
+  .d2-check span.box {
+    @apply w-4 h-4 border border-d2-gold rounded-sm mr-2 flex-shrink-0;
+  }
+  .d2-check input[type="checkbox"]:checked + span.box {
+    @apply bg-d2-gold;
+  }
+
+  /* Progress Bar */
+  .d2-progress {
+    @apply w-full h-2 bg-d2-slate rounded overflow-hidden;
+  }
+  .d2-progress > .bar {
+    @apply h-full bg-d2-gold;
+  }
+
+  /* Card container */
+  .d2-card {
+    @apply bg-d2-slate/90 text-white rounded-lg shadow-lg border border-d2-gold/20;
+  }
+} 
