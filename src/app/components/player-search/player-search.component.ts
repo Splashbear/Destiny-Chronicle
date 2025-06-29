@@ -57,6 +57,7 @@ interface YearGroup {
 interface AccountGroup {
   displayName: string;
   platform: string;
+  game: 'D1' | 'D2';
   yearGroups: Map<string, YearGroup>;
 }
 
@@ -314,6 +315,7 @@ interface PlatformStats {
   totalTime: number;
   totalActivities: number;
   totalSeals: number;
+  game: 'D1' | 'D2';
   emblemBackground?: string; // Bungie relative path (e.g. /common/.../emblem.jpg)
   emblemIcon?: string;       // Small square emblem icon path
   displayName?: string;      // Representative guardian name (first account found)
@@ -368,7 +370,7 @@ export class PlayerSearchComponent implements OnInit {
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000;
   private activityCache: Map<string, ActivityCache> = new Map();
-  private filteredActivitiesCache: Map<string, ActivityWithMembership[]> = new Map();
+  private filteredActivitiesCache: Map<string, { list: ActivityWithMembership[]; dirty: boolean }> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000;
   private filteredActivities$ = new BehaviorSubject<ActivityHistory[]>([]);
   private searchTerm$ = new Subject<string>();
@@ -436,6 +438,44 @@ export class PlayerSearchComponent implements OnInit {
   titleSort: 'alpha' | 'release' = 'alpha';
   titleFilter: 'all' | 'current' | 'legacy' = 'all';
   loadingTitlesOverall = false;
+  private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
+  private syncedPlayers: Set<string> = new Set();
+
+  // ------------------------------------------------------------------
+  // Concurrency-limited queue for per-account sync (Pattern 2)
+  // ------------------------------------------------------------------
+  private readonly MAX_PARALLEL_PLAYER_SYNCS = 2;
+  private activePlayerSyncs = 0;
+  private playerSyncQueue: Array<() => void> = [];
+
+  /**
+   * Runs the given async task while enforcing the global
+   * MAX_PARALLEL_PLAYER_SYNCS limit.  Additional tasks are queued and
+   * executed FIFO as slots become available.
+   */
+  private runWithPlayerSyncLimit<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const exec = () => {
+        this.activePlayerSyncs++;
+        task()
+          .then(resolve)
+          .catch(reject)
+          .finally(() => {
+            this.activePlayerSyncs--;
+            const next = this.playerSyncQueue.shift();
+            if (next) {
+              next();
+            }
+          });
+      };
+
+      if (this.activePlayerSyncs < this.MAX_PARALLEL_PLAYER_SYNCS) {
+        exec();
+      } else {
+        this.playerSyncQueue.push(exec);
+      }
+    });
+  }
 
   /**
    * Returns the list of titles ready for display based on the current filter / sort.
@@ -559,13 +599,35 @@ export class PlayerSearchComponent implements OnInit {
     return this.selectedPlayers.some(player => !this.isD1Player(player));
   }
 
+  /**
+   * Returns the list of platforms that actually produced at least one stored
+   * activity for the given game.  Brand-new guardians with zero history are
+   * ignored so we don't show empty tabs.
+   */
   getPlatforms(game: string): string[] {
+    // 1. Prefer perPlatformStats – already filtered to platforms with ≥1 activity.
+    if (this.perPlatformStats && this.perPlatformStats.length) {
+      const list = this.perPlatformStats
+        .filter(s => s.game === game && ((s.totalActivities ?? 0) > 0 || (s.totalTime ?? 0) > 0))
+        .map(s => s.platform);
+      if (list.length) {
+        // Deduplicate while preserving order
+        return Array.from(new Set(list));
+      }
+    }
+
+    // 2. Fallback: derive from selectedPlayers (may include platforms with zero history)
     const platforms = new Set<string>();
     this.selectedPlayers.forEach(player => {
-      if ((game === 'D1' && this.isD1Player(player)) || 
-          (game === 'D2' && !this.isD1Player(player))) {
-        platforms.add(this.getPlatformName(player.membershipType));
-      }
+      const isGameMatch = (game === 'D1' && this.isD1Player(player)) ||
+                          (game === 'D2' && !this.isD1Player(player));
+      if (!isGameMatch) return;
+
+      // If activities map is available, ensure at least one activity exists to avoid empty tabs
+      const acts = this.activities[player.membershipId];
+      if (!acts || acts.length === 0) return;
+
+      platforms.add(this.getPlatformName(player.membershipType));
     });
     return Array.from(platforms);
   }
@@ -745,6 +807,9 @@ export class PlayerSearchComponent implements OnInit {
     };
     this.guardianFirsts = [];
     this.playerTitles = {};
+    // Reset initial-sync tracking
+    this.firstFullSyncDone = false;
+    this.syncedPlayers.clear();
 
     // Use the game property from the player object if present, otherwise fallback to selectedGame
     const displayPlayer: PlayerSearchDisplay = {
@@ -800,14 +865,19 @@ export class PlayerSearchComponent implements OnInit {
       // Parallel loading of activities, titles, and firsts for each selected player (primary + linked)
       const loadPromises: Promise<void>[] = [];
       for (const pl of this.selectedPlayers) {
-        // Load character history first, then guardian firsts for that character
+        // Use the concurrency-limited runner so only N accounts are being
+        // crawled at the same time.  Each player sync includes character
+        // history + guardian firsts + dungeon solo firsts serially.
         loadPromises.push(
-          this.loadCharacterHistory(pl)
-            .then(() => this.loadGuardianFirsts(pl))
-            .then(() => this.loadDungeonSoloFirsts(pl))
-            .catch(err => {
+          this.runWithPlayerSyncLimit(async () => {
+            try {
+              await this.loadCharacterHistory(pl);
+              await this.loadGuardianFirsts(pl);
+              await this.loadDungeonSoloFirsts(pl);
+            } catch (err) {
               console.warn('[LoadCharacterHistory/Firsts] Skipped due to error for', pl.membershipId, err);
-            })
+            }
+          })
         );
         // Wasted time can load in parallel
         loadPromises.push(
@@ -819,9 +889,19 @@ export class PlayerSearchComponent implements OnInit {
       await Promise.all(loadPromises);
       // After loading character history, trigger activity loading if we have a date selected
       if (this.selectedDate) {
-        await this.loadAllFilteredActivities();
+        await this.loadAllFilteredActivities(true);
       }
       await this.calculateAccountStats();
+
+      // Mark this player as fully synced for the initial crawl
+      this.syncedPlayers.add(this.getPlayerKey(player as any));
+      if (!this.firstFullSyncDone && this.syncedPlayers.size === this.selectedPlayers.length) {
+        this.firstFullSyncDone = true;
+        // One final rebuild now that all games finished
+        if (this.selectedDate) {
+          await this.loadAllFilteredActivities(true);
+        }
+      }
     } catch (error) {
       this.selectedPlayers = [];
       delete this.selectedCharacterIds[player.membershipId];
@@ -929,11 +1009,31 @@ export class PlayerSearchComponent implements OnInit {
         return null;
       }
       
+      // First attempt to retrieve a cached, pruned PGCR. If not found we hit
+      // Bungie's API, then store the result for future look-ups.
       return {
-        promise: firstValueFrom(this.bungieService.getPGCR(
-          instanceId,
-          character.game === 'D1'
-        )),
+        promise: (async () => {
+          const cached = character.game === 'D1'
+            ? await this.pgcrCacheService.getD1PGCR(instanceId)
+            : await this.pgcrCacheService.get(instanceId);
+
+          if (cached) {
+            return cached as any;
+          }
+
+          // Not cached – fetch from Bungie and persist.
+          const fetched = await firstValueFrom(
+            this.bungieService.getPGCR(instanceId, character.game === 'D1')
+          );
+
+          if (character.game === 'D1') {
+            await this.pgcrCacheService.cacheD1PGCR(instanceId, fetched);
+          } else {
+            await this.pgcrCacheService.set(fetched);
+          }
+
+          return fetched;
+        })(),
         activity,
         instanceId
       };
@@ -1353,6 +1453,22 @@ export class PlayerSearchComponent implements OnInit {
             await this.activityDb.addActivities(uniqueNewActivities);
             // keep local cache in sync to avoid duplicate inserts on subsequent pages/modes
             dbActivities.push(...uniqueNewActivities);
+
+            // Invalidate the per-player cache so the next getPlayerActivities() re-reads from DB
+            this.activitiesCache.delete(character.membershipId);
+
+            // If any of the newly stored activities fall on the date currently being viewed,
+            // clear the per-date filtered cache so subsequent refreshes (or the one we trigger
+            // below) include the new rows.
+            if (this.selectedDate && uniqueNewActivities.some(act => this.isActivityOnSelectedDate(act))) {
+              const cacheKey = `filtered-${this.selectedDate}-${this.selectedActivityType.label}`;
+              const entry = this.filteredActivitiesCache.get(cacheKey);
+              if (entry) {
+                entry.dirty = true;
+              }
+              // Fire-and-forget background refresh — guarded by currentLoadToken inside the call.
+              this.loadAllFilteredActivities(true);
+            }
           }
 
           // Phase-A fast path: as soon as we have at least one activity for the selected date
@@ -1362,7 +1478,7 @@ export class PlayerSearchComponent implements OnInit {
             if (foundToday) {
               this.initialDisplayShown = true;
               // Fire-and-forget – we don't await to avoid stalling further page fetches.
-              this.loadAllFilteredActivities();
+              this.loadAllFilteredActivities(true);
             }
           }
 
@@ -1411,11 +1527,12 @@ export class PlayerSearchComponent implements OnInit {
     }
     const accountGroups = new Map<string, AccountGroup>();
     for (const activity of this.filteredActivitiesForDate) {
-      const accountKey = activity.membershipId;
+      const accountKey = `${activity.game}|${activity.membershipId}`;
       if (!accountGroups.has(accountKey)) {
         accountGroups.set(accountKey, {
           displayName: activity.displayName,
           platform: activity.platform,
+          game: activity.game,
           yearGroups: new Map<string, YearGroup>()
         });
       }
@@ -1471,6 +1588,8 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
     await this.setFirstEverActivityFromDb();
     this.debugLogEarliestActivity();
+    console.log('[DEBUG] GroupedAccounts: D1=', this.getAccountGroupsForGame('D1').length,
+                'D2=', this.getAccountGroupsForGame('D2').length);
   }
 
   getActivityDurationSeconds(activity: ActivityHistory): number {
@@ -1492,7 +1611,7 @@ export class PlayerSearchComponent implements OnInit {
     return seconds;
   }
 
-  public async loadAllFilteredActivities() {
+  public async loadAllFilteredActivities(forceRefresh: boolean = false) {
     const loadToken = ++this.currentLoadToken;
 
     // Only show the blocking loading state until the very first slice of activities has rendered.
@@ -1504,7 +1623,7 @@ export class PlayerSearchComponent implements OnInit {
     }
 
     try {
-      const activities = await this.getAllFilteredActivitiesForDate();
+      const activities = await this.getAllFilteredActivitiesForDate(forceRefresh);
       if (loadToken !== this.currentLoadToken) return; // Abort if a newer load started
 
       // Ensure Destiny manifest has finished loading so that activity names/types resolve properly
@@ -1845,6 +1964,7 @@ export class PlayerSearchComponent implements OnInit {
         if (!platformStatsMap[key]) {
           platformStatsMap[key] = {
             platform: platformName,
+            game: pl.game as 'D1' | 'D2',
             totalTime: 0,
             totalActivities: 0,
             totalSeals: 0
@@ -1984,12 +2104,25 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async onDateSelect(month: string, day: string) {
-    // Reset fast-load flag so the new date gets its own early refresh
+    const newMonth = parseInt(month);
+    const newDay   = parseInt(day);
+
+    // If the user clicked "Search" for the same day we're already showing, we
+    // just trigger a lightweight refresh instead of blowing away caches and
+    // restarting the fast-load logic (which caused the visible refresh loop).
+    const sameDate = newMonth === this.selectedMonth && newDay === this.selectedDay;
+    if (sameDate) {
+      await this.loadAllFilteredActivities();
+      return;
+    }
+
+    // Date actually changed – reset fast-load state so the first slice renders
+    // quickly once again.
     this.initialDisplayShown = false;
     this.filteredActivitiesForDate = [];
     this.clearFilteredActivitiesCache();
-    this.selectedMonth = parseInt(month);
-    this.selectedDay = parseInt(day);
+    this.selectedMonth = newMonth;
+    this.selectedDay = newDay;
     this.selectedDate = `${month}-${day}`;
     
     // Set loading state for the selected date
@@ -2313,17 +2446,16 @@ export class PlayerSearchComponent implements OnInit {
   /**
    * Retrieves all filtered activities for the selected date and players.
    */
-  private async getAllFilteredActivitiesForDate(): Promise<ActivityWithMembership[]> {
+  private async getAllFilteredActivitiesForDate(forceRefresh: boolean = false): Promise<ActivityWithMembership[]> {
     if (!this.selectedDate) {
       return [];
     }
 
-    // Check filtered activities cache first
     const cacheKey = `filtered-${this.selectedDate}-${this.selectedActivityType.label}`;
-    const cachedFiltered = this.filteredActivitiesCache.get(cacheKey);
-    if (cachedFiltered) {
+    const cachedEntry = this.filteredActivitiesCache.get(cacheKey);
+    if (cachedEntry && !forceRefresh && !cachedEntry.dirty && this.firstFullSyncDone) {
       console.log('[DEBUG] Using cached filtered activities for date:', this.selectedDate);
-      return cachedFiltered;
+      return cachedEntry.list;
     }
 
     const [month, day] = this.selectedDate.split('-').map(Number);
@@ -2403,7 +2535,11 @@ export class PlayerSearchComponent implements OnInit {
       }
 
       // Keep only activities that belong to the same game as this player
-      playerActivities = playerActivities.filter(a => (a as any).game === player.game);
+      playerActivities = playerActivities.filter(a => {
+        const g = (a as any).game as 'D1' | 'D2' | undefined;
+        // Older cached rows may not include the `game` marker – treat them as belonging to this player's game
+        return !g || g === player.game;
+      });
 
       if (player.game === 'D1') {
         console.log(`[DEBUG][D1] Filtered D1 activities for ${player.displayName}:`, {
@@ -2448,8 +2584,10 @@ export class PlayerSearchComponent implements OnInit {
     const d1Count = dedupedActivities.filter(a => a.game === 'D1').length;
     console.log(`[DEBUG][D1] Total deduped D1 activities for ${this.selectedDate}:`, d1Count);
 
-    // Cache the filtered activities
-    this.filteredActivitiesCache.set(cacheKey, dedupedActivities);
+    // Cache only after initial full sync completes so early partial lists don't persist
+    if (this.firstFullSyncDone) {
+      this.filteredActivitiesCache.set(cacheKey, { list: dedupedActivities, dirty: false });
+    }
     
     this.filteredActivitiesForDate = dedupedActivities;
     return dedupedActivities;
@@ -2676,9 +2814,15 @@ export class PlayerSearchComponent implements OnInit {
       Object.values(this.guardianFirstsMap).forEach(list => {
         for (const f of list) {
           const key = `${f.game}|${f.type}|${f.name}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            aggregate.push(f);
+          const existing = aggregate.find(x => `${x.game}|${x.type}|${x.name}` === key);
+          if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+            if (existing) {
+              // replace later completion with earlier one
+              const idx = aggregate.indexOf(existing);
+              aggregate[idx] = f;
+            } else {
+              aggregate.push(f);
+            }
           }
         }
       });
@@ -3216,7 +3360,11 @@ export class PlayerSearchComponent implements OnInit {
         }
       }
 
-      this.aggregatedTitles = Array.from(aggMap.values()).sort((a,b)=>a.name.localeCompare(b.name));
+      // Rebuild aggregatedTitles via the new service
+      this.aggregatedTitles = this.titleService.aggregateTitles(
+        this.selectedPlayers as any,
+        this.playerTitles as any
+      );
       this.loadingTitlesOverall = false;
       this.cdr.detectChanges();
     }
@@ -3579,5 +3727,25 @@ export class PlayerSearchComponent implements OnInit {
     const player = this.selectedPlayers.find(p => p.membershipId === first.membershipId);
     if (!player) return undefined;
     return this.getDungeonSoloFirstForPlayer(player, first.name);
+  }
+
+  getAccountGroupsForGame(game: 'D1' | 'D2') {
+    return this.groupedActivitiesByAccount.filter(g => g.game === game);
+  }
+
+  /** Called when user picks an account from the Favorites dropdown */
+  onFavoriteSelect(event: Event): void {
+    const selectEl = event.target as HTMLSelectElement;
+    const val = selectEl.value;
+    if (!val) {
+      return;
+    }
+    const [membershipId, game] = val.split('|');
+    const fav = this.favoriteAccounts.find(f => f.membershipId === membershipId && f.game === (game as 'D1' | 'D2'));
+    if (fav) {
+      this.selectPlayer(fav);
+    }
+    // reset to placeholder
+    selectEl.value = '';
   }
 }
