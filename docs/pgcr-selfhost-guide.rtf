@@ -1,0 +1,146 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Segoe UI;}{\f1 Courier New;}}
+\fs24
+\b Destiny Chronicle – In-House PGCR Backend Deployment Guide\b0\par
+\par
+\b 1. Overview\b0\par
+This guide explains how to run the full Rivenbot PGCR pipeline on your own always-on Linux box (Raspberry Pi, NUC, or spare PC).  Once deployed, your Angular front-end will fetch cached Post Game Carnage Reports and daily summaries from \i api.<your-domain>.com\i0 instead of Bungie.net, cutting page load times to near-instant and eliminating third-party hosting costs.\par
+\par
+The stack you will deploy:\par
+• \b proxy-service\b0 – Rotates Bungie API keys & enforces 25 req/s rate-limit.\par
+• \b pgcr-crawler-service\b0 – Downloads raw PGCR JSON.\par
+• \b pgcr-processing-service\b0 – Extracts analytics into Postgres tables.\par
+• \b rivenbot-api-service\b0 – Public REST/GraphQL gateway for your Angular app.\par
+• \b Postgres\b0 – Relational DB.\par
+• \b MinIO\b0 – Self-hosted S3 object storage for raw PGCR blobs.\par
+• \b Redis\b0 – Lightweight job queue.\par
+• \b Caddy\b0 – Reverse-proxy with automatic Let's Encrypt TLS.\par
+\par
+\b 2. Hardware Requirements\b0\par
+• Raspberry Pi 5 (8 GB) + USB-SSD \i or\i0 Intel NUC / mini-PC with ≧ 4 vCPU, 8 GB RAM, 250 GB SSD.\par
+• Router that allows port-forward 80 & 443 to the box.\par
+• Static IP \i or\i0 Dynamic-DNS (DuckDNS / Cloudflare).\par
+• ≥ 5 Mbps upstream bandwidth.\par
+• Optional UPS for power protection.\par
+\par
+\b 3. Network Topology\b0\par
+```
+Internet → [Caddy:443] ─→ rivenbot-api-service:8080
+                           ↑
+Angular UI (https://app.<domain>)
+```
+Caddy terminates TLS and forwards traffic to the API container.  Internal services communicate over Docker's bridge network.\par
+\par
+\b 4. docker-compose.yml (template)\b0\par
+\f1\fs20
+version: '3.9'
+services:
+  postgres:
+    image: postgres:16
+    volumes: ["./data/pg:/var/lib/postgresql/data"]
+    env_file: .env
+  minio:
+    image: minio/minio
+    command: server /data --console-address ':9001'
+    volumes: ["./data/minio:/data"]
+    env_file: .env
+  redis:
+    image: redis:7
+  proxy:
+    image: ghcr.io/riven-of-a-thousand-servers/proxy-service:latest
+    env_file: .env
+    depends_on: [redis]
+  crawler:
+    image: ghcr.io/riven-of-a-thousand-servers/pgcr-crawler-service:latest
+    env_file: .env
+    depends_on: [proxy, postgres, redis, minio]
+  processor:
+    image: ghcr.io/riven-of-a-thousand-servers/pgcr-processing-service:latest
+    env_file: .env
+    depends_on: [postgres, minio]
+  api:
+    image: ghcr.io/riven-of-a-thousand-servers/rivenbot-api-service:latest
+    env_file: .env
+    depends_on: [postgres, minio]
+    ports: ["8080:8080"]
+  caddy:
+    image: caddy:2
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+    ports: ["80:80", "443:443"]
+\f0\fs24\par
+\par
+\b 5. .env (sample)\b0\par
+```
+POSTGRES_PASSWORD=supersecret
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=anothersecret
+BUNGIE_API_KEYS=key1,key2,key3
+BUNGIE_OAUTH_CLIENT_ID=XXXX
+BUNGIE_OAUTH_CLIENT_SECRET=YYYY
+DOMAIN=api.example.com
+```
+\par
+\b 6. Caddyfile (auto-TLS)\b0\par
+```
+api.example.com {
+    reverse_proxy api:8080
+    encode zstd gzip
+}
+```
+\par
+\b 7. Step-by-Step Setup\b0\par
+1. Flash Ubuntu Server 24.04 LTS on the device and boot.\par
+2. Install Docker: \`curl -fsSL https://get.docker.com | sh\` and add your user to \`docker\` group.\par
+3. \`sudo apt install docker-compose-plugin\`\par
+4. Clone this guide's repo or copy the above YML, Caddyfile, and .env onto the server.\par
+5. \`docker compose pull && docker compose up -d\`\par
+6. Verify:
+   • \`https://api.example.com/healthz\` → 200 OK\par
+   • \`http://<server-ip>:9001\` → MinIO console.\par
+7. Update Angular environment (`environment.ts`) with:
+\f1\fs20
+export const environment = {
+  production: false,
+  pgcrApi: 'https://api.example.com',
+};
+\f0\fs24
+Rebuild & deploy the UI.\par
+\par
+\b 8. Storage & Backup\b0\par
+• PGCR blobs: 30 KB gzip each → ≈ 12 GB for 5 years × 20 players.\par
+• Daily cron:
+\f1\fs20
+0 3 * * * docker exec -i postgres pg_dump -U postgres | gzip > /mnt/backups/dc-$(date +%F).sql.gz
+\f0\fs24\par
+• Use \`mc mirror\` to copy MinIO buckets to an external drive weekly.\par
+\par
+\b 9. Maintenance Checklist\b0\par
+• Every fortnight: \`docker compose pull && docker compose up -d\` (updates images)\par
+• Apply Ubuntu security updates (\`unattended-upgrades\`).\par
+• Rotate Bungie API keys annually.\par
+• Monitor \`/metrics\` endpoints via Prometheus or Grafana.\par
+\par
+\b 10. AI-Assistant Prompts\b0\par
+Paste these to ChatGPT or another agent when automating tasks.\par
+\i 10.1 Generate docker-compose overrides\i0\par
+"Create a docker-compose.override.yml that adds Watchtower for automatic image updates and configures persistent logging volumes for every service listed."\par
+\i 10.2 Expand API queries\i0\par
+"Add an endpoint to rivenbot-api-service that returns Guardian Firsts per day.  Show the SQL migration and the Go handler code."\par
+\i 10.3 Front-end integration\i0\par
+"In Angular, update ActivityService to fetch daily summaries from \`${environment.pgcrApi}/v1/daily/{date}?membershipId=…\` and fall back to individual PGCR calls only when the summary is missing."\par
+\i 10.4 Monitoring setup\i0\par
+"Provide a Prometheus scrape config and a Grafana dashboard JSON for the pgcr-crawler-service and processor latency metrics."\par
+\par
+\b 11. When to Scale Up\b0\par
+Home hardware handles thousands of PGCRs/day.  If you see CPU > 70 % sustained or upstream bandwidth saturating, migrate containers unchanged to a cloud host (Fly.io, GCP, etc.)—just point the DNS \`A\` record to the new IP.\par
+\par
+\b 12. Useful Links\b0\par
+• Riven-of-a-Thousand-Servers repositories – https://github.com/orgs/Riven-of-a-Thousand-Servers/repositories\par
+• Bungie Developer Portals – https://bungie-net.github.io\par
+• Caddy automatic HTTPS – https://caddyserver.com\par
+• MinIO quickstart – https://min.io\par
+\par
+\fs18© 2025 Destiny Chronicle – Internal Use Only\par
+} 

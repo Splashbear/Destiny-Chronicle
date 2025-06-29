@@ -66,8 +66,12 @@ export class PlaytimeService {
         } catch {}
       }
     } else {
-      // Destiny 1 – approximate by summing stored activity durations
-      const allActs: ActivityHistory[] = await this.activityDb.getActivitiesByGame(player.membershipId, '', 'D1');
+      // Destiny 1 – approximate by summing stored activity durations across ALL characters.
+      const allActs: ActivityHistory[] = await this.activityDb.activities
+        .where('membershipId')
+        .equals(player.membershipId)
+        .filter((a: any) => (a as any).game === 'D1')
+        .toArray();
       for (const act of allActs) {
         const dur = (act as any)?.values?.timePlayedSeconds?.basic?.value;
         if (typeof dur === 'number' && dur > 0) seconds += dur;

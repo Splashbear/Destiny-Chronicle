@@ -1,149 +1,76 @@
-import { Injectable, Inject } from '@angular/core';
-import { Cache } from './cache.service';
+import { Injectable } from '@angular/core';
+import { openDB, IDBPDatabase } from 'idb';
+import { prunePgcr, PrunedPgcr } from '../utils/pgcr-prune';
 
-interface CachedPGCR {
-  activityId: string;
-  timestamp: number;
-  data: any;
-  isFullData: boolean;
-}
+interface ChronicleDB extends IDBPDatabase<any> {}
+
+const DB_NAME = 'chronicle';
+const DB_VERSION = 1;
 
 @Injectable({
   providedIn: 'root'
 })
 export class PGCRCacheService {
-  private readonly CACHE_KEY = 'destiny_pgcr_cache';
-  private readonly MAX_CACHE_SIZE = 50; // Maximum number of PGCRs to cache
-  private readonly CACHE_EXPIRY = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
-  private d2PgcrCache: Cache<any>;
-  private d1PgcrCache: Cache<any>;
-
-  constructor() {
-    this.d2PgcrCache = new Cache<any>('d2-pgcr-cache', 24 * 60 * 60 * 1000); // 24 hours
-    this.d1PgcrCache = new Cache<any>('d1-pgcr-cache', 24 * 60 * 60 * 1000); // 24 hours
-  }
-
-  private getCache(): CachedPGCR[] {
-    const cached = localStorage.getItem(this.CACHE_KEY);
-    return cached ? JSON.parse(cached) : [];
-  }
-
-  private saveCache(cache: CachedPGCR[]): void {
-    localStorage.setItem(this.CACHE_KEY, JSON.stringify(cache));
-  }
-
-  private cleanCache(): void {
-    const cache = this.getCache();
-    const now = Date.now();
-
-    // Remove expired entries
-    const validEntries = cache.filter(entry => 
-      now - entry.timestamp < this.CACHE_EXPIRY
-    );
-
-    // If still over limit, remove oldest entries
-    if (validEntries.length > this.MAX_CACHE_SIZE) {
-      validEntries.sort((a, b) => b.timestamp - a.timestamp);
-      validEntries.splice(this.MAX_CACHE_SIZE);
+  private dbPromise = openDB(DB_NAME, DB_VERSION, {
+    upgrade(db) {
+      if (!db.objectStoreNames.contains('pgcr')) {
+        const store = db.createObjectStore('pgcr', { keyPath: 'id' });
+        store.createIndex('period', 'period');
+        store.createIndex('member_period', ['member', 'period']);
+      }
     }
+  });
 
-    this.saveCache(validEntries);
+  /** Retrieve a pruned PGCR from IndexedDB. */
+  public get(id: string): Promise<PrunedPgcr | undefined> {
+    return this.dbPromise.then(db => db.get('pgcr', id));
   }
 
-  getPGCR(activityId: string): any | null {
-    const cache = this.getCache();
-    const entry = cache.find(e => e.activityId === activityId);
-    
-    if (!entry) {
-      return null;
+  /** Store a full Bungie PGCR (will be pruned before writing). */
+  public async set(rawPgcr: any, requestedMemberId?: string): Promise<void> {
+    const pruned = prunePgcr(rawPgcr, requestedMemberId);
+    (await this.dbPromise).put('pgcr', pruned).catch(console.error);
+  }
+
+  /** Get every PGCR whose period falls within one calendar day (ISO yyyy-mm-dd). */
+  getForDay(isoDate: string): Promise<PrunedPgcr[]> {
+    const lower = isoDate + 'T00:00:00Z';
+    const upper = isoDate + 'T23:59:59Z';
+    const range = IDBKeyRange.bound(lower, upper);
+    return this.dbPromise.then(db => db.getAllFromIndex('pgcr', 'period', range));
+  }
+
+  /** Delete PGCRs older than N days, returns number removed. */
+  async purgeOlderThan(days = 365): Promise<number> {
+    const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+    const db = await this.dbPromise;
+    let removed = 0;
+    const tx = db.transaction('pgcr', 'readwrite');
+    const index = tx.store.index('period');
+    for await (const cursor of index.iterate()) {
+      if (cursor.key < cutoff) {
+        cursor.delete();
+        removed++;
+      }
     }
-
-    // Update timestamp to mark as recently used
-    entry.timestamp = Date.now();
-    this.saveCache(cache);
-
-    return entry.data;
+    await tx.done;
+    return removed;
   }
 
-  cachePGCR(activityId: string, data: any, isFullData: boolean = false): void {
-    const cache = this.getCache();
-    
-    // Remove existing entry if present
-    const existingIndex = cache.findIndex(e => e.activityId === activityId);
-    if (existingIndex !== -1) {
-      cache.splice(existingIndex, 1);
-    }
-
-    // Add new entry
-    cache.push({
-      activityId,
-      timestamp: Date.now(),
-      data,
-      isFullData
-    });
-
-    this.cleanCache();
+  async getD2PGCR(activityId: string): Promise<PrunedPgcr | undefined> {
+    return this.get(activityId);
   }
 
-  cacheMinimalPGCR(activityId: string, minimalData: any): void {
-    this.cachePGCR(activityId, minimalData, false);
+  async cacheD2PGCR(activityId: string, pgcr: any): Promise<void> {
+    return this.set(pgcr);
   }
 
-  cacheFullPGCR(activityId: string, fullData: any): void {
-    this.cachePGCR(activityId, fullData, true);
+  // Destiny 1 variants forward to same store for now – future split possible
+  async getD1PGCR(activityId: string): Promise<PrunedPgcr | undefined> {
+    return this.get(activityId);
   }
 
-  clearCache(): void {
-    localStorage.removeItem(this.CACHE_KEY);
-    this.d2PgcrCache.clear();
-    this.d1PgcrCache.clear();
-  }
-
-  getCacheStats(): { total: number; fullData: number; size: number } {
-    const cache = this.getCache();
-    const fullDataCount = cache.filter(e => e.isFullData).length;
-    const cacheSize = new Blob([JSON.stringify(cache)]).size;
-
-    return {
-      total: cache.length,
-      fullData: fullDataCount,
-      size: cacheSize
-    };
-  }
-
-  /**
-   * Caches a D2 PGCR (Post Game Carnage Report).
-   * @param activityId The ID of the activity to cache.
-   * @param pgcr The PGCR data to cache.
-   */
-  cacheD2PGCR(activityId: string, pgcr: any): void {
-    this.d2PgcrCache.set(activityId, pgcr);
-  }
-
-  /**
-   * Gets a cached D2 PGCR (Post Game Carnage Report).
-   * @param activityId The ID of the activity to get.
-   * @returns The cached PGCR data, or undefined if not cached.
-   */
-  getD2PGCR(activityId: string): any {
-    return this.d2PgcrCache.get(activityId);
-  }
-
-  /**
-   * Caches a D1 PGCR (Post Game Carnage Report).
-   * @param activityId The ID of the activity to cache.
-   * @param pgcr The PGCR data to cache.
-   */
-  cacheD1PGCR(activityId: string, pgcr: any): void {
-    this.d1PgcrCache.set(activityId, pgcr);
-  }
-
-  /**
-   * Gets a cached D1 PGCR (Post Game Carnage Report).
-   * @param activityId The ID of the activity to get.
-   * @returns The cached PGCR data, or undefined if not cached.
-   */
-  getD1PGCR(activityId: string): any {
-    return this.d1PgcrCache.get(activityId);
+  async cacheD1PGCR(activityId: string, pgcr: any): Promise<void> {
+    return this.set(pgcr);
   }
 } 

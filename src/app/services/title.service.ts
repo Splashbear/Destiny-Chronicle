@@ -20,6 +20,7 @@ export interface TitleItem {
 }
 
 export interface PlayerIdentityMin {
+  game: 'D1' | 'D2';
   membershipType: number;
   membershipId: string;
   displayName: string;
@@ -153,5 +154,56 @@ export class TitleService {
     const completedList = all.filter(t => t.completed).sort((a,b)=>a.name.localeCompare(b.name));
     const lockedList    = all.filter(t => !t.completed).sort((a,b)=>a.name.localeCompare(b.name));
     return [...completedList, ...lockedList];
+  }
+
+  /**
+   * Aggregates title lists from multiple players into a single list matching the
+   * logic previously inside PlayerSearchComponent.
+   */
+  public aggregateTitles(players: PlayerIdentityMin[], titlesByPlayerKey: { [key: string]: TitleItem[] }): TitleItem[] {
+    const getKey = (p: PlayerIdentityMin) => `${p.game}|${p.membershipId}`;
+
+    // Choose reference (main) player – first D2 primary/cross-save or first D2 account
+    const mainPlayer = players.find(p => p.game === 'D2') || players[0];
+    if (!mainPlayer) return [];
+
+    const mainList = titlesByPlayerKey[getKey(mainPlayer)] || [];
+
+    const aggMap = new Map<number, TitleItem>();
+
+    const addHolder = (t: any, holder: { displayName: string; platform: string }) => {
+      if (!t.holders) t.holders = [];
+      if (!t.holders.some((h: any) => h.displayName === holder.displayName && h.platform === holder.platform)) {
+        t.holders.push(holder);
+      }
+    };
+
+    // seed map with main titles
+    for (const t of mainList) {
+      const clone = { ...t, holders: t.completed ? [{ displayName: mainPlayer.displayName, platform: mainPlayer.platform }] : [] } as TitleItem;
+      aggMap.set(t.hash, clone);
+    }
+
+    // merge titles from other players
+    for (const p of players) {
+      if (p.game === 'D1') continue;
+      if (p.membershipId === mainPlayer.membershipId) continue;
+      const list = titlesByPlayerKey[getKey(p)] || [];
+      for (const t of list) {
+        const existing = aggMap.get(t.hash);
+        if (!existing) {
+          const clone = { ...t, holders: t.completed ? [{ displayName: p.displayName, platform: p.platform }] : [] } as TitleItem;
+          aggMap.set(t.hash, clone);
+        } else {
+          if (t.completed) addHolder(existing, { displayName: p.displayName, platform: p.platform });
+          if (!existing.completed && t.completed) {
+            existing.completed = true; existing.locked = false;
+            if (!existing.icon) existing.icon = t.icon;
+          }
+        }
+      }
+    }
+
+    return Array.from(aggMap.values()).sort((a,b)=>a.name.localeCompare(b.name));
   }
 } 

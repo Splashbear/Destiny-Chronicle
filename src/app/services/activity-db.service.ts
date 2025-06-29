@@ -454,7 +454,10 @@ export class ActivityDbService extends Dexie {
       let isSoloFlawless = false;
       
       if (game === 'D2' && type === 'dungeon') {
-        const pgcr = await this.pgcrCacheService.getD2PGCR(activity.activityDetails.instanceId);
+        // Fetch the pruned PGCR (if cached). We cast to <any> to keep the
+        // existing "entries" access until the rest of the codebase is fully
+        // migrated to the typed `PrunedPgcr` shape.
+        const pgcr: any = await this.pgcrCacheService.get(activity.activityDetails.instanceId);
         if (pgcr) {
           // Check if solo (only one player)
           const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
