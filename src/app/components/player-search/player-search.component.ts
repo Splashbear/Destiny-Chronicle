@@ -1015,7 +1015,7 @@ export class PlayerSearchComponent implements OnInit {
         promise: (async () => {
           const cached = character.game === 'D1'
             ? await this.pgcrCacheService.getD1PGCR(instanceId)
-            : await this.pgcrCacheService.get(instanceId);
+            : await this.pgcrCacheService.getD2PGCR(instanceId);
 
           if (cached) {
             return cached as any;
@@ -1029,7 +1029,7 @@ export class PlayerSearchComponent implements OnInit {
           if (character.game === 'D1') {
             await this.pgcrCacheService.cacheD1PGCR(instanceId, fetched);
           } else {
-            await this.pgcrCacheService.set(fetched);
+            await this.pgcrCacheService.cacheD2PGCR(instanceId, fetched);
           }
 
           return fetched;
