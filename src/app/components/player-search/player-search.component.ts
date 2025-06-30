@@ -781,6 +781,16 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async selectPlayer(player: PlayerSearchResult) {
+    // If we already have one or more selected players, append the new
+    // account instead of wiping the whole state.  This lets users build
+    // a multi-account view incrementally (without relying on "Select All"
+    // in the modal).
+
+    if (this.selectedPlayers.length > 0) {
+      await this.appendPlayer(player as any);
+      return;
+    }
+
     // Hide the platform picker
     this.showPlatformPicker = false;
 
@@ -909,6 +919,63 @@ export class PlayerSearchComponent implements OnInit {
     } finally {
       this.loadingActivities[this.selectedDate] = false;
       this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Appends a player to the current dashboard without clearing any existing
+   * state.  Internally mirrors the logic used for the "rest" accounts in
+   * selectAllPlayersInModal().
+   */
+  private async appendPlayer(player: PlayerSearchDisplay) {
+    const incomingGame = (player as any).game || this.selectedGame;
+
+    // Deduplicate: no-op if this (game,id) combo is already present.
+    if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && (p as any).game === incomingGame)) {
+      return;
+    }
+
+    const displayPlayer: PlayerSearchDisplay = {
+      ...player,
+      game: incomingGame,
+      platform: this.getPlatformName(player.membershipType),
+      isPrimary: false
+    } as any;
+
+    this.selectedPlayers.push(displayPlayer);
+    this.selectedCharacterIds[displayPlayer.membershipId] = undefined;
+
+    // Ensure UI reflects the newly added chip immediately.
+    this.updatePlatformTabs();
+    this.cdr.detectChanges();
+
+    try {
+      await this.runWithPlayerSyncLimit(async () => {
+        await this.loadCharacterHistory(displayPlayer);
+        await this.loadGuardianFirsts(displayPlayer);
+        await this.loadDungeonSoloFirsts(displayPlayer);
+      });
+
+      // Wasted-on-Destiny can run in parallel and isn't bound to the
+      // concurrency semaphore because it hits a different host.
+      this.loadWastedTime(displayPlayer).catch(err => console.warn('[appendPlayer] WastedTime skipped', err));
+
+      // Refresh per-day activity list & stats.
+      if (this.selectedDate) {
+        await this.loadAllFilteredActivities(true);
+      }
+      await this.calculateAccountStats();
+
+    } catch (err) {
+      console.warn('[appendPlayer] Failed to load new player', err);
+    }
+
+    // Mark as synced so selectAll/initial gate logic remains correct.
+    this.syncedPlayers.add(this.getPlayerKey(displayPlayer));
+
+    if (this.firstFullSyncDone && this.selectedDate) {
+      // Refresh activities once more so aggregates include the new player
+      await this.loadAllFilteredActivities(true);
     }
   }
 
@@ -1518,9 +1585,14 @@ export class PlayerSearchComponent implements OnInit {
 
   private async processAndGroupActivities(): Promise<void> {
     if (!this.filteredActivitiesForDate.length) {
-      this.groupedActivitiesByAccount = [];
-      this.firstEverActivity = undefined;
-      this.cdr.detectChanges();
+      // If we have no activities for the current refresh **but** the UI
+      // already has data from earlier players, keep the existing view so
+      // it doesn't flicker away while the new account finishes syncing.
+      if (this.groupedActivitiesByAccount.length === 0) {
+        this.groupedActivitiesByAccount = [];
+        this.firstEverActivity = undefined;
+        this.cdr.detectChanges();
+      }
       await this.setFirstEverActivityFromDb();
       this.debugLogEarliestActivity();
       return;
