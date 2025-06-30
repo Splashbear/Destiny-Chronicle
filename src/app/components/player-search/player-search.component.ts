@@ -928,6 +928,10 @@ export class PlayerSearchComponent implements OnInit {
    * selectAllPlayersInModal().
    */
   private async appendPlayer(player: PlayerSearchDisplay) {
+    // Close the search modal immediately so the user sees the existing
+    // dashboard while the newly-queued account syncs in the background.
+    this.showPlatformPicker = false;
+
     const incomingGame = (player as any).game || this.selectedGame;
 
     // Deduplicate: no-op if this (game,id) combo is already present.
