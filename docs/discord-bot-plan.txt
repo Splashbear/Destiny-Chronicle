@@ -1,0 +1,159 @@
+Turning Destiny Chronicle into a Discord bot
+===========================================
+
+This document captures an end-to-end checklist for converting the Angular-only “Destiny Chronicle” into a Discord bot.
+
+────────────────────────────────────────
+1. Runtime & Project Skeleton
+────────────────────────────────────────
+• Node 18 + (Discord’s gateway and Bungie’s APIs both use modern TLS ciphers).
+• Create a new folder ­– e.g. `discord-bot/` – to keep server code separate from the Angular SPA.
+• Suggested packages: `discord.js` v14 (or `@discordjs/[rest|builders]`), plus `dotenv`, `axios`, `sqlite3`.
+
+Example:
+```
+mkdir discord-bot && cd discord-bot
+npm init -y
+npm install discord.js dotenv axios sqlite3
+```
+
+────────────────────────────────────────
+2. Discord Application Setup
+────────────────────────────────────────
+• https://discord.com/developers/applications → “New App” → “Bot”.
+• Copy the **BOT TOKEN** → store in `.env`.
+• Enable Gateway Intents you need:
+  – `GUILD_MESSAGES`, `DIRECT_MESSAGES`, `GUILD_MEMBERS`, `MESSAGE_CONTENT`.
+• Under “OAuth2 → URL Generator” add `bot` + `applications.commands` scopes, grant **Send Messages**, **Embed Links**, **Use External Emojis**.
+
+────────────────────────────────────────
+3. Move (or Re-use) Destiny Logic
+────────────────────────────────────────
+• Copy core Angular services (`bungie-api.service.ts`, `destiny.service.ts`, etc.) into `discord-bot/src/services/` or extract to a shared library.
+• Replace browser-only tech:
+  – HTTP: use `axios` or native `fetch`.
+  – Storage: switch from IndexedDB/Dexie to SQLite (`better-sqlite3` or `sqlite3`).
+• Schema can mimic Dexie tables (`activities`, `pgcr`, …). For scale move to Postgres/Dynamo later.
+
+────────────────────────────────────────
+4. Command Surface
+────────────────────────────────────────
+Slash commands (recommended):
+  /daily              → show today’s activities
+  /history <date>     → back-dated slice
+  /search <name>      → set/tracked player
+  /ping               → uptime
+
+Buttons / SelectMenus:
+  “◀ Prev Day” / “Next Day ▶”
+  Mode filters (Raid, Dungeon, PvP, …)
+
+────────────────────────────────────────
+5. Formatting Results
+────────────────────────────────────────
+Discord embeds map nicely to the Angular cards:
+• Embed title: `April 23 2021 – 4 h 12 m total`.
+• Fields: “Destiny 1” / “Destiny 2” lists with tricorn emojis.
+• Thumbnail/Icon: activity icon hosted on CDN or as Discord attachment.
+• Footer: “Data via Bungie.net API • Destiny Chronicle”.
+
+────────────────────────────────────────
+6. Rate Limits & Caching
+────────────────────────────────────────
+• Call Bungie endpoints lazily, cache aggressively.
+• Cache PGCRs forever (they don’t change), manifest on startup or cron.
+• Respect Bungie’s 20 req/s limit; use chunked `Promise.all`.
+
+────────────────────────────────────────
+7. Scheduling Background Syncs (Optional)
+────────────────────────────────────────
+• `node-cron` every 10 min to pre-cache new activities.
+• Daily “On This Day” push at 00:00 UTC.
+
+────────────────────────────────────────
+8. Deployment & Ops
+────────────────────────────────────────
+• Hosts: Railway, Render, Fly.io.
+• Docker: `node:18-alpine`, volume for SQLite.
+• ENV vars: `DISCORD_TOKEN`, `BUNGIE_API_KEY`, `SQLITE_PATH`.
+• CI: GitHub Actions – build, lint, deploy.
+
+────────────────────────────────────────
+9. Typical File Layout
+────────────────────────────────────────
+```
+discord-bot/
+  src/
+    index.ts             ▶ boot client & register commands
+    commands/
+      daily.ts
+      history.ts
+      ping.ts
+    interactions/
+      buttons.ts
+      menus.ts
+    services/
+      bungie.ts
+      manifest.ts
+      db.ts
+  .env
+  tsconfig.json
+```
+
+────────────────────────────────────────
+10. Minimal Boot Code (TypeScript)
+────────────────────────────────────────
+```ts
+// src/index.ts
+import 'dotenv/config';
+import {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  Interaction,
+} from 'discord.js';
+import { registerSlashCommands } from './commands/index.js';
+import { handleInteraction } from './interactions/index.js';
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+});
+
+client.once('ready', async () => {
+  console.log(`Logged in as ${client.user?.tag}`);
+  await registerSlashCommands();
+});
+
+client.on('interactionCreate', (interaction: Interaction) => {
+  if (interaction.isChatInputCommand()) handleInteraction(interaction);
+});
+
+await client.login(process.env.DISCORD_TOKEN);
+```
+
+────────────────────────────────────────
+11. Time Estimate (MVP)
+────────────────────────────────────────
+✓ 1 day   – scaffold bot & “/ping”
+✓ 1-2 days – port Destiny services & DB
+✓ 1 day   – embed formatting + rate-limit safe queries
+✓ ½ day   – deployment
+≈ 3-4 dev days total.
+
+────────────────────────────────────────
+12. Optional Extras
+────────────────────────────────────────
+• External emojis for activity icons.
+• Presence: “Playing /daily for you”.
+• Redis instead of SQLite for multi-node.
+• Slash-command permissions for heavier ops.
+
+────────────────────────────────────────
+Summary
+────────────────────────────────────────
+1. Spin up Node project with `discord.js`.
+2. Port Bungie logic; swap IndexedDB → SQLite.
+3. Mirror Angular UI via slash commands + embeds.
+4. Cache aggressively & respect rate limits.
+5. Host, keep secrets safe. 

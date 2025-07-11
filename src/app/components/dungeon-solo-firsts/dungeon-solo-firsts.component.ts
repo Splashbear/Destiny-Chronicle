@@ -11,7 +11,7 @@ import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
   styleUrls: ['./dungeon-solo-firsts.component.css']
 })
 export class DungeonSoloFirstsComponent {
-  @Input({ required: true }) solos: DungeonSoloFirst[] = [];
+  @Input() solos: DungeonSoloFirst[] = [];
 
   trackByFamily(_: number, item: DungeonSoloFirst) {
     return item.family;

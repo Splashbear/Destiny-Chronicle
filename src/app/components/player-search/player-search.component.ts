@@ -10,8 +10,8 @@ import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/l
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
-import { BehaviorSubject, Observable, of, Subject } from 'rxjs';
-import { map, shareReplay, switchMap, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of, Subject, debounceTime, from } from 'rxjs';
+import { map, shareReplay, switchMap, catchError, distinctUntilChanged, exhaustMap } from 'rxjs/operators';
 import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
@@ -23,6 +23,10 @@ import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
 import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
 import { PlaytimeService } from '../../services/playtime.service';
 import { TitleService } from '../../services/title.service';
+import { SelectedAccountsService } from '../../services/selected-accounts.service';
+import { PlatformAccount } from '../../models/platform-account.model';
+import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
+import { ExportService, ExportRequest } from '../../services/export.service';
 
 interface ActivityEntry {
   game: string;
@@ -326,7 +330,7 @@ interface PlatformStats {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingProgressComponent],
+  imports: [CommonModule, FormsModule, LoadingProgressComponent, DungeonSoloFirstsComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -374,6 +378,8 @@ export class PlayerSearchComponent implements OnInit {
   private readonly CACHE_DURATION = 5 * 60 * 1000;
   private filteredActivities$ = new BehaviorSubject<ActivityHistory[]>([]);
   private searchTerm$ = new Subject<string>();
+  /** Emits when account stats need to be recomputed; debounced in constructor */
+  private statsDebounce$ = new Subject<void>();
   loadingAccountStats = false;
   accountStats: {
     totalTime: number;
@@ -390,6 +396,8 @@ export class PlayerSearchComponent implements OnInit {
   };
   private filteredActivitiesForDate: ActivityWithMembership[] = [];
   private currentLoadToken = 0;
+  /** Incrementing token for stats calculations to avoid stale calls resetting the spinner late. */
+  private statsCalcToken = 0;
   private readonly PGCR_BATCH_SIZE = 30;
   private readonly VALIDATION_DELAY = 50;
   guardianFirsts: ActivityFirstCompletion[] = [];
@@ -525,7 +533,9 @@ export class PlayerSearchComponent implements OnInit {
     private activityIconService: ActivityIconService,
     private wastedService: WastedOnDestinyService,
     private playtimeService: PlaytimeService,
-    private titleService: TitleService
+    private titleService: TitleService,
+    private selectedAccounts: SelectedAccountsService,
+    private exportService: ExportService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -536,6 +546,14 @@ export class PlayerSearchComponent implements OnInit {
       .subscribe((term: string) => {
         this.searchUsername = term;
       });
+
+    // Debounce heavy account-stats calculation; ignore new triggers while one is running
+    this.statsDebounce$
+      .pipe(
+        debounceTime(1000),
+        exhaustMap(() => from(this.calculateAccountStats()))
+      )
+      .subscribe();
   }
 
   private updatePlatformTabs() {
@@ -901,17 +919,7 @@ export class PlayerSearchComponent implements OnInit {
       if (this.selectedDate) {
         await this.loadAllFilteredActivities(true);
       }
-      await this.calculateAccountStats();
-
-      // Mark this player as fully synced for the initial crawl
-      this.syncedPlayers.add(this.getPlayerKey(player as any));
-      if (!this.firstFullSyncDone && this.syncedPlayers.size === this.selectedPlayers.length) {
-        this.firstFullSyncDone = true;
-        // One final rebuild now that all games finished
-        if (this.selectedDate) {
-          await this.loadAllFilteredActivities(true);
-        }
-      }
+      this.statsDebounce$.next();
     } catch (error) {
       this.selectedPlayers = [];
       delete this.selectedCharacterIds[player.membershipId];
@@ -968,7 +976,7 @@ export class PlayerSearchComponent implements OnInit {
       if (this.selectedDate) {
         await this.loadAllFilteredActivities(true);
       }
-      await this.calculateAccountStats();
+      this.statsDebounce$.next();
 
     } catch (err) {
       console.warn('[appendPlayer] Failed to load new player', err);
@@ -981,6 +989,15 @@ export class PlayerSearchComponent implements OnInit {
       // Refresh activities once more so aggregates include the new player
       await this.loadAllFilteredActivities(true);
     }
+
+    // Also push into global SelectedAccountsService so other components can react.
+    const acc: PlatformAccount = {
+      platformType: player.membershipType,
+      membershipId: player.membershipId,
+      displayName: player.displayName,
+      platformGroups: [],
+    };
+    this.selectedAccounts.add(acc);
   }
 
   async loadCharacterHistory(player: PlayerSearchResult | PlayerSearchDisplay) {
@@ -1273,12 +1290,13 @@ export class PlayerSearchComponent implements OnInit {
           return toValidate;
         } else {
           const response = await firstValueFrom(
+            // Correct parameter order: mode first, then page index
             this.bungieService.getActivityHistory(
               character.membershipType,
               character.membershipId,
               character.characterId,
-              page,
-              character.mode
+              character.mode,   // mode parameter (optional)
+              page              // page index for pagination
             )
           );
 
@@ -1370,7 +1388,7 @@ export class PlayerSearchComponent implements OnInit {
       
       await this.activityDb.addActivities(storedActivities);
       // Update totals in background (no await to avoid slowing batch loop)
-      this.calculateAccountStats();
+      this.statsDebounce$.next();
       console.log(`[DEBUG] Stored ${storedActivities.length} new activities for character ${character.characterId} (${character.game})`);
       this.cdr.detectChanges();
     }
@@ -1446,47 +1464,13 @@ export class PlayerSearchComponent implements OnInit {
 
       let newActivities: StoredActivity[] = [];
       
-      // Fetch activities for all relevant modes
-      const modes = [
-        0,   // None (PvE)
-        1,   // Story
-        2,   // Strike
-        3,   // Raid
-        4,   // AllPvP
-        5,   // Patrol
-        6,   // AllPvE
-        7,   // Reserved7
-        8,   // Reserved8
-        9,   // Reserved9
-        10,  // Control
-        12,  // Clash
-        15,  // Iron Banner
-        16,  // Nightfall
-        17,  // PrestigeNightfall
-        18,  // AllStrikes
-        19,  // TrialsOfOsiris
-        22,  // Survival
-        24,  // Rumble
-        25,  // AllMayhem
-        31,  // Supremacy
-        32,  // PrivateMatchesAll
-        37,  // Survival
-        38,  // Countdown
-        39,  // TrialsOfTheNine
-        40,  // Breakthrough
-        41,  // Doubles
-        42,  // PrivateMatchesClash
-        43,  // PrivateMatchesControl
-        44,  // PrivateMatchesSupremacy
-        45,  // Gambit
-        46,  // AllPvECompetitive
-        48,  // Showdown
-        49,  // Lockdown
-        50,  // Momentum
-        51,  // CountdownClassic
-        52,  // Elimination
-        53   // Rift
-      ];
+      // Select mode list based on game to minimize unnecessary API calls.
+      // Destiny 1 requires individual mode pagination, Destiny 2 can use
+      // a single aggregated request (mode undefined) which Bungie returns
+      // with all activities.
+      const modes: (number | undefined)[] = character.game === 'D1'
+        ? [6, 4]          // PvE and PvP cover all activity types
+        : [undefined];    // D2 – aggregated
 
       for (const mode of modes) {
         let page = 0;
@@ -1710,7 +1694,7 @@ export class PlayerSearchComponent implements OnInit {
       this.processAndGroupActivities();
       this.updateActivityDisplay();
       // Recalculate account-level statistics now that filtered activities are available
-      await this.calculateAccountStats();
+      this.statsDebounce$.next();
     } catch (error) {
       // handle error
     } finally {
@@ -1914,6 +1898,7 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async calculateAccountStats() {
+    const token = ++this.statsCalcToken; // capture token for this invocation
     this.loadingAccountStats = true;
     this.loadingGuardianFirsts = true;
     let totalTime = 0;
@@ -2033,7 +2018,20 @@ export class PlayerSearchComponent implements OnInit {
         const platformName = pl.platform;
         // Use game as part of the key so Destiny 1 and Destiny 2 accounts on the same platform don't overwrite each other
         const key = `${pl.game}-${platformName}`;
-        const time = this.wastedTimes[this.getPlayerKey(pl)] || 0;
+        // Prefer WastedOnDestiny playtime (seconds).  If unavailable (e.g. Destiny 1
+        // accounts) fall back to the sum of `minutesPlayedTotal` (D2) or
+        // `minutesPlayed` (D1) reported on each character profile.
+        let time = this.wastedTimes[this.getPlayerKey(pl)] || 0;
+        if (time === 0) {
+          const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
+          if (chars && chars.length > 0) {
+            const minutes = chars.reduce((sum, c) => {
+              const min = Number(c.minutesPlayedTotal ?? c.minutesPlayed ?? 0);
+              return sum + (isNaN(min) ? 0 : min);
+            }, 0);
+            time = minutes * 60; // convert to seconds to keep units consistent
+          }
+        }
         const seals = this.wastedSeals[this.getPlayerKey(pl)] || 0;
         const acts = await this.activityDb.countActivitiesForMemberships([pl.membershipId]);
 
@@ -2074,9 +2072,12 @@ export class PlayerSearchComponent implements OnInit {
           }
         }
       }
-      // Exclude platforms with no recorded play time or activities to keep the UI clean
-      this.perPlatformStats = Object.values(platformStatsMap)
-        .filter(s => (s.totalTime || 0) > 0 || (s.totalActivities || 0) > 0);
+      // Include a platform row if it has *either* play time OR activities so newly
+      // added Destiny 1 accounts (play-time unknown) still appear immediately once
+      // activities sync in.
+      this.perPlatformStats = Object.values(platformStatsMap).filter(s =>
+        (s.totalTime || 0) > 0 || (s.totalActivities || 0) > 0
+      );
 
       // Extend accountStats to include seals
       this.accountStats = {
@@ -2089,7 +2090,10 @@ export class PlayerSearchComponent implements OnInit {
     } catch (error) {
       console.error('[GuardianFirsts][ERROR] Error in calculateAccountStats:', error);
     } finally {
-      this.loadingAccountStats = false;
+      // Only clear the spinner if this is the newest (last) in-flight calculation.
+      if (token === this.statsCalcToken) {
+        this.loadingAccountStats = false;
+      }
       this.loadingGuardianFirsts = false;
       this.cdr.detectChanges();
     }
@@ -2446,7 +2450,10 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   removePlayer(index: number) {
-    this.selectedPlayers.splice(index, 1);
+    const removed = this.selectedPlayers.splice(index, 1)[0];
+    if (removed) {
+      this.selectedAccounts.remove(removed.membershipId);
+    }
     // Recalculate account stats when a player is removed
     this.calculateAccountStats();
     this.cdr.detectChanges();
@@ -3511,7 +3518,7 @@ export class PlayerSearchComponent implements OnInit {
       this.wastedTimes[key] = 0;
       this.wastedSeals[key] = 0;
     } finally {
-      this.calculateAccountStats();
+      this.statsDebounce$.next();
     }
   }
 
@@ -3823,5 +3830,39 @@ export class PlayerSearchComponent implements OnInit {
     }
     // reset to placeholder
     selectEl.value = '';
+  }
+
+  // ------------------------------------------------------------------
+  // Export helpers
+  // ------------------------------------------------------------------
+  async exportActivities(): Promise<void> {
+    if (!this.selectedDate) {
+      console.warn('[Export] No date selected');
+      return;
+    }
+
+    const [year, month, day] = this.selectedDate.split('-').map(Number);
+    // Build start & end for that day UTC
+    const from = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+    const to   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
+
+    const req: ExportRequest = {
+      from,
+      to,
+      types: [],       // all modes
+      platforms: [],   // all selected
+      includeSummaries: false,
+      includeFirsts: false,
+      includeActivities: true,
+    } as const;
+
+    let payload;
+    if (this.filteredActivitiesForDate?.length) {
+      payload = { activities: this.filteredActivitiesForDate } as any;
+    } else {
+      payload = await this.exportService.buildPayload(req);
+    }
+
+    this.exportService.downloadExcel(payload);
   }
 }

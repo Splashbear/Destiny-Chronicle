@@ -126,9 +126,13 @@
         <!-- Activities Tab -->
         <div *ngIf="activeTab === 'activities'">
           <!-- Account Stats Summary -->
-          <div *ngIf="!loadingAccountStats && (accountStats.totalActivityCount > 0 || selectedPlayers.length > 0)" class="mb-6">
+          <div *ngIf="accountStats.totalActivityCount > 0 || selectedPlayers.length > 0" class="mb-6">
             <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4">
-              <h3 class="text-lg font-semibold text-white mb-2">Account Summary</h3>
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-lg font-semibold text-white">Account Summary</h3>
+                <button (click)="exportActivities()" class="d2-btn bg-green-600 hover:bg-green-500 text-xs px-3 py-1">Export</button>
+                <span *ngIf="loadingAccountStats" class="ml-3 animate-spin text-slate-300"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12a8 8 0 018-8" /></svg></span>
+              </div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="stat-item">
                   <strong>Total Time Played:</strong>
@@ -510,6 +514,12 @@
                     <div *ngIf="getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
                       No raid firsts found for D1.
                     </div>
+
+                    <!-- Dungeon Solo / Flawless grid -->
+                    <app-dungeon-solo-firsts
+                      *ngIf="dungeonSoloFirsts[player.membershipId]?.length"
+                      [solos]="dungeonSoloFirsts[player.membershipId]">
+                    </app-dungeon-solo-firsts>
                   </ng-container>
                   <!-- D2 Firsts -->
                   <ng-container *ngIf="!isD1Player(player)">
