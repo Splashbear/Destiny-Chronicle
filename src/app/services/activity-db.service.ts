@@ -239,13 +239,12 @@ export class ActivityDbService extends Dexie {
 
       if (isDuplicateIndex) {
         console.warn('[Dexie] Duplicate index detected – deleting database and reloading');
-        try {
-          await Dexie.delete('DestinyChronicleDb');
-        } catch (delErr) {
-          console.warn('[Dexie] Failed to delete DB via Dexie.delete:', delErr);
-        }
-        // Give the deletion a tick, then reload the page.
-        setTimeout(() => window.location.reload(), 100);
+        Dexie.delete('DestinyChronicleDb').catch((err) => {
+          console.warn('[Dexie] Failed to delete DB via Dexie.delete:', err);
+        }).finally(() => {
+          // Give the deletion a tick, then reload the page.
+          setTimeout(() => window.location.reload(), 100);
+        });
       }
 
       throw error;
