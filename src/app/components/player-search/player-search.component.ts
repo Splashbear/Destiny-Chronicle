@@ -27,6 +27,7 @@ import { SelectedAccountsService } from '../../services/selected-accounts.servic
 import { PlatformAccount } from '../../models/platform-account.model';
 import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
 import { ExportService, ExportRequest } from '../../services/export.service';
+import { AchievementsService, AchievementStatus } from '../../services/achievements.service';
 
 interface ActivityEntry {
   game: string;
@@ -406,7 +407,7 @@ export class PlayerSearchComponent implements OnInit {
   favoriteAccounts: FavoriteAccount[] = [];
   apiAvailable: boolean = true;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' | 'achievements' = 'activities';
   activeFirstsTab: string = 'all';
   platformTabs: string[] = [];
   playerTitles: { [key: string]: any } = {};
@@ -446,6 +447,11 @@ export class PlayerSearchComponent implements OnInit {
   titleSort: 'alpha' | 'release' = 'alpha';
   titleFilter: 'all' | 'current' | 'legacy' = 'all';
   loadingTitlesOverall = false;
+  // -----------------------------------------------
+  // Achievements tab
+  achievementsList: AchievementStatus[] = [];
+  loadingAchievements: boolean = false;
+  // -----------------------------------------------
   private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
   private syncedPlayers: Set<string> = new Set();
 
@@ -535,7 +541,8 @@ export class PlayerSearchComponent implements OnInit {
     private playtimeService: PlaytimeService,
     private titleService: TitleService,
     private selectedAccounts: SelectedAccountsService,
-    private exportService: ExportService
+    private exportService: ExportService,
+    private achievementsService: AchievementsService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -746,12 +753,16 @@ export class PlayerSearchComponent implements OnInit {
         const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
         const memberships = user.destinyMemberships as any[];
         for (const m of memberships) {
+          const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
+            ? m.crossSaveOverride
+            : m.membershipType;
+
           players.push({
             displayName: bungieName,
             membershipId: m.membershipId,
-            membershipType: m.membershipType,
+            membershipType: effectiveType,
             game: 'D2',
-            platform: this.getPlatformName(m.membershipType),
+            platform: this.getPlatformName(effectiveType),
             isCrossSavePrimary: m.isCrossSavePrimary,
             crossSaveOverride: m.crossSaveOverride
           } as PlayerSearchDisplay);
@@ -860,9 +871,14 @@ export class PlayerSearchComponent implements OnInit {
           const legacyPlayer: PlayerSearchDisplay = {
             displayName: player.displayName,
             membershipId: prof.membershipId,
-            membershipType: prof.membershipType,
+            // Convert BungieNext (254) to concrete platform via crossSaveOverride if available
+            membershipType: (prof.membershipType === 254 && prof.crossSaveOverride && prof.crossSaveOverride > 0)
+              ? prof.crossSaveOverride
+              : prof.membershipType,
             game: 'D2',
-            platform: this.getPlatformName(prof.membershipType),
+            platform: this.getPlatformName((prof.membershipType === 254 && prof.crossSaveOverride && prof.crossSaveOverride > 0)
+              ? prof.crossSaveOverride
+              : prof.membershipType),
             isPrimary: false
           } as any;
           // Deduplicate
@@ -2392,12 +2408,16 @@ export class PlayerSearchComponent implements OnInit {
             const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
             const memberships = user.destinyMemberships as any[];
             for (const m of memberships) {
+              const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
+                ? m.crossSaveOverride
+                : m.membershipType;
+
               players.push({
                 displayName: bungieName,
                 membershipId: m.membershipId,
-                membershipType: m.membershipType,
+                membershipType: effectiveType,
                 game: 'D2',
-                platform: this.getPlatformName(m.membershipType),
+                platform: this.getPlatformName(effectiveType),
                 isCrossSavePrimary: m.isCrossSavePrimary,
                 crossSaveOverride: m.crossSaveOverride
               } as PlayerSearchDisplay);
@@ -3196,7 +3216,7 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
+  private async onTabChangeLegacy(tab: 'activities' | 'firsts' | 'titles' | 'achievements') {
     this.activeTab = tab;
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
       this.loadingTitlesOverall = true;
@@ -3450,6 +3470,11 @@ export class PlayerSearchComponent implements OnInit {
       );
       this.loadingTitlesOverall = false;
       this.cdr.detectChanges();
+    } else if (tab === 'achievements') {
+      if (!this.achievementsTargetKey) this.chooseDefaultAchievementsTarget();
+      if (this.achievementsTarget) {
+        await this.loadAchievementsForPlayer(this.achievementsTarget);
+      }
     }
   }
 
@@ -3710,7 +3735,7 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   /** Returns a unique key for the given player independent of case */
-  private getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
+  public getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
     return `${(p as any).game || 'D2'}|${p.membershipId}`;
   }
 
@@ -3864,5 +3889,331 @@ export class PlayerSearchComponent implements OnInit {
     }
 
     this.exportService.downloadExcel(payload);
+  }
+
+  private async loadAchievements(): Promise<void> {
+     // For now show achievements for the first D2 player (cross-save primary if any)
+     const target = this.selectedPlayers.find(p => p.game === 'D2');
+     if (!target) {
+       this.achievementsList = [];
+       return;
+     }
+     try {
+       this.loadingAchievements = true;
+       this.achievementsList = await this.achievementsService.getAchievementStatuses(target.membershipType, target.membershipId);
+     } catch (err) {
+       console.error('[Achievements] Failed to load achievements', err);
+       this.achievementsList = [];
+     } finally {
+       this.loadingAchievements = false;
+       this.cdr.detectChanges();
+     }
+  }
+
+  // ... inside class ...
+  /** Which player's achievements are currently displayed (membershipId|game key) */
+  public achievementsTargetKey: string | null = null;
+
+  /** Returns PlayerSearchDisplay for current achievements target */
+  private get achievementsTarget(): PlayerSearchDisplay | undefined {
+    if (!this.achievementsTargetKey) return undefined;
+    return this.selectedPlayers.find(p => this.getPlayerKey(p) === this.achievementsTargetKey);
+  }
+
+  private chooseDefaultAchievementsTarget(): void {
+    // Prefer primary cross-save D2 account
+    const d2Players = this.selectedPlayers.filter(p => p.game === 'D2');
+    if (d2Players.length === 0) { this.achievementsTargetKey = null; return; }
+
+    let primary = d2Players.find(p => (p as any).isPrimary);
+    if (!primary) primary = d2Players[0];
+    this.achievementsTargetKey = this.getPlayerKey(primary);
+  }
+
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'achievements') {
+    this.activeTab = tab;
+    if (tab === 'titles' && this.selectedPlayers.length > 0) {
+      this.loadingTitlesOverall = true;
+      for (const player of this.selectedPlayers) {
+        if (this.isD1Player(player)) continue; // skip Destiny 1 profiles (no titles)
+        const pKey = this.getPlayerKey(player);
+        if (!this.playerTitles[pKey]) {
+          this.loadingTitles[pKey] = true;
+          try {
+            if (!this.manifest.isLoadedSync) {
+              await this.manifest.isLoaded().toPromise();
+            }
+            const presentationNodes = this.manifest.getPresentationNodes();
+            // Hashes for current and legacy titles
+            const currentTitlesHash = 616318467;
+            const legacyTitlesHash = 1881970629;
+            const getChildNodes = (parentHash: number) => {
+              const parentNode = presentationNodes[parentHash];
+              if (!parentNode || !parentNode.children || !Array.isArray(parentNode.children.presentationNodes)) return [];
+              return parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean);
+            };
+            const currentTitleNodes = getChildNodes(currentTitlesHash);
+            const legacyTitleNodes = getChildNodes(legacyTitlesHash);
+            // Gather all title nodes (current + legacy)
+            const titleParentHashes = [616318467, 1881970629]; // Current and Legacy Titles
+            let allTitleNodes: any[] = [];
+            for (const parentHash of titleParentHashes) {
+              const parentNode = presentationNodes[parentHash];
+              if (!parentNode || !parentNode.children || !Array.isArray(parentNode.children.presentationNodes)) continue;
+              allTitleNodes.push(...parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean));
+            }
+            // Get player records
+            const response = await firstValueFrom(this.bungieService.getPlayerTitles(player.membershipType, player.membershipId));
+            const records = response.Response?.profileRecords?.data?.records || {};
+            const charRecords = response.Response?.characterRecords?.data as { [characterId: string]: { records?: { [key: string]: TitleRecord } } } || {};
+            // Debug: Output player records
+            console.log('[TITLES DEBUG] Player Records:', records);
+            // Debug: Print all completionRecordHash values from manifest title nodes
+            for (const node of allTitleNodes) {
+              if (!node || !node.completionRecordHash) continue;
+              let hasRecord = !!records[node.completionRecordHash];
+              if (!hasRecord) {
+                // Check all character records for this hash
+                for (const charId of Object.keys(charRecords)) {
+                  const charRecordObj = charRecords[charId];
+                  if (charRecordObj?.records && charRecordObj.records[node.completionRecordHash]) {
+                    hasRecord = true;
+                    console.warn(`[TITLES DEBUG] Manifest node: ${node.displayProperties?.name} (completionRecordHash: ${node.completionRecordHash}) - FOUND in characterRecords for characterId: ${charId}`);
+                    break;
+                  }
+                }
+              }
+              if (!hasRecord) {
+                console.log(`[TITLES DEBUG] Manifest node: ${node.displayProperties?.name} (completionRecordHash: ${node.completionRecordHash}) - In player records: false`);
+              }
+            }
+            // Build a single list of titles (show all manifest nodes, even if no record)
+            const titleMap: { [key: string]: any } = {};
+            for (const node of allTitleNodes) {
+              if (!node || !node.completionRecordHash) {
+                console.warn('[TITLES DEBUG] Skipping node with missing completionRecordHash:', node);
+                continue;
+              }
+              let record = records[node.completionRecordHash];
+              let foundInCharacter = false;
+              if (!record) {
+                for (const charId of Object.keys(charRecords)) {
+                  const charRecordObj = charRecords[charId];
+                  if (charRecordObj?.records && charRecordObj.records[node.completionRecordHash]) {
+                    record = charRecordObj.records[node.completionRecordHash];
+                    foundInCharacter = true;
+                    break;
+                  }
+                }
+              }
+              // Get the DestinyRecordDefinition for the completionRecordHash
+              const recordDef = this.manifest.getTitleDefs()[node.completionRecordHash];
+              // Prefer special mapping name if present
+              const special = SPECIAL_TITLES[node.completionRecordHash] || SPECIAL_TITLES[node.hash];
+              let displayName = special ? special.name : (recordDef?.titleInfo?.titlesByGender?.Male || node.displayProperties?.name || 'Unknown');
+              const normalizedName = this.normalizeTitleName(displayName);
+              // Use Bungie bitmask for completion if record exists
+              const isCompleted = record ? ((record.state & 1) !== 0) : false;
+              // Gilding logic for all eligible titles
+              let isGilded = false;
+              let timesGilded = 0;
+              let gildedIcon: string | undefined = undefined;
+              let mappingExists = false;
+              // Use special-case hash for current Conqueror/Flawless, otherwise manifest's hash
+              let gildingTrackingHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
+              let isGildable = !!gildingTrackingHash;
+              if (isGildable && isCompleted) {
+                mappingExists = !!this.GILDED_SEAL_IMAGE_MAP[normalizedName];
+                // Look up the gilding tracking record in both profile and character records
+                let gildingRecord = records[gildingTrackingHash];
+                if (!gildingRecord) {
+                  for (const charId of Object.keys(charRecords)) {
+                    const charRecordObj = charRecords[charId];
+                    if (charRecordObj?.records && charRecordObj.records[gildingTrackingHash]) {
+                      gildingRecord = charRecordObj.records[gildingTrackingHash];
+                      break;
+                    }
+                  }
+                }
+                if (gildingRecord) {
+                  timesGilded = gildingRecord.completedCount || 0;
+                  isGilded = timesGilded > 0;
+                  if (isGilded && mappingExists) {
+                    gildedIcon = this.GILDED_SEAL_IMAGE_MAP[normalizedName];
+                  }
+                  console.log(`[TITLES DEBUG] Gilded status for ${displayName}: isGilded=${isGilded}, timesGilded=${timesGilded}, gildedIcon=${gildedIcon}`);
+                } else {
+                  console.warn(`[TITLES DEBUG] No valid gildingRecord for ${displayName}`);
+                }
+              } else if (isGildable && !isCompleted) {
+                // If not completed, do not show gilded info
+                console.log(`[TITLES DEBUG] ${displayName} is not completed, skipping gilded info.`);
+              }
+              // Debug: Output each title's record and completion logic
+              console.log('[TITLES DEBUG] Seal:', displayName, 'completionRecordHash:', node.completionRecordHash, 'State:', record?.state, 'Completed:', isCompleted, foundInCharacter ? '(Found in characterRecords)' : '');
+              // Use a unique key for deduplication: displayName + completionRecordHash
+              const uniqueKey = `${displayName}#${node.completionRecordHash}`;
+              if (!titleMap[uniqueKey]) {
+                titleMap[uniqueKey] = {
+                  hash: node.completionRecordHash,
+                  name: displayName,
+                  icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+                  completed: isCompleted,
+                  isGilded,
+                  timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
+                  gildedIcon: (isGilded && gildedIcon) ? gildedIcon : undefined,
+                  locked: !isCompleted,
+                  missingRecord: !record,
+                  altIcon: (() => {
+                    const frames = node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames;
+                    if (frames && frames.length > 0) {
+                      return `https://www.bungie.net${frames[frames.length - 1]}`; // grey/silver variant
+                    }
+                    return undefined;
+                  })(),
+                  legacy: (node.parentNodeHashes || []).includes(1881970629),
+                  releaseRank: RELEASE_ORDER[normalizedName] || 0,
+                  normalized: normalizedName,
+                };
+              }
+            }
+            // Split into completed and locked, then sort
+            const allTitles = Object.values(titleMap);
+            const completed = allTitles.filter((t: any) => t.completed).sort((a: any, b: any) => a.name.localeCompare(b.name));
+            const locked = allTitles.filter((t: any) => !t.completed).sort((a: any, b: any) => a.name.localeCompare(b.name));
+            this.playerTitles[pKey] = [...completed, ...locked];
+            // Debug: Print all record hashes for the current user
+            const motHashes = ['126238604', '3175660257']; // MoT 2024, 2023
+            const recordKeys = Object.keys(records);
+            console.log('[TITLES DEBUG] All player record hashes:', recordKeys);
+            for (const motHash of motHashes) {
+              let found = !!records[motHash];
+              if (!found) {
+                for (const charId of Object.keys(charRecords)) {
+                  const charRecordObj = charRecords[charId];
+                  if (charRecordObj?.records && charRecordObj.records[motHash]) {
+                    found = true;
+                    console.warn(`[TITLES DEBUG] MoT record FOUND in characterRecords for hash: ${motHash} (characterId: ${charId})`);
+                    break;
+                  }
+                }
+              }
+              if (!found) {
+                console.warn(`[TITLES DEBUG] MoT record missing for hash: ${motHash}`);
+              } else {
+                console.log(`[TITLES DEBUG] MoT record found for hash: ${motHash}`);
+              }
+            }
+            // Add MoT 2024 debug info for this player
+            this.motDebug[player.membershipId] = records['126238604'] || null;
+          } catch (err) {
+            // Store an empty list when we fail to fetch titles so downstream code can safely iterate
+            this.playerTitles[pKey] = [];
+          } finally {
+            this.loadingTitles[pKey] = false;
+            this.cdr.markForCheck();
+          }
+        }
+      }
+      // After fetching titles for all players, create aggregatedTitles based on main/cross-save account.
+      // Choose first Destiny 2 profile as the reference account for ordering
+      const mainPlayer = (this.selectedPlayers.find(p => !this.isD1Player(p) && p.isPrimary) ||
+                          this.crossSavePlayer ||
+                          this.selectedPlayers.find(p => !this.isD1Player(p))) as typeof this.selectedPlayers[0];
+      const mainList = mainPlayer ? (this.playerTitles[this.getPlayerKey(mainPlayer)] || []) : [];
+
+      // Build a map keyed by title name to avoid duplicates and to merge data cleanly
+      const aggMap = new Map<number, any>();
+
+      const addHolder = (titleObj: any, holder: { displayName: string; platform: string }) => {
+        if (!titleObj.holders) titleObj.holders = [];
+        titleObj.holders.push(holder);
+      };
+
+      // Seed with the main account's titles (completed **and** locked)
+      for (const t of mainList as any[]) {
+        // Skip duplicates; prefer a completed version over locked if both exist
+        const existing = aggMap.get(t.hash);
+        if (!existing) {
+          // Clone to avoid mutating original reference
+          const clone = { ...t, holders: [] as { displayName: string; platform: string }[] };
+          if (t.completed) {
+            addHolder(clone, { displayName: mainPlayer.displayName, platform: mainPlayer.platform });
+          }
+          aggMap.set(t.hash, clone);
+        } else if (!existing.completed && t.completed) {
+          // Replace locked placeholder with completed version
+          const clone = { ...t, holders: existing.holders };
+          if (clone.holders.length === 0) {
+            addHolder(clone, { displayName: mainPlayer.displayName, platform: mainPlayer.platform });
+          }
+          aggMap.set(t.hash, clone);
+        }
+      }
+
+      // Merge in titles from the rest of the selected players
+      for (const p of this.selectedPlayers) {
+        if (this.isD1Player(p)) continue; // skip D1 accounts entirely
+        if (p.membershipId === mainPlayer.membershipId) continue;
+        const list = this.playerTitles[this.getPlayerKey(p)] || [];
+        for (const t of list as any[]) {
+          const existing = aggMap.get(t.hash);
+          if (!existing) {
+            // Clone and seed map (even if locked) so other players can add themselves as holders later
+            const clone = { ...t, holders: [] as { displayName: string; platform: string }[] };
+            aggMap.set(t.hash, clone);
+          }
+          // If this player has completed the title, record them as a holder
+          if (t.completed) {
+            const ex = aggMap.get(t.hash)!;
+            addHolder(ex, { displayName: p.displayName, platform: p.platform });
+            // Upgrade to completed if previously locked
+            if (!ex.completed) {
+              ex.completed = true;
+              ex.locked = false;
+              if (!ex.icon) ex.icon = t.icon;
+            }
+          }
+        }
+      }
+
+      // Rebuild aggregatedTitles via the new service
+      this.aggregatedTitles = this.titleService.aggregateTitles(
+        this.selectedPlayers as any,
+        this.playerTitles as any
+      );
+      this.loadingTitlesOverall = false;
+      this.cdr.detectChanges();
+    } else if (tab === 'achievements') {
+      if (!this.achievementsTargetKey) this.chooseDefaultAchievementsTarget();
+      if (this.achievementsTarget) {
+        await this.loadAchievementsForPlayer(this.achievementsTarget);
+      }
+    }
+  }
+
+  async setAchievementsTarget(playerKey: string): Promise<void> {
+    this.achievementsTargetKey = playerKey;
+    const p = this.achievementsTarget;
+    if (p) await this.loadAchievementsForPlayer(p);
+  }
+
+  private async loadAchievementsForPlayer(player: PlayerSearchDisplay): Promise<void> {
+    if (player.game !== 'D2') { this.achievementsList = []; return; }
+    try {
+      this.loadingAchievements = true;
+      this.achievementsList = await this.achievementsService.getAchievementStatuses(player.membershipType, player.membershipId);
+    } catch (err) {
+      console.error('[Achievements] Failed', err);
+      this.achievementsList = [];
+    } finally {
+      this.loadingAchievements = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // Convenience getter for template (avoids forbidden arrow functions)
+  get d2Players(): PlayerSearchDisplay[] {
+    return this.selectedPlayers.filter(p => p.game === 'D2');
   }
 }

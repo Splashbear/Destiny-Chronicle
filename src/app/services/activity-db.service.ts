@@ -213,7 +213,7 @@ export class ActivityDbService extends Dexie {
       this.version(4).stores({
         activities: '++id, membershipId, membershipType, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
                    '[membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId], ' +
-                   '[game+membershipId+characterId], membershipType',
+                   '[game+membershipId+characterId]',
         favorites: 'membershipId, game'
       }).upgrade(tx => {
         console.log('[Dexie] Upgrading to version 4 (membershipType index)');
