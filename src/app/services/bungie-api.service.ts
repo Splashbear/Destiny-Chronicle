@@ -511,6 +511,17 @@ export class BungieApiService {
     );
   }
 
+  // Fetch both ProfileRecords (900) and CharacterRecords (1000) in a single request – used for achievements & triumphs
+  getPlayerRecords(membershipType: number, membershipId: string) {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900,1000`;
+    return this.http.get<BungieResponse<any>>(url, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('[DEBUG] Error fetching player records (900/1000):', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
   private handleError(error: HttpErrorResponse) {
     console.error('Bungie API Error:', error);
     let errorMessage = 'An error occurred';

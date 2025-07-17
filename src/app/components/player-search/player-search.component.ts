@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
-import { LoadingProgressComponent, LoadingProgress } from '../loading-progress/loading-progress.component';
+import { LoadingProgress } from '../loading-progress/loading-progress.component';
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
@@ -331,7 +331,7 @@ interface PlatformStats {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingProgressComponent, DungeonSoloFirstsComponent],
+  imports: [CommonModule, FormsModule, DungeonSoloFirstsComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })

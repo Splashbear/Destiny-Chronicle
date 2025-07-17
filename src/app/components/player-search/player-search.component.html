@@ -120,6 +120,10 @@
                     class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'titles'}">
               Titles
             </button>
+            <button (click)="onTabChange('achievements')"
+                    class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'achievements'}">
+              Achievements
+            </button>
           </div>
         </div>
 
@@ -638,6 +642,33 @@
             </div>
           </div>
         </ng-container>
+
+        <!-- Achievements Tab -->
+        <div *ngIf="activeTab === 'achievements'">
+          <!-- Account picker when multiple D2 players -->
+          <div *ngIf="d2Players.length > 1" class="mb-4">
+            <label class="text-sm text-slate-300 mr-2">Account:</label>
+            <select [(ngModel)]="achievementsTargetKey" (change)="setAchievementsTarget($any($event.target).value)"
+                    class="px-2 py-1 bg-slate-700/90 text-white rounded border border-slate-600 text-sm">
+              <option *ngFor="let p of d2Players" [value]="getPlayerKey(p)">{{ p.displayName }} ({{ p.platform }})</option>
+            </select>
+          </div>
+          <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+            Achievements
+            <span *ngIf="loadingAchievements" class="ml-2 animate-spin text-slate-300"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12a8 8 0 018-8" /></svg></span>
+          </h3>
+          <div *ngIf="achievementsList.length === 0 && !loadingAchievements" class="text-slate-400">No achievements data.</div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4" *ngIf="achievementsList.length > 0">
+            <div *ngFor="let ach of achievementsList" class="flex items-center gap-2 p-2 rounded border" [ngClass]="ach.unlocked ? 'border-green-500 bg-slate-700/60' : 'border-slate-600 bg-slate-800/70'">
+              <svg *ngIf="ach.unlocked" class="w-5 h-5 text-green-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8.414 15l-4.121-4.121a1 1 0 011.414-1.414L8.414 12.172l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+              <svg *ngIf="!ach.unlocked" class="w-5 h-5 text-slate-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM2 10a8 8 0 1116 0A8 8 0 012 10z" /></svg>
+              <div>
+                <div class="text-sm text-slate-200 truncate" title="{{ ach.name }}">{{ ach.name }}</div>
+                <div class="text-xs text-slate-400" *ngIf="ach.gamerscore">{{ ach.gamerscore }} GS</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       <!-- Left Sidebar: On This Day -->
       <div class="col-span-12 xl:col-span-3 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">

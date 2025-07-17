@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { BungieApiService } from './bungie-api.service';
+import { BungieApiService, BungieResponse } from './bungie-api.service';
 
 export interface AchievementMeta {
   hash: number;
@@ -12,6 +12,21 @@ export interface AchievementMeta {
 
 export interface AchievementStatus extends AchievementMeta {
   unlocked: boolean;
+}
+
+interface RecordsResponse {
+  profileRecords?: {
+    data?: {
+      records?: { [hash: string]: { state: number } };
+    };
+  };
+  characterRecords?: {
+    data?: {
+      [characterId: string]: {
+        records?: { [hash: string]: { state: number } };
+      };
+    };
+  };
 }
 
 // TODO: Fill out the full list. Only a small starter set is provided so the feature compiles.
@@ -33,7 +48,7 @@ export class AchievementsService {
    * Returns the full list of Destiny 2 achievements with an `unlocked` flag for the given profile.
    */
   async getAchievementStatuses(membershipType: number, membershipId: string): Promise<AchievementStatus[]> {
-    const response = await firstValueFrom(this.bungie.getPlayerRecords(membershipType, membershipId));
+    const response: BungieResponse<RecordsResponse> = await firstValueFrom(this.bungie.getPlayerRecords(membershipType, membershipId));
     const profileRecords = response?.Response?.profileRecords?.data?.records || {};
     const charRecordsData = response?.Response?.characterRecords?.data || {};
 
