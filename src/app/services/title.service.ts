@@ -206,4 +206,104 @@ export class TitleService {
 
     return Array.from(aggMap.values()).sort((a,b)=>a.name.localeCompare(b.name));
   }
+
+  /**
+   * Checks for new titles by comparing current manifest with cached data
+   * Returns information about new titles found
+   */
+  async checkForNewTitles(): Promise<{ newTitles: TitleItem[], totalTitles: number }> {
+    // Load manifest if not yet ready
+    if (!this.manifest.isLoadedSync) {
+      await this.manifest.isLoaded().toPromise();
+    }
+
+    const presentationNodes = this.manifest.getPresentationNodes();
+    
+    // Get all title nodes (current + legacy)
+    const titleParentHashes = [616318467, 1881970629];
+    let allTitleNodes: any[] = [];
+    for (const parentHash of titleParentHashes) {
+      const parentNode = presentationNodes[parentHash];
+      if (!parentNode?.children?.presentationNodes) continue;
+      allTitleNodes.push(...parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean));
+    }
+
+    const totalTitles = allTitleNodes.length;
+    const newTitles: TitleItem[] = [];
+
+    // For now, just return the total count since we don't have a way to track "new" titles
+    // In the future, this could compare against a cached list of known titles
+    console.log(`[TitleService] Found ${totalTitles} total titles in manifest`);
+
+    return { newTitles, totalTitles };
+  }
+
+  /**
+   * Refreshes the manifest and returns updated title information
+   */
+  async refreshTitles(): Promise<{ newTitles: TitleItem[], totalTitles: number }> {
+    await this.manifest.refreshManifest();
+    return this.checkForNewTitles();
+  }
+
+  /**
+   * Debug method to list all available titles in the manifest
+   */
+  async debugAllTitles(): Promise<void> {
+    if (!this.manifest.isLoadedSync) {
+      await this.manifest.isLoaded().toPromise();
+    }
+
+    const presentationNodes = this.manifest.getPresentationNodes();
+    const titleDefs = this.manifest.getTitleDefs();
+    
+    console.log('[TitleService] Debugging all available titles...');
+    
+    // Get all title nodes (current + legacy)
+    const titleParentHashes = [616318467, 1881970629];
+    let allTitleNodes: any[] = [];
+    for (const parentHash of titleParentHashes) {
+      const parentNode = presentationNodes[parentHash];
+      if (!parentNode?.children?.presentationNodes) continue;
+      allTitleNodes.push(...parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean));
+    }
+
+    console.log(`[TitleService] Found ${allTitleNodes.length} total title nodes`);
+    
+    // List all titles with their hashes
+    const titleList = allTitleNodes
+      .filter(node => node?.completionRecordHash)
+      .map(node => ({
+        hash: node.completionRecordHash,
+        name: node.displayProperties?.name,
+        description: node.displayProperties?.description,
+        icon: node.displayProperties?.icon,
+        parentNodeHashes: node.parentNodeHashes
+      }))
+      .sort((a, b) => a.name?.localeCompare(b.name || '') || 0);
+
+    console.log('[TitleService] All available titles:', titleList);
+    
+    // Check for specific new titles by completion hash
+    const newTitleCompletionHashes = [3888842466, 3198225435]; // Edge of Fate, Sharpshooter completion hashes
+    for (const hash of newTitleCompletionHashes) {
+      const found = titleList.find(t => t.hash === hash);
+      if (found) {
+        console.log(`[TitleService] ✅ Found new title by completion hash: ${found.name} (${hash})`);
+      } else {
+        console.log(`[TitleService] ❌ New title not found by completion hash: ${hash}`);
+      }
+    }
+
+    // Also check by presentation node hash
+    const newTitlePresentationHashes = [3588958240, 3417748255]; // Edge of Fate, Sharpshooter presentation hashes
+    for (const hash of newTitlePresentationHashes) {
+      const found = titleList.find(t => t.hash === hash);
+      if (found) {
+        console.log(`[TitleService] ✅ Found new title by presentation hash: ${found.name} (${hash})`);
+      } else {
+        console.log(`[TitleService] ❌ New title not found by presentation hash: ${hash}`);
+      }
+    }
+  }
 } 

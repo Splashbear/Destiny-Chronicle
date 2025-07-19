@@ -27,6 +27,7 @@ import { SelectedAccountsService } from '../../services/selected-accounts.servic
 import { PlatformAccount } from '../../models/platform-account.model';
 import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
 import { ExportService, ExportRequest } from '../../services/export.service';
+import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
 
 interface ActivityEntry {
   game: string;
@@ -311,6 +312,8 @@ const RELEASE_ORDER: { [normalized: string]: number } = {
   'mmxxiv mot': 32,
   'eternal': 36,
   'heavy metal': 36,
+  'the edge of fate': 37,
+  'sharpshooter': 37,
 };
 
 // Aggregated statistics per platform (e.g., Xbox, PlayStation, Steam)
@@ -330,7 +333,7 @@ interface PlatformStats {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, LoadingProgressComponent, DungeonSoloFirstsComponent],
+  imports: [CommonModule, FormsModule, DungeonSoloFirstsComponent, ExportOptionsDialogComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -433,6 +436,7 @@ export class PlayerSearchComponent implements OnInit {
   /** Aggregated (all-platform) firsts across selected players */
   aggregateGuardianFirsts: ActivityFirstCompletion[] = [];
   includeLinkedAccounts: boolean = true;
+  addMode: boolean = false; // NEW: Track whether we're adding profiles or replacing them
   /** Play-time + seal counts fetched from WastedOnDestiny keyed by "game|membershipId" */
   private wastedTimes: { [playerKey: string]: number } = {};
   private wastedSeals: { [playerKey: string]: number } = {};
@@ -443,7 +447,7 @@ export class PlayerSearchComponent implements OnInit {
   /** Indicates whether the UI has already rendered at least one slice of activities for the selected date. */
   private initialDisplayShown: boolean = false;
   // UI state for title view
-  titleSort: 'alpha' | 'release' = 'alpha';
+  titleSort: 'alpha' | 'release' = 'release';
   titleFilter: 'all' | 'current' | 'legacy' = 'all';
   loadingTitlesOverall = false;
   private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
@@ -571,7 +575,7 @@ export class PlayerSearchComponent implements OnInit {
     this.selectedMonth = today.getMonth() + 1;
     this.selectedDay = today.getDate();
     this.selectedDate = `${this.selectedMonth}-${this.selectedDay}`;
-    await this.loadFavorites();
+    await this.loadAndDisplayFavorites();
     this.dbReady = true;
     this.cdr.detectChanges();
   }
@@ -581,23 +585,139 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  /**
+   * Automatically load and display favorite profiles on app startup
+   */
+  async loadAndDisplayFavorites() {
+    await this.loadFavorites();
+    
+    // If we have favorites and no currently selected players, load them automatically
+    if (this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0) {
+      await this.loadMultipleFavorites(this.favoriteAccounts);
+    }
+  }
+
+  /**
+   * Load multiple favorite profiles at once
+   */
+  async loadMultipleFavorites(favorites: FavoriteAccount[]) {
+    if (favorites.length === 0) return;
+
+    // Check profile limit
+    if (favorites.length > 10) {
+      this.errorMessage = `Too many favorites (${favorites.length}). Only the first 10 will be loaded.`;
+      favorites = favorites.slice(0, 10);
+    }
+
+    // Clear any existing players
+    this.selectedPlayers = [];
+    this.selectedCharacterIds = {};
+    this.characters = {};
+    this.activities = {};
+    this.loading = {};
+    this.error = {};
+    this.groupedActivitiesByAccount = [];
+    this.clearCache();
+
+    // Convert favorites to PlayerSearchDisplay format
+    const playersToLoad: PlayerSearchDisplay[] = favorites.map(fav => ({
+      displayName: fav.displayName,
+      membershipId: fav.membershipId,
+      membershipType: fav.membershipType,
+      game: fav.game,
+      platform: fav.platform,
+      isPrimary: false
+    } as PlayerSearchDisplay));
+
+    // Add all players to selectedPlayers
+    this.selectedPlayers.push(...playersToLoad);
+    
+    // Set up character IDs
+    for (const player of playersToLoad) {
+      this.selectedCharacterIds[player.membershipId] = undefined;
+    }
+
+    // Ensure a date is selected
+    if (!this.selectedDate) {
+      const month = this.currentMonth;
+      const day = this.currentDay;
+      this.selectedDate = `${month}-${day}`;
+    }
+
+    // Set loading state
+    this.loadingActivities[this.selectedDate] = true;
+    this.cdr.detectChanges();
+
+    try {
+      // Load all players in parallel with concurrency limit
+      const loadPromises: Promise<void>[] = [];
+      for (const player of playersToLoad) {
+        loadPromises.push(
+          this.runWithPlayerSyncLimit(async () => {
+            try {
+              await this.loadCharacterHistory(player);
+              await this.loadGuardianFirsts(player);
+              await this.loadDungeonSoloFirsts(player);
+            } catch (err) {
+              console.warn('[LoadFavorites] Skipped due to error for', player.membershipId, err);
+            }
+          })
+        );
+        
+        // Wasted time can load in parallel
+        loadPromises.push(
+          this.loadWastedTime(player).catch(err => {
+            console.warn('[LoadFavorites] WastedTime skipped for', player.membershipId, err);
+          })
+        );
+      }
+
+      await Promise.all(loadPromises);
+      
+      // Load activities for the selected date
+      if (this.selectedDate) {
+        await this.loadAllFilteredActivities(true);
+      }
+      
+      this.statsDebounce$.next();
+    } catch (error) {
+      console.error('[LoadFavorites] Error loading favorites:', error);
+    } finally {
+      this.loadingActivities[this.selectedDate] = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   isFavorite(player: PlayerSearchDisplay): boolean {
-    return this.favoriteAccounts.some(f => f.membershipId === player.membershipId && f.game === player.game);
+    return this.favoriteAccounts.some(f => 
+      f.membershipId === player.membershipId && 
+      f.game === player.game && 
+      f.membershipType === player.membershipType
+    );
   }
 
   async toggleFavorite(player: PlayerSearchDisplay) {
     if (this.isFavorite(player)) {
-      await this.activityDb.removeFavorite(player.membershipId, player.game);
+      await this.removeFavorite(player.membershipId, player.game);
     } else {
-      await this.activityDb.addFavorite({
-        membershipId: player.membershipId,
-        membershipType: player.membershipType,
-        displayName: player.displayName,
-        game: player.game,
-        platform: player.platform,
-        lastUpdated: new Date().toISOString()
-      });
+      await this.addFavorite(player);
     }
+  }
+
+  async addFavorite(player: PlayerSearchDisplay) {
+    await this.activityDb.addFavorite({
+      membershipId: player.membershipId,
+      membershipType: player.membershipType,
+      displayName: player.displayName,
+      game: player.game,
+      platform: player.platform,
+      lastUpdated: new Date().toISOString()
+    });
+    await this.loadFavorites();
+  }
+
+  async removeFavorite(membershipId: string, game: 'D1' | 'D2', membershipType?: number) {
+    await this.activityDb.removeFavorite(membershipId, game, membershipType);
     await this.loadFavorites();
   }
 
@@ -799,12 +919,17 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async selectPlayer(player: PlayerSearchResult) {
-    // If we already have one or more selected players, append the new
-    // account instead of wiping the whole state.  This lets users build
-    // a multi-account view incrementally (without relying on "Select All"
-    // in the modal).
+    // Check profile limit
+    if (this.selectedPlayers.length >= 10) {
+      this.errorMessage = 'Maximum of 10 profiles allowed. Please remove some profiles before adding more.';
+      return;
+    }
 
-    if (this.selectedPlayers.length > 0) {
+    // If we're in add mode or already have selected players, append the new
+    // account instead of wiping the whole state. This lets users build
+    // a multi-account view incrementally.
+
+    if (this.addMode || this.selectedPlayers.length > 0) {
       await this.appendPlayer(player as any);
       return;
     }
@@ -2449,6 +2574,41 @@ export class PlayerSearchComponent implements OnInit {
     }
   }
 
+  /**
+   * Toggle between "add mode" (add profiles without clearing existing ones) 
+   * and "replace mode" (clear existing profiles when searching)
+   */
+  toggleAddMode(): void {
+    this.addMode = !this.addMode;
+    
+    // Clear error message and update it based on new mode
+    if (this.selectedPlayers.length > 0 && this.searchUsername.trim()) {
+      if (this.addMode) {
+        this.errorMessage = ''; // Clear warning when switching to add mode
+      } else {
+        this.errorMessage = 'Warning: This search will replace your current profiles. Enable "Add mode" to keep existing profiles.';
+      }
+    } else {
+      this.errorMessage = '';
+    }
+  }
+
+  /**
+   * Clear all selected players and reset to replace mode
+   */
+  clearAllPlayers(): void {
+    this.selectedPlayers = [];
+    this.selectedCharacterIds = {};
+    this.characters = {};
+    this.activities = {};
+    this.loading = {};
+    this.error = {};
+    this.groupedActivitiesByAccount = [];
+    this.addMode = false;
+    this.clearCache();
+    this.cdr.detectChanges();
+  }
+
   removePlayer(index: number) {
     const removed = this.selectedPlayers.splice(index, 1)[0];
     if (removed) {
@@ -3559,6 +3719,13 @@ export class PlayerSearchComponent implements OnInit {
   /** Called on every keystroke in the username box */
   onSearchInput(value: string): void {
     this.searchTerm$.next(value);
+    
+    // If not in add mode and we have existing players, show a warning
+    if (!this.addMode && this.selectedPlayers.length > 0 && value.trim()) {
+      this.errorMessage = 'Warning: This search will replace your current profiles. Enable "Add mode" to keep existing profiles.';
+    } else if (this.addMode && this.selectedPlayers.length > 0 && value.trim()) {
+      this.errorMessage = ''; // Clear any previous warnings
+    }
   }
 
   /** Handler for toggling the "Include linked accounts" checkbox */
@@ -3649,9 +3816,12 @@ export class PlayerSearchComponent implements OnInit {
 
   /**
    * Selects every account currently listed in the search-results modal (cross-save, D2, D1).
-   * The first account becomes the primary; additional ones are appended without wiping state.
+   * This only selects them in the modal, doesn't load them.
    */
   async selectAllPlayersInModal() {
+    // Clear current selection and select all available players
+    this.modalSelectedPlayers.clear();
+    
     const all: PlayerSearchDisplay[] = [];
     if (this.crossSavePlayer) {
       all.push(this.crossSavePlayer);
@@ -3659,42 +3829,123 @@ export class PlayerSearchComponent implements OnInit {
     all.push(...this.d2SearchResults.filter(p => !p.isCrossSavePrimary));
     all.push(...this.d1SearchResults);
 
-    // Deduplicate by (game, membershipId) so a Destiny 1 and Destiny 2 account with the same ID are both kept
-    const unique = all.filter((p, idx, arr) => {
-      const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
-      return arr.findIndex(x => `${(x as any).game || 'D2'}|${x.membershipId}` === key) === idx;
+    // Add all to selection
+    all.forEach(player => {
+      this.modalSelectedPlayers.add(this.getPlayerKey(player));
+    });
+    
+    this.cdr.detectChanges();
+  }
+
+  async addSelectedToFavorites() {
+    const selectedPlayers: PlayerSearchDisplay[] = [];
+    
+    // Get all available players
+    const all: PlayerSearchDisplay[] = [];
+    if (this.crossSavePlayer) {
+      all.push(this.crossSavePlayer);
+    }
+    all.push(...this.d2SearchResults.filter(p => !p.isCrossSavePrimary));
+    all.push(...this.d1SearchResults);
+
+    // Filter to only selected players
+    all.forEach(player => {
+      if (this.modalSelectedPlayers.has(this.getPlayerKey(player))) {
+        selectedPlayers.push(player);
+      }
     });
 
-    if (unique.length === 0) {
+    // Add each selected player to favorites
+    for (const player of selectedPlayers) {
+      if (!this.isFavorite(player)) {
+        await this.addFavorite(player);
+      }
+    }
+
+    this.cdr.detectChanges();
+  }
+
+  /** Returns a unique key for the given player independent of case */
+  private getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
+    return `${(p as any).game || 'D2'}|${p.membershipId}`;
+  }
+
+  clearModalSelection() {
+    this.modalSelectedPlayers.clear();
+    this.cdr.detectChanges();
+  }
+
+  isPlayerSelected(player: PlayerSearchDisplay): boolean {
+    return this.modalSelectedPlayers.has(this.getPlayerKey(player));
+  }
+
+  togglePlayerSelection(player: PlayerSearchDisplay) {
+    const key = this.getPlayerKey(player);
+    if (this.modalSelectedPlayers.has(key)) {
+      this.modalSelectedPlayers.delete(key);
+    } else {
+      this.modalSelectedPlayers.add(key);
+    }
+    this.cdr.detectChanges();
+  }
+
+  getSelectedCount(): number {
+    return this.modalSelectedPlayers.size;
+  }
+
+  getTotalCount(): number {
+    let count = 0;
+    if (this.crossSavePlayer) count++;
+    count += this.d2SearchResults.length;
+    count += this.d1SearchResults.length;
+    return count;
+  }
+
+  async loadSelectedPlayers() {
+    const selectedPlayers: PlayerSearchDisplay[] = [];
+    
+    // Get all available players
+    const all: PlayerSearchDisplay[] = [];
+    if (this.crossSavePlayer) {
+      all.push(this.crossSavePlayer);
+    }
+    all.push(...this.d2SearchResults.filter(p => !p.isCrossSavePrimary));
+    all.push(...this.d1SearchResults);
+
+    // Filter to only selected players
+    all.forEach(player => {
+      if (this.modalSelectedPlayers.has(this.getPlayerKey(player))) {
+        selectedPlayers.push(player);
+      }
+    });
+
+    if (selectedPlayers.length === 0) {
       return;
     }
 
+    // Check profile limit
+    if (selectedPlayers.length > 10) {
+      this.errorMessage = `Too many profiles selected (${selectedPlayers.length}). Only the first 10 will be loaded.`;
+      selectedPlayers.splice(10);
+    }
+
     // Use the first as primary (re-use existing flow)
-    const [primary, ...rest] = unique;
+    const [primary, ...rest] = selectedPlayers;
     await this.selectPlayer(primary);
 
-    // Load remaining accounts in parallel without resetting state
-    const tasks: Promise<void>[] = [];
-    for (const p of rest) {
-      if (this.selectedPlayers.some(sp => sp.membershipId === p.membershipId && (sp as any).game === (p as any).game)) {
-        continue; // already selected via linked profiles etc.
-      }
-      const displayPlayer: PlayerSearchDisplay = {
-        ...p,
-        platform: this.getPlatformName(p.membershipType),
-        isPrimary: false
-      } as any;
-      this.selectedPlayers.push(displayPlayer);
-      this.selectedCharacterIds[displayPlayer.membershipId] = undefined;
-
-      tasks.push(
-        this.loadCharacterHistory(displayPlayer)
-          .then(() => this.loadGuardianFirsts(displayPlayer))
-          .then(() => this.loadDungeonSoloFirsts(displayPlayer))
-          .then(() => this.loadWastedTime(displayPlayer))
-          .catch(err => console.warn('[SelectAll] skipped player due to error', displayPlayer.membershipId, err))
-      );
-    }
+    // Load the rest in parallel
+    const tasks = rest.map(displayPlayer =>
+      this.runWithPlayerSyncLimit(async () => {
+        try {
+          await this.loadCharacterHistory(displayPlayer);
+          await this.loadGuardianFirsts(displayPlayer);
+          await this.loadDungeonSoloFirsts(displayPlayer);
+          await this.loadWastedTime(displayPlayer);
+        } catch (err) {
+          console.warn('[LoadSelected] skipped player due to error', displayPlayer.membershipId, err);
+        }
+      })
+    );
 
     if (tasks.length) {
       await Promise.all(tasks);
@@ -3706,12 +3957,8 @@ export class PlayerSearchComponent implements OnInit {
     await this.calculateAccountStats();
 
     this.showPlatformPicker = false;
+    this.modalSelectedPlayers.clear();
     this.cdr.detectChanges();
-  }
-
-  /** Returns a unique key for the given player independent of case */
-  private getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
-    return `${(p as any).game || 'D2'}|${p.membershipId}`;
   }
 
   // Currently viewed game within the Guardian Firsts view – drives platform list & rendering
@@ -3816,21 +4063,7 @@ export class PlayerSearchComponent implements OnInit {
     return this.groupedActivitiesByAccount.filter(g => g.game === game);
   }
 
-  /** Called when user picks an account from the Favorites dropdown */
-  onFavoriteSelect(event: Event): void {
-    const selectEl = event.target as HTMLSelectElement;
-    const val = selectEl.value;
-    if (!val) {
-      return;
-    }
-    const [membershipId, game] = val.split('|');
-    const fav = this.favoriteAccounts.find(f => f.membershipId === membershipId && f.game === (game as 'D1' | 'D2'));
-    if (fav) {
-      this.selectPlayer(fav);
-    }
-    // reset to placeholder
-    selectEl.value = '';
-  }
+
 
   // ------------------------------------------------------------------
   // Export helpers
@@ -3841,14 +4074,13 @@ export class PlayerSearchComponent implements OnInit {
       return;
     }
 
-    const [year, month, day] = this.selectedDate.split('-').map(Number);
-    // Build start & end for that day UTC
-    const from = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
-    const to   = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
+    const [month, day] = this.selectedDate.split('-').map(Number);
+    const year = new Date().getFullYear();
+    const fromDate = new Date(Date.UTC(year, month - 1, day));
 
     const req: ExportRequest = {
-      from,
-      to,
+      from: fromDate,
+      to: fromDate,
       types: [],       // all modes
       platforms: [],   // all selected
       includeSummaries: false,
@@ -3856,13 +4088,130 @@ export class PlayerSearchComponent implements OnInit {
       includeActivities: true,
     } as const;
 
-    let payload;
-    if (this.filteredActivitiesForDate?.length) {
-      payload = { activities: this.filteredActivitiesForDate } as any;
-    } else {
-      payload = await this.exportService.buildPayload(req);
+    await this.exportService.exportMultiSheet(req, {
+      selectedPlayers: this.selectedPlayers,
+      activityDb: this.activityDb,
+      manifestService: this.manifest,
+      characters: this.characters,
+      getPlayerKey: this.getPlayerKey.bind(this),
+      titleService: this.titleService
+    });
+  }
+
+  showExportDialog: boolean = false;
+  showFavoritesModal: boolean = false;
+  modalSelectedPlayers: Set<string> = new Set(); // Track selected players in modal
+
+  openExportOptionsDialog() {
+    this.showExportDialog = true;
+  }
+
+  async handleExportOptions(options: any) {
+    console.log('Received export options:', options);
+    this.showExportDialog = false;
+    // Convert selectedDate (e.g., '7-18') to a valid ISO date string if needed
+    if (options.from && typeof options.from === 'string' && options.from.match(/^\d{1,2}-\d{1,2}$/)) {
+      const [month, day] = options.from.split('-').map(Number);
+      const year = new Date().getFullYear();
+      options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+    }
+    await this.exportService.exportMultiSheet(options, {
+      selectedPlayers: this.selectedPlayers,
+      activityDb: this.activityDb,
+      manifestService: this.manifest,
+      characters: this.characters,
+      getPlayerKey: this.getPlayerKey.bind(this),
+      titleService: this.titleService
+    });
+  }
+
+  async refreshTitles() {
+    try {
+      this.loadingTitlesOverall = true;
+      const result = await this.titleService.refreshTitles();
+      console.log(`[Titles] Refresh complete. Found ${result.totalTitles} total titles.`);
+      
+      // Check for specific new titles
+      this.checkForSpecificTitles();
+      
+      // Clear cached titles to force reload
+      this.playerTitles = {};
+      this.aggregatedTitles = [];
+      
+      // Force reload all player titles
+      if (this.activeTab === 'titles' && this.selectedPlayers.length > 0) {
+        for (const player of this.selectedPlayers) {
+          if (this.isD1Player(player)) continue; // skip Destiny 1 profiles (no titles)
+          const pKey = this.getPlayerKey(player);
+          
+          // Force reload by clearing the cache and setting loading state
+          this.loadingTitles[pKey] = true;
+          delete this.playerTitles[pKey];
+        }
+        
+        // Now reload the titles tab
+        await this.onTabChange('titles');
+      }
+      
+      this.cdr.detectChanges();
+    } catch (error) {
+      console.error('[Titles] Error refreshing titles:', error);
+    } finally {
+      this.loadingTitlesOverall = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  private checkForSpecificTitles() {
+    if (!this.manifest.isLoadedSync) {
+      console.log('[Titles] Manifest not loaded, skipping specific title check');
+      return;
     }
 
-    this.exportService.downloadExcel(payload);
+    const presentationNodes = this.manifest.getPresentationNodes();
+    const titleDefs = this.manifest.getTitleDefs();
+    
+    // Check for specific new titles using their completionRecordHash values
+    const newTitleCompletionHashes = [3888842466, 3198225435]; // Edge of Fate, Sharpshooter completion hashes
+    
+    console.log('[Titles] Checking for specific new titles by completion hash...');
+    for (const hash of newTitleCompletionHashes) {
+      const recordDef = titleDefs[hash];
+      
+      if (recordDef) {
+        console.log(`[Titles] ✅ Found record definition for completion hash ${hash}:`, {
+          titleInfo: recordDef.titleInfo,
+          displayProperties: recordDef.displayProperties,
+          name: recordDef.displayProperties?.name
+        });
+      } else {
+        console.log(`[Titles] ❌ No record definition found for completion hash ${hash}`);
+      }
+    }
+
+    // Also check by presentation node hash
+    const newTitlePresentationHashes = [3588958240, 3417748255]; // Edge of Fate, Sharpshooter presentation hashes
+    
+    console.log('[Titles] Checking for specific new titles by presentation hash...');
+    for (const hash of newTitlePresentationHashes) {
+      const node = presentationNodes[hash];
+      
+      if (node) {
+        console.log(`[Titles] ✅ Found presentation node for hash ${hash}:`, {
+          name: node.displayProperties?.name,
+          description: node.displayProperties?.description,
+          icon: node.displayProperties?.icon,
+          completionRecordHash: node.completionRecordHash
+        });
+      } else {
+        console.log(`[Titles] ❌ No presentation node found for hash ${hash}`);
+      }
+    }
+  }
+
+  async debugTitles() {
+    console.log('[Titles] Starting debug...');
+    await this.titleService.debugAllTitles();
+    this.checkForSpecificTitles();
   }
 }

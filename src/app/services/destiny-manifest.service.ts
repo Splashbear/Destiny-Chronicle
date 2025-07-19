@@ -57,6 +57,12 @@ export class DestinyManifestService {
     }
   }
 
+  async refreshManifest() {
+    console.log('[Manifest] Refreshing manifest...');
+    this.manifestLoaded.next(false);
+    await this.loadManifest();
+  }
+
   async getTitleDefinition(hash: string): Promise<any> {
     if (!this.manifestLoaded.value) {
       await this.isLoaded().toPromise();

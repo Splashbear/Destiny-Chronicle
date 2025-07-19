@@ -751,3 +751,34 @@ button {
     @apply cursor-pointer ml-1 flex-shrink-0;
   }
 } 
+
+.d2-tab {
+  @apply px-4 py-2 rounded-t font-semibold text-slate-300 transition-all duration-150;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+  box-shadow: none;
+  border-bottom: 2px solid transparent;
+  &:hover {
+    color: var(--destiny-gold);
+    background: rgba(245, 197, 66, 0.08);
+  }
+}
+.d2-tab-active {
+  color: var(--destiny-gold) !important;
+  background: rgba(245, 197, 66, 0.12) !important;
+  border-bottom: 2px solid var(--destiny-gold) !important;
+  box-shadow: 0 0 8px 2px rgba(245, 197, 66, 0.5), 0 2px 8px 0 rgba(0,0,0,0.15);
+  z-index: 2;
+}
+
+// Sub-tab (platform/game) highlight (blue)
+.d2-tab.d2-tab-active-blue {
+  color: #60a5fa !important;
+  background: rgba(96, 165, 250, 0.12) !important;
+  border-bottom: 2px solid #60a5fa !important;
+  box-shadow: 0 0 8px 2px rgba(96, 165, 250, 0.5), 0 2px 8px 0 rgba(0,0,0,0.10);
+} 

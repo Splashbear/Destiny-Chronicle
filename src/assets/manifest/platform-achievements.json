@@ -1,0 +1,260 @@
+{
+  "steam": [
+    {
+      "id": "long_and_winding_road",
+      "name": "Long and Winding Road",
+      "description": "Reach level 20.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/18c2c6e05659aed26cd374da8a75b722121b37f0.jpg",
+      "globalCompletionRate": 83.5,
+      "triumphHash": null,
+      "detectionMethod": "level_check"
+    },
+    {
+      "id": "the_peoples_hero",
+      "name": "The People's Hero",
+      "description": "Complete a Heroic public event.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/4f1d1d43b60c087bf99bba3061b375fe0f327be7.jpg",
+      "globalCompletionRate": 50.0,
+      "triumphHash": null,
+      "detectionMethod": "public_event_completion",
+      "requiredCount": 1
+    },
+    {
+      "id": "caydes_pathfinder",
+      "name": "Cayde's Pathfinder",
+      "description": "Acquire each Hunter subclass.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/8f23007de716cd93b5abc02560dbef7a8d2f053c.jpg",
+      "globalCompletionRate": 35.2,
+      "triumphHash": null,
+      "detectionMethod": "subclass_check",
+      "requiredClass": "hunter"
+    },
+    {
+      "id": "heart_of_darkness",
+      "name": "Heart of Darkness",
+      "description": "Complete a Nightfall strike.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/feacf3708386388730de45cf538e96cd90e5ec5e.jpg",
+      "globalCompletionRate": 28.0,
+      "triumphHash": null,
+      "detectionMethod": "nightfall_completion"
+    },
+    {
+      "id": "ikoras_protege",
+      "name": "Ikora's Protégé",
+      "description": "Acquire each Warlock subclass.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/a00b8c7394b8af482a2d3fea70e152310d6d8a2f.jpg",
+      "globalCompletionRate": 27.8,
+      "triumphHash": null,
+      "detectionMethod": "subclass_check",
+      "requiredClass": "warlock"
+    },
+    {
+      "id": "in_a_flash",
+      "name": "In A Flash",
+      "description": "Complete 5 Heroic Public Events.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/d5d441bce37d3997c314de2dde4155da58a45ea9.jpg",
+      "globalCompletionRate": 26.6,
+      "triumphHash": null,
+      "detectionMethod": "public_event_completion",
+      "requiredCount": 5
+    },
+    {
+      "id": "zavalas_lieutenant",
+      "name": "Zavala's Lieutenant",
+      "description": "Acquire each Titan subclass.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/c4b32b8cc89ee429acd52cada5520af99fd253e9.jpg",
+      "globalCompletionRate": 24.8,
+      "triumphHash": null,
+      "detectionMethod": "subclass_check",
+      "requiredClass": "titan"
+    },
+    {
+      "id": "lest_ye_be_judged",
+      "name": "Lest Ye Be Judged",
+      "description": "Encounter an Agent of the Nine somewhere in the system.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/cc0bd02daa4d45c8b43deb23c1923a40257ba061.jpg",
+      "globalCompletionRate": 24.2,
+      "triumphHash": null,
+      "detectionMethod": "xur_encounter"
+    },
+    {
+      "id": "heart_of_the_awoken",
+      "name": "Heart of the Awoken",
+      "description": "Complete any campaign.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/bd61420c3804eb3befbc9feda1ea0c34d146715d.jpg",
+      "globalCompletionRate": 20.0,
+      "triumphHash": null,
+      "detectionMethod": "campaign_completion"
+    },
+    {
+      "id": "the_life_exotic",
+      "name": "The Life Exotic",
+      "description": "Collect 15 exotic weapons or armor.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/bc3b74c2422e55faae5a2fceb5c5218afd06afe5.jpg",
+      "globalCompletionRate": 19.3,
+      "triumphHash": null,
+      "detectionMethod": "exotic_collection",
+      "requiredCount": 15
+    },
+    {
+      "id": "show_me_what_you_got",
+      "name": "Show Me What You Got",
+      "description": "Complete the \"Light Reforged\" quest.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/d79a37583b5bef753e6d17e420e558c277e391c3.jpg",
+      "globalCompletionRate": 19.2,
+      "triumphHash": 2731861220,
+      "detectionMethod": "triumph_hash"
+    },
+    {
+      "id": "high_stakes_play",
+      "name": "High-Stakes Play",
+      "description": "Win a Gambit match.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/da27fe8a4ee4379e15de5d280b99201d94651f8d.jpg",
+      "globalCompletionRate": 17.3,
+      "triumphHash": null,
+      "detectionMethod": "gambit_win"
+    },
+    {
+      "id": "challenge_accepted",
+      "name": "Challenge Accepted",
+      "description": "Complete 30 challenges.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/08c8201a669107e6ebcccb50be6e7980e2d6a1d6.jpg",
+      "globalCompletionRate": 17.2,
+      "triumphHash": null,
+      "detectionMethod": "challenge_count",
+      "requiredCount": 30
+    },
+    {
+      "id": "legends_grow",
+      "name": "Legends Grow",
+      "description": "Earn 5,000 Triumph points.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/b601e22596fcf9213c95712f68634826f79cdecc.jpg",
+      "globalCompletionRate": 15.3,
+      "triumphHash": null,
+      "detectionMethod": "triumph_score",
+      "requiredScore": 5000
+    },
+    {
+      "id": "nothing_left_to_say",
+      "name": "Nothing Left to Say",
+      "description": "Complete any campaign.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/25d1689712aaafda1a21da025ae08a96d3146a62.jpg",
+      "globalCompletionRate": 14.9,
+      "triumphHash": null,
+      "detectionMethod": "campaign_completion"
+    },
+    {
+      "id": "darkness_falls",
+      "name": "Darkness Falls",
+      "description": "Defeat any Nightfall Boss.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/02b3bf2ec43a90f60eb0d29c49a8ae79aa68360c.jpg",
+      "globalCompletionRate": 13.0,
+      "triumphHash": null,
+      "detectionMethod": "nightfall_boss"
+    },
+    {
+      "id": "an_exotic_journey",
+      "name": "An Exotic Journey",
+      "description": "Complete an Exotic quest.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/c5a45165bd07f421f6de5a5ed5918f8e342fe320.jpg",
+      "globalCompletionRate": 12.6,
+      "triumphHash": null,
+      "detectionMethod": "exotic_quest"
+    },
+    {
+      "id": "exotique",
+      "name": "Exotique",
+      "description": "Collect 10 Exotic weapons or armor.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/a7484760f6a350cece3f6edaf88edcd8fa5208e1.jpg",
+      "globalCompletionRate": 12.2,
+      "triumphHash": null,
+      "detectionMethod": "exotic_collection",
+      "requiredCount": 10
+    },
+    {
+      "id": "belly_of_the_beast",
+      "name": "Belly Of The Beast",
+      "description": "Complete a Nightfall strike on Master difficulty.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/930efb81487e3b2e2482b3ea7385c8697579f24b.jpg",
+      "globalCompletionRate": 11.1,
+      "triumphHash": null,
+      "detectionMethod": "nightfall_master"
+    },
+    {
+      "id": "fashion_statement",
+      "name": "Fashion Statement",
+      "description": "Complete a Collections Badge.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/a67df1bd9d4767efda1448e30b54fe3d08ce47b8.jpg",
+      "globalCompletionRate": 9.4,
+      "triumphHash": null,
+      "detectionMethod": "collections_badge"
+    },
+    {
+      "id": "the_prestige",
+      "name": "The Prestige",
+      "description": "Complete a Nightfall strike on Grandmaster difficulty.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/e9ce8a6dae6e12e71fafaa3f15116461d61e7a5b.jpg",
+      "globalCompletionRate": 7.5,
+      "triumphHash": null,
+      "detectionMethod": "nightfall_grandmaster"
+    },
+    {
+      "id": "seal_the_deal",
+      "name": "Seal the Deal",
+      "description": "Complete a Triumph Seal.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/5618ff9afb3b097ad99ba0d34e3eb9e674a02f27.jpg",
+      "globalCompletionRate": 7.1,
+      "triumphHash": null,
+      "detectionMethod": "triumph_seal"
+    },
+    {
+      "id": "wishing_for_the_best",
+      "name": "Wishing for the Best",
+      "description": "Complete any Raid.",
+      "icon": "https://cdn.akamai.steamstatic.com/steamcommunity/public/images/apps/1085660/5116bae12cddf7942a225fcc68e89a54c4a02a05.jpg",
+      "globalCompletionRate": 7.0,
+      "triumphHash": null,
+      "detectionMethod": "raid_completion"
+    }
+  ],
+  "xbox": [
+    {
+      "id": "long_and_winding_road",
+      "name": "Long and Winding Road",
+      "description": "Reach level 20.",
+      "icon": "/assets/icons/xbox-achievements/long-and-winding-road.png",
+      "gamerscore": 20,
+      "triumphHash": null,
+      "detectionMethod": "level_check"
+    },
+    {
+      "id": "the_peoples_hero",
+      "name": "The People's Hero",
+      "description": "Complete a Heroic public event.",
+      "icon": "/assets/icons/xbox-achievements/peoples-hero.png",
+      "gamerscore": 20,
+      "triumphHash": 876498389,
+      "detectionMethod": "triumph_hash"
+    }
+  ],
+  "playstation": [
+    {
+      "id": "long_and_winding_road",
+      "name": "Long and Winding Road",
+      "description": "Reach level 20.",
+      "icon": "/assets/icons/ps-achievements/long-and-winding-road.png",
+      "trophyType": "bronze",
+      "triumphHash": null,
+      "detectionMethod": "level_check"
+    },
+    {
+      "id": "the_peoples_hero",
+      "name": "The People's Hero",
+      "description": "Complete a Heroic public event.",
+      "icon": "/assets/icons/ps-achievements/peoples-hero.png",
+      "trophyType": "bronze",
+      "triumphHash": 876498389,
+      "detectionMethod": "triumph_hash"
+    }
+  ]
+}

@@ -182,12 +182,12 @@ export class ActivityDbService extends Dexie {
     try {
       this.version(1).stores({
         activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]',
-        favorites: 'membershipId, game'
+        favorites: 'membershipId, game, membershipType'
       });
 
       this.version(2).stores({
         activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]',
-        favorites: 'membershipId, game'
+        favorites: 'membershipId, game, membershipType'
       }).upgrade(tx => {
         console.log('[Dexie] Upgrading to version 2');
       });
@@ -200,7 +200,7 @@ export class ActivityDbService extends Dexie {
                    '[game+membershipId+characterId], ' + // For game-specific queries
                    '[mode+period+membershipId], ' + // For activity type + date queries
                    '[validated+membershipId+characterId]', // For validation status
-        favorites: 'membershipId, game'
+        favorites: 'membershipId, game, membershipType'
       }).upgrade(tx => {
         console.log('[Dexie] Upgrading to version 3');
         // Add game field to existing activities
@@ -214,9 +214,21 @@ export class ActivityDbService extends Dexie {
         activities: '++id, membershipId, membershipType, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
                    '[membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId], ' +
                    '[game+membershipId+characterId], membershipType',
-        favorites: 'membershipId, game'
+        favorites: 'membershipId, game, membershipType'
       }).upgrade(tx => {
         console.log('[Dexie] Upgrading to version 4 (membershipType index)');
+      });
+
+      // Version 5 – update favorites schema to include membershipType in primary key
+      this.version(5).stores({
+        activities: '++id, membershipId, membershipType, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
+                   '[membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId], ' +
+                   '[game+membershipId+characterId], membershipType',
+        favorites: 'membershipId, game, membershipType'
+      }).upgrade(tx => {
+        console.log('[Dexie] Upgrading to version 5 (favorites membershipType key)');
+        // Clear existing favorites to prevent conflicts with new schema
+        return tx.table('favorites').clear();
       });
 
       this.activities = this.table('activities');
@@ -640,8 +652,14 @@ export class ActivityDbService extends Dexie {
     await this.favorites.put(account);
   }
 
-  async removeFavorite(membershipId: string, game: 'D1' | 'D2') {
-    await this.favorites.where({ membershipId, game }).delete();
+  async removeFavorite(membershipId: string, game: 'D1' | 'D2', membershipType?: number) {
+    if (membershipType !== undefined) {
+      // Remove specific platform account
+      await this.favorites.where({ membershipId, game, membershipType }).delete();
+    } else {
+      // Remove all accounts for this membershipId and game (backward compatibility)
+      await this.favorites.where({ membershipId, game }).delete();
+    }
   }
 
   async getFavorites(): Promise<FavoriteAccount[]> {
@@ -787,5 +805,39 @@ export class ActivityDbService extends Dexie {
    */
   async getActivitiesByPlatform(membershipType: number): Promise<StoredActivity[]> {
     return this.activities.where('membershipType').equals(membershipType).toArray();
+  }
+
+  /**
+   * Returns a paginated list of activities for a player (most recent first).
+   */
+  async getPlayerActivitiesPaginated(
+    membershipId: string,
+    offset: number = 0,
+    limit: number = 50
+  ): Promise<StoredActivity[]> {
+    return this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .reverse() // Most recent first
+      .offset(offset)
+      .limit(limit)
+      .toArray();
+  }
+
+  /**
+   * Returns activities for a player within a date range.
+   */
+  async getActivitiesInDateRange(
+    membershipId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<StoredActivity[]> {
+    const startPeriod = startDate.toISOString();
+    const endPeriod = endDate.toISOString();
+    return this.activities
+      .where('period')
+      .between(startPeriod, endPeriod, true, true)
+      .and(activity => activity.membershipId === membershipId)
+      .toArray();
   }
 } 

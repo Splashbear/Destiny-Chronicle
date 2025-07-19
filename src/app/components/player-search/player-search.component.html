@@ -7,37 +7,56 @@
         <div class="flex-1 xl:basis-1/3 flex flex-row gap-4 items-end min-w-0">
           <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex-1 min-w-0">
             <h2 class="text-xl font-bold text-white mb-4">Accounts</h2>
-            <!-- Favorites Section -->
-            <div *ngIf="favoriteAccounts.length > 0" class="mb-4">
-              <label class="text-sm font-semibold text-yellow-400 mb-1 block" for="favSelect">Favorites</label>
-              <select id="favSelect" (change)="onFavoriteSelect($event)"
-                      class="w-full px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
-                <option value="">Select favorite…</option>
-                <option *ngFor="let fav of favoriteAccounts" [value]="fav.membershipId + '|' + fav.game">
-                  {{ fav.displayName }} ({{ fav.platform }}, {{ fav.game }})
-                </option>
-              </select>
+            <!-- Favorites Button -->
+            <div class="mb-4">
+              <button (click)="showFavoritesModal = true" 
+                      class="flex items-center gap-2 px-3 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded transition-colors">
+                <span class="text-sm">★</span>
+                <span class="text-sm">Favorites</span>
+                <span *ngIf="favoriteAccounts.length > 0" class="text-xs bg-yellow-700 px-1.5 py-0.5 rounded">
+                  {{ favoriteAccounts.length }}
+                </span>
+              </button>
             </div>
             <!-- API Unavailable Message -->
             <div *ngIf="!apiAvailable" class="bg-red-900 text-red-200 p-2 rounded mb-4">
               Bungie API is currently unavailable. Showing cached data for favorite accounts only.
             </div>
-            <!-- Selected profiles ribbon → single-line, horizontal scroll -->
-            <div class="mb-4 flex overflow-x-auto gap-2 whitespace-nowrap scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent pr-1">
-              <ng-container *ngFor="let player of selectedPlayers; let i = index">
-                <div class="inline-flex items-center gap-2 rounded px-2 py-1 shrink-0 cursor-pointer select-none"
-                     [ngClass]="isFavorite(player) ? 'border border-yellow-400 bg-slate-700/95' : 'bg-slate-700/60'"
-                     (click)="toggleFavorite(player)">
-                  <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-4 h-4" alt="plat" />
-                  <img [src]="player.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                  <span class="" title="{{ player.displayName }} ({{ player.platform }}, {{ player.game }})">
-                    {{ player.displayName }}
-                  </span>
-                  <button (click)="removePlayer(i); $event.stopPropagation()" aria-label="Remove" class="text-red-400 hover:text-red-300 text-xs ml-1 opacity-0 hover:opacity-100 focus:opacity-100">
-                    ✕
-                  </button>
+            <!-- Selected profiles ribbon -->
+            <div *ngIf="selectedPlayers.length > 0" class="mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-white">Selected Profiles</label>
+                <button (click)="clearAllPlayers()" 
+                        class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
+                  Clear All
+                </button>
+              </div>
+              <div class="space-y-2 max-h-32 overflow-y-auto">
+                <div *ngFor="let player of selectedPlayers; let i = index" 
+                     class="flex items-center justify-between p-2 rounded transition-colors"
+                     [ngClass]="isFavorite(player) ? 'border border-yellow-400 bg-slate-700/95' : 'bg-slate-700/60 hover:bg-slate-700/80'">
+                  <div class="flex items-center gap-2 flex-1 min-w-0">
+                    <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-4 h-4 flex-shrink-0" alt="platform" />
+                    <img [src]="player.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4 flex-shrink-0" alt="game" />
+                    <span class="text-sm text-white truncate" [title]="player.displayName + ' (' + player.platform + ', ' + player.game + ')'">
+                      {{ player.displayName }}
+                    </span>
+                    <span class="text-xs text-slate-400 flex-shrink-0">({{ player.platform }})</span>
+                    <span *ngIf="isFavorite(player)" class="text-xs text-yellow-400 flex-shrink-0">★</span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button (click)="toggleFavorite(player)" 
+                            class="text-xs px-2 py-1 rounded transition-colors"
+                            [ngClass]="isFavorite(player) ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-slate-600 hover:bg-slate-500 text-slate-300'">
+                      {{ isFavorite(player) ? '★' : '☆' }}
+                    </button>
+                    <button (click)="removePlayer(i)" 
+                            class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
+                      ✕
+                    </button>
+                  </div>
                 </div>
-              </ng-container>
+              </div>
             </div>
             <!-- Compact Search Form -->
             <div class="flex flex-row gap-2 items-end">
@@ -70,6 +89,26 @@
                       class="d2-btn disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ loading['search'] ? 'Searching...' : 'Search' }}
               </button>
+            </div>
+            <!-- Add Mode Controls -->
+            <div *ngIf="selectedPlayers.length > 0" class="mt-2">
+              <button (click)="toggleAddMode()" 
+                      class="w-full px-4 py-3 rounded-lg border-2 transition-all duration-200 font-medium text-sm"
+                      [ngClass]="addMode ? 
+                        'border-green-500 bg-green-600/20 text-green-300 hover:bg-green-600/30' : 
+                        'border-yellow-500 bg-yellow-600/20 text-yellow-300 hover:bg-yellow-600/30'">
+                <div class="flex items-center justify-between">
+                  <span>{{ addMode ? '✓ Add Mode Active' : '⚠ Replace Mode Active' }}</span>
+                  <span class="text-xs opacity-80">{{ addMode ? 'Select to add profiles to the existing display' : 'New searches will replace existing profiles' }}</span>
+                </div>
+              </button>
+              <div class="flex justify-between items-center mt-2">
+                <span class="text-xs text-slate-400">Profiles: {{ selectedPlayers.length }}/10</span>
+                <button (click)="clearAllPlayers()" 
+                        class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
+                  Clear All
+                </button>
+              </div>
             </div>
             <div *ngIf="errorMessage" class="mt-2 text-sm text-red-400">
               {{ errorMessage }}
@@ -129,9 +168,21 @@
           <div *ngIf="accountStats.totalActivityCount > 0 || selectedPlayers.length > 0" class="mb-6">
             <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4">
               <div class="flex items-center justify-between mb-2">
-                <h3 class="text-lg font-semibold text-white">Account Summary</h3>
-                <button (click)="exportActivities()" class="d2-btn bg-green-600 hover:bg-green-500 text-xs px-3 py-1">Export</button>
-                <span *ngIf="loadingAccountStats" class="ml-3 animate-spin text-slate-300"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 12a8 8 0 018-8" /></svg></span>
+                <div class="flex items-center gap-3">
+                  <h3 class="text-lg font-semibold text-white">Account Summary</h3>
+                  <div *ngIf="loadingAccountStats" class="flex items-center gap-2 px-3 py-1 bg-yellow-600/20 border border-yellow-500/50 rounded-full">
+                    <div class="animate-spin text-yellow-400">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M4 12a8 8 0 018-8" />
+                      </svg>
+                    </div>
+                    <span class="text-sm text-yellow-300 font-medium">Loading...</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button (click)="exportActivities()" class="d2-btn bg-green-600 hover:bg-green-500 text-xs px-3 py-1">Export</button>
+                  <button (click)="openExportOptionsDialog()" class="d2-btn bg-blue-600 hover:bg-blue-500 text-xs px-3 py-1">Export Options</button>
+                </div>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="stat-item">
@@ -278,14 +329,14 @@
           <div class="flex gap-4 mb-4">
             <button *ngFor="let g of guardianGames"
                     (click)="setActiveFirstsGame(g)"
-                    class="d2-tab" [ngClass]="{'d2-tab-active': activeFirstsGame===g}">
+                    class="d2-tab" [ngClass]="{'d2-tab-active-blue': activeFirstsGame===g}">
               {{ g === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
             </button>
           </div>
           <!-- Platform Tabs -->
           <div class="flex gap-4 mb-4" *ngIf="platformTabs.length > 1">
-            <button (click)="activeFirstsTab='all'" class="d2-tab" [ngClass]="{'d2-tab-active': activeFirstsTab==='all'}">All Platforms</button>
-            <button *ngFor="let plat of platformTabs" (click)="activeFirstsTab=plat" class="d2-tab flex items-center gap-1" [ngClass]="{'d2-tab-active': activeFirstsTab===plat}">
+            <button (click)="activeFirstsTab='all'" class="d2-tab" [ngClass]="{'d2-tab-active-blue': activeFirstsTab==='all'}">All Platforms</button>
+            <button *ngFor="let plat of platformTabs" (click)="activeFirstsTab=plat" class="d2-tab flex items-center gap-1" [ngClass]="{'d2-tab-active-blue': activeFirstsTab===plat}">
               <img [src]="getPlatformIconUrl(getPlatformId(plat))" class="w-4 h-4" alt="platform" />
               <span>{{ plat }}</span>
             </button>
@@ -514,12 +565,6 @@
                     <div *ngIf="getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
                       No raid firsts found for D1.
                     </div>
-
-                    <!-- Dungeon Solo / Flawless grid -->
-                    <app-dungeon-solo-firsts
-                      *ngIf="dungeonSoloFirsts[player.membershipId]?.length"
-                      [solos]="dungeonSoloFirsts[player.membershipId]">
-                    </app-dungeon-solo-firsts>
                   </ng-container>
                   <!-- D2 Firsts -->
                   <ng-container *ngIf="!isD1Player(player)">
@@ -595,28 +640,55 @@
         <!-- Only show the Titles tab if the selected game is D2 -->
         <ng-container *ngIf="selectedGame === 'D2'">
           <!-- Titles Tab -->
-          <div *ngIf="activeTab === 'titles' && aggregatedTitles.length > 0" class="space-y-6">
+          <div *ngIf="activeTab === 'titles'" class="space-y-6">
             <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
               <div class="flex items-center gap-3">
+                <button (click)="refreshTitles()" 
+                        [disabled]="loadingTitlesOverall"
+                        class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded text-sm flex items-center gap-2">
+                  <svg *ngIf="loadingTitlesOverall" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                  </svg>
+                  {{ loadingTitlesOverall ? 'Refreshing...' : 'Refresh Titles' }}
+                </button>
+                <button (click)="debugTitles()" 
+                        class="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm">
+                  Debug Titles
+                </button>
                 <select [(ngModel)]="titleSort" class="bg-slate-700 text-sm text-white rounded px-2 py-1 border border-slate-600">
                   <option value="alpha">Alphabetical</option>
                   <option value="release">Newest First</option>
                 </select>
                 <div class="flex gap-1 text-xs">
-                  <button (click)="titleFilter='all'" [class.bg-blue-600]="titleFilter==='all'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">All</button>
-                  <button (click)="titleFilter='current'" [class.bg-blue-600]="titleFilter==='current'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">Current</button>
-                  <button (click)="titleFilter='legacy'" [class.bg-blue-600]="titleFilter==='legacy'" class="px-2 py-1 rounded bg-slate-700 hover:bg-blue-500">Legacy</button>
+                  <button (click)="titleFilter='all'" [ngClass]="{'d2-tab d2-tab-active-blue': titleFilter==='all', 'd2-tab': titleFilter!=='all'}">All</button>
+                  <button (click)="titleFilter='current'" [ngClass]="{'d2-tab d2-tab-active-blue': titleFilter==='current', 'd2-tab': titleFilter!=='current'}">Current</button>
+                  <button (click)="titleFilter='legacy'" [ngClass]="{'d2-tab d2-tab-active-blue': titleFilter==='legacy', 'd2-tab': titleFilter!=='legacy'}">Legacy</button>
                 </div>
               </div>
             </div>
-            <div *ngIf="loadingTitlesOverall && aggregatedTitles.length === 0" class="flex justify-center items-center py-8 w-full">
-              <svg class="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <!-- Loading State -->
+            <div *ngIf="loadingTitlesOverall" class="flex flex-col items-center justify-center py-12 w-full">
+              <svg class="animate-spin h-8 w-8 text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
               </svg>
+              <div class="text-lg text-white font-medium">Loading titles...</div>
+              <div class="text-sm text-slate-400 mt-2">Fetching title data from Bungie</div>
             </div>
-            <div *ngIf="!loadingTitlesOverall || aggregatedTitles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+            <!-- Empty State -->
+            <div *ngIf="!loadingTitlesOverall && aggregatedTitles.length === 0" class="flex flex-col items-center justify-center py-12 w-full">
+              <div class="text-lg text-slate-400 font-medium mb-2">No titles found</div>
+              <div class="text-sm text-slate-500 text-center">
+                No Destiny 2 titles are available for the selected accounts.<br>
+                Make sure you have Destiny 2 accounts selected and try refreshing.
+              </div>
+            </div>
+
+            <!-- Titles Grid -->
+            <div *ngIf="!loadingTitlesOverall && aggregatedTitles.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div *ngFor="let title of displayTitles" class="flex items-center gap-4 bg-slate-700/50 rounded-lg p-3 relative" [ngClass]="{'text-slate-400': title.legacy}">
                 <img *ngIf="title.icon" [src]="(title.legacy && title.altIcon) ? title.altIcon : title.icon" class="w-12 h-12 rounded shadow" alt="Seal Icon" [ngClass]="{'grayscale opacity-70': title.legacy && !title.altIcon}" />
                 <div>
@@ -672,59 +744,173 @@
   </div>
 </div>
 
+<!-- Favorites Modal -->
+<div class="modal" [class.show]="showFavoritesModal">
+  <div class="modal-content max-w-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-bold text-white">Favorites</h2>
+      <button (click)="showFavoritesModal = false" class="text-slate-400 hover:text-white text-xl">
+        ✕
+      </button>
+    </div>
+    
+    <div *ngIf="favoriteAccounts.length === 0" class="text-center py-8">
+      <div class="text-slate-400 mb-2">No favorites saved yet</div>
+      <div class="text-sm text-slate-500">Search for profiles and click the star to save them as favorites</div>
+    </div>
+    
+    <div *ngIf="favoriteAccounts.length > 0" class="space-y-3 max-h-96 overflow-y-auto">
+      <div *ngFor="let fav of favoriteAccounts" 
+           class="flex items-center justify-between p-3 bg-slate-700/60 rounded hover:bg-slate-700/80 transition-colors">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          <img [src]="getPlatformIconUrl(fav.membershipType)" class="w-5 h-5 flex-shrink-0" alt="platform" />
+          <img [src]="fav.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-5 h-5 flex-shrink-0" alt="game" />
+          <div class="min-w-0">
+            <div class="text-white font-medium truncate" [title]="fav.displayName">
+              {{ fav.displayName }}
+            </div>
+            <div class="text-sm text-slate-400">{{ fav.platform }} • {{ fav.game }}</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button (click)="loadMultipleFavorites([fav]); showFavoritesModal = false" 
+                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm">
+            Load
+          </button>
+                              <button (click)="removeFavorite(fav.membershipId, fav.game, fav.membershipType)" 
+                            class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-sm">
+                      Remove
+                    </button>
+        </div>
+      </div>
+    </div>
+    
+    <div *ngIf="favoriteAccounts.length > 0" class="mt-4 pt-4 border-t border-slate-600">
+      <button (click)="loadMultipleFavorites(favoriteAccounts); showFavoritesModal = false" 
+              class="w-full px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded font-medium">
+        Load All Favorites
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- Search Results Modal -->
 <div class="modal" [class.show]="showPlatformPicker">
-  <div class="modal-content">
-    <h2>Select Account</h2>
-    <button class="select-all-button mb-4" (click)="selectAllPlayersInModal()">Select All</button>
-    <div class="search-results">
+  <div class="modal-content max-w-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-bold text-white">Select Accounts</h2>
+      <button (click)="showPlatformPicker = false" class="text-slate-400 hover:text-white text-xl">
+        ✕
+      </button>
+    </div>
+    
+    <!-- Mode Indicator -->
+    <div *ngIf="selectedPlayers.length > 0" class="mb-4 p-3 rounded text-sm" 
+         [ngClass]="addMode ? 'bg-green-900/50 text-green-200' : 'bg-yellow-900/50 text-yellow-200'">
+      <div class="font-semibold mb-1">
+        {{ addMode ? '✓ Add Mode Active' : '⚠ Replace Mode Active' }}
+      </div>
+      <div class="text-xs opacity-90">
+        {{ addMode ? 'Selected accounts will be added to your current display.' : 'Selected accounts will replace your current display.' }}
+      </div>
+    </div>
+    
+    <!-- Selection Controls -->
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2">
+        <button (click)="selectAllPlayersInModal()" 
+                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm">
+          Select All
+        </button>
+        <button (click)="clearModalSelection()" 
+                class="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm">
+          Clear Selection
+        </button>
+        <button (click)="addSelectedToFavorites()" 
+                [disabled]="getSelectedCount() === 0"
+                class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded text-sm">
+          Add to Favorites
+        </button>
+      </div>
+      <div class="text-sm text-slate-400">
+        {{ getSelectedCount() }} of {{ getTotalCount() }} selected
+      </div>
+    </div>
+    
+    <div class="space-y-4 max-h-96 overflow-y-auto">
       <!-- Cross Save Option -->
-      <div *ngIf="crossSavePlayer" class="result-section">
-        <h3>Cross Save Account</h3>
-        <div class="result-list">
-          <div class="result-item cross-save" (click)="selectPlayer(crossSavePlayer)">
-            <div class="platform-icon">
-              <img [src]="getPlatformIconUrl(crossSavePlayer.membershipType)" class="w-4 h-4" alt="platform" />
-            </div>
-            <div class="player-info">
-              <div class="player-name">{{crossSavePlayer.displayName}}</div>
-              <div class="platform-name">Cross Save ({{crossSavePlayer.platform}})</div>
+      <div *ngIf="crossSavePlayer" class="bg-slate-700/60 rounded-lg p-3">
+        <h3 class="text-lg font-semibold text-yellow-300 mb-2">Cross Save Account</h3>
+        <div class="flex items-center justify-between p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
+          <div class="flex items-center gap-3 flex-1">
+            <input type="checkbox" 
+                   [checked]="isPlayerSelected(crossSavePlayer)"
+                   (change)="togglePlayerSelection(crossSavePlayer)"
+                   class="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500">
+            <img [src]="getPlatformIconUrl(crossSavePlayer.membershipType)" class="w-5 h-5" alt="platform" />
+            <div>
+              <div class="text-white font-medium">{{crossSavePlayer.displayName}}</div>
+              <div class="text-sm text-slate-400">Cross Save ({{crossSavePlayer.platform}})</div>
             </div>
           </div>
         </div>
       </div>
+      
       <!-- D2 Results -->
-      <div *ngIf="d2SearchResults.length > 0" class="result-section">
-        <h3>Destiny 2 Accounts</h3>
-        <div class="result-list">
-          <div *ngFor="let player of d2SearchResults" class="result-item" (click)="selectPlayer(player)">
-            <div class="platform-icon">
-              <img [src]="getPlatformIconUrl(player.membershipType)" class="w-4 h-4" alt="platform" />
-            </div>
-            <div class="player-info">
-              <div class="player-name">{{player.displayName}}</div>
-              <div class="platform-name">{{getPlatformName(player.membershipType)}}</div>
+      <div *ngIf="d2SearchResults.length > 0" class="bg-slate-700/60 rounded-lg p-3">
+        <h3 class="text-lg font-semibold text-blue-300 mb-2">Destiny 2 Accounts</h3>
+        <div class="space-y-2">
+          <div *ngFor="let player of d2SearchResults" 
+               class="flex items-center justify-between p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
+            <div class="flex items-center gap-3 flex-1">
+              <input type="checkbox" 
+                     [checked]="isPlayerSelected(player)"
+                     (change)="togglePlayerSelection(player)"
+                     class="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500">
+              <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
+              <div>
+                <div class="text-white font-medium">{{player.displayName}}</div>
+                <div class="text-sm text-slate-400">{{getPlatformName(player.membershipType)}}</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
+      
       <!-- D1 Results -->
-      <div *ngIf="d1SearchResults.length > 0" class="result-section">
-        <h3>Destiny 1 Accounts</h3>
-        <div class="result-list">
-          <div *ngFor="let player of d1SearchResults" class="result-item" (click)="selectPlayer(player)">
-            <div class="platform-icon">
-              <img [src]="getPlatformIconUrl(player.membershipType)" class="w-4 h-4" alt="platform" />
-            </div>
-            <div class="player-info">
-              <div class="player-name">{{player.displayName}}</div>
-              <div class="platform-name">{{getPlatformName(player.membershipType)}}</div>
+      <div *ngIf="d1SearchResults.length > 0" class="bg-slate-700/60 rounded-lg p-3">
+        <h3 class="text-lg font-semibold text-slate-300 mb-2">Destiny 1 Accounts</h3>
+        <div class="space-y-2">
+          <div *ngFor="let player of d1SearchResults" 
+               class="flex items-center justify-between p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
+            <div class="flex items-center gap-3 flex-1">
+              <input type="checkbox" 
+                     [checked]="isPlayerSelected(player)"
+                     (change)="togglePlayerSelection(player)"
+                     class="w-4 h-4 text-blue-600 bg-slate-700 border-slate-600 rounded focus:ring-blue-500">
+              <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
+              <div>
+                <div class="text-white font-medium">{{player.displayName}}</div>
+                <div class="text-sm text-slate-400">{{getPlatformName(player.membershipType)}}</div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <button class="close-button" (click)="showPlatformPicker = false">Cancel</button>
+    
+    <!-- Action Buttons -->
+    <div class="flex items-center justify-between mt-6 pt-4 border-t border-slate-600">
+      <button (click)="showPlatformPicker = false" 
+              class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded">
+        Cancel
+      </button>
+      <button (click)="loadSelectedPlayers()" 
+              [disabled]="getSelectedCount() === 0"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded font-medium">
+        Load Selected ({{ getSelectedCount() }})
+      </button>
+    </div>
   </div>
 </div>
 
@@ -737,3 +923,6 @@
     Clear Activity Database
   </button>
 </div> 
+
+  <!-- Export Options Dialog Placeholder -->
+  <app-export-options-dialog *ngIf="showExportDialog" [selectedDate]="selectedDate" (close)="showExportDialog = false" (export)="handleExportOptions($event)"></app-export-options-dialog> 

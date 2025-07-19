@@ -3,6 +3,7 @@ import { ActivityDbService } from './activity-db.service';
 import { ActivityHistory } from '../models/activity-history.model';
 import * as FileSaver from 'file-saver';
 import * as XLSX from 'xlsx';
+import { TitleService } from './title.service';
 
 export interface ExportRequest {
   from: Date;
@@ -18,9 +19,32 @@ export interface ExportPayload {
   activities?: ActivityHistory[];
 }
 
+export interface ExportOptions {
+  from?: Date;
+  to?: Date;
+  includeActivities?: boolean;
+  includeFirsts?: boolean;
+  includeTitles?: boolean;
+  includeSummary?: boolean;
+  allDates?: boolean;
+  showIconsInline?: boolean; // New option for inline icons
+}
+
+export interface ExportContext {
+  selectedPlayers: any[];
+  activityDb: any;
+  manifestService: any;
+  characters: any;
+  getPlayerKey: (player: any) => string;
+  titleService: TitleService;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ExportService {
-  constructor(private activityDb: ActivityDbService) {}
+  constructor(
+    private activityDb: ActivityDbService,
+    private titleService: TitleService
+  ) {}
 
   /**
    * Builds an object containing whichever slices were requested.
@@ -71,5 +95,155 @@ export class ExportService {
       .toISOString()
       .replace(/[:.]/g, '-')}.xlsx`;
     FileSaver.saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName);
+  }
+
+  /**
+   * Multi-sheet export for activities, firsts, titles/seals, and account summary.
+   * Sheets are Google Sheets compatible (no embedded images, icon URLs only).
+   */
+  async exportMultiSheet(options: ExportOptions, context: ExportContext): Promise<void> {
+    // Use the passed-in context for all data gathering
+    const { selectedPlayers, activityDb, manifestService, characters, getPlayerKey } = context;
+    // 1. Gather data for each requested sheet
+    const sheets: { [name: string]: any[] } = {};
+
+    if (options.includeActivities) {
+      const activities: any[] = [];
+      if (options.allDates) {
+        for (const player of selectedPlayers) {
+          let playerActivities = await activityDb.getAllActivities(player.membershipId);
+          for (const activity of playerActivities) {
+            activities.push({
+              Player: player.displayName,
+              Platform: player.platform,
+              Date: activity.date,
+              Name: manifestService.getActivityName(activity.activityHash),
+              Type: manifestService.getActivityType(activity.activityHash),
+              Hash: activity.activityHash,
+              PGCR: activity.pgcrId ? `https://www.bungie.net/en/PGCR/${activity.pgcrId}` : '',
+            });
+          }
+        }
+      } else {
+        // Selected date export: gather activities for each character on that date
+        if (!options.from) {
+          console.error('[ExportService] No date provided in options.from. Skipping export for selected date.');
+          return;
+        }
+        const date = new Date(options.from);
+        if (isNaN(date.getTime())) {
+          console.error('[ExportService] Invalid date in options.from:', options.from);
+          return;
+        }
+        const month = date.getUTCMonth() + 1;
+        const day = date.getUTCDate();
+        console.log('[ExportService] Exporting for date:', { from: options.from, month, day });
+        for (const player of selectedPlayers) {
+          const charObjs = (characters && getPlayerKey) ? (characters[getPlayerKey(player)] || []) : [];
+          const charIds = charObjs.map((c: any) => c.characterId).filter((id: any) => !!id);
+          for (const charId of charIds) {
+            const acts = await activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
+            for (const activity of acts) {
+              activities.push({
+                Player: player.displayName,
+                Platform: player.platform,
+                Date: activity.period,
+                Name: manifestService.getActivityName(activity.activityDetails?.referenceId, player.game === 'D1'),
+                Type: manifestService.getActivityType(activity.activityDetails?.referenceId, activity.activityDetails?.mode),
+                Hash: activity.activityDetails?.referenceId,
+                PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
+              });
+            }
+          }
+        }
+      }
+      sheets['Activities'] = activities;
+    }
+
+    if (options.includeFirsts) {
+      const firsts: any[] = [];
+      for (const player of selectedPlayers) {
+        const charObjs = (characters && getPlayerKey) ? (characters[getPlayerKey(player)] || []) : [];
+        const charIds = charObjs.map((c: any) => c.characterId).filter((id: any) => !!id);
+        for (const charId of charIds) {
+          // Assume activityDb.getFirstCompletions returns GuardianFirsts for this character
+          const firstsData = await activityDb.getFirstCompletions(player.membershipId, charId, player.game);
+          for (const family in firstsData) {
+            const first = firstsData[family];
+            if (!first) continue;
+            firsts.push({
+              Player: player.displayName,
+              Platform: player.platform,
+              Family: family,
+              Name: manifestService.getActivityName(first.activityHash, player.game === 'D1'),
+              Type: manifestService.getActivityType(first.activityHash, first.mode),
+              Date: first.completionDate,
+              Hash: first.activityHash,
+              PGCR: first.pgcrId ? `https://www.bungie.net/en/PGCR/${first.pgcrId}` : '',
+            });
+          }
+        }
+      }
+      sheets['Guardian Firsts'] = firsts;
+    }
+
+    if (options.includeTitles) {
+      const titles: any[] = [];
+      for (const player of selectedPlayers) {
+        // Use TitleService to get titles for the player
+        const titlesList = await this.titleService.getPlayerTitles(player);
+        for (const title of titlesList) {
+          const iconUrl = title.icon; // Use icon property from TitleItem
+          const row: any = {
+            Player: player.displayName,
+            Platform: player.platform,
+            Name: title.name,
+            CompletionDate: title.completed ? 'Yes' : 'No',
+            Gilded: title.isGilded,
+            Hash: title.hash,
+            IconURL: iconUrl
+          };
+          if (options.showIconsInline) {
+            row['Icon (Google Sheets)'] = iconUrl ? `=IMAGE("${iconUrl}")` : '';
+          }
+          titles.push(row);
+        }
+      }
+      sheets['Titles & Seals'] = titles;
+    }
+
+    if (options.includeSummary) {
+      const summary: any[] = [];
+      for (const player of selectedPlayers) {
+        // Assume activityDb.getAccountSummary returns stats for the player
+        const stats = await activityDb.getAccountSummary(player.membershipId);
+        summary.push({
+          Player: player.displayName,
+          Platform: player.platform,
+          TotalTime: stats.totalTime,
+          TotalActivities: stats.totalActivities,
+          TotalSeals: stats.totalSeals,
+          TotalFirsts: stats.totalFirsts,
+        });
+      }
+      sheets['Account Summary'] = summary;
+    }
+
+    // 2. Generate the workbook
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    let hasData = false;
+    for (const [sheetName, data] of Object.entries(sheets)) {
+      if (data.length > 0) {
+        hasData = true;
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+    }
+    if (!hasData) {
+      throw new Error('Workbook is empty');
+    }
+    const filename = `destiny-chronicle-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
   }
 } 
