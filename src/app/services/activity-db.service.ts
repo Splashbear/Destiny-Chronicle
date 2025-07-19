@@ -241,8 +241,24 @@ export class ActivityDbService extends Dexie {
       // }).catch(error => {
       //   console.error('[Dexie] Error checking activity count:', error);
       // });
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Dexie] Error initializing ActivityDbService:', error);
+      // Self-healing: if we hit a duplicate-index/ConstraintError, wipe the DB
+      // and reload so the app can recreate a clean schema automatically.
+      const msg = error?.message || '';
+      const isDuplicateIndex =
+        error?.name === 'DatabaseClosedError' && /createIndex/i.test(msg) && /exists/i.test(msg);
+
+      if (isDuplicateIndex) {
+        console.warn('[Dexie] Duplicate index detected – deleting database and reloading');
+        Dexie.delete('DestinyChronicleDb').catch((err) => {
+          console.warn('[Dexie] Failed to delete DB via Dexie.delete:', err);
+        }).finally(() => {
+          // Give the deletion a tick, then reload the page.
+          setTimeout(() => window.location.reload(), 100);
+        });
+      }
+
       throw error;
     }
   }
