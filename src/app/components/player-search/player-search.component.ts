@@ -892,8 +892,8 @@ export class PlayerSearchComponent implements OnInit {
 
       // Deduplicate by (game, membershipId) so a Destiny 1 and Destiny 2 account with the same ID are both kept
       const unique = players.filter((p, idx, arr) => {
-        const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
-        return arr.findIndex(x => `${(x as any).game || 'D2'}|${x.membershipId}` === key) === idx;
+        const key = `${p.game || 'D2'}|${p.membershipId}`;
+        return arr.findIndex(x => `${x.game || 'D2'}|${x.membershipId}` === key) === idx;
       });
 
       // Identify cross-save primary (if any)
@@ -946,7 +946,7 @@ export class PlayerSearchComponent implements OnInit {
 
     // Check if the exact (game, membershipId) combo is already selected
     const incomingGame = (player as any).game || this.selectedGame;
-    if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && (p as any).game === incomingGame)) {
+    if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && p.game === incomingGame)) {
       return;
     }
 
@@ -1080,7 +1080,7 @@ export class PlayerSearchComponent implements OnInit {
     const incomingGame = (player as any).game || this.selectedGame;
 
     // Deduplicate: no-op if this (game,id) combo is already present.
-    if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && (p as any).game === incomingGame)) {
+    if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && p.game === incomingGame)) {
       return;
     }
 
@@ -3883,7 +3883,7 @@ export class PlayerSearchComponent implements OnInit {
 
   /** Returns a unique key for the given player independent of case */
   public getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
-    return `${(p as any).game || 'D2'}|${p.membershipId}`;
+    return `${p.game || 'D2'}|${p.membershipId}`;
   }
 
   clearModalSelection() {
