@@ -28,7 +28,6 @@ import { PlatformAccount } from '../../models/platform-account.model';
 import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
 import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
-import { AchievementsService, AchievementStatus } from '../../services/achievements.service';
 
 interface ActivityEntry {
   game: string;
@@ -410,7 +409,7 @@ export class PlayerSearchComponent implements OnInit {
   favoriteAccounts: FavoriteAccount[] = [];
   apiAvailable: boolean = true;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' | 'achievements' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' = 'activities';
   activeFirstsTab: string = 'all';
   platformTabs: string[] = [];
   playerTitles: { [key: string]: any } = {};
@@ -452,9 +451,7 @@ export class PlayerSearchComponent implements OnInit {
   titleFilter: 'all' | 'current' | 'legacy' = 'all';
   loadingTitlesOverall = false;
   // -----------------------------------------------
-  // Achievements tab
-  achievementsList: AchievementStatus[] = [];
-  loadingAchievements: boolean = false;
+
   // -----------------------------------------------
   private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
   private syncedPlayers: Set<string> = new Set();
@@ -545,8 +542,7 @@ export class PlayerSearchComponent implements OnInit {
     private playtimeService: PlaytimeService,
     private titleService: TitleService,
     private selectedAccounts: SelectedAccountsService,
-    private exportService: ExportService,
-    private achievementsService: AchievementsService
+    private exportService: ExportService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -3376,7 +3372,7 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
-  private async onTabChangeLegacy(tab: 'activities' | 'firsts' | 'titles' | 'achievements') {
+  private async onTabChangeLegacy(tab: 'activities' | 'firsts' | 'titles') {
     this.activeTab = tab;
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
       this.loadingTitlesOverall = true;
@@ -3630,11 +3626,6 @@ export class PlayerSearchComponent implements OnInit {
       );
       this.loadingTitlesOverall = false;
       this.cdr.detectChanges();
-    } else if (tab === 'achievements') {
-      if (!this.achievementsTargetKey) this.chooseDefaultAchievementsTarget();
-      if (this.achievementsTarget) {
-        await this.loadAchievementsForPlayer(this.achievementsTarget);
-      }
     }
   }
 
@@ -4241,46 +4232,11 @@ export class PlayerSearchComponent implements OnInit {
     this.checkForSpecificTitles();
   }
 
-  private async loadAchievements(): Promise<void> {
-     // For now show achievements for the first D2 player (cross-save primary if any)
-     const target = this.selectedPlayers.find(p => p.game === 'D2');
-     if (!target) {
-       this.achievementsList = [];
-       return;
-     }
-     try {
-       this.loadingAchievements = true;
-       this.achievementsList = await this.achievementsService.getAchievementStatuses(target.membershipType, target.membershipId);
-     } catch (err) {
-       console.error('[Achievements] Failed to load achievements', err);
-       this.achievementsList = [];
-     } finally {
-       this.loadingAchievements = false;
-       this.cdr.detectChanges();
-     }
-  }
 
-  // ... inside class ...
-  /** Which player's achievements are currently displayed (membershipId|game key) */
-  public achievementsTargetKey: string | null = null;
 
-  /** Returns PlayerSearchDisplay for current achievements target */
-  private get achievementsTarget(): PlayerSearchDisplay | undefined {
-    if (!this.achievementsTargetKey) return undefined;
-    return this.selectedPlayers.find(p => this.getPlayerKey(p) === this.achievementsTargetKey);
-  }
 
-  private chooseDefaultAchievementsTarget(): void {
-    // Prefer primary cross-save D2 account
-    const d2Players = this.selectedPlayers.filter(p => p.game === 'D2');
-    if (d2Players.length === 0) { this.achievementsTargetKey = null; return; }
 
-    let primary = d2Players.find(p => (p as any).isPrimary);
-    if (!primary) primary = d2Players[0];
-    this.achievementsTargetKey = this.getPlayerKey(primary);
-  }
-
-  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'achievements') {
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
     this.activeTab = tab;
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
       this.loadingTitlesOverall = true;
@@ -4534,33 +4490,10 @@ export class PlayerSearchComponent implements OnInit {
       );
       this.loadingTitlesOverall = false;
       this.cdr.detectChanges();
-    } else if (tab === 'achievements') {
-      if (!this.achievementsTargetKey) this.chooseDefaultAchievementsTarget();
-      if (this.achievementsTarget) {
-        await this.loadAchievementsForPlayer(this.achievementsTarget);
-      }
     }
   }
 
-  async setAchievementsTarget(playerKey: string): Promise<void> {
-    this.achievementsTargetKey = playerKey;
-    const p = this.achievementsTarget;
-    if (p) await this.loadAchievementsForPlayer(p);
-  }
 
-  private async loadAchievementsForPlayer(player: PlayerSearchDisplay): Promise<void> {
-    if (player.game !== 'D2') { this.achievementsList = []; return; }
-    try {
-      this.loadingAchievements = true;
-      this.achievementsList = await this.achievementsService.getAchievementStatuses(player.membershipType, player.membershipId);
-    } catch (err) {
-      console.error('[Achievements] Failed', err);
-      this.achievementsList = [];
-    } finally {
-      this.loadingAchievements = false;
-      this.cdr.detectChanges();
-    }
-  }
 
   // Convenience getter for template (avoids forbidden arrow functions)
   get d2Players(): PlayerSearchDisplay[] {
