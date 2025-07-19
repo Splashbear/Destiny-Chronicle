@@ -334,7 +334,7 @@ interface PlatformStats {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, DungeonSoloFirstsComponent, ExportOptionsDialogComponent],
+  imports: [CommonModule, FormsModule, ExportOptionsDialogComponent],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -3891,7 +3891,7 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   /** Returns a unique key for the given player independent of case */
-  private getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
+  public getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2'; }): string {
     return `${(p as any).game || 'D2'}|${p.membershipId}`;
   }
 
