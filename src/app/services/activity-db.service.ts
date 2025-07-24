@@ -25,6 +25,8 @@ export interface StoredActivity extends ActivityHistory {
 }
 
 export interface FavoriteAccount {
+  id?: number; // Auto-incremented primary key
+  compositeKey: string; // Synthetic key for uniqueness
   membershipId: string;
   membershipType: number;
   displayName: string;
@@ -38,7 +40,8 @@ export interface FavoriteAccount {
 })
 export class ActivityDbService extends Dexie {
   activities!: Table<StoredActivity, number>;
-  favorites!: Table<FavoriteAccount, string>;
+  favorites!: Table<FavoriteAccount, number>;
+  initPromise: Promise<void>;
 
   // Canonical mapping for all D2 and D1 raids/dungeons (2024, expand as needed)
   private static readonly ACTIVITY_FAMILY_MAP: Record<string, string> = {
@@ -178,89 +181,43 @@ export class ActivityDbService extends Dexie {
     private pgcrCacheService: PGCRCacheService,
     private http: HttpClient
   ) {
-    super('DestinyChronicleDb');
+    // Bump DB name to V4 so we can redefine the favorites schema with an auto-increment primary key.
+    // This avoids the historical bug where `membershipId` was the primary key, which prevented
+    // having multiple rows for the same membershipId (e.g., D1 vs D2) and triggered Dexie
+    // ConstraintErrors.  Existing data will be recreated automatically on first use.
+    super('DestinyChronicleDbV4');
     try {
+      // Version 1: original schema
       this.version(1).stores({
-        activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]',
-        favorites: 'membershipId, game, membershipType'
-      });
-
-      this.version(2).stores({
-        activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, [membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId]',
-        favorites: 'membershipId, game, membershipType'
-      }).upgrade(tx => {
-        console.log('[Dexie] Upgrading to version 2');
-      });
-
-      this.version(3).stores({
-        activities: '++id, membershipId, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
-                   '[membershipId+characterId+instanceId], ' + // For deduplication
-                   '[membershipId+characterId+mode], ' + // For activity type filtering
-                   '[period+membershipId+characterId], ' + // For date-based queries
-                   '[game+membershipId+characterId], ' + // For game-specific queries
-                   '[mode+period+membershipId], ' + // For activity type + date queries
-                   '[validated+membershipId+characterId]', // For validation status
-        favorites: 'membershipId, game, membershipType'
-      }).upgrade(tx => {
-        console.log('[Dexie] Upgrading to version 3');
-        // Add game field to existing activities
-        return tx.table('activities').toCollection().modify((activity: any) => {
-          activity.game = activity.activityDetails?.mode >= 4 ? 'D2' : 'D1';
-        });
-      });
-
-      // Version 4 – add membershipType index so we can query by platform quickly
-      this.version(4).stores({
         activities: '++id, membershipId, membershipType, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
                    '[membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId], ' +
-                   '[game+membershipId+characterId], membershipType',
-        favorites: 'membershipId, game, membershipType'
-      }).upgrade(tx => {
-        console.log('[Dexie] Upgrading to version 4 (membershipType index)');
+                   '[game+membershipId+characterId]',
+        favorites: '++id, compositeKey, membershipId, game, membershipType'
       });
-
-      // Version 5 – update favorites schema to include membershipType in primary key
-      this.version(5).stores({
-        activities: '++id, membershipId, membershipType, characterId, period, instanceId, mode, validated, validatedAt, game, ' +
-                   '[membershipId+characterId+instanceId], [membershipId+characterId+mode], [period+membershipId+characterId], ' +
-                   '[game+membershipId+characterId], membershipType',
-        favorites: 'membershipId, game, membershipType'
-      }).upgrade(tx => {
-        console.log('[Dexie] Upgrading to version 5 (favorites membershipType key)');
-        // Clear existing favorites to prevent conflicts with new schema
-        return tx.table('favorites').clear();
-      });
-
-      this.activities = this.table('activities');
-      this.favorites = this.table('favorites');
-      // console.log('[Dexie] ActivityDbService initialized successfully');
-      
-      // Test the database connection
-      // this.activities.count().then(count => {
-      //   console.log(`[Dexie] Current activity count: ${count}`);
-      // }).catch(error => {
-      //   console.error('[Dexie] Error checking activity count:', error);
-      // });
+      this.initPromise = this.init();
     } catch (error: any) {
       console.error('[Dexie] Error initializing ActivityDbService:', error);
-      // Self-healing: if we hit a duplicate-index/ConstraintError, wipe the DB
-      // and reload so the app can recreate a clean schema automatically.
+      // Self-healing: if we hit a duplicate-index/ConstraintError, wipe the DB and reload
       const msg = error?.message || '';
       const isDuplicateIndex =
         error?.name === 'DatabaseClosedError' && /createIndex/i.test(msg) && /exists/i.test(msg);
-
       if (isDuplicateIndex) {
         console.warn('[Dexie] Duplicate index detected – deleting database and reloading');
-        Dexie.delete('DestinyChronicleDb').catch((err) => {
+        Dexie.delete('DestinyChronicleDbV3').catch((err) => {
           console.warn('[Dexie] Failed to delete DB via Dexie.delete:', err);
         }).finally(() => {
           // Give the deletion a tick, then reload the page.
           setTimeout(() => window.location.reload(), 100);
         });
       }
-
       throw error;
     }
+  }
+
+  private async init() {
+    await this.open();
+    this.activities = this.table('activities');
+    this.favorites = this.table('favorites');
   }
 
   private isDuplicateActivity(a1: StoredActivity, a2: StoredActivity): boolean {
@@ -270,6 +227,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async addActivities(activities: StoredActivity[]) {
+    await this.initPromise;
     try {
       // console.log(`[Dexie] Adding ${activities.length} activities to database`);
       // Deduplicate activities before storing
@@ -289,6 +247,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getActivitiesByDate(membershipId: string, characterId: string, month: number, day: number, year?: number): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       // Defensive check
       if (!membershipId || !characterId || !month || !day) {
@@ -326,6 +285,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getActivitiesByMode(membershipId: string, characterId: string, mode: number): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       // console.log(`[Dexie] Getting activities for ${membershipId}/${characterId} with mode ${mode}`);
       const activities = await this.activities
@@ -341,6 +301,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async clearActivitiesForCharacter(membershipId: string, characterId: string) {
+    await this.initPromise;
     try {
       // console.log(`[Dexie] Clearing activities for ${membershipId}/${characterId}`);
       await this.activities
@@ -354,6 +315,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getAllActivitiesForCharacter(membershipId: string, characterId: string): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       // console.log(`[Dexie] Getting all activities for ${membershipId}/${characterId}`);
       const activities = await this.activities.where({ membershipId, characterId }).toArray();
@@ -384,6 +346,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async clearAllActivities() {
+    await this.initPromise;
     try {
       await this.activities.clear();
       // console.log('[Dexie] All activities cleared.');
@@ -394,6 +357,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getActivityByInstanceId(instanceId: string): Promise<StoredActivity | undefined> {
+    await this.initPromise;
     try {
       return await this.activities.where('instanceId').equals(instanceId).first();
     } catch (error) {
@@ -403,6 +367,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getUnvalidatedActivities(membershipId: string, characterId: string): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       return await this.activities
         .where({ membershipId, characterId })
@@ -415,6 +380,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getFirstCompletions(membershipId: string, characterId: string, game: 'D1' | 'D2'): Promise<GuardianFirsts> {
+    await this.initPromise;
     // Fetch all stored activities for this membership/character
     const activities = await this.activities
       .where(['membershipId', 'characterId'])
@@ -528,6 +494,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async validateAllActivities() {
+    await this.initPromise;
     const all = await this.activities.toArray();
     let updated = 0;
     for (const activity of all) {
@@ -543,6 +510,7 @@ export class ActivityDbService extends Dexie {
   }
 
   private async getLastActivityDate(characterId: string): Promise<Date | null> {
+    await this.initPromise;
     try {
       const activities = await this.activities
         .where('characterId')
@@ -562,6 +530,7 @@ export class ActivityDbService extends Dexie {
 
   // Store a batch of activities and explicitly tag them with the correct game
   private async storeActivities(activities: any[], characterId: string, game: 'D1' | 'D2'): Promise<void> {
+    await this.initPromise;
     try {
       const activitiesToStore = activities.map(activity => ({
         ...activity,
@@ -584,6 +553,7 @@ export class ActivityDbService extends Dexie {
     characterId: string,
     isD1: boolean = false
   ): Promise<void> {
+    await this.initPromise;
     try {
       // console.log('[DEBUG] Starting activity fetch:', {
       //   membershipType,
@@ -664,11 +634,25 @@ export class ActivityDbService extends Dexie {
     }
   }
 
+  // Helper to generate a composite key for a favorite account
+  private getFavoriteKey(account: FavoriteAccount): string {
+    return `${account.membershipId}|${account.game}|${account.membershipType}`;
+  }
+
   async addFavorite(account: FavoriteAccount) {
-    await this.favorites.put(account);
+    await this.initPromise;
+    // Deduplicate in app logic using the composite key
+    const allFavorites = await this.favorites.toArray();
+    const exists = allFavorites.some(fav => this.getFavoriteKey(fav) === this.getFavoriteKey(account));
+    if (!exists) {
+      await this.favorites.add(account);
+    } else {
+      await this.favorites.put(account); // Update if already exists
+    }
   }
 
   async removeFavorite(membershipId: string, game: 'D1' | 'D2', membershipType?: number) {
+    await this.initPromise;
     if (membershipType !== undefined) {
       // Remove specific platform account
       await this.favorites.where({ membershipId, game, membershipType }).delete();
@@ -679,10 +663,12 @@ export class ActivityDbService extends Dexie {
   }
 
   async getFavorites(): Promise<FavoriteAccount[]> {
+    await this.initPromise;
     return this.favorites.toArray();
   }
 
   async getActivitiesByGame(membershipId: string, characterId: string, game: 'D1' | 'D2'): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       return await this.activities
         .where('[game+membershipId+characterId]')
@@ -695,6 +681,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getActivitiesByModeAndDate(membershipId: string, mode: number, startDate: Date, endDate: Date): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       return await this.activities
         .where('[mode+period+membershipId]')
@@ -710,6 +697,7 @@ export class ActivityDbService extends Dexie {
   }
 
   async getUnvalidatedActivitiesByCharacter(membershipId: string, characterId: string): Promise<StoredActivity[]> {
+    await this.initPromise;
     try {
       return await this.activities
         .where({ membershipId, characterId })
@@ -756,6 +744,7 @@ export class ActivityDbService extends Dexie {
    * This method performs an in-memory scan—no extra API calls.
    */
   async getDungeonSoloFirsts(membershipId: string): Promise<DungeonSoloFirst[]> {
+    await this.initPromise;
     // Gather all stored activities for this player (all characters) limited to Destiny 2.
     const activities = await this.activities
       .where('membershipId')
@@ -811,6 +800,7 @@ export class ActivityDbService extends Dexie {
 
   /** Returns how many activities we have stored for the given list of membershipIds */
   async countActivitiesForMemberships(membershipIds: string[]): Promise<number> {
+    await this.initPromise;
     if (!membershipIds?.length) return 0;
     return this.activities.where('membershipId').anyOf(membershipIds).count();
   }
@@ -820,6 +810,7 @@ export class ActivityDbService extends Dexie {
    * 1 = Xbox, 2 = PlayStation, 3 = Steam, 4 = Blizzard, 5 = Stadia, 6 = Epic
    */
   async getActivitiesByPlatform(membershipType: number): Promise<StoredActivity[]> {
+    await this.initPromise;
     return this.activities.where('membershipType').equals(membershipType).toArray();
   }
 
@@ -831,6 +822,7 @@ export class ActivityDbService extends Dexie {
     offset: number = 0,
     limit: number = 50
   ): Promise<StoredActivity[]> {
+    await this.initPromise;
     return this.activities
       .where('membershipId')
       .equals(membershipId)
@@ -848,6 +840,7 @@ export class ActivityDbService extends Dexie {
     startDate: Date,
     endDate: Date
   ): Promise<StoredActivity[]> {
+    await this.initPromise;
     const startPeriod = startDate.toISOString();
     const endPeriod = endDate.toISOString();
     return this.activities

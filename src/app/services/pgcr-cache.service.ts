@@ -4,8 +4,8 @@ import { prunePgcr, PrunedPgcr } from '../utils/pgcr-prune';
 
 interface ChronicleDB extends IDBPDatabase<any> {}
 
-const DB_NAME = 'chronicle';
-const DB_VERSION = 1;
+const DB_NAME = 'DestinyChroniclePgcrCache';
+const DB_VERSION = 5;
 
 @Injectable({
   providedIn: 'root'

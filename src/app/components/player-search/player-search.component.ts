@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
-import { LoadingProgress } from '../loading-progress/loading-progress.component';
+import { LoadingProgressComponent } from '../loading-progress/loading-progress.component';
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
@@ -28,6 +28,7 @@ import { PlatformAccount } from '../../models/platform-account.model';
 import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
 import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
+import { LoadingProgress } from '../../models/loading-progress.model';
 
 interface ActivityEntry {
   game: string;
@@ -708,14 +709,20 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async addFavorite(player: PlayerSearchDisplay) {
-    await this.activityDb.addFavorite({
+    const favorite: FavoriteAccount = {
       membershipId: player.membershipId,
       membershipType: player.membershipType,
       displayName: player.displayName,
       game: player.game,
       platform: player.platform,
-      lastUpdated: new Date().toISOString()
-    });
+      lastUpdated: new Date().toISOString(),
+      compositeKey: this.getFavoriteKey({
+        membershipId: player.membershipId,
+        game: player.game,
+        membershipType: player.membershipType
+      })
+    };
+    await this.activityDb.addFavorite(favorite);
     await this.loadFavorites();
   }
 
@@ -1675,9 +1682,12 @@ export class PlayerSearchComponent implements OnInit {
           }
 
           // Emit progress before heavy processing so user sees immediate feedback
+          const percent = ((page + 1) / (page + 2)) * 100;
           this.updateLoadingProgress(
-            character.characterId,
-            ((page + 1) / (page + 2)) * 100
+            'fetch',
+            percent,
+            100,
+            `Fetching activities (${percent.toFixed(0)}%)…`
           );
           
           page++;
@@ -1697,19 +1707,22 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   private updateLoadingProgress(
-    characterId: string,
-    progress: number
+    phase: LoadingProgress['phase'],
+    current: number,
+    total: number,
+    message: string
   ): void {
-    this.loadingProgress = {
-      characterId,
-      progress,
-      message: `Processed ${this.overallActivitiesProcessed} activities...`
-    };
+    if (this.loadingProgress) {
+      Object.assign(this.loadingProgress, { phase, current, total, message });
+    } else {
+      this.loadingProgress = { phase, current, total, message };
+    }
     this.cdr.detectChanges();
   }
 
   private async processAndGroupActivities(): Promise<void> {
-    if (!this.filteredActivitiesForDate.length) {
+    const totalToProcess = this.filteredActivitiesForDate.length;
+    if (totalToProcess === 0) {
       // If we have no activities for the current refresh **but** the UI
       // already has data from earlier players, keep the existing view so
       // it doesn't flicker away while the new account finishes syncing.
@@ -1722,6 +1735,9 @@ export class PlayerSearchComponent implements OnInit {
       this.debugLogEarliestActivity();
       return;
     }
+    // Initialise process-phase progress bar
+    this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
+    let processedCount = 0;
     const accountGroups = new Map<string, AccountGroup>();
     for (const activity of this.filteredActivitiesForDate) {
       const accountKey = `${activity.game}|${activity.membershipId}`;
@@ -1764,7 +1780,23 @@ export class PlayerSearchComponent implements OnInit {
         });
       }
       yearGroup.typeGroups.get(groupKey)!.activities.push(activity);
+
+      // Increment progress periodically to keep UI responsive
+      processedCount++;
+      if (processedCount % 200 === 0) {
+        this.updateLoadingProgress(
+          'process',
+          processedCount,
+          totalToProcess,
+          `Processing activities (${((processedCount / totalToProcess) * 100).toFixed(0)}%)…`
+        );
+        // Trigger partial change detection so the UI can start filling
+        this.cdr.detectChanges();
+      }
     }
+
+    // Final update: processing complete
+    this.updateLoadingProgress('process', totalToProcess, totalToProcess, 'Processing complete');
 
     // Sort activities within each group by time (descending)
     for (const account of accountGroups.values()) {
@@ -1811,13 +1843,8 @@ export class PlayerSearchComponent implements OnInit {
   public async loadAllFilteredActivities(forceRefresh: boolean = false) {
     const loadToken = ++this.currentLoadToken;
 
-    // Only show the blocking loading state until the very first slice of activities has rendered.
-    // Background refreshes should keep the UI visible so the list doesn't disappear and reappear.
-    const showSpinner = !this.initialDisplayShown;
-    if (showSpinner) {
-      this.loadingActivities[this.selectedDate] = true;
-      this.cdr.detectChanges();
-    }
+    // Kick off render-phase progress bar (will update inside slice loop)
+    this.updateLoadingProgress('render', 0, 1, 'Preparing display…');
 
     try {
       const activities = await this.getAllFilteredActivitiesForDate(forceRefresh);
@@ -1828,14 +1855,41 @@ export class PlayerSearchComponent implements OnInit {
         await this.manifest.isLoaded().toPromise();
       }
 
+      // PROCESS phase handled separately—ensure groups are ready before rendering slices
       this.processAndGroupActivities();
-      this.updateActivityDisplay();
-      // Recalculate account-level statistics now that filtered activities are available
-      this.statsDebounce$.next();
+
+      // ---------- RENDER PHASE ----------
+      const sliceSize = 250;
+      const totalSlices = Math.max(1, Math.ceil(this.filteredActivitiesForDate.length / sliceSize));
+      for (let i = 0; i < totalSlices; i++) {
+        if (loadToken !== this.currentLoadToken) return; // Abort if newer load started
+
+        // Nothing special: activities already grouped; we just trigger change detection so list updates
+        this.updateActivityDisplay();
+
+        // Progress update
+        this.updateLoadingProgress(
+          'render',
+          i + 1,
+          totalSlices,
+          `Rendering activities (${Math.round(((i + 1) / totalSlices) * 100)}%)…`
+        );
+
+        // Give the UI a chance to paint between large batches
+        await new Promise(requestAnimationFrame);
+      }
+
+      // Fade out overlay after a short delay so user sees 100% state
+      if (loadToken === this.currentLoadToken) {
+        setTimeout(() => {
+          this.loadingProgress = null;
+          this.cdr.detectChanges();
+        }, 300);
+      }
     } catch (error) {
       // handle error
     } finally {
-      if (showSpinner && loadToken === this.currentLoadToken) {
+      if (loadToken === this.currentLoadToken) {
         this.loadingActivities[this.selectedDate] = false;
         this.cdr.detectChanges();
       }
@@ -3853,32 +3907,65 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  // Helper to generate a composite key for a favorite account
+  private getFavoriteKey(account: { membershipId: string; game: 'D1' | 'D2'; membershipType: number }): string {
+    return `${account.membershipId}|${account.game}|${account.membershipType}`;
+  }
+
   async addSelectedToFavorites() {
-    const selectedPlayers: PlayerSearchDisplay[] = [];
-    
-    // Get all available players
+    // Gather all available players
     const all: PlayerSearchDisplay[] = [];
     if (this.crossSavePlayer) {
       all.push(this.crossSavePlayer);
     }
-    all.push(...this.d2SearchResults.filter(p => !p.isCrossSavePrimary));
+    all.push(...this.d2SearchResults.filter((p: PlayerSearchDisplay) => !p.isCrossSavePrimary));
     all.push(...this.d1SearchResults);
 
-    // Filter to only selected players
-    all.forEach(player => {
-      if (this.modalSelectedPlayers.has(this.getPlayerKey(player))) {
-        selectedPlayers.push(player);
-      }
-    });
-
-    // Add each selected player to favorites
-    for (const player of selectedPlayers) {
-      if (!this.isFavorite(player)) {
-        await this.addFavorite(player);
+    // Build selectedPlayers by matching keys in modalSelectedPlayers
+    const selectedPlayers: PlayerSearchDisplay[] = all.filter((player: PlayerSearchDisplay) =>
+      this.modalSelectedPlayers.has(this.getPlayerKey(player))
+    );
+    console.log('[Favorites][AddSelected] Selected players to favorite:', selectedPlayers.map((p: PlayerSearchDisplay) => ({
+      displayName: p.displayName,
+      membershipId: p.membershipId,
+      membershipType: p.membershipType,
+      game: p.game,
+      platform: p.platform
+    })));
+    // Convert to FavoriteAccount for deduplication and favoriting
+    const now = new Date().toISOString();
+    const favoriteAccounts: FavoriteAccount[] = selectedPlayers.map((player: PlayerSearchDisplay) => ({
+      membershipId: player.membershipId,
+      membershipType: player.membershipType,
+      displayName: player.displayName,
+      game: player.game,
+      platform: player.platform,
+      lastUpdated: now,
+      compositeKey: this.getFavoriteKey({
+        membershipId: player.membershipId,
+        game: player.game,
+        membershipType: player.membershipType
+      })
+    }));
+    // Deduplicate using composite key
+    const uniqueFavorites: { [key: string]: FavoriteAccount } = {};
+    for (const fav of favoriteAccounts) {
+      const key = this.getFavoriteKey(fav);
+      if (!uniqueFavorites[key]) {
+        uniqueFavorites[key] = fav;
       }
     }
-
-    this.cdr.detectChanges();
+    for (const key in uniqueFavorites) {
+      const fav = uniqueFavorites[key];
+      console.log('[Favorites][AddSelected] Adding to favorites:', {
+        displayName: fav.displayName,
+        membershipId: fav.membershipId,
+        membershipType: fav.membershipType,
+        game: fav.game,
+        platform: fav.platform
+      });
+      await this.addFavorite(fav);
+    }
   }
 
   /** Returns a unique key for the given player independent of case */
