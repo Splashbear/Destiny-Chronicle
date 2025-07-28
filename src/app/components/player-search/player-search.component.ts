@@ -29,6 +29,7 @@ import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-
 import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
 import { LoadingProgress } from '../../models/loading-progress.model';
+import { ShareService } from '../../services/share.service';
 
 interface ActivityEntry {
   game: string;
@@ -543,7 +544,8 @@ export class PlayerSearchComponent implements OnInit {
     private playtimeService: PlaytimeService,
     private titleService: TitleService,
     private selectedAccounts: SelectedAccountsService,
-    private exportService: ExportService
+    private exportService: ExportService,
+    private shareService: ShareService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -2245,11 +2247,15 @@ export class PlayerSearchComponent implements OnInit {
         if (!s.emblemBackground) {
           const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
           if (chars && chars.length > 0) {
-            // Pick character with highest minutesPlayedTotal
+            // Pick most recently played character for emblem art
             const top = [...chars].sort((a, b) => {
-              const aMin = Number(a.minutesPlayedTotal || a.minutesPlayed || 0);
-              const bMin = Number(b.minutesPlayedTotal || b.minutesPlayed || 0);
-              return bMin - aMin;
+              const aDate = new Date(
+                a.dateLastPlayed || a.dateLastPlayedTime || a.lastPlayed || 0
+              ).getTime();
+              const bDate = new Date(
+                b.dateLastPlayed || b.dateLastPlayedTime || b.lastPlayed || 0
+              ).getTime();
+              return bDate - aDate;
             })[0];
             if (top) {
               s.emblemBackground = top.emblemBackgroundPath || top.emblemPath || undefined;
@@ -4585,5 +4591,19 @@ export class PlayerSearchComponent implements OnInit {
   // Convenience getter for template (avoids forbidden arrow functions)
   get d2Players(): PlayerSearchDisplay[] {
     return this.selectedPlayers.filter(p => p.game === 'D2');
+  }
+
+  async shareDailyView(): Promise<void> {
+    if (!this.selectedPlayers.length) return;
+    const players = this.selectedPlayers.map(p => [p.membershipId, p.membershipType, p.game]);
+    const dateStr = `${this.selectedMonth}-${this.selectedDay}`;
+    const state = { d: dateStr, p: players, l: this.includeLinkedAccounts };
+    const link = this.shareService.buildLink(state);
+    try {
+      await navigator.clipboard.writeText(link);
+      alert('Share link copied to clipboard!');
+    } catch {
+      prompt('Copy link', link);
+    }
   }
 }

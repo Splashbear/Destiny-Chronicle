@@ -4,6 +4,7 @@ import { ActivityHistory } from '../models/activity-history.model';
 import * as FileSaver from 'file-saver';
 import * as XLSX from 'xlsx';
 import { TitleService } from './title.service';
+import { DestinyManifestService } from './destiny-manifest.service';
 
 export interface ExportRequest {
   from: Date;
@@ -43,7 +44,8 @@ export interface ExportContext {
 export class ExportService {
   constructor(
     private activityDb: ActivityDbService,
-    private titleService: TitleService
+    private titleService: TitleService,
+    private manifest: DestinyManifestService
   ) {}
 
   /**
@@ -98,6 +100,57 @@ export class ExportService {
   }
 
   /**
+   * Generates a CSV string for the given activities. Columns are chosen to be
+   * Google-Sheets-friendly (comma-separated, RFC4180). Date formatted as ISO.
+   */
+  generateCsv(activities: ActivityHistory[]): string {
+    const header = [
+      'Period',
+      'Game',
+      'Platform',
+      'Activity Name',
+      'Type',
+      'Duration (s)',
+      'Kills',
+      'Deaths',
+      'Completed',
+      'InstanceId'
+    ];
+    const rows = activities.map(a => {
+      const isD1 = (a as any).game === 'D1';
+      const name = this.manifest.getActivityName(a.activityDetails?.referenceId, isD1) || 'Unknown Activity';
+      const type = this.manifest.getActivityType(a.activityDetails?.referenceId, a.activityDetails?.mode) || '';
+      const duration = (a as any)?.values?.timePlayedSeconds?.basic?.value ?? '';
+      const kills = (a as any)?.values?.kills?.basic?.value ?? '';
+      const deaths = (a as any)?.values?.deaths?.basic?.value ?? '';
+      const completed = (a as any)?.values?.completed?.basic?.value ?? '';
+      return [
+        a.period,
+        (a as any).game || 'D2',
+        (a as any).platform || '',
+        name,
+        type,
+        duration,
+        kills,
+        deaths,
+        completed,
+        a.activityDetails?.instanceId || ''
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+    });
+    return [header.join(','), ...rows].join('\n');
+  }
+
+  downloadCsv(filename: string, csv: string) {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
    * Multi-sheet export for activities, firsts, titles/seals, and account summary.
    * Sheets are Google Sheets compatible (no embedded images, icon URLs only).
    */
@@ -107,7 +160,7 @@ export class ExportService {
     // 1. Gather data for each requested sheet
     const sheets: { [name: string]: any[] } = {};
 
-    if (options.includeActivities) {
+    if (options.includeActivities === undefined || options.includeActivities) {
       const activities: any[] = [];
       if (options.allDates) {
         for (const player of selectedPlayers) {
@@ -120,7 +173,7 @@ export class ExportService {
               Name: manifestService.getActivityName(activity.activityHash),
               Type: manifestService.getActivityType(activity.activityHash),
               Hash: activity.activityHash,
-              PGCR: activity.pgcrId ? `https://www.bungie.net/en/PGCR/${activity.pgcrId}` : '',
+              PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
             });
           }
         }
@@ -241,7 +294,11 @@ export class ExportService {
       }
     }
     if (!hasData) {
-      throw new Error('Workbook is empty');
+      // Fallback: export all activities as CSV so user still gets a file
+      const allActs = await this.activityDb.activities.toArray();
+      const csv = this.generateCsv(allActs);
+      this.downloadCsv('destiny-chronicle-export.csv', csv);
+      return;
     }
     const filename = `destiny-chronicle-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(wb, filename);

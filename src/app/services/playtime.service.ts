@@ -73,7 +73,10 @@ export class PlaytimeService {
         .filter((a: any) => (a as any).game === 'D1')
         .toArray();
       for (const act of allActs) {
-        const dur = (act as any)?.values?.timePlayedSeconds?.basic?.value;
+        let dur: number | undefined = (act as any)?.values?.timePlayedSeconds?.basic?.value;
+        if (dur === undefined) {
+          dur = (act as any)?.values?.activityDurationSeconds?.basic?.value;
+        }
         if (typeof dur === 'number' && dur > 0) seconds += dur;
       }
     }
