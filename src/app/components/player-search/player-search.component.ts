@@ -30,6 +30,7 @@ import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
+import { AccountStatsComponent } from '../account-stats/account-stats.component';
 
 interface ActivityEntry {
   game: string;
@@ -335,7 +336,13 @@ interface PlatformStats {
 @Component({
   selector: 'app-player-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, ExportOptionsDialogComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    LoadingProgressComponent,
+    AccountStatsComponent,
+    ExportOptionsDialogComponent
+  ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss']
 })
@@ -3553,6 +3560,21 @@ export class PlayerSearchComponent implements OnInit {
               }
               // Debug: Output each title's record and completion logic
               console.log('[TITLES DEBUG] Seal:', displayName, 'completionRecordHash:', node.completionRecordHash, 'State:', record?.state, 'Completed:', isCompleted, foundInCharacter ? '(Found in characterRecords)' : '');
+              // Calculate progress percentage for incomplete titles
+              let progressPercent: number | undefined;
+              if (!isCompleted && record && Array.isArray((record as any).objectives)) {
+                let total = 0;
+                let done = 0;
+                for (const obj of (record as any).objectives) {
+                  if (obj?.visible === false) continue;
+                  const target = obj.completionValue ?? 1;
+                  total += target;
+                  done += Math.min(obj.progress ?? 0, target);
+                }
+                if (total > 0) {
+                  progressPercent = Math.round((done / total) * 100);
+                }
+              }
               // Use a unique key for deduplication: displayName + completionRecordHash
               const uniqueKey = `${displayName}#${node.completionRecordHash}`;
               if (!titleMap[uniqueKey]) {
@@ -3576,6 +3598,7 @@ export class PlayerSearchComponent implements OnInit {
                   legacy: (node.parentNodeHashes || []).includes(1881970629),
                   releaseRank: RELEASE_ORDER[normalizedName] || 0,
                   normalized: normalizedName,
+                  progressPercent: progressPercent,
                 };
               }
             }
@@ -4450,6 +4473,21 @@ export class PlayerSearchComponent implements OnInit {
               }
               // Debug: Output each title's record and completion logic
               console.log('[TITLES DEBUG] Seal:', displayName, 'completionRecordHash:', node.completionRecordHash, 'State:', record?.state, 'Completed:', isCompleted, foundInCharacter ? '(Found in characterRecords)' : '');
+              // Calculate progress percentage for incomplete titles
+              let progressPercent: number | undefined;
+              if (!isCompleted && record && Array.isArray((record as any).objectives)) {
+                let total = 0;
+                let done = 0;
+                for (const obj of (record as any).objectives) {
+                  if (obj?.visible === false) continue;
+                  const target = obj.completionValue ?? 1;
+                  total += target;
+                  done += Math.min(obj.progress ?? 0, target);
+                }
+                if (total > 0) {
+                  progressPercent = Math.round((done / total) * 100);
+                }
+              }
               // Use a unique key for deduplication: displayName + completionRecordHash
               const uniqueKey = `${displayName}#${node.completionRecordHash}`;
               if (!titleMap[uniqueKey]) {
@@ -4473,6 +4511,7 @@ export class PlayerSearchComponent implements OnInit {
                   legacy: (node.parentNodeHashes || []).includes(1881970629),
                   releaseRank: RELEASE_ORDER[normalizedName] || 0,
                   normalized: normalizedName,
+                  progressPercent: progressPercent,
                 };
               }
             }

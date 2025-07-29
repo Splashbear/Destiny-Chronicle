@@ -165,78 +165,7 @@
         <!-- Activities Tab -->
         <div *ngIf="activeTab === 'activities'">
           <!-- Account Stats Summary -->
-          <div *ngIf="accountStats.totalActivityCount > 0 || selectedPlayers.length > 0" class="mb-6">
-            <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4">
-              <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-3">
-                  <h3 class="text-lg font-semibold text-white">Account Summary</h3>
-                  <div *ngIf="loadingAccountStats" class="flex items-center gap-2 px-3 py-1 bg-yellow-600/20 border border-yellow-500/50 rounded-full">
-                    <div class="animate-spin text-yellow-400">
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path d="M4 12a8 8 0 018-8" />
-                      </svg>
-                    </div>
-                    <span class="text-sm text-yellow-300 font-medium">Loading...</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2">
-                  <button (click)="exportActivities()" class="d2-btn bg-green-600 hover:bg-green-500 text-xs px-3 py-1">Export</button>
-                  <button (click)="openExportOptionsDialog()" class="d2-btn bg-blue-600 hover:bg-blue-500 text-xs px-3 py-1">Export Options</button>
-                  <button (click)="shareDailyView()" class="d2-btn bg-purple-600 hover:bg-purple-500 text-xs px-3 py-1">Share</button>
-                </div>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="stat-item">
-                  <strong>Total Time Played:</strong>
-                  <span class="ml-1">{{ formatDuration(accountStats.totalTime) }}</span>
-                </div>
-                <div class="stat-item">
-                  <strong>Total Seals:</strong>
-                  <span class="ml-1">{{ accountStats.totalSeals || 0 }}</span>
-                </div>
-                <div class="stat-item">
-                  <strong>Total Activities:</strong>
-                  <span class="ml-1">{{ accountStats.totalActivityCount }}</span>
-                </div>
-              </div>
-              <div class="activity-type-stats mt-4">
-                <div class="type-stat" *ngFor="let type of (selectedPlayers.length === 1 ? (selectedPlayers[0].game === 'D1' ? ['Raid','Strike','Nightfall','Crucible','Other'] : ['Raid','Dungeon','Strike','Nightfall','Crucible','Gambit','Other']) : ['Raid','Dungeon','Strike','Nightfall','Crucible','Gambit','Other'])">
-                  <ng-container *ngIf="accountStats.perType[type] && (type !== 'Dungeon' || (selectedPlayers.length > 1 || (selectedPlayers[0].game !== 'D1'))) ">
-                    <strong>{{ type }}</strong>
-                    <span>
-                      {{ getPerTypeStats(type).count }} runs,
-                      {{ formatDuration(getPerTypeStats(type).time) }}
-                    </span>
-                  </ng-container>
-                </div>
-              </div>
-              <!-- Per-Platform Breakdown -->
-              <div *ngIf="perPlatformStats.length > 0" class="platform-breakdown mt-6">
-                <h4 class="text-md font-semibold text-white mb-2">Per-Platform Breakdown</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div *ngFor="let plat of perPlatformStats" class="emblem-card relative rounded-lg overflow-hidden shadow-lg h-24">
-                    <img *ngIf="plat.emblemBackground" [src]="'https://www.bungie.net' + plat.emblemBackground" class="absolute inset-0 w-full h-full object-cover" alt="emblem bg" />
-                    <div class="absolute inset-0 bg-black/60"></div>
-                    <div class="absolute bottom-0 left-0 right-0 p-3 flex flex-col gap-0.5 z-10">
-                      <div class="flex items-center justify-between">
-                        <span class="text-slate-100 font-bold truncate">{{ plat.displayName || plat.platform }}</span>
-                        <img *ngIf="plat.emblemIcon" [src]="'https://www.bungie.net' + plat.emblemIcon" class="w-6 h-6 rounded-full border border-slate-300" alt="emblem icon" />
-                      </div>
-                      <div class="flex items-center gap-2 text-slate-300 text-sm">
-                        <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform icon" />
-                        <img [src]="plat.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                        <span>{{ plat.platform }}</span>
-                        <span *ngIf="plat.className">· {{ plat.className }}</span>
-                        <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
-                      </div>
-                      <div class="text-yellow-300 font-mono text-sm">{{ formatDuration(plat.totalTime) }}</div>
-                      <div class="text-xs text-slate-400">{{ plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <app-account-stats [stats]="accountStats"></app-account-stats>
           <div *ngIf="loadingProgress && platformTabs.length === 0" class="text-center text-slate-400 py-4">
             Searching for accounts with activities…
           </div>
@@ -697,6 +626,10 @@
                     {{ title.name }}
                     <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
                     <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
+                  </div>
+                  <!-- Progress bar for incomplete titles -->
+                  <div *ngIf="!title.completed && title.progressPercent !== undefined" class="w-40 h-2 bg-slate-600 rounded mt-1 overflow-hidden">
+                    <div class="h-full bg-blue-500" [style.width.%]="title.progressPercent"></div>
                   </div>
                   <div *ngIf="title.locked" class="text-red-400 text-sm font-semibold">Locked</div>
                   <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
