@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { compressToEncodedURIComponent as compress, decompressFromEncodedURIComponent as decompress } from 'lz-string';
+import { compressToURL as compress, decompressFromURL as decompress } from '@amoutonbrady/lz-string';
 
 @Injectable({ providedIn: 'root' })
 export class ShareService {
