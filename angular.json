@@ -38,6 +38,7 @@
               "src/styles.scss"
             ],
             "scripts": [],
+            "allowedCommonJsDependencies": ["lz-string", "file-saver"],
             "baseHref": "/Destiny-Chronicle/",
             "deployUrl": "/Destiny-Chronicle/"
           },
