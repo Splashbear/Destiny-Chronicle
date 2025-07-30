@@ -773,17 +773,15 @@ export class PlayerSearchComponent implements OnInit {
       }
     }
 
-    // 2. Fallback: derive from selectedPlayers (may include platforms with zero history)
+    // 2. Fallback: derive from selectedPlayers (include all selected players regardless of activity status)
     const platforms = new Set<string>();
     this.selectedPlayers.forEach(player => {
       const isGameMatch = (game === 'D1' && this.isD1Player(player)) ||
                           (game === 'D2' && !this.isD1Player(player));
       if (!isGameMatch) return;
 
-      // If activities map is available, ensure at least one activity exists to avoid empty tabs
-      const acts = this.activities[player.membershipId];
-      if (!acts || acts.length === 0) return;
-
+      // Include all selected players for the game, even if they don't have activities yet
+      // This ensures D1 accounts show up immediately when selected
       platforms.add(this.getPlatformName(player.membershipType));
     });
     return Array.from(platforms);

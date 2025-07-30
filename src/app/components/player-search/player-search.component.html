@@ -165,7 +165,13 @@
         <!-- Activities Tab -->
         <div *ngIf="activeTab === 'activities'">
           <!-- Account Stats Summary -->
-          <app-account-stats [stats]="accountStats"></app-account-stats>
+          <app-account-stats 
+            [stats]="accountStats" 
+            [perPlatformStats]="perPlatformStats"
+            [onExportActivities]="exportActivities.bind(this)"
+            [onOpenExportOptionsDialog]="openExportOptionsDialog.bind(this)"
+            [onShareDailyView]="shareDailyView.bind(this)">
+          </app-account-stats>
           <div *ngIf="loadingProgress && platformTabs.length === 0" class="text-center text-slate-400 py-4">
             Searching for accounts with activities…
           </div>
