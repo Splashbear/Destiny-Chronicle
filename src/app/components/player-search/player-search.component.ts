@@ -2425,27 +2425,62 @@ export class PlayerSearchComponent implements OnInit {
     if (!activity.period) return false;
     
     const activityDate = new Date(activity.period);
-    const activityMonth = activityDate.getUTCMonth() + 1; // Convert 0-11 to 1-12
-    const activityDay = activityDate.getUTCDate();
-    const activityYear = activityDate.getUTCFullYear();
-
-    // Debug logging for specific activity
-    if (activity.activityDetails.instanceId === '1859166440') {
-      console.log('[Date Check] Activity 1859166440:', {
+    
+    // Try multiple date parsing approaches to handle timezone differences
+    // 1. UTC approach (original)
+    const activityMonthUTC = activityDate.getUTCMonth() + 1;
+    const activityDayUTC = activityDate.getUTCDate();
+    const activityYearUTC = activityDate.getUTCFullYear();
+    
+    // 2. Local approach (for activities that might be stored in local time)
+    const activityMonthLocal = activityDate.getMonth() + 1;
+    const activityDayLocal = activityDate.getDate();
+    const activityYearLocal = activityDate.getFullYear();
+    
+    // Debug logging for D1 activities to help diagnose timezone issues
+    if (activity.activityDetails?.referenceId && this.isD1Activity(activity)) {
+      console.log('[Date Check] D1 Activity:', {
         period: activity.period,
         utc: activityDate.toISOString(),
-        month: activityMonth,
-        day: activityDay,
-        year: activityYear,
+        utcMonth: activityMonthUTC,
+        utcDay: activityDayUTC,
+        localMonth: activityMonthLocal,
+        localDay: activityDayLocal,
         selectedMonth: this.selectedMonth,
         selectedDay: this.selectedDay,
-        selectedYear: this.selectedYear
+        referenceId: activity.activityDetails.referenceId
       });
     }
 
-    return activityMonth === this.selectedMonth && 
-           activityDay === this.selectedDay && 
-           (!this.selectedYear || activityYear === this.selectedYear);
+    // Check both UTC and local time matches
+    const utcMatch = activityMonthUTC === this.selectedMonth && 
+                    activityDayUTC === this.selectedDay && 
+                    (!this.selectedYear || activityYearUTC === this.selectedYear);
+                    
+    const localMatch = activityMonthLocal === this.selectedMonth && 
+                      activityDayLocal === this.selectedDay && 
+                      (!this.selectedYear || activityYearLocal === this.selectedYear);
+    
+    return utcMatch || localMatch;
+  }
+  
+  private isD1Activity(activity: ActivityHistory): boolean {
+    // Check if this is a D1 activity based on reference ID ranges
+    const refId = activity.activityDetails?.referenceId;
+    if (!refId) return false;
+    
+    // D1 activity reference IDs are typically in specific ranges
+    // This is a heuristic - D1 activities often have different ID patterns
+    const d1RaidHashes = [
+      '3801607287', '708693006', '2659248071', '2043403989', // Vault of Glass
+      '898834093', '112157962', '3879860662', '1836893116', // Crota's End
+      '1733556769', '421023204', '1661734046', '2964135793', // King's Fall
+      '2578867903', '4007500989', '1099433614', '1342567280', '260765522' // Wrath of the Machine
+    ];
+    
+    const refIdStr = String(refId);
+    return d1RaidHashes.includes(refIdStr) || 
+           (parseInt(refIdStr) < 1000000000); // D1 activities typically have smaller reference IDs
   }
 
   onDateOrTypeChange() {
