@@ -1932,16 +1932,47 @@ export class PlayerSearchComponent implements OnInit {
       // Defensive: player is undefined/null
       return false;
     }
+    
     // If the game property is explicitly set, use it
+    // This is the most reliable method since it's set based on the API used
     if ((player as any).game) {
       // D1/D2 distinction by explicit property
       return (player as any).game === 'D1';
     }
-    // Fallback: D1 is Xbox/PlayStation, no BungieGlobalDisplayName, not cross-save
-    // This logic is brittle if Bungie changes their API, so always test both games after refactor.
-    return (player.membershipType === 1 || player.membershipType === 2) && 
-           !(player as any).bungieGlobalDisplayName &&
-           !(player as any).isCrossSavePrimary;
+    
+    // FALLBACK: Legacy detection logic (less reliable)
+    // This should only be used if the game property is not set
+    console.warn('[isD1Player] Game property not set, using fallback detection for player:', player.displayName);
+    
+    // Check if this is a D1 account by looking at the membership type and other indicators
+    // D1 accounts are typically Xbox (1) or PlayStation (2) without cross-save indicators
+    const isXboxOrPlayStation = player.membershipType === 1 || player.membershipType === 2;
+    
+    // If it's Xbox/PlayStation and doesn't have cross-save indicators, it's likely D1
+    if (isXboxOrPlayStation) {
+      const hasCrossSaveIndicators = (player as any).bungieGlobalDisplayName || 
+                                   (player as any).isCrossSavePrimary ||
+                                   (player as any).crossSaveOverride;
+      
+      // If no cross-save indicators, it's likely a D1 account
+      if (!hasCrossSaveIndicators) {
+        return true;
+      }
+      
+      // If it has cross-save indicators, check if it's the original platform (not cross-save)
+      // For cross-save accounts, the original platform is usually D1
+      const crossSaveOverride = (player as any).crossSaveOverride;
+      if (crossSaveOverride && crossSaveOverride !== player.membershipType) {
+        // This is the cross-save override platform (D2), not the original (D1)
+        return false;
+      }
+      
+      // If it's the original platform in a cross-save setup, it's likely D1
+      return true;
+    }
+    
+    // For other platforms (Steam, Battle.net, etc.), they're typically D2
+    return false;
   }
 
   getClassName(classType: number): string {
@@ -2593,6 +2624,18 @@ export class PlayerSearchComponent implements OnInit {
     this.cdr.detectChanges();
   }
 
+  /**
+   * Searches for Destiny accounts across both D1 and D2.
+   * 
+   * ARCHITECTURE:
+   * - D1 accounts are searched via the D1 API endpoints (searchD1Player)
+   * - D2 accounts are searched via the D2 API endpoints (searchD2Player, searchUsersPrefix)
+   * - The game property is set based on which API returned the result, not platform
+   * - This ensures proper D1/D2 classification regardless of cross-save status
+   * 
+   * IMPORTANT: Never use D2 API to search for D1 accounts or vice versa.
+   * The APIs are separate for a reason and return different data structures.
+   */
   async addPlayer() {
     if (!this.searchUsername) {
       this.errorMessage = 'Please enter a username.';
@@ -2614,6 +2657,9 @@ export class PlayerSearchComponent implements OnInit {
 
       /* --------------------
          Process Destiny 2
+         IMPORTANT: These results come from the D2 API endpoints (searchD2Player or searchUsersPrefix).
+         The D2 API returns D2 accounts, which can include cross-save accounts on any platform.
+         We set game: 'D2' because these are definitely D2 accounts.
       -------------------- */
       if (this.searchUsername.includes('#')) {
         // Bungie Name exact match flow uses helper that already populates d2SearchResults
@@ -2634,7 +2680,7 @@ export class PlayerSearchComponent implements OnInit {
                 displayName: bungieName,
                 membershipId: m.membershipId,
                 membershipType: effectiveType,
-                game: 'D2',
+                game: 'D2', // These come from D2 API, so they're definitely D2
                 platform: this.getPlatformName(effectiveType),
                 isCrossSavePrimary: m.isCrossSavePrimary,
                 crossSaveOverride: m.crossSaveOverride
@@ -2653,11 +2699,13 @@ export class PlayerSearchComponent implements OnInit {
 
       /* --------------------
          Process Destiny 1
+         IMPORTANT: These results come from the D1 API endpoints, so they are definitely D1 accounts.
+         The D1 API only returns D1 accounts, so we can safely set game: 'D1'.
       -------------------- */
       const d1Players = [...(d1Xbox || []), ...(d1Psn || [])];
       this.d1SearchResults = d1Players.map(pl => ({
         ...pl,
-        game: 'D1',
+        game: 'D1', // These come from D1 API, so they're definitely D1
         platform: this.getPlatformName(pl.membershipType)
       }));
 
