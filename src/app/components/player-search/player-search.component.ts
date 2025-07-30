@@ -2426,42 +2426,35 @@ export class PlayerSearchComponent implements OnInit {
     
     const activityDate = new Date(activity.period);
     
-    // Try multiple date parsing approaches to handle timezone differences
-    // 1. UTC approach (original)
-    const activityMonthUTC = activityDate.getUTCMonth() + 1;
-    const activityDayUTC = activityDate.getUTCDate();
-    const activityYearUTC = activityDate.getUTCFullYear();
+    // Convert activity date to local midnight for consistent comparison
+    const activityLocalMidnight = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate());
     
-    // 2. Local approach (for activities that might be stored in local time)
-    const activityMonthLocal = activityDate.getMonth() + 1;
-    const activityDayLocal = activityDate.getDate();
-    const activityYearLocal = activityDate.getFullYear();
+    // Create selected date as local midnight for comparison
+    const currentYear = new Date().getFullYear();
+    const selectedDateLocal = new Date(currentYear, this.selectedMonth - 1, this.selectedDay);
+    
+    // If selected year is specified, use that instead
+    if (this.selectedYear) {
+      selectedDateLocal.setFullYear(this.selectedYear);
+    }
     
     // Debug logging for D1 activities to help diagnose timezone issues
     if (activity.activityDetails?.referenceId && this.isD1Activity(activity)) {
       console.log('[Date Check] D1 Activity:', {
         period: activity.period,
-        utc: activityDate.toISOString(),
-        utcMonth: activityMonthUTC,
-        utcDay: activityDayUTC,
-        localMonth: activityMonthLocal,
-        localDay: activityDayLocal,
+        activityDate: activityDate.toISOString(),
+        activityLocalMidnight: activityLocalMidnight.toISOString(),
+        selectedDateLocal: selectedDateLocal.toISOString(),
         selectedMonth: this.selectedMonth,
         selectedDay: this.selectedDay,
-        referenceId: activity.activityDetails.referenceId
+        selectedYear: this.selectedYear,
+        referenceId: activity.activityDetails.referenceId,
+        match: activityLocalMidnight.getTime() === selectedDateLocal.getTime()
       });
     }
-
-    // Check both UTC and local time matches
-    const utcMatch = activityMonthUTC === this.selectedMonth && 
-                    activityDayUTC === this.selectedDay && 
-                    (!this.selectedYear || activityYearUTC === this.selectedYear);
-                    
-    const localMatch = activityMonthLocal === this.selectedMonth && 
-                      activityDayLocal === this.selectedDay && 
-                      (!this.selectedYear || activityYearLocal === this.selectedYear);
     
-    return utcMatch || localMatch;
+    // Compare dates at local midnight (ignoring time)
+    return activityLocalMidnight.getTime() === selectedDateLocal.getTime();
   }
   
   private isD1Activity(activity: ActivityHistory): boolean {
@@ -2499,29 +2492,33 @@ export class PlayerSearchComponent implements OnInit {
     // Parse the month and day from the date string
     const [month, day] = dateStr.split('-').map(Number);
     
-    // Create a date object for comparison (year doesn't matter)
-    const selectedDate = new Date(Date.UTC(2024, month - 1, day));
+    // Create a date object for comparison using local time (consistent with our comparison logic)
+    const selectedDate = new Date(2024, month - 1, day);
     
     const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
     
-    // Only treat as future date if the month/day is in the future
-    const isFutureDate = selectedDate.getUTCMonth() > today.getUTCMonth() || 
-                        (selectedDate.getUTCMonth() === today.getUTCMonth() && 
-                         selectedDate.getUTCDate() > today.getUTCDate());
+    // Only treat as future date if the month/day is in the future (using local time)
+    const isFutureDate = selectedDate.getMonth() > today.getMonth() || 
+                        (selectedDate.getMonth() === today.getMonth() && 
+                         selectedDate.getDate() > today.getDate());
     
     if (isFutureDate) {
       console.log('[DEBUG] Future date detected, using today instead');
-      this.selectedDate = `${today.getUTCMonth() + 1}-${today.getUTCDate()}`;
+      this.selectedDate = `${today.getMonth() + 1}-${today.getDate()}`;
+      this.selectedMonth = today.getMonth() + 1;
+      this.selectedDay = today.getDate();
     } else {
       // Keep just the month and day
       this.selectedDate = `${month}-${day}`;
+      this.selectedMonth = month;
+      this.selectedDay = day;
     }
     
     console.log('[DEBUG] Date validated and set to:', {
       selectedDate: this.selectedDate,
-      month: selectedDate.getUTCMonth() + 1,
-      day: selectedDate.getUTCDate(),
+      selectedMonth: this.selectedMonth,
+      selectedDay: this.selectedDay,
       isFutureDate
     });
   }
