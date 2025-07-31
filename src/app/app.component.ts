@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { PlayerSearchComponent } from './components/player-search/player-search.component';
+import { PerformanceMonitorComponent } from './components/performance-monitor/performance-monitor.component';
 import { CommonModule } from '@angular/common';
 import { MatDialogModule } from '@angular/material/dialog';
 import { DestinyManifestService } from './services/destiny-manifest.service';
@@ -9,7 +10,7 @@ import { SharedStateService } from './services/shared-state.service';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, PlayerSearchComponent, MatDialogModule],
+  imports: [CommonModule, PlayerSearchComponent, PerformanceMonitorComponent, MatDialogModule],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
