@@ -937,7 +937,7 @@ export class PlayerSearchComponent implements OnInit {
 
   selectPlatformPlayer(player: PlayerSearchDisplay) {
     this.showPlatformPicker = false;
-    console.log('[DEBUG] selectPlatformPlayer:', player);
+
     this.selectPlayer(player);
   }
 
@@ -2531,7 +2531,7 @@ export class PlayerSearchComponent implements OnInit {
     
     // Check if the date is in the future
     if (selectedDate > today) {
-      console.log('[DEBUG] Future date detected, using today instead');
+  
       const todayYear = today.getFullYear();
       const todayMonth = today.getMonth() + 1;
       const todayDay = today.getDate();
@@ -2547,12 +2547,7 @@ export class PlayerSearchComponent implements OnInit {
       this.selectedYear = year;
     }
     
-    console.log('[DEBUG] Date validated and set to:', {
-      selectedDate: this.selectedDate,
-      selectedMonth: this.selectedMonth,
-      selectedDay: this.selectedDay,
-      selectedYear: this.selectedYear
-    });
+
   }
 
   /**
