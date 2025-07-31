@@ -43,6 +43,19 @@
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-destiny-accent-primary;
   }
+  
+  /* Custom scrollbar for specific components */
+  .custom-scrollbar::-webkit-scrollbar {
+    @apply w-1.5;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-destiny-surface-400/50 rounded-full;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-destiny-border-secondary/70 rounded-full hover:bg-destiny-accent-primary/70;
+  }
 }
 
 @layer components {
