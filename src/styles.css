@@ -1,5 +1,256 @@
+/* Import modern fonts from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Your custom styles below */
+/* Enhanced base styles for modern Destiny Chronicle */
+@layer base {
+  /* Improved default styling */
+  html {
+    @apply scroll-smooth;
+  }
+  
+  body {
+    @apply bg-destiny-bg-primary text-destiny-text-primary font-destiny antialiased;
+    @apply selection:bg-destiny-accent-primary/30 selection:text-destiny-text-primary;
+  }
+  
+  /* Enhanced focus styles for accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-destiny-accent-primary ring-offset-2 ring-offset-destiny-bg-primary;
+  }
+  
+  /* Smooth transitions for all interactive elements */
+  * {
+    @apply transition-colors duration-200 ease-in-out;
+  }
+  
+  /* Modern scrollbar styling */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-destiny-surface-400;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-destiny-border-secondary rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-destiny-accent-primary;
+  }
+}
+
+@layer components {
+  /* Modern card component inspired by community sites */
+  .destiny-card {
+    @apply bg-destiny-bg-secondary border border-destiny-border-primary rounded-destiny;
+    @apply shadow-destiny backdrop-blur-destiny;
+    @apply hover:border-destiny-border-secondary hover:shadow-destiny-md;
+    @apply transition-all duration-300 ease-in-out;
+  }
+  
+  .destiny-card-glass {
+    @apply bg-glass-gradient border border-destiny-border-primary/50 rounded-destiny;
+    @apply shadow-destiny-lg backdrop-blur-destiny;
+    @apply hover:border-destiny-border-secondary/70 hover:shadow-destiny-xl;
+    @apply transition-all duration-300 ease-in-out;
+  }
+  
+  /* Enhanced button styles */
+  .destiny-btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-destiny-sm;
+    @apply font-medium transition-all duration-200 ease-in-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+  
+  .destiny-btn-primary {
+    @apply destiny-btn bg-destiny-accent-primary text-white;
+    @apply hover:bg-destiny-accent-primary/90 active:bg-destiny-accent-primary/80;
+    @apply focus:ring-destiny-accent-primary focus:ring-offset-destiny-bg-primary;
+    @apply shadow-glow-sm hover:shadow-glow;
+  }
+  
+  .destiny-btn-secondary {
+    @apply destiny-btn bg-destiny-surface-200 text-destiny-text-primary;
+    @apply hover:bg-destiny-surface-100 active:bg-destiny-surface-300;
+    @apply border border-destiny-border-primary;
+    @apply focus:ring-destiny-border-accent focus:ring-offset-destiny-bg-primary;
+  }
+  
+  .destiny-btn-ghost {
+    @apply destiny-btn text-destiny-text-secondary;
+    @apply hover:text-destiny-text-primary hover:bg-destiny-surface-400/50;
+    @apply focus:ring-destiny-border-accent focus:ring-offset-destiny-bg-primary;
+  }
+  
+  /* Activity type badges */
+  .activity-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  .activity-badge-raid {
+    @apply activity-badge bg-destiny-raid-bg text-destiny-raid border border-destiny-raid/30;
+  }
+  
+  .activity-badge-strike {
+    @apply activity-badge bg-destiny-strike-bg text-destiny-strike border border-destiny-strike/30;
+  }
+  
+  .activity-badge-crucible {
+    @apply activity-badge bg-destiny-crucible-bg text-destiny-crucible border border-destiny-crucible/30;
+  }
+  
+  .activity-badge-gambit {
+    @apply activity-badge bg-destiny-gambit-bg text-destiny-gambit border border-destiny-gambit/30;
+  }
+  
+  .activity-badge-dungeon {
+    @apply activity-badge bg-destiny-dungeon-bg text-destiny-dungeon border border-destiny-dungeon/30;
+  }
+  
+  .activity-badge-nightfall {
+    @apply activity-badge bg-destiny-nightfall-bg text-destiny-nightfall border border-destiny-nightfall/30;
+  }
+  
+  /* Game version badges */
+  .game-badge {
+    @apply inline-flex items-center px-2 py-1 rounded-destiny-sm text-xs font-semibold;
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  .game-badge-d1 {
+    @apply game-badge bg-destiny-d1-bg text-destiny-d1 border border-destiny-d1/30;
+  }
+  
+  .game-badge-d2 {
+    @apply game-badge bg-destiny-d2-bg text-destiny-d2 border border-destiny-d2/30;
+  }
+  
+  /* Enhanced input styles */
+  .destiny-input {
+    @apply w-full px-3 py-2 rounded-destiny-sm;
+    @apply bg-destiny-surface-300 border border-destiny-border-primary;
+    @apply text-destiny-text-primary placeholder-destiny-text-muted;
+    @apply focus:border-destiny-accent-primary focus:ring-1 focus:ring-destiny-accent-primary;
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  .destiny-input:focus {
+    @apply bg-destiny-surface-200;
+  }
+  
+  /* Loading and skeleton states */
+  .destiny-skeleton {
+    @apply animate-pulse bg-destiny-surface-300 rounded-destiny-sm;
+  }
+  
+  .destiny-loading {
+    @apply animate-spin h-5 w-5 border-2 border-destiny-border-primary border-t-destiny-accent-primary rounded-full;
+  }
+  
+  /* Enhanced table styles */
+  .destiny-table {
+    @apply w-full border-collapse border border-destiny-border-primary rounded-destiny overflow-hidden;
+  }
+  
+  .destiny-table th {
+    @apply bg-destiny-surface-200 px-4 py-3 text-left text-sm font-semibold text-destiny-text-primary;
+    @apply border-b border-destiny-border-primary;
+  }
+  
+  .destiny-table td {
+    @apply px-4 py-3 text-sm text-destiny-text-secondary;
+    @apply border-b border-destiny-border-primary/50;
+  }
+  
+  .destiny-table tr:hover {
+    @apply bg-destiny-surface-400/30;
+  }
+  
+  /* Modern gradient backgrounds */
+  .destiny-bg-gradient {
+    @apply bg-destiny-gradient;
+  }
+  
+  .destiny-bg-gradient-dark {
+    @apply bg-destiny-gradient-dark;
+  }
+  
+  /* Glass morphism effect */
+  .glass-effect {
+    @apply bg-glass-gradient backdrop-blur-destiny border border-white/10;
+  }
+}
+
+@layer utilities {
+  /* Enhanced text utilities */
+  .text-gradient {
+    @apply bg-gradient-to-r from-destiny-accent-primary to-destiny-accent-secondary bg-clip-text text-transparent;
+  }
+  
+  /* Animation utilities */
+  .animate-fade-in {
+    @apply animate-fade-in;
+  }
+  
+  .animate-slide-up {
+    @apply animate-slide-up;
+  }
+  
+  .animate-slide-in {
+    @apply animate-slide-in;
+  }
+  
+  /* Glow effects */
+  .glow-sm {
+    @apply shadow-glow-sm;
+  }
+  
+  .glow {
+    @apply shadow-glow;
+  }
+  
+  .glow-lg {
+    @apply shadow-glow-lg;
+  }
+  
+  /* Enhanced hover states */
+  .hover-lift {
+    @apply transition-transform duration-200 ease-in-out hover:-translate-y-1;
+  }
+  
+  .hover-glow {
+    @apply transition-shadow duration-300 ease-in-out hover:shadow-glow;
+  }
+  
+  /* Platform-specific colors for icons and badges */
+  .platform-xbox {
+    @apply text-green-400;
+  }
+  
+  .platform-playstation {
+    @apply text-blue-400;
+  }
+  
+  .platform-steam {
+    @apply text-gray-300;
+  }
+  
+  .platform-stadia {
+    @apply text-red-400;
+  }
+  
+  .platform-epic {
+    @apply text-purple-400;
+  }
+  
+  .platform-blizzard {
+    @apply text-blue-300;
+  }
+}

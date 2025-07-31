@@ -1,11 +1,56 @@
-<div class="min-h-screen bg-slate-900 text-white">
-  <header class="bg-slate-800/95 border-b border-slate-700">
+<div class="min-h-screen destiny-bg-gradient-dark">
+  <!-- Modern header with glass effect -->
+  <header class="glass-effect border-b border-destiny-border-primary/30 sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <h1 class="text-3xl font-bold text-destiny-gold">{{ title }}</h1>
-      <p class="mt-2 text-slate-300">Track your Destiny 1 & 2 activity history</p>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+          <!-- Logo area with Destiny styling -->
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 bg-destiny-gradient rounded-destiny flex items-center justify-center">
+              <div class="w-6 h-6 bg-destiny-accent-primary rounded-full animate-glow"></div>
+            </div>
+            <div>
+              <h1 class="text-3xl font-bold font-d2-headline text-gradient">{{ title }}</h1>
+              <p class="text-sm text-destiny-text-secondary">Track your Destiny 1 & 2 activity history</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Header actions area -->
+        <div class="flex items-center space-x-3">
+          <!-- Theme toggle placeholder -->
+          <button class="destiny-btn-ghost p-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+            </svg>
+          </button>
+          
+          <!-- Settings placeholder -->
+          <button class="destiny-btn-ghost p-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <app-player-search></app-player-search>
+
+  <!-- Main content area with enhanced spacing -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+    <!-- Background decoration -->
+    <div class="absolute inset-0 overflow-hidden pointer-events-none">
+      <div class="absolute -top-40 -right-40 w-80 h-80 bg-destiny-accent-primary/5 rounded-full blur-3xl"></div>
+      <div class="absolute top-40 -left-40 w-96 h-96 bg-destiny-accent-secondary/5 rounded-full blur-3xl"></div>
+    </div>
+    
+    <!-- Main component with enhanced container -->
+    <div class="relative">
+      <app-player-search></app-player-search>
+    </div>
   </main>
+
+  <!-- Performance monitor (if enabled) -->
+  <app-performance-monitor></app-performance-monitor>
 </div>
