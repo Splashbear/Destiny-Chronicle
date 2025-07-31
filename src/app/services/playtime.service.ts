@@ -70,7 +70,11 @@ export class PlaytimeService {
       const allActs: ActivityHistory[] = await this.activityDb.activities
         .where('membershipId')
         .equals(player.membershipId)
-        .filter((a: any) => (a as any).game === 'D1')
+        .filter((a: any) => {
+          const g = (a as any).game as 'D1' | 'D2' | undefined;
+          // Older cached rows may not include the `game` marker – treat them as belonging to this player's game
+          return !g || g === 'D1';
+        })
         .toArray();
       for (const act of allActs) {
         let dur: number | undefined = (act as any)?.values?.timePlayedSeconds?.basic?.value;

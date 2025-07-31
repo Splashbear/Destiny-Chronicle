@@ -255,27 +255,36 @@ export class ActivityDbService extends Dexie {
         return [];
       }
 
-      // Get all activities for the character
+      // Use the compound index for much faster queries
+      // The index [period+membershipId+characterId] allows us to do range queries efficiently
+      const startOfDay = new Date(year || new Date().getFullYear(), month - 1, day);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+
+      // Use Dexie's between() method which leverages the compound index
       const activities = await this.activities
-        .where({ membershipId, characterId })
+        .where('[period+membershipId+characterId]')
+        .between(
+          [startOfDay.toISOString(), membershipId, characterId],
+          [endOfDay.toISOString(), membershipId, characterId],
+          true, // includeLower
+          false // includeUpper
+        )
         .toArray();
 
-      // Filter activities to match the exact month and day
+      // Additional filtering to ensure exact date match (handles timezone edge cases)
       return activities.filter(activity => {
         if (!activity.period) return false;
         const activityDate = new Date(activity.period);
-        const activityMonth = activityDate.getUTCMonth() + 1; // Convert 0-11 to 1-12
+        const activityMonth = activityDate.getUTCMonth() + 1;
         const activityDay = activityDate.getUTCDate();
         const activityYear = activityDate.getUTCFullYear();
 
-        // If year is specified, also check the year
         if (year) {
           return activityMonth === month && 
                  activityDay === day && 
                  activityYear === year;
         }
-
-        // Otherwise just check month and day
         return activityMonth === month && activityDay === day;
       });
     } catch (error) {
@@ -555,45 +564,52 @@ export class ActivityDbService extends Dexie {
   ): Promise<void> {
     await this.initPromise;
     try {
-      // console.log('[DEBUG] Starting activity fetch:', {
-      //   membershipType,
-      //   membershipId,
-      //   characterId,
-      //   isD1
-      // });
-
       // Get the last stored activity date for this character
       const lastActivity = await this.getLastActivityDate(characterId);
-      // console.log('[DEBUG] Last stored activity:', lastActivity);
 
       let activities: any[] = [];
       if (isD1) {
-        // ---------------- Full D1 pagination ----------------
+        // ---------------- Parallel D1 pagination ----------------
         const D1_MODES = [
           0,1,2,3,4,5,6,10,12,15,16,17,18,19,22,24,25,31,32,37,38,39,40,41,42,43,44,45,46,48,49,50,51,52,53
         ];
         const pageSize = 250;
-        for (const mode of D1_MODES) {
-          let page = 0;
-          let hasMore = true;
-          while (hasMore) {
-            let resp: any;
-            try {
-              resp = await firstValueFrom(
-                this.bungieService.getD1ActivityHistory(membershipType, membershipId, characterId, mode, page)
-              );
-            } catch (err) {
-              console.warn(`[D1] fetch failed for mode ${mode} page ${page}`, err);
-              break; // stop this mode on error to avoid infinite loop
+        
+        // Process all modes in parallel with concurrency control
+        const concurrencyLimit = 5; // Limit concurrent requests to avoid rate limiting
+        const modeChunks = this.chunkArray(D1_MODES, concurrencyLimit);
+        
+        for (const modeChunk of modeChunks) {
+          const modePromises = modeChunk.map(async (mode) => {
+            const modeActivities: any[] = [];
+            let page = 0;
+            let hasMore = true;
+            
+            while (hasMore) {
+              let resp: any;
+              try {
+                resp = await firstValueFrom(
+                  this.bungieService.getD1ActivityHistory(membershipType, membershipId, characterId, mode, page)
+                );
+              } catch (err) {
+                console.warn(`[D1] fetch failed for mode ${mode} page ${page}`, err);
+                break; // stop this mode on error to avoid infinite loop
+              }
+
+              const pageActs = resp?.data?.activities || [];
+              modeActivities.push(...pageActs);
+
+              // Continue while Bungie signals more AND we received a full page
+              hasMore = resp?.hasMore === true && pageActs.length === pageSize;
+              page++;
             }
-
-            const pageActs = resp?.data?.activities || [];
-            activities.push(...pageActs);
-
-            // Continue while Bungie signals more AND we received a full page
-            hasMore = resp?.hasMore === true && pageActs.length === pageSize;
-            page++;
-          }
+            
+            return modeActivities;
+          });
+          
+          // Wait for current chunk to complete before starting next chunk
+          const chunkResults = await Promise.all(modePromises);
+          activities.push(...chunkResults.flat());
         }
       } else {
         // Existing D2 activity fetching logic
@@ -603,35 +619,29 @@ export class ActivityDbService extends Dexie {
         activities = (response as any).data.activities || [];
       }
 
-      // console.log('[DEBUG] Fetched activities:', {
-      //   count: activities.length,
-      //   firstActivity: activities[0],
-      //   lastActivity: activities[activities.length - 1]
-      // });
-
       // Filter out activities we already have
       const newActivities = activities.filter(activity => {
         const activityDate = new Date(activity.period);
         return !lastActivity || activityDate > lastActivity;
       });
 
-      // console.log('[DEBUG] New activities to store:', {
-      //   total: activities.length,
-      //   new: newActivities.length,
-      //   skipped: activities.length - newActivities.length
-      // });
-
       if (newActivities.length > 0) {
         // Store new activities
         await this.storeActivities(newActivities, characterId, isD1 ? 'D1' : 'D2');
-        // console.log('[DEBUG] Successfully stored new activities');
-      } else {
-        // console.log('[DEBUG] No new activities to store');
       }
     } catch (error) {
       console.error('[DEBUG] Error in fetchAndStoreActivities:', error);
       throw error;
     }
+  }
+
+  // Helper method to chunk array for concurrency control
+  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
   }
 
   // Helper to generate a composite key for a favorite account

@@ -127,11 +127,11 @@ export class AccountStatsComponent {
   getPlatformIconUrl(membershipType: number): string {
     switch (membershipType) {
       case 1: return 'assets/icons/platforms/xbox.png';
-      case 2: return 'assets/icons/platforms/playstation.png';
+      case 2: return 'assets/icons/platforms/ps.png';
       case 3: return 'assets/icons/platforms/steam.png';
-      case 4: return 'assets/icons/platforms/battlenet.png';
+      case 4: return 'assets/icons/platforms/blizzard.svg';
       case 5: return 'assets/icons/platforms/stadia.png';
-      case 6: return 'assets/icons/platforms/epic.png';
+      case 6: return 'assets/icons/platforms/egs.png';
       default: return 'assets/icons/platforms/xbox.png';
     }
   }

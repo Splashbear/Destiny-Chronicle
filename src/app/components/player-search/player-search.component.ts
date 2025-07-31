@@ -6,7 +6,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
-import { LoadingProgressComponent } from '../loading-progress/loading-progress.component';
+
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
@@ -339,7 +339,6 @@ interface PlatformStats {
   imports: [
     CommonModule,
     FormsModule,
-    LoadingProgressComponent,
     AccountStatsComponent,
     ExportOptionsDialogComponent
   ],
@@ -364,8 +363,8 @@ export class PlayerSearchComponent implements OnInit {
   error: { [key: string]: string } = {};
   selectedActivityType: ActivityTypeOption = ACTIVITY_TYPE_OPTIONS[0];
   searchUsername = '';
-  selectedPlatform = '';
-  selectedGame: 'D1' | 'D2' = 'D2';
+  // Removed selectedPlatform - no longer needed without game picker
+  // Removed selectedGame - now searches both D1 and D2 automatically
   errorMessage = '';
   platforms = [
     { label: 'Xbox', value: 'Xbox' },
@@ -444,7 +443,7 @@ export class PlayerSearchComponent implements OnInit {
   guardianFirstsMap: { [membershipId: string]: ActivityFirstCompletion[] } = {};
   /** Aggregated (all-platform) firsts across selected players */
   aggregateGuardianFirsts: ActivityFirstCompletion[] = [];
-  includeLinkedAccounts: boolean = true;
+  // Removed includeLinkedAccounts - users explicitly select accounts from search modal
   addMode: boolean = false; // NEW: Track whether we're adding profiles or replacing them
   /** Play-time + seal counts fetched from WastedOnDestiny keyed by "game|membershipId" */
   private wastedTimes: { [playerKey: string]: number } = {};
@@ -583,11 +582,12 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   async ngOnInit() {
-    // Set default date to today
+    // Set default date to today (use YYYY-MM-DD format)
     const today = new Date();
     this.selectedMonth = today.getMonth() + 1;
     this.selectedDay = today.getDate();
-    this.selectedDate = `${this.selectedMonth}-${this.selectedDay}`;
+    this.selectedYear = today.getFullYear();
+    this.selectedDate = `${this.selectedYear}-${this.selectedMonth.toString().padStart(2, '0')}-${this.selectedDay.toString().padStart(2, '0')}`;
     await this.loadAndDisplayFavorites();
     this.dbReady = true;
     this.cdr.detectChanges();
@@ -650,11 +650,13 @@ export class PlayerSearchComponent implements OnInit {
       this.selectedCharacterIds[player.membershipId] = undefined;
     }
 
-    // Ensure a date is selected
+    // Ensure a date is selected (use full YYYY-MM-DD format for better date handling)
     if (!this.selectedDate) {
-      const month = this.currentMonth;
-      const day = this.currentDay;
-      this.selectedDate = `${month}-${day}`;
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const day = today.getDate();
+      const year = today.getFullYear();
+      this.selectedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     }
 
     // Set loading state
@@ -959,7 +961,7 @@ export class PlayerSearchComponent implements OnInit {
     this.showPlatformPicker = false;
 
     // Check if the exact (game, membershipId) combo is already selected
-    const incomingGame = (player as any).game || this.selectedGame;
+    const incomingGame = (player as any).game || 'D2'; // Default to D2 if not specified
     if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && p.game === incomingGame)) {
       return;
     }
@@ -985,53 +987,25 @@ export class PlayerSearchComponent implements OnInit {
     this.firstFullSyncDone = false;
     this.syncedPlayers.clear();
 
-    // Use the game property from the player object if present, otherwise fallback to selectedGame
+    // Use the game property from the player object (should be set by search methods)
     const displayPlayer: PlayerSearchDisplay = {
       ...player,
-      game: (player as any).game || this.selectedGame,
+      game: (player as any).game || 'D2', // Default to D2 if not specified
       platform: this.getPlatformName(player.membershipType),
       isPrimary: true
     };
     this.selectedPlayers = [displayPlayer];
     this.selectedCharacterIds[player.membershipId] = undefined;
 
-    // Fetch linked profiles if enabled
-    if (this.includeLinkedAccounts) {
-      try {
-        const linkedResp = await firstValueFrom(this.bungieService.getLinkedProfiles(player.membershipType, player.membershipId));
-        const linkedProfiles = linkedResp?.Response?.profiles || [];
-        for (const prof of linkedProfiles) {
-          if (prof.isCrossSavePrimary) continue; // skip primary (already included)
-          // include profile even if private; API will 403 and we will just log it later
-          const legacyPlayer: PlayerSearchDisplay = {
-            displayName: player.displayName,
-            membershipId: prof.membershipId,
-            // Convert BungieNext (254) to concrete platform via crossSaveOverride if available
-            membershipType: (prof.membershipType === 254 && prof.crossSaveOverride && prof.crossSaveOverride > 0)
-              ? prof.crossSaveOverride
-              : prof.membershipType,
-            game: 'D2',
-            platform: this.getPlatformName((prof.membershipType === 254 && prof.crossSaveOverride && prof.crossSaveOverride > 0)
-              ? prof.crossSaveOverride
-              : prof.membershipType),
-            isPrimary: false
-          } as any;
-          // Deduplicate
-          if (!this.selectedPlayers.some(p => p.membershipId === legacyPlayer.membershipId)) {
-            this.selectedPlayers.push(legacyPlayer);
-            this.selectedCharacterIds[legacyPlayer.membershipId] = undefined;
-          }
-        }
-      } catch (err) {
-        console.warn('[LinkedProfiles] Failed to load linked profiles:', err);
-      }
-    }
 
-    // Ensure a date is selected
+
+    // Ensure a date is selected (use full YYYY-MM-DD format for better date handling)
     if (!this.selectedDate) {
-      const month = this.currentMonth;
-      const day = this.currentDay;
-      this.selectedDate = `${month}-${day}`;
+      const today = new Date();
+      const month = today.getMonth() + 1;
+      const day = today.getDate();
+      const year = today.getFullYear();
+      this.selectedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     }
     // Set loading state for the selected date
     this.loadingActivities[this.selectedDate] = true;
@@ -1091,7 +1065,7 @@ export class PlayerSearchComponent implements OnInit {
     // dashboard while the newly-queued account syncs in the background.
     this.showPlatformPicker = false;
 
-    const incomingGame = (player as any).game || this.selectedGame;
+    const incomingGame = (player as any).game || 'D2'; // Default to D2 if not specified
 
     // Deduplicate: no-op if this (game,id) combo is already present.
     if (this.selectedPlayers.some(p => p.membershipId === player.membershipId && p.game === incomingGame)) {
@@ -1621,9 +1595,11 @@ export class PlayerSearchComponent implements OnInit {
       // with all activities.
       const modes: (number | undefined)[] = character.game === 'D1'
         ? [6, 4]          // PvE and PvP cover all activity types
-        : [undefined];    // D2 – aggregated
+        : [undefined];     // D2: single request gets all modes
 
-      for (const mode of modes) {
+      // Process modes in parallel for faster loading
+      const modePromises = modes.map(async (mode) => {
+        const modeActivities: StoredActivity[] = [];
         let page = 0;
         let hasMore = true;
 
@@ -1647,12 +1623,35 @@ export class PlayerSearchComponent implements OnInit {
             game: character.game // ensure we persist which game this activity belongs to
           }));
 
-          const uniqueNewActivities = storedActivities.filter(activity => 
-            !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
-          );
+          modeActivities.push(...storedActivities);
 
           // Count every activity we fetched toward the progress display, even if it was already cached
           this.overallActivitiesProcessed += storedActivities.length;
+
+          // Emit progress before heavy processing so user sees immediate feedback
+          const percent = ((page + 1) / (page + 2)) * 100;
+          this.updateLoadingProgress(
+            'fetch',
+            percent,
+            100,
+            `Fetching activities (${percent.toFixed(0)}%)…`
+          );
+          
+          hasMore = activities.length === 250; // Assume 250 is page size
+          page++;
+        }
+        
+        return modeActivities;
+      });
+
+      // Wait for all modes to complete
+      const allModeActivities = await Promise.all(modePromises);
+      const allActivities = allModeActivities.flat();
+
+      // Filter for unique new activities
+      const uniqueNewActivities = allActivities.filter(activity => 
+        !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
+      );
 
           // Persist any new, unique activities to IndexedDB
           if (uniqueNewActivities.length > 0) {
@@ -1680,36 +1679,20 @@ export class PlayerSearchComponent implements OnInit {
           // Phase-A fast path: as soon as we have at least one activity for the selected date
           // (month/day match) we trigger a lightweight refresh so the user sees results instantly.
           if (!this.initialDisplayShown) {
-            const foundToday = storedActivities.some(act => this.isActivityOnSelectedDate(act));
+        const foundToday = allActivities.some(act => this.isActivityOnSelectedDate(act));
             if (foundToday) {
               this.initialDisplayShown = true;
               // Fire-and-forget – we don't await to avoid stalling further page fetches.
               this.loadAllFilteredActivities(true);
-            }
-          }
-
-          // Emit progress before heavy processing so user sees immediate feedback
-          const percent = ((page + 1) / (page + 2)) * 100;
-          this.updateLoadingProgress(
-            'fetch',
-            percent,
-            100,
-            `Fetching activities (${percent.toFixed(0)}%)…`
-          );
-          
-          page++;
         }
       }
 
       this.processAndGroupActivities();
-      await this.loadAllFilteredActivities();
     } catch (error) {
-      console.error('Error loading activity history:', error);
-      throw error;
+      console.error('[DEBUG] Error loading activity history for character:', error);
+      this.error[loadingKey] = 'Failed to load activity history';
     } finally {
       this.loadingActivities[loadingKey] = false;
-      this.loadingProgress = null;
-      this.cdr.detectChanges();
     }
   }
 
@@ -2436,7 +2419,8 @@ export class PlayerSearchComponent implements OnInit {
     this.clearFilteredActivitiesCache();
     this.selectedMonth = newMonth;
     this.selectedDay = newDay;
-    this.selectedDate = `${month}-${day}`;
+    this.selectedYear = this.selectedYear || new Date().getFullYear(); // Ensure year is set
+    this.selectedDate = `${this.selectedYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     
     // Set loading state for the selected date
     this.loadingActivities[this.selectedDate] = true;
@@ -2453,21 +2437,26 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   private isActivityOnSelectedDate(activity: ActivityHistory): boolean {
-    if (!activity.period) return false;
+    if (!activity.period || !this.selectedDate) return false;
     
     const activityDate = new Date(activity.period);
     
+    // Parse selectedDate (format: "YYYY-MM-DD")
+    const dateParts = this.selectedDate.split('-');
+    if (dateParts.length !== 3) {
+      console.warn('[DateFilter] Invalid selectedDate format:', this.selectedDate);
+      return false;
+    }
+
+    const selectedYear = parseInt(dateParts[0]);
+    const selectedMonth = parseInt(dateParts[1]);
+    const selectedDay = parseInt(dateParts[2]);
+
     // Convert activity date to local midnight for consistent comparison
     const activityLocalMidnight = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate());
     
     // Create selected date as local midnight for comparison
-    const currentYear = new Date().getFullYear();
-    const selectedDateLocal = new Date(currentYear, this.selectedMonth - 1, this.selectedDay);
-    
-    // If selected year is specified, use that instead
-    if (this.selectedYear) {
-      selectedDateLocal.setFullYear(this.selectedYear);
-    }
+    const selectedDateLocal = new Date(selectedYear, selectedMonth - 1, selectedDay);
     
     // Debug logging for D1 activities to help diagnose timezone issues
     if (activity.activityDetails?.referenceId && this.isD1Activity(activity)) {
@@ -2476,9 +2465,7 @@ export class PlayerSearchComponent implements OnInit {
         activityDate: activityDate.toISOString(),
         activityLocalMidnight: activityLocalMidnight.toISOString(),
         selectedDateLocal: selectedDateLocal.toISOString(),
-        selectedMonth: this.selectedMonth,
-        selectedDay: this.selectedDay,
-        selectedYear: this.selectedYear,
+        selectedDate: this.selectedDate,
         referenceId: activity.activityDetails.referenceId,
         match: activityLocalMidnight.getTime() === selectedDateLocal.getTime()
       });
@@ -2520,37 +2507,51 @@ export class PlayerSearchComponent implements OnInit {
    * 3. Maintains the date in the user's local timezone
    */
   private validateAndSetDate(dateStr: string): void {
-    // Parse the month and day from the date string
-    const [month, day] = dateStr.split('-').map(Number);
+    // Parse the date string (format: "MM-DD" or "YYYY-MM-DD")
+    const dateParts = dateStr.split('-').map(Number);
+    let month: number, day: number, year: number;
     
-    // Create a date object for comparison using local time (consistent with our comparison logic)
-    const selectedDate = new Date(2024, month - 1, day);
+    if (dateParts.length === 2) {
+      // Format: "MM-DD" - use current year
+      [month, day] = dateParts;
+      year = new Date().getFullYear();
+    } else if (dateParts.length === 3) {
+      // Format: "YYYY-MM-DD"
+      [year, month, day] = dateParts;
+    } else {
+      console.warn('[DateFilter] Invalid date format:', dateStr);
+      return;
+    }
+    
+    // Create a date object for comparison using local time
+    const selectedDate = new Date(year, month - 1, day);
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    // Only treat as future date if the month/day is in the future (using local time)
-    const isFutureDate = selectedDate.getMonth() > today.getMonth() || 
-                        (selectedDate.getMonth() === today.getMonth() && 
-                         selectedDate.getDate() > today.getDate());
-    
-    if (isFutureDate) {
+    // Check if the date is in the future
+    if (selectedDate > today) {
       console.log('[DEBUG] Future date detected, using today instead');
-      this.selectedDate = `${today.getMonth() + 1}-${today.getDate()}`;
-      this.selectedMonth = today.getMonth() + 1;
-      this.selectedDay = today.getDate();
+      const todayYear = today.getFullYear();
+      const todayMonth = today.getMonth() + 1;
+      const todayDay = today.getDate();
+      this.selectedDate = `${todayYear}-${todayMonth.toString().padStart(2, '0')}-${todayDay.toString().padStart(2, '0')}`;
+      this.selectedMonth = todayMonth;
+      this.selectedDay = todayDay;
+      this.selectedYear = todayYear;
     } else {
-      // Keep just the month and day
-      this.selectedDate = `${month}-${day}`;
+      // Use the full YYYY-MM-DD format
+      this.selectedDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       this.selectedMonth = month;
       this.selectedDay = day;
+      this.selectedYear = year;
     }
     
     console.log('[DEBUG] Date validated and set to:', {
       selectedDate: this.selectedDate,
       selectedMonth: this.selectedMonth,
       selectedDay: this.selectedDay,
-      isFutureDate
+      selectedYear: this.selectedYear
     });
   }
 
@@ -2862,8 +2863,14 @@ export class PlayerSearchComponent implements OnInit {
       return cachedEntry.list;
     }
 
-    const [month, day] = this.selectedDate.split('-').map(Number);
-    console.log('[DEBUG][D1] Processing date:', { month, day, selectedDate: this.selectedDate });
+    // Parse selectedDate (format: "YYYY-MM-DD")
+    const dateParts = this.selectedDate.split('-');
+    if (dateParts.length !== 3) {
+      console.warn('[DEBUG] Invalid selectedDate format:', this.selectedDate);
+      return [];
+    }
+    const [year, month, day] = dateParts.map(Number);
+    console.log('[DEBUG][D1] Processing date:', { year, month, day, selectedDate: this.selectedDate });
     
     const allFilteredActivities: ActivityWithMembership[] = [];
 
@@ -2919,8 +2926,8 @@ export class PlayerSearchComponent implements OnInit {
         playerActivities = activitiesArrays.flat();
       } else {
         // Get activities filtered by mode and date
-        const startDate = new Date(Date.UTC(2014, month - 1, day, 0, 0, 0));
-        const endDate = new Date(Date.UTC(2030, month - 1, day, 23, 59, 59));
+        const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+        const endDate = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
         const mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;
         console.log('[DEBUG][D1] Filtering by mode:', {
           player: player.displayName,
@@ -3888,7 +3895,11 @@ export class PlayerSearchComponent implements OnInit {
       allActivities = allActivities.concat(activities);
     }
     const now = new Date();
-    const valid = allActivities.filter(a => new Date(a.period) <= now && (a as any).game === player.game);
+    const valid = allActivities.filter(a => {
+      const g = (a as any).game as 'D1' | 'D2' | undefined;
+      // Older cached rows may not include the `game` marker – treat them as belonging to this player's game
+      return new Date(a.period) <= now && (!g || g === player.game);
+    });
     if (valid.length === 0) return undefined;
     return valid.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
   }
@@ -3906,52 +3917,7 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   /** Handler for toggling the "Include linked accounts" checkbox */
-  onIncludeLinkedChange(): void {
-    if (this.selectedPlayers.length === 0) return;
-
-    const primary = this.selectedPlayers.find(p => p.isPrimary) || this.selectedPlayers[0];
-
-    if (this.includeLinkedAccounts) {
-      this.bungieService
-        .getLinkedProfiles(primary.membershipType as any, primary.membershipId)
-        .pipe(
-          map((resp: any) => resp?.Response?.profiles ?? []),
-          catchError(err => {
-            console.warn('[LinkedProfiles] Failed to load linked profiles on toggle:', err);
-            return of([]);
-          })
-        )
-        .subscribe(profiles => {
-          let changed = false;
-          for (const prof of profiles) {
-            if (prof.isCrossSavePrimary) continue;
-            if (this.selectedPlayers.some(p => p.membershipId === prof.membershipId)) continue;
-            const linked: PlayerSearchDisplay = {
-              displayName: primary.displayName,
-              membershipId: prof.membershipId,
-              membershipType: prof.membershipType,
-              game: 'D2',
-              platform: this.getPlatformName(prof.membershipType),
-              isPrimary: false
-            } as any;
-            this.selectedPlayers.push(linked);
-            this.selectedCharacterIds[linked.membershipId] = undefined;
-            changed = true;
-          }
-          if (changed) {
-            this.updatePlatformTabs();
-            this.cdr.detectChanges();
-          }
-        });
-    } else {
-      const beforeCount = this.selectedPlayers.length;
-      this.selectedPlayers = this.selectedPlayers.filter(p => p.isPrimary);
-      if (this.selectedPlayers.length !== beforeCount) {
-        this.updatePlatformTabs();
-        this.cdr.detectChanges();
-      }
-    }
-  }
+  // Removed onIncludeLinkedChange method - users explicitly select accounts from search modal
 
   /** Returns earliest (first ever) activity across all selected players for the specified game. */
   getAggregateFirstEver(game: 'D1' | 'D2'): ActivityHistory | undefined {
@@ -4139,27 +4105,20 @@ export class PlayerSearchComponent implements OnInit {
       selectedPlayers.splice(10);
     }
 
-    // Use the first as primary (re-use existing flow)
+    console.log('[LoadSelectedPlayers] Loading', selectedPlayers.length, 'players:', selectedPlayers.map(p => `${p.displayName} (${p.platform}, ${p.game})`));
+
+    // CRITICAL FIX: Use the first as primary, then append the rest
+    // This ensures all selected players end up in this.selectedPlayers
     const [primary, ...rest] = selectedPlayers;
     await this.selectPlayer(primary);
 
-    // Load the rest in parallel
-    const tasks = rest.map(displayPlayer =>
-      this.runWithPlayerSyncLimit(async () => {
-        try {
-          await this.loadCharacterHistory(displayPlayer);
-          await this.loadGuardianFirsts(displayPlayer);
-          await this.loadDungeonSoloFirsts(displayPlayer);
-          await this.loadWastedTime(displayPlayer);
-        } catch (err) {
-          console.warn('[LoadSelected] skipped player due to error', displayPlayer.membershipId, err);
-        }
-      })
-    );
-
-    if (tasks.length) {
-      await Promise.all(tasks);
+    // Now append the rest using appendPlayer to add them to this.selectedPlayers
+    for (const player of rest) {
+      await this.appendPlayer(player);
     }
+
+    // Hide the modal
+    this.showPlatformPicker = false;
 
     if (this.selectedDate) {
       await this.loadAllFilteredActivities();
@@ -4285,8 +4244,13 @@ export class PlayerSearchComponent implements OnInit {
       return;
     }
 
-    const [month, day] = this.selectedDate.split('-').map(Number);
-    const year = new Date().getFullYear();
+    // Parse selectedDate (format: "YYYY-MM-DD")
+    const dateParts = this.selectedDate.split('-');
+    if (dateParts.length !== 3) {
+      console.warn('[Export] Invalid selectedDate format:', this.selectedDate);
+      return;
+    }
+    const [year, month, day] = dateParts.map(Number);
     const fromDate = new Date(Date.UTC(year, month - 1, day));
 
     const req: ExportRequest = {
@@ -4320,11 +4284,19 @@ export class PlayerSearchComponent implements OnInit {
   async handleExportOptions(options: any) {
     console.log('Received export options:', options);
     this.showExportDialog = false;
-    // Convert selectedDate (e.g., '7-18') to a valid ISO date string if needed
-    if (options.from && typeof options.from === 'string' && options.from.match(/^\d{1,2}-\d{1,2}$/)) {
-      const [month, day] = options.from.split('-').map(Number);
-      const year = new Date().getFullYear();
-      options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+    // Convert date string to valid ISO date string if needed
+    if (options.from && typeof options.from === 'string') {
+      const dateParts = options.from.split('-').map(Number);
+      if (dateParts.length === 2) {
+        // Old MM-DD format
+        const [month, day] = dateParts;
+        const year = new Date().getFullYear();
+        options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+      } else if (dateParts.length === 3) {
+        // New YYYY-MM-DD format
+        const [year, month, day] = dateParts;
+        options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+      }
     }
     await this.exportService.exportMultiSheet(options, {
       selectedPlayers: this.selectedPlayers,
@@ -4714,7 +4686,7 @@ export class PlayerSearchComponent implements OnInit {
     if (!this.selectedPlayers.length) return;
     const players = this.selectedPlayers.map(p => [p.membershipId, p.membershipType, p.game]);
     const dateStr = `${this.selectedMonth}-${this.selectedDay}`;
-    const state = { d: dateStr, p: players, l: this.includeLinkedAccounts };
+    const state = { d: dateStr, p: players };
     const link = this.shareService.buildLink(state);
     try {
       await navigator.clipboard.writeText(link);

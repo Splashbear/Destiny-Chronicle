@@ -537,15 +537,32 @@ export class BungieApiService {
     return throwError(() => new Error(errorMessage));
   }
 
+  /**
+   * Searches both D1 and D2 APIs for the given search term.
+   *
+   * IMPORTANT: Bungie Names (e.g. "Player#1234") are **only** valid for D2.
+   * Destiny 1 gamertags do **not** contain the #code suffix.
+   * If a Bungie Name is supplied we strip the suffix when calling the D1 API
+   * so Destiny 1 accounts can still be found.
+   */
   searchAllGames(searchTerm: string): Observable<[any, PlayerSearchResult[], PlayerSearchResult[]]> {
-    // Destiny 2 search: choose the correct endpoint depending on whether a Bungie name code is present
+    // ---------------------
+    // Destiny 2 Search
+    // ---------------------
+    // Choose the correct endpoint depending on whether a Bungie Name code is present
     const d2$ = searchTerm.includes('#')
       ? this.searchD2Player(searchTerm).pipe(catchError(() => of(null)))
       : this.searchUsersPrefix(searchTerm).pipe(catchError(() => of(null)));
 
+    // ---------------------
+    // Destiny 1 Search
+    // ---------------------
+    // Strip the #code suffix because D1 gamertags don't include it
+    const d1SearchTerm = searchTerm.includes('#') ? searchTerm.split('#')[0] : searchTerm;
+
     // Destiny 1 searches for Xbox (1) and PlayStation (2)
-    const d1Xbox$ = this.searchD1Player(searchTerm, 1).pipe(catchError(() => of([])));
-    const d1Psn$  = this.searchD1Player(searchTerm, 2).pipe(catchError(() => of([])));
+    const d1Xbox$ = this.searchD1Player(d1SearchTerm, 1).pipe(catchError(() => of([])));
+    const d1Psn$  = this.searchD1Player(d1SearchTerm, 2).pipe(catchError(() => of([])));
 
     // Run them concurrently
     return forkJoin([d2$, d1Xbox$, d1Psn$]);

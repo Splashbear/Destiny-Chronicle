@@ -17,6 +17,13 @@ export class FirstActivityService {
   }
 
   /**
+   * Clears the cache for first ever activities. Useful when the filtering logic changes.
+   */
+  clearCache(): void {
+    this.cache = {};
+  }
+
+  /**
    * Returns the earliest (first ever) stored activity for the given player & game,
    * or undefined if none found.
    */
@@ -31,7 +38,11 @@ export class FirstActivityService {
       const acts: StoredActivity[] = await this.db.activities
         .where('membershipId')
         .equals(player.membershipId)
-        .filter(a => (a as any).game === player.game)
+        .filter(a => {
+          const g = (a as any).game as 'D1' | 'D2' | undefined;
+          // Older cached rows may not include the `game` marker – treat them as belonging to this player's game
+          return !g || g === player.game;
+        })
         .sortBy('period');
 
       const first = acts.length ? acts[0] : undefined;

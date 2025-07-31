@@ -65,27 +65,10 @@
                      (ngModelChange)="onSearchInput($event)"
                      (keydown.enter)="addPlayer()"
                      [class.border-red-500]="errorMessage"
-                     class="w-40 px-3 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600"
+                     class="flex-1 px-3 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600"
                      placeholder="Username">
-              <select [(ngModel)]="selectedGame" 
-                      class="w-20 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
-                <option value="D1">D1</option>
-                <option value="D2">D2</option>
-              </select>
-              <select *ngIf="selectedGame === 'D1'"
-                      [(ngModel)]="selectedPlatform"
-                      class="w-24 px-2 py-1.5 text-sm bg-slate-700/95 text-white rounded border border-slate-600">
-                <option value="" disabled selected>Select Platform</option>
-                <option value="Xbox">Xbox</option>
-                <option value="PlayStation">PlayStation</option>
-              </select>
-              <label class="d2-check text-xs">
-                <input type="checkbox" [(ngModel)]="includeLinkedAccounts" (change)="onIncludeLinkedChange()">
-                <span class="box"></span>
-                Include linked
-              </label>
               <button (click)="addPlayer()" 
-                      [disabled]="!searchUsername || (selectedGame === 'D1' && !selectedPlatform)"
+                      [disabled]="!searchUsername"
                       class="d2-btn disabled:opacity-50 disabled:cursor-not-allowed">
                 {{ loading['search'] ? 'Searching...' : 'Search' }}
               </button>
@@ -573,10 +556,8 @@
           </ng-container>
         </div>
 
-        <!-- Only show the Titles tab if the selected game is D2 -->
-        <ng-container *ngIf="selectedGame === 'D2'">
-          <!-- Titles Tab -->
-          <div *ngIf="activeTab === 'titles'" class="space-y-6">
+        <!-- Titles Tab -->
+        <div *ngIf="activeTab === 'titles'" class="space-y-6">
             <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
               <div class="flex items-center gap-3">
@@ -649,7 +630,6 @@
               </div>
             </div>
           </div>
-        </ng-container>
 
 
       </div>
@@ -774,8 +754,12 @@
           Add to Favorites
         </button>
       </div>
-      <div class="text-sm text-slate-400">
-        {{ getSelectedCount() }} of {{ getTotalCount() }} selected
+      <div class="flex items-center gap-4">
+        <!-- Include Linked Accounts Toggle -->
+
+        <div class="text-sm text-slate-400">
+          {{ getSelectedCount() }} of {{ getTotalCount() }} selected
+        </div>
       </div>
     </div>
     

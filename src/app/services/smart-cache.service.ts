@@ -1,18 +1,16 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
+import { ActivityDbService } from './activity-db.service';
 
-interface CacheEntry<T> {
+export interface CacheEntry<T> {
   data: T;
   timestamp: number;
-  expiresAt: number;
-  accessCount: number;
-  lastAccessed: number;
+  ttl: number; // Time to live in milliseconds
 }
 
-interface CacheStats {
-  totalEntries: number;
-  hitRate: number;
-  memoryUsage: number;
+export interface DateRange {
+  start: Date;
+  end: Date;
 }
 
 @Injectable({
@@ -20,237 +18,280 @@ interface CacheStats {
 })
 export class SmartCacheService {
   private cache = new Map<string, CacheEntry<any>>();
-  private readonly MAX_CACHE_SIZE = 100;
-  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
-  private readonly CLEANUP_INTERVAL = 60 * 1000; // 1 minute
+  private preloadQueue: string[] = [];
+  private isPreloading = false;
   
-  private hits = 0;
-  private misses = 0;
-  private cleanupTimer: any;
+  // Cache configuration
+  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly ACTIVITY_TTL = 30 * 60 * 1000; // 30 minutes for activity data
+  private readonly MAX_CACHE_SIZE = 1000; // Maximum number of cache entries
 
-  private statsSubject = new BehaviorSubject<CacheStats>({
-    totalEntries: 0,
-    hitRate: 0,
-    memoryUsage: 0
-  });
+  public cacheStats$ = new BehaviorSubject<{
+    size: number;
+    hits: number;
+    misses: number;
+    preloadQueue: number;
+  }>({ size: 0, hits: 0, misses: 0, preloadQueue: 0 });
 
-  public stats$ = this.statsSubject.asObservable();
+  private stats = { hits: 0, misses: 0 };
 
-  constructor() {
-    this.startCleanupTimer();
+  constructor(private activityDb: ActivityDbService) {
+    this.startCleanupInterval();
   }
 
   /**
-   * Get data from cache or execute factory function
+   * Get data from cache with automatic TTL checking
    */
-  async get<T>(
-    key: string,
-    factory: () => Promise<T>,
-    ttl: number = this.DEFAULT_TTL
-  ): Promise<T> {
+  get<T>(key: string): T | null {
     const entry = this.cache.get(key);
-    const now = Date.now();
-
-    // Check if we have valid cached data
-    if (entry && now < entry.expiresAt) {
-      entry.accessCount++;
-      entry.lastAccessed = now;
-      this.hits++;
+    
+    if (!entry) {
+      this.stats.misses++;
       this.updateStats();
-      return entry.data;
+      return null;
     }
 
-    // Cache miss - fetch new data
-    this.misses++;
-    const data = await factory();
-    
-    // Store in cache
-    this.set(key, data, ttl);
+    // Check if expired
+    if (Date.now() > entry.timestamp + entry.ttl) {
+      this.cache.delete(key);
+      this.stats.misses++;
+      this.updateStats();
+      return null;
+    }
+
+    this.stats.hits++;
     this.updateStats();
-    
-    return data;
+    return entry.data;
   }
 
   /**
    * Set data in cache
    */
-  set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
-    const now = Date.now();
-    
-    // Ensure we don't exceed max cache size
-    if (this.cache.size >= this.MAX_CACHE_SIZE && !this.cache.has(key)) {
-      this.evictLeastUsed();
+  set<T>(key: string, data: T, ttl?: number): void {
+    // Clean up old entries if cache is full
+    if (this.cache.size >= this.MAX_CACHE_SIZE) {
+      this.evictOldest();
     }
 
     this.cache.set(key, {
       data,
-      timestamp: now,
-      expiresAt: now + ttl,
-      accessCount: 1,
-      lastAccessed: now
+      timestamp: Date.now(),
+      ttl: ttl || this.DEFAULT_TTL
     });
 
     this.updateStats();
   }
 
   /**
-   * Check if key exists and is valid
+   * Preload activities for a date range
    */
-  has(key: string): boolean {
-    const entry = this.cache.get(key);
-    if (!entry) return false;
+  async preloadActivities(membershipId: string, characterId: string, dateRange: DateRange): Promise<void> {
+    const cacheKey = `activities-${membershipId}-${characterId}-${dateRange.start.toISOString()}-${dateRange.end.toISOString()}`;
     
-    if (Date.now() >= entry.expiresAt) {
-      this.cache.delete(key);
-      return false;
+    // Check if already cached
+    if (this.get(cacheKey)) {
+      return;
     }
+
+    // Add to preload queue
+    this.preloadQueue.push(cacheKey);
+    this.updateStats();
+
+    // Start preloading if not already running
+    if (!this.isPreloading) {
+      this.processPreloadQueue();
+    }
+  }
+
+  /**
+   * Preload activities for common date patterns
+   */
+  async preloadCommonDates(membershipId: string, characterId: string): Promise<void> {
+    const today = new Date();
+    const commonDates: DateRange[] = [
+      // Today
+      { start: new Date(today.getFullYear(), today.getMonth(), today.getDate()), 
+        end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) },
+      
+      // Yesterday
+      { start: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1), 
+        end: new Date(today.getFullYear(), today.getMonth(), today.getDate()) },
+      
+      // This week (last 7 days)
+      { start: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7), 
+        end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1) },
+      
+      // This month
+      { start: new Date(today.getFullYear(), today.getMonth(), 1), 
+        end: new Date(today.getFullYear(), today.getMonth() + 1, 1) },
+      
+      // Last month
+      { start: new Date(today.getFullYear(), today.getMonth() - 1, 1), 
+        end: new Date(today.getFullYear(), today.getMonth(), 1) }
+    ];
+
+    // Preload each date range
+    for (const dateRange of commonDates) {
+      await this.preloadActivities(membershipId, characterId, dateRange);
+    }
+  }
+
+  /**
+   * Process the preload queue
+   */
+  private async processPreloadQueue(): Promise<void> {
+    if (this.isPreloading || this.preloadQueue.length === 0) {
+      return;
+    }
+
+    this.isPreloading = true;
+
+    try {
+      while (this.preloadQueue.length > 0) {
+        const cacheKey = this.preloadQueue.shift()!;
+        
+        // Parse the cache key to extract parameters
+        const parts = cacheKey.replace('activities-', '').split('-');
+        if (parts.length < 4) continue;
+
+        const membershipId = parts[0];
+        const characterId = parts[1];
+        const startDate = new Date(parts[2]);
+        const endDate = new Date(parts[3]);
+
+        try {
+          // Fetch activities for the date range
+          const activities = await this.activityDb.getActivitiesInDateRange(
+            membershipId,
+            startDate,
+            endDate
+          );
+
+          // Cache the result
+          this.set(cacheKey, activities, this.ACTIVITY_TTL);
+        } catch (error) {
+          console.warn(`[SmartCache] Failed to preload ${cacheKey}:`, error);
+        }
+
+        // Small delay to avoid overwhelming the database
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    } finally {
+      this.isPreloading = false;
+      this.updateStats();
+    }
+  }
+
+  /**
+   * Get activities for a specific date with smart caching
+   */
+  async getActivitiesForDate(
+    membershipId: string, 
+    characterId: string, 
+    month: number, 
+    day: number, 
+    year?: number
+  ): Promise<any[]> {
+    const cacheKey = `date-${membershipId}-${characterId}-${month}-${day}-${year || 'any'}`;
     
-    return true;
-  }
-
-  /**
-   * Remove specific key from cache
-   */
-  delete(key: string): boolean {
-    const result = this.cache.delete(key);
-    this.updateStats();
-    return result;
-  }
-
-  /**
-   * Clear all cache entries
-   */
-  clear(): void {
-    this.cache.clear();
-    this.hits = 0;
-    this.misses = 0;
-    this.updateStats();
-  }
-
-  /**
-   * Get cache statistics
-   */
-  getStats(): CacheStats {
-    return this.statsSubject.value;
-  }
-
-  /**
-   * Preload data into cache
-   */
-  async preload<T>(
-    key: string,
-    factory: () => Promise<T>,
-    ttl: number = this.DEFAULT_TTL
-  ): Promise<void> {
-    if (!this.has(key)) {
-      const data = await factory();
-      this.set(key, data, ttl);
-    }
-  }
-
-  /**
-   * Get multiple keys at once
-   */
-  async getMultiple<T>(
-    keys: string[],
-    factory: (key: string) => Promise<T>,
-    ttl: number = this.DEFAULT_TTL
-  ): Promise<Map<string, T>> {
-    const results = new Map<string, T>();
-    const promises: Promise<void>[] = [];
-
-    for (const key of keys) {
-      promises.push(
-        this.get(key, () => factory(key), ttl).then(data => {
-          results.set(key, data);
-        })
-      );
+    // Try cache first
+    const cached = this.get<any[]>(cacheKey);
+    if (cached) {
+      return cached;
     }
 
-    await Promise.all(promises);
-    return results;
+    // Fetch from database
+    const activities = await this.activityDb.getActivitiesByDate(
+      membershipId, 
+      characterId, 
+      month, 
+      day, 
+      year
+    );
+
+    // Cache the result
+    this.set(cacheKey, activities, this.ACTIVITY_TTL);
+    
+    return activities;
   }
 
   /**
-   * Invalidate cache entries matching pattern
+   * Clear cache entries for a specific character
    */
-  invalidatePattern(pattern: RegExp): number {
-    let count = 0;
-    for (const key of this.cache.keys()) {
-      if (pattern.test(key)) {
-        this.cache.delete(key);
-        count++;
-      }
-    }
-    this.updateStats();
-    return count;
-  }
-
-  /**
-   * Get cache keys matching pattern
-   */
-  getKeysMatching(pattern: RegExp): string[] {
-    return Array.from(this.cache.keys()).filter(key => pattern.test(key));
-  }
-
-  private evictLeastUsed(): void {
-    let leastUsedKey: string | null = null;
-    let leastUsedScore = Infinity;
-
-    for (const [key, entry] of this.cache.entries()) {
-      // Score based on access count and recency
-      const score = entry.accessCount * (Date.now() - entry.lastAccessed);
-      if (score < leastUsedScore) {
-        leastUsedScore = score;
-        leastUsedKey = key;
-      }
-    }
-
-    if (leastUsedKey) {
-      this.cache.delete(leastUsedKey);
-    }
-  }
-
-  private startCleanupTimer(): void {
-    this.cleanupTimer = setInterval(() => {
-      this.cleanup();
-    }, this.CLEANUP_INTERVAL);
-  }
-
-  private cleanup(): void {
-    const now = Date.now();
+  clearCharacterCache(membershipId: string, characterId: string): void {
     const keysToDelete: string[] = [];
-
-    for (const [key, entry] of this.cache.entries()) {
-      if (now >= entry.expiresAt) {
+    
+    for (const key of this.cache.keys()) {
+      if (key.includes(`${membershipId}-${characterId}`)) {
         keysToDelete.push(key);
       }
     }
 
     keysToDelete.forEach(key => this.cache.delete(key));
+    this.updateStats();
+  }
+
+  /**
+   * Clear all cache
+   */
+  clearAll(): void {
+    this.cache.clear();
+    this.preloadQueue = [];
+    this.updateStats();
+  }
+
+  /**
+   * Evict oldest cache entries
+   */
+  private evictOldest(): void {
+    const entries = Array.from(this.cache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
     
-    if (keysToDelete.length > 0) {
-      this.updateStats();
+    // Remove oldest 20% of entries
+    const toRemove = Math.ceil(entries.length * 0.2);
+    for (let i = 0; i < toRemove; i++) {
+      this.cache.delete(entries[i][0]);
     }
   }
 
-  private updateStats(): void {
-    const totalRequests = this.hits + this.misses;
-    const hitRate = totalRequests > 0 ? (this.hits / totalRequests) * 100 : 0;
-    
-    // Estimate memory usage (rough calculation)
-    const memoryUsage = this.cache.size * 1024; // Assume 1KB per entry on average
+  /**
+   * Start periodic cleanup of expired entries
+   */
+  private startCleanupInterval(): void {
+    setInterval(() => {
+      const now = Date.now();
+      const keysToDelete: string[] = [];
+      
+      for (const [key, entry] of this.cache.entries()) {
+        if (now > entry.timestamp + entry.ttl) {
+          keysToDelete.push(key);
+        }
+      }
 
-    this.statsSubject.next({
-      totalEntries: this.cache.size,
-      hitRate: Math.round(hitRate * 100) / 100,
-      memoryUsage
+      keysToDelete.forEach(key => this.cache.delete(key));
+      
+      if (keysToDelete.length > 0) {
+        this.updateStats();
+      }
+    }, 60000); // Run every minute
+  }
+
+  /**
+   * Update cache statistics
+   */
+  private updateStats(): void {
+    this.cacheStats$.next({
+      size: this.cache.size,
+      hits: this.stats.hits,
+      misses: this.stats.misses,
+      preloadQueue: this.preloadQueue.length
     });
   }
 
-  ngOnDestroy(): void {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-    }
+  /**
+   * Get cache statistics
+   */
+  getStats() {
+    return this.cacheStats$.value;
   }
 }

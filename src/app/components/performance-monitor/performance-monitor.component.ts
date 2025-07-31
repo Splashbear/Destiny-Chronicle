@@ -124,11 +124,18 @@ export class PerformanceMonitorComponent implements OnInit, OnDestroy {
   private updateMetrics(): void {
     const cacheStats = this.cacheService.getStats();
     
+    // Calculate hit rate from hits and misses
+    const totalRequests = cacheStats.hits + cacheStats.misses;
+    const hitRate = totalRequests > 0 ? (cacheStats.hits / totalRequests) * 100 : 0;
+    
+    // Estimate memory usage (rough calculation)
+    const estimatedMemoryUsage = cacheStats.size * 1024; // Assume 1KB per cache entry
+    
     this.metrics = {
       loadTime: Date.now() - this.startTime,
       renderTime: this.measureRenderTime(),
-      cacheHitRate: cacheStats.hitRate,
-      memoryUsage: cacheStats.memoryUsage + this.estimateComponentMemory(),
+      cacheHitRate: hitRate,
+      memoryUsage: estimatedMemoryUsage + this.estimateComponentMemory(),
       activitiesLoaded: this.getActivitiesCount(),
       lastUpdate: new Date()
     };
@@ -159,7 +166,7 @@ export class PerformanceMonitorComponent implements OnInit, OnDestroy {
   }
 
   clearCache(): void {
-    this.cacheService.clear();
+    this.cacheService.clearAll();
     console.log('[Performance] Cache cleared');
   }
 
