@@ -10,6 +10,7 @@ import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
 import { ActivityDbService, StoredActivity, FavoriteAccount } from '../../services/activity-db.service';
+import { FirstActivityService } from '../../services/first-activity.service';
 import { BehaviorSubject, Observable, of, Subject, debounceTime, from } from 'rxjs';
 import { map, shareReplay, switchMap, catchError, distinctUntilChanged, exhaustMap } from 'rxjs/operators';
 import { TimezoneService } from '../../services/timezone.service';
@@ -208,23 +209,7 @@ function normalizeTitleName(name: string): string {
 }
 
 // Minimal standalone function to test Bungie API response for profileRecords
-async function testBungieProfileRecords(bungieService: any, membershipType: number, membershipId: string) {
-  try {
-    const response = await firstValueFrom(bungieService.getPlayerTitles(membershipType, membershipId)) as any;
-    console.log('[TEST] Full API response:', JSON.stringify(response, null, 2));
-    if (response.Response && response.Response.profileRecords && response.Response.profileRecords.data && response.Response.profileRecords.data.records) {
-      const records = response.Response.profileRecords.data.records;
-      const keys = Object.keys(records);
-      console.log('[TEST] profileRecords.data.records keys:', keys);
-      console.log('[TEST] profileRecords.data.records[126238604]:', records['126238604']);
-      console.log('[TEST] profileRecords.data.records[3175660257]:', records['3175660257']);
-    } else {
-      console.log('[TEST] profileRecords.data.records not found in response');
-    }
-  } catch (err) {
-    console.error('[TEST] Error fetching Bungie profile records:', err);
-  }
-}
+async function testBungieProfileRecords(_bungieService: any, _membershipType: number, _membershipId: string) { /* no-op in production */ }
 
 // Utility function to extract characterId for both D1 and D2 character objects
 // D1: character.characterBase.characterId
@@ -551,7 +536,8 @@ export class PlayerSearchComponent implements OnInit {
     private titleService: TitleService,
     private selectedAccounts: SelectedAccountsService,
     private exportService: ExportService,
-    private shareService: ShareService
+    private shareService: ShareService,
+    private firstActivityService: FirstActivityService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -588,6 +574,14 @@ export class PlayerSearchComponent implements OnInit {
     this.selectedDay = today.getDate();
     this.selectedYear = today.getFullYear();
     this.selectedDate = `${this.selectedYear}-${this.selectedMonth.toString().padStart(2, '0')}-${this.selectedDay.toString().padStart(2, '0')}`;
+    
+    // Clear firstEverActivities cache to ensure new filtering logic takes effect
+    this.firstEverActivities = {};
+    // Clear the FirstActivityService cache to ensure new filtering logic takes effect
+    if (this.firstActivityService) {
+      this.firstActivityService.clearCache();
+    }
+    
     await this.loadAndDisplayFavorites();
     this.dbReady = true;
     this.cdr.detectChanges();
@@ -1327,7 +1321,14 @@ export class PlayerSearchComponent implements OnInit {
           validatedActivities.push({
             ...activity,
             validated: true,
-            validatedAt: new Date().toISOString()
+            validatedAt: new Date().toISOString(),
+            // Attach character class of the matching entry so the UI can render the icon
+            characterClass: (pgcr.entries.find((entry: PGCREntry) => (
+              (entry.player?.destinyUserInfo?.membershipId === character.membershipId && entry.characterId === character.characterId) ||
+              (entry.player?.destinyUserInfo?.membershipId === character.membershipId) ||
+              (entry.characterId === character.characterId) ||
+              (entry.player?.destinyUserInfo?.membershipType === character.membershipType && entry.player?.destinyUserInfo?.membershipId === character.membershipId)
+            ))?.player?.characterClass) || activity.characterClass
           });
         } else {
           console.warn(`[DEBUG] Player ${character.membershipId} not found in PGCR ${instanceId} using any matching strategy`);
@@ -1971,6 +1972,13 @@ export class PlayerSearchComponent implements OnInit {
     return this.timezoneService.formatDate(dateString);
   }
 
+  /** Formats a date that may come from an ActivityHistory (period) or ActivityFirstCompletion (completionDate). */
+  formatActivityOrCompletionDate(first: any): string {
+    if (!first) return '';
+    const raw: string = (first.period || first.completionDate || '') as string;
+    return this.timezoneService.formatDateTime(raw);
+  }
+
   /**
    * Debug helper to summarize activity data
    */
@@ -2071,6 +2079,8 @@ export class PlayerSearchComponent implements OnInit {
   // Add cache clearing method
   private clearCache(): void {
     this.activityCache.clear();
+    this.firstEverActivities = {};
+    this.firstEverActivity = undefined;
   }
 
   /**
@@ -2406,7 +2416,19 @@ export class PlayerSearchComponent implements OnInit {
     // If the user clicked "Search" for the same day we're already showing, we
     // just trigger a lightweight refresh instead of blowing away caches and
     // restarting the fast-load logic (which caused the visible refresh loop).
-    const sameDate = newMonth === this.selectedMonth && newDay === this.selectedDay;
+    // IMPORTANT: Because selectedMonth/selectedDay are two-way bound (ngModel),
+    // comparing against them will always look the same as the newly chosen values.
+    // Compare against the month/day parsed from selectedDate instead.
+    let prevMonth: number | undefined;
+    let prevDay: number | undefined;
+    if (this.selectedDate) {
+      const parts = this.selectedDate.split('-');
+      if (parts.length === 3) {
+        prevMonth = parseInt(parts[1]);
+        prevDay = parseInt(parts[2]);
+      }
+    }
+    const sameDate = prevMonth === newMonth && prevDay === newDay;
     if (sameDate) {
       await this.loadAllFilteredActivities();
       return;
@@ -2865,18 +2887,12 @@ export class PlayerSearchComponent implements OnInit {
       return [];
     }
     const [year, month, day] = dateParts.map(Number);
-    console.log('[DEBUG][D1] Processing date:', { year, month, day, selectedDate: this.selectedDate });
+    // debug removed
     
     const allFilteredActivities: ActivityWithMembership[] = [];
 
     // Get all activities for selected players in parallel
     const playerActivitiesPromises = this.selectedPlayers.map(async player => {
-      console.log('[DEBUG][D1] Processing player:', { 
-        displayName: player.displayName, 
-        membershipId: player.membershipId,
-        game: player.game,
-        isD1: this.isD1Player(player)
-      });
       
       // Use the new optimized query methods based on activity type
       let playerActivities: StoredActivity[] = [];
@@ -2886,35 +2902,14 @@ export class PlayerSearchComponent implements OnInit {
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-        console.log('[DEBUG][D1] Found character IDs:', { 
-          player: player.displayName, 
-          charIds,
-          characters: this.characters[this.getPlayerKey(player)]
-        });
+          
         
         const activitiesPromises = charIds.map(async charId => {
-          console.log('[DEBUG][D1] Fetching activities for character:', {
-            player: player.displayName,
-            charId,
-            membershipId: player.membershipId,
-            month,
-            day
-          });
+          
           
           const activities = await this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
           
-          // Debug log for D1 activities
-          if (player.game === 'D1') {
-            console.log(`[DEBUG][D1] Activities for ${player.displayName} (${player.membershipId}) character ${charId} on ${month}-${day}:`, {
-              count: activities.length,
-              activities: activities.map(a => ({
-                period: a.period,
-                mode: a.activityDetails?.mode,
-                referenceId: a.activityDetails?.referenceId,
-                instanceId: a.activityDetails?.instanceId
-              }))
-            });
-          }
+          
           return activities;
         });
         const activitiesArrays = await Promise.all(activitiesPromises);
@@ -2924,13 +2919,6 @@ export class PlayerSearchComponent implements OnInit {
         const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
         const endDate = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
         const mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;
-        console.log('[DEBUG][D1] Filtering by mode:', {
-          player: player.displayName,
-          game: player.game,
-          mode,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        });
         
         playerActivities = await this.activityDb.getActivitiesByModeAndDate(
           player.membershipId,
@@ -2947,17 +2935,7 @@ export class PlayerSearchComponent implements OnInit {
         return !g || g === player.game;
       });
 
-      if (player.game === 'D1') {
-        console.log(`[DEBUG][D1] Filtered D1 activities for ${player.displayName}:`, {
-          count: playerActivities.length,
-          activities: playerActivities.map(a => ({
-            period: a.period,
-            mode: a.activityDetails?.mode,
-            referenceId: a.activityDetails?.referenceId,
-            instanceId: a.activityDetails?.instanceId
-          }))
-        });
-      }
+      
       
       return playerActivities.map(activity => ({
         ...activity,
@@ -2986,9 +2964,7 @@ export class PlayerSearchComponent implements OnInit {
     // Sort by period (descending)
     dedupedActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
     
-    // Debug log: count of D1 activities for this date
-    const d1Count = dedupedActivities.filter(a => a.game === 'D1').length;
-    console.log(`[DEBUG][D1] Total deduped D1 activities for ${this.selectedDate}:`, d1Count);
+    
 
     // Cache only after initial full sync completes so early partial lists don't persist
     if (this.firstFullSyncDone) {
@@ -3085,6 +3061,60 @@ export class PlayerSearchComponent implements OnInit {
     }
     // Fallback to activity type icon
     return this.activityIconService.getActivityIconPath(first.type, false);
+  }
+
+  // Build per-character earliest for a given list of first completions
+  getPerCharacterFirsts(player: PlayerSearchDisplay, type: 'first-ever' | 'raid' | 'dungeon'): Array<{ characterId: string; className?: string; platformIcon: string; first: ActivityHistory | ActivityFirstCompletion }>{
+    const results: Array<{ characterId: string; className?: string; platformIcon: string; first: any }> = [];
+    const pKey = this.getPlayerKey(player);
+    const charIds = (this.characters[pKey] || []).map(getCharacterId).filter((id): id is string => !!id);
+    if (type === 'first-ever') {
+      // For first-ever, compute earliest per character from stored activities
+      for (const cid of charIds) {
+        const list = (this.activities[`${player.membershipId}|${cid}`] || []) as ActivityHistory[];
+        if (!list.length) continue;
+        const earliest = [...list].sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
+        results.push({
+          characterId: cid,
+          className: earliest.characterClass,
+          platformIcon: this.getPlatformIconUrl(player.membershipType),
+          first: earliest
+        });
+      }
+    } else {
+      // For raid/dungeon, use per-character earliest from guardianFirstsMap entries for this player
+      const list = this.getFirstsForPlayer(player).filter(f => f.game === player.game && (type === 'raid' ? f.type === 'raid' : f.type === 'dungeon'));
+      const perChar = new Map<string, ActivityFirstCompletion>();
+      for (const f of list) {
+        const existing = perChar.get(f.characterId);
+        if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+          perChar.set(f.characterId, f);
+        }
+      }
+      perChar.forEach(f => {
+        results.push({
+          characterId: f.characterId,
+          className: f.characterClass,
+          platformIcon: this.getPlatformIconUrl(f.membershipType ?? player.membershipType),
+          first: f
+        });
+      });
+    }
+    return results.sort((a, b) => a.className?.localeCompare(b.className || '') || 0);
+  }
+
+  // UI state for per-character expand/collapse keyed by player+kind
+  private perCharacterExpanded: { [key: string]: boolean } = {};
+  private getExpandKey(player: PlayerSearchDisplay, kind: 'first-ever' | 'raid' | 'dungeon'): string {
+    return `${this.getPlayerKey(player)}|${kind}`;
+  }
+  isPerCharacterExpanded(player: PlayerSearchDisplay, kind: 'first-ever' | 'raid' | 'dungeon'): boolean {
+    return !!this.perCharacterExpanded[this.getExpandKey(player, kind)];
+  }
+  togglePerCharacter(player: PlayerSearchDisplay, kind: 'first-ever' | 'raid' | 'dungeon'): void {
+    const key = this.getExpandKey(player, kind);
+    this.perCharacterExpanded[key] = !this.perCharacterExpanded[key];
+    this.cdr.detectChanges();
   }
 
   groupActivitiesByType(activities: any[]): ActivityGroup[] {
@@ -3344,6 +3374,18 @@ export class PlayerSearchComponent implements OnInit {
     window.open(`https://pgcr.eververse.trade/${game}/${instanceId}`, '_blank', 'noopener');
   }
 
+  // Route per-character row clicks to the right PGCR link regardless of data shape
+  onClickPerCharacterFirst(first: ActivityHistory | ActivityFirstCompletion, player: PlayerSearchDisplay): void {
+    const anyFirst: any = first as any;
+    if (anyFirst && anyFirst.instanceId && (anyFirst.completionDate || anyFirst.type)) {
+      // Looks like ActivityFirstCompletion
+      this.openExternalPGCRForFirst(anyFirst as ActivityFirstCompletion);
+      return;
+    }
+    // Fallback as ActivityHistory
+    this.openExternalPGCR(first as ActivityHistory, this.isD1Player(player));
+  }
+
   handleImageError(event: Event, isD1: boolean): void {
     const imgElement = event.target as HTMLImageElement;
     // Prevent infinite loop: only set if not already the fallback
@@ -3374,6 +3416,22 @@ export class PlayerSearchComponent implements OnInit {
   // Add this method to trigger activity refresh only when Search is clicked
   onDateSearch() {
     this.onDateSelect(this.selectedMonth.toString(), this.selectedDay.toString());
+  }
+
+  /**
+   * Debug method to manually clear caches and reload first ever activity
+   */
+  async debugReloadFirstEver() {
+    // debug removed
+    this.clearFirstEverActivitiesCache();
+    this.firstEverActivity = undefined;
+    
+    if (this.selectedPlayers.length > 0) {
+      const player = this.selectedPlayers[0];
+      // debug removed
+      this.firstEverActivity = await this.computeFirstEverActivityForSelectedPlayerFromDb();
+      this.cdr.detectChanges();
+    }
   }
 
   // Debug: Get all record hashes from d2TitleRecords
@@ -3410,112 +3468,31 @@ export class PlayerSearchComponent implements OnInit {
   }
 
   /**
-   * Returns the first-ever activity for a player for the specified game (D1 or D2).
-   * No need to filter by activity.game, as all activities for the player are for the correct game.
+   * Returns the first-ever activity for a player for the specified game (D1 or D2),
+   * delegated to the centralized FirstActivityService.
    */
   async getFirstEverActivity(player: PlayerSearchDisplay, game: 'D1' | 'D2'): Promise<ActivityHistory | undefined> {
-    console.log('[DEBUG][FirstEver] Starting getFirstEverActivity for:', {
-      player: player.displayName,
-      game,
-      membershipId: player.membershipId
-    });
-
-    const charIds = (this.characters[this.getPlayerKey(player)] || [])
-      .map(getCharacterId)
-      .filter((id): id is string => !!id);
-    
-    console.log('[DEBUG][FirstEver] Found character IDs:', charIds);
-
-    let allActivities: ActivityHistory[] = [];
-    for (const charId of charIds) {
-      const activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, charId);
-      console.log(`[DEBUG][FirstEver] Activities for character ${charId}:`, {
-        count: activities.length,
-        sample: activities.slice(0, 3).map(a => ({
-          period: a.period,
-          mode: a.activityDetails?.mode,
-          referenceId: a.activityDetails?.referenceId
-        }))
-      });
-      allActivities = allActivities.concat(activities);
-    }
-
-    // Filter out activities with a period in the future
-    const now = new Date();
-    const validActivities = allActivities.filter(a => {
-      const periodDate = new Date(a.period);
-      return periodDate <= now;
-    });
-
-    console.log('[DEBUG][FirstEver] Total valid activities found (not in future):', {
-      count: validActivities.length,
-      periods: validActivities.slice(0, 5).map(a => a.period)
-    });
-
-    if (validActivities.length === 0) {
-      console.log('[DEBUG][FirstEver] No valid activities found');
-      return undefined;
-    }
-
-    const firstActivity = validActivities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
-    console.log('[DEBUG][FirstEver] First valid activity found:', {
-      period: firstActivity.period,
-      mode: firstActivity.activityDetails?.mode,
-      referenceId: firstActivity.activityDetails?.referenceId
-    });
-
-    return firstActivity;
+    return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game });
   }
 
-  // Replace the helper function with an async DB version
+  // Replace the helper function with a centralized service call
   async computeFirstEverActivityForSelectedPlayerFromDb(): Promise<ActivityHistory | undefined> {
     if (this.selectedPlayers.length === 0) return undefined;
     const player = this.selectedPlayers[0];
-    const charIds = (this.characters[this.getPlayerKey(player)] || [])
-      .map(getCharacterId)
-      .filter((id): id is string => !!id);
-
-    let allActivities: ActivityHistory[] = [];
-    for (const charId of charIds) {
-      const activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, charId);
-      allActivities = allActivities.concat(activities);
-    }
-    const now = new Date();
-    const validActivities = allActivities.filter(a => {
-      const d = new Date(a.period);
-      return d instanceof Date && !isNaN(d.getTime()) && d <= now;
-    });
-    if (validActivities.length === 0) return undefined;
-    return validActivities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
+    return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game });
   }
 
-  // Add a debug method to log the earliest activity from the DB for the selected player
-  async debugLogEarliestActivity() {
-    if (this.selectedPlayers.length === 0) {
-      console.log('[DEBUG] No player selected');
-      return;
-    }
-    const player = this.selectedPlayers[0];
-    const charIds = (this.characters[this.getPlayerKey(player)] || [])
-      .map(getCharacterId)
-      .filter((id): id is string => !!id);
+  // Deprecated debug method – keep as no-op to avoid template errors
+  async debugLogEarliestActivity() { /* no-op */ }
 
-    let allActivities: ActivityHistory[] = [];
-    for (const charId of charIds) {
-      const activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, charId);
-      allActivities = allActivities.concat(activities);
-    }
-    allActivities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
-    if (allActivities.length === 0) {
-      console.log('[DEBUG] No activities found in DB for player', player.displayName);
-    } else {
-      console.log('[DEBUG] Earliest activity from DB:', allActivities[0]);
-    }
-  }
-
-  // Add a helper to set firstEverActivity from the async DB function
+  // Add a helper to set firstEverActivity using the centralized service
   private async setFirstEverActivityFromDb() {
-    this.firstEverActivity = await this.computeFirstEverActivityForSelectedPlayerFromDb();
+    if (this.selectedPlayers.length > 0) {
+      const player = this.selectedPlayers[0];
+      this.firstEverActivity = await this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game });
+    } else {
+      this.firstEverActivity = undefined;
+    }
     this.cdr.detectChanges();
   }
 
@@ -3555,8 +3532,7 @@ export class PlayerSearchComponent implements OnInit {
             const response = await firstValueFrom(this.bungieService.getPlayerTitles(player.membershipType, player.membershipId));
             const records = response.Response?.profileRecords?.data?.records || {};
             const charRecords = response.Response?.characterRecords?.data as { [characterId: string]: { records?: { [key: string]: TitleRecord } } } || {};
-            // Debug: Output player records
-            console.log('[TITLES DEBUG] Player Records:', records);
+      // debug removed
             // Debug: Print all completionRecordHash values from manifest title nodes
             for (const node of allTitleNodes) {
               if (!node || !node.completionRecordHash) continue;
@@ -3567,20 +3543,20 @@ export class PlayerSearchComponent implements OnInit {
                   const charRecordObj = charRecords[charId];
                   if (charRecordObj?.records && charRecordObj.records[node.completionRecordHash]) {
                     hasRecord = true;
-                    console.warn(`[TITLES DEBUG] Manifest node: ${node.displayProperties?.name} (completionRecordHash: ${node.completionRecordHash}) - FOUND in characterRecords for characterId: ${charId}`);
+                    // debug removed
                     break;
                   }
                 }
               }
               if (!hasRecord) {
-                console.log(`[TITLES DEBUG] Manifest node: ${node.displayProperties?.name} (completionRecordHash: ${node.completionRecordHash}) - In player records: false`);
+                // debug removed
               }
             }
             // Build a single list of titles (show all manifest nodes, even if no record)
             const titleMap: { [key: string]: any } = {};
             for (const node of allTitleNodes) {
               if (!node || !node.completionRecordHash) {
-                console.warn('[TITLES DEBUG] Skipping node with missing completionRecordHash:', node);
+                // debug removed
                 continue;
               }
               let record = records[node.completionRecordHash];
@@ -3630,16 +3606,16 @@ export class PlayerSearchComponent implements OnInit {
                   if (isGilded && mappingExists) {
                     gildedIcon = this.GILDED_SEAL_IMAGE_MAP[normalizedName];
                   }
-                  console.log(`[TITLES DEBUG] Gilded status for ${displayName}: isGilded=${isGilded}, timesGilded=${timesGilded}, gildedIcon=${gildedIcon}`);
+                  // debug removed
                 } else {
-                  console.warn(`[TITLES DEBUG] No valid gildingRecord for ${displayName}`);
+                  // debug removed
                 }
               } else if (isGildable && !isCompleted) {
                 // If not completed, do not show gilded info
-                console.log(`[TITLES DEBUG] ${displayName} is not completed, skipping gilded info.`);
+                // debug removed
               }
               // Debug: Output each title's record and completion logic
-              console.log('[TITLES DEBUG] Seal:', displayName, 'completionRecordHash:', node.completionRecordHash, 'State:', record?.state, 'Completed:', isCompleted, foundInCharacter ? '(Found in characterRecords)' : '');
+              // debug removed
               // Calculate progress percentage for incomplete titles
               let progressPercent: number | undefined;
               if (!isCompleted && record && Array.isArray((record as any).objectives)) {
@@ -3690,7 +3666,7 @@ export class PlayerSearchComponent implements OnInit {
             // Debug: Print all record hashes for the current user
             const motHashes = ['126238604', '3175660257']; // MoT 2024, 2023
             const recordKeys = Object.keys(records);
-            console.log('[TITLES DEBUG] All player record hashes:', recordKeys);
+            // debug removed
             for (const motHash of motHashes) {
               let found = !!records[motHash];
               if (!found) {
@@ -3698,15 +3674,15 @@ export class PlayerSearchComponent implements OnInit {
                   const charRecordObj = charRecords[charId];
                   if (charRecordObj?.records && charRecordObj.records[motHash]) {
                     found = true;
-                    console.warn(`[TITLES DEBUG] MoT record FOUND in characterRecords for hash: ${motHash} (characterId: ${charId})`);
+                    // debug removed
                     break;
                   }
                 }
               }
               if (!found) {
-                console.warn(`[TITLES DEBUG] MoT record missing for hash: ${motHash}`);
+                // debug removed
               } else {
-                console.log(`[TITLES DEBUG] MoT record found for hash: ${motHash}`);
+                // debug removed
               }
             }
             // Add MoT 2024 debug info for this player
@@ -3873,30 +3849,41 @@ export class PlayerSearchComponent implements OnInit {
     return 0;
   }
 
+  /** Map class name to icon asset path */
+  getClassIconUrl(className?: string): string | undefined {
+    if (!className) return undefined;
+    const c = className.toLowerCase();
+    if (c.includes('hunter')) return 'assets/icons/destiny/hunter.svg';
+    if (c.includes('titan')) return 'assets/icons/destiny/titan.svg';
+    if (c.includes('warlock')) return 'assets/icons/destiny/warlock.svg';
+    return undefined;
+  }
+
   /** Returns cached first ever activity for player */
   getFirstEverForPlayer(player: PlayerSearchDisplay): ActivityHistory | undefined {
     return this.firstEverActivities[this.getPlayerKey(player)];
   }
 
-  /** Compute first-ever activity per player */
+  /** Compute first-ever activity per player using centralized service */
   private async computeFirstEverActivityForPlayer(player: PlayerSearchDisplay): Promise<ActivityHistory | undefined> {
-    const charIds = (this.characters[this.getPlayerKey(player)] || [])
-      .map(getCharacterId)
-      .filter((id): id is string => !!id);
-
-    let allActivities: ActivityHistory[] = [];
-    for (const charId of charIds) {
-      const activities = await this.activityDb.getAllActivitiesForCharacter(player.membershipId, charId);
-      allActivities = allActivities.concat(activities);
+    // Ensure D1 history is fully backfilled before computing earliest
+    if (player.game === 'D1') {
+      const charIds = (this.characters[this.getPlayerKey(player)] || [])
+        .map(getCharacterId)
+        .filter((id): id is string => !!id);
+      for (const charId of charIds) {
+        try {
+          await this.activityDb.fetchAndStoreActivities(
+            player.membershipType as any,
+            player.membershipId,
+            charId,
+            true
+          );
+        } catch {}
+      }
     }
-    const now = new Date();
-    const valid = allActivities.filter(a => {
-      const g = (a as any).game as 'D1' | 'D2' | undefined;
-      // Older cached rows may not include the `game` marker – treat them as belonging to this player's game
-      return new Date(a.period) <= now && (!g || g === player.game);
-    });
-    if (valid.length === 0) return undefined;
-    return valid.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
+    // Force service refresh so we don't reuse stale cache
+    return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game }, true);
   }
 
   /** Called on every keystroke in the username box */
@@ -4568,7 +4555,7 @@ export class PlayerSearchComponent implements OnInit {
             // Debug: Print all record hashes for the current user
             const motHashes = ['126238604', '3175660257']; // MoT 2024, 2023
             const recordKeys = Object.keys(records);
-            console.log('[TITLES DEBUG] All player record hashes:', recordKeys);
+            // debug removed
             for (const motHash of motHashes) {
               let found = !!records[motHash];
               if (!found) {
@@ -4688,6 +4675,18 @@ export class PlayerSearchComponent implements OnInit {
       alert('Share link copied to clipboard!');
     } catch {
       prompt('Copy link', link);
+    }
+  }
+
+  /**
+   * Clears the firstEverActivities cache to force recalculation with new filtering logic
+   */
+  clearFirstEverActivitiesCache(): void {
+    this.firstEverActivities = {};
+    this.firstEverActivity = undefined;
+    // Also clear the FirstActivityService cache to ensure fresh data
+    if (this.firstActivityService) {
+      this.firstActivityService.clearCache();
     }
   }
 }

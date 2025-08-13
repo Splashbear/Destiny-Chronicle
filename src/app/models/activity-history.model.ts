@@ -19,6 +19,8 @@ export interface ActivityHistory {
   validated?: boolean;
   validatedAt?: string;
   pgcrUnavailable?: boolean;
+  /** Optional: character class string from PGCR (e.g., "Hunter", "Titan", "Warlock"). */
+  characterClass?: string;
 
   /**
    * Explicit game identifier added at persistence time so components can safely

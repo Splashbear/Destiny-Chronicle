@@ -257,9 +257,8 @@ export class ActivityDbService extends Dexie {
 
       // Use the compound index for much faster queries
       // The index [period+membershipId+characterId] allows us to do range queries efficiently
-      const startOfDay = new Date(year || new Date().getFullYear(), month - 1, day);
-      const endOfDay = new Date(startOfDay);
-      endOfDay.setDate(endOfDay.getDate() + 1);
+      const startOfDay = new Date((year ?? 2014), month - 1, day);
+      const endOfDay = new Date((year ?? 2030), month - 1, day + 1);
 
       // Use Dexie's between() method which leverages the compound index
       const activities = await this.activities
@@ -267,8 +266,8 @@ export class ActivityDbService extends Dexie {
         .between(
           [startOfDay.toISOString(), membershipId, characterId],
           [endOfDay.toISOString(), membershipId, characterId],
-          true, // includeLower
-          false // includeUpper
+          true,
+          false
         )
         .toArray();
 
@@ -281,9 +280,7 @@ export class ActivityDbService extends Dexie {
         const activityYear = activityDate.getUTCFullYear();
 
         if (year) {
-          return activityMonth === month && 
-                 activityDay === day && 
-                 activityYear === year;
+          return activityMonth === month && activityDay === day && activityYear === year;
         }
         return activityMonth === month && activityDay === day;
       });
@@ -398,15 +395,7 @@ export class ActivityDbService extends Dexie {
 
     // Helpful debug for D1
     if (game === 'D1') {
-      const d1RaidHashes = Object.keys(ActivityDbService.D1_FAMILY_MAP);
-      const allD1Raids = activities.filter(a => d1RaidHashes.includes(String(a.activityDetails.referenceId)));
-      console.log('[GuardianFirsts][DEBUG] All D1 raid activities for user:', allD1Raids.map(a => ({
-        period: a.period,
-        referenceId: a.activityDetails.referenceId,
-        family: ActivityDbService.D1_FAMILY_MAP[a.activityDetails.referenceId],
-        completed: a.values?.completed?.basic?.value,
-        instanceId: a.activityDetails.instanceId
-      })));
+      // debug removed
     }
 
     // Group by raid/dungeon family and find the first activity for each
@@ -437,10 +426,15 @@ export class ActivityDbService extends Dexie {
         }
       }
 
-      const family = game === 'D2'
+      let family = game === 'D2'
         ? ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash]
         : ActivityDbService.D1_FAMILY_MAP[activityHash];
-      if (!family) continue;
+      if (!family) {
+        // Fallback to manifest name when mapping is missing so dungeons/raids still render
+        const name = this.manifest.getActivityName(activityHash, game === 'D1');
+        if (!name) continue;
+        family = name;
+      }
       const completed = activity.values?.completed?.basic?.value ?? 0;
       if (completed !== 1) {
         // console.log('[DEBUG][Firsts][Skip] Not a completion:', {
@@ -456,7 +450,7 @@ export class ActivityDbService extends Dexie {
       let isSolo = false;
       let isSoloFlawless = false;
       
-      if (game === 'D2' && type === 'dungeon') {
+        if (game === 'D2' && type === 'dungeon') {
         // Fetch the pruned PGCR (if cached). We cast to <any> to keep the
         // existing "entries" access until the rest of the codebase is fully
         // migrated to the typed `PrunedPgcr` shape.
@@ -470,6 +464,12 @@ export class ActivityDbService extends Dexie {
           if (isSolo) {
             isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
           }
+            // Attach class and membershipType for per-character view
+            const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
+            if (me) {
+              (activity as any).characterClass = me.player.characterClass;
+              (activity as any).membershipType = me.player.destinyUserInfo.membershipType;
+            }
         }
       }
 
@@ -485,6 +485,8 @@ export class ActivityDbService extends Dexie {
           mode: activity.activityDetails.mode,
           characterId,
           membershipId,
+          membershipType: (activity as any).membershipType,
+          characterClass: (activity as any).characterClass,
           completed,
           isSolo,
           isSoloFlawless
@@ -492,7 +494,7 @@ export class ActivityDbService extends Dexie {
       }
     }
     const firstCompletions: ActivityFirstCompletion[] = Object.values(firstsByFamily);
-    console.log('[GuardianFirsts][DEBUG][FirstsByFamily]', firstsByFamily);
+    // debug removed
     return {
       firstCompletions,
       membershipId,
@@ -538,11 +540,13 @@ export class ActivityDbService extends Dexie {
   }
 
   // Store a batch of activities and explicitly tag them with the correct game
-  private async storeActivities(activities: any[], characterId: string, game: 'D1' | 'D2'): Promise<void> {
+  private async storeActivities(activities: any[], membershipId: string, membershipType: number, characterId: string, game: 'D1' | 'D2'): Promise<void> {
     await this.initPromise;
     try {
       const activitiesToStore = activities.map(activity => ({
         ...activity,
+        membershipId,
+        membershipType,
         characterId,
         validated: false,
         validatedAt: null,
@@ -599,8 +603,9 @@ export class ActivityDbService extends Dexie {
               const pageActs = resp?.data?.activities || [];
               modeActivities.push(...pageActs);
 
-              // Continue while Bungie signals more AND we received a full page
-              hasMore = resp?.hasMore === true && pageActs.length === pageSize;
+              // Continue while Bungie signals more (prefer Bungie's flag); fallback to page-size heuristic
+              const bungieHasMore = resp?.hasMore === true;
+              hasMore = bungieHasMore || pageActs.length === pageSize;
               page++;
             }
             
@@ -619,15 +624,23 @@ export class ActivityDbService extends Dexie {
         activities = (response as any).data.activities || [];
       }
 
-      // Filter out activities we already have
+      // Filter out activities we already have by instanceId (allows backfilling older pages)
+      const existingForCharacter = await this.activities
+        .where({ membershipId, characterId })
+        .toArray();
+      const existingInstanceIds = new Set(
+        existingForCharacter
+          .map(a => a.activityDetails?.instanceId)
+          .filter((id): id is string => !!id)
+      );
       const newActivities = activities.filter(activity => {
-        const activityDate = new Date(activity.period);
-        return !lastActivity || activityDate > lastActivity;
+        const instanceId = activity?.activityDetails?.instanceId;
+        return !!instanceId && !existingInstanceIds.has(instanceId);
       });
 
       if (newActivities.length > 0) {
         // Store new activities
-        await this.storeActivities(newActivities, characterId, isD1 ? 'D1' : 'D2');
+        await this.storeActivities(newActivities, membershipId, membershipType, characterId, isD1 ? 'D1' : 'D2');
       }
     } catch (error) {
       console.error('[DEBUG] Error in fetchAndStoreActivities:', error);

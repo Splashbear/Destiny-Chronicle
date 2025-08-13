@@ -229,6 +229,8 @@ export class BungieApiService {
 
         // Transform the response to match expected structure and add game flag
         const activities = response.Response.data.activities || [];
+        const respHasMore = (response as any)?.Response?.hasMore;
+        const totalResults = response.Response.data.totalResults || 0;
         return {
           data: {
             activities: activities.map((activity: any) => ({
@@ -237,8 +239,9 @@ export class BungieApiService {
               mode: mode   // Add mode to each activity
             }))
           },
-          totalResults: response.Response.data.totalResults || 0,
-          hasMore: activities.length === count
+          totalResults,
+          // Prefer Bungie's hasMore when available; fallback to page-size heuristic
+          hasMore: typeof respHasMore === 'boolean' ? respHasMore : (activities.length === count)
         };
       }),
       catchError(error => {

@@ -212,6 +212,10 @@ export class DestinyManifestService {
     if (typeHash === 1063765675 || modeTypes.includes(80) || modeTypes.includes(81)) return 'seasonal';
     if (typeHash === 1234567890 || modeTypes.includes(90) || modeTypes.includes(91)) return 'exotic-mission';
     if (typeHash === 987654321 || modeTypes.includes(92) || modeTypes.includes(93)) return 'seasonal-event';
+    // As a last resort, try to infer from display name
+    const name = (def.displayProperties?.name || '').toLowerCase();
+    if (name.includes('dungeon')) return 'dungeon';
+    if (name.includes('leviathan') || name.includes('raid')) return 'raid';
     // If still falling through to 'other', log it
     // if (typeof referenceId !== 'undefined') {
     //   console.warn(`[DestinyManifestService] getActivityType: Unmapped activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);

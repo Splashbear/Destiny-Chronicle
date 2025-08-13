@@ -9,6 +9,9 @@ export interface ActivityFirstCompletion {
   mode: number;
   characterId: string;
   membershipId: string;
+  membershipType?: number;
+  /** Optional class string for the character that completed this first */
+  characterClass?: string;
   completed: number;
   isSolo?: boolean;
   isSoloFlawless?: boolean;

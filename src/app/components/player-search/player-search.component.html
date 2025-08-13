@@ -52,6 +52,7 @@
                 Clear All
               </button>
             </div>
+<<<<<<< HEAD
             <div class="space-y-3 max-h-40 overflow-y-auto custom-scrollbar">
               <div *ngFor="let player of selectedPlayers; let i = index" 
                    class="group destiny-card p-3 hover-lift animate-slide-in"
@@ -93,6 +94,48 @@
                         </span>
                       </div>
                     </div>
+=======
+            <!-- API Unavailable Message -->
+            <div *ngIf="!apiAvailable" class="bg-red-900 text-red-200 p-2 rounded mb-4">
+              Bungie API is currently unavailable. Showing cached data for favorite accounts only.
+            </div>
+            <!-- Selected profiles ribbon -->
+            <div *ngIf="selectedPlayers.length > 0" class="mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-white">Selected Profiles</label>
+                <button (click)="clearAllPlayers()" 
+                        class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
+                  Clear All
+                </button>
+              </div>
+              <!-- Per-character first-ever summary for aggregate D1 -->
+              <div class="bg-slate-800/70 rounded-md p-3 mb-4">
+                <div class="text-xs text-slate-300 mb-2">Per character:</div>
+                <div class="space-y-2">
+                  <div *ngFor="let row of getPerCharacterFirsts(selectedPlayers[0], 'first-ever')" class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <img [src]="row.platformIcon" class="w-4 h-4" alt="platform" />
+                      <img *ngIf="row.className as cc" [src]="getClassIconUrl(cc)" class="w-4 h-4" [title]="cc" alt="class" />
+                    </div>
+                    <div class="text-slate-200 text-sm">
+                      {{ formatActivityOrCompletionDate(row.first) }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="space-y-2 max-h-32 overflow-y-auto">
+                <div *ngFor="let player of selectedPlayers; let i = index" 
+                     class="flex items-center justify-between p-2 rounded transition-colors"
+                     [ngClass]="isFavorite(player) ? 'border border-yellow-400 bg-slate-700/95' : 'bg-slate-700/60 hover:bg-slate-700/80'">
+                  <div class="flex items-center gap-2 flex-1 min-w-0">
+                    <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-4 h-4 flex-shrink-0" alt="platform" />
+                    <img [src]="player.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4 flex-shrink-0" alt="game" />
+                    <span class="text-sm text-white truncate" [title]="player.displayName + ' (' + player.platform + ', ' + player.game + ')'">
+                      {{ player.displayName }}
+                    </span>
+                    <span class="text-xs text-slate-400 flex-shrink-0">({{ player.platform }})</span>
+                    <span *ngIf="isFavorite(player)" class="text-xs text-yellow-400 flex-shrink-0">★</span>
+>>>>>>> 789c590 (feat(firsts): correct D1 first-ever selection; centralize in service with tie-breaker; backfill D1 before compute; remove noisy logs)
                   </div>
                   
                   <!-- Action buttons -->
@@ -319,6 +362,7 @@
                       <div class="grid grid-cols-1 gap-2">
                         <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
                           <img [src]="getPlatformIconUrl(activity.membershipType)" class="w-4 h-4 platform-icon" alt="platform" />
+                          <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                           <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
                             {{ formatTime(activity.period) }}
                           </a>
@@ -357,6 +401,7 @@
                       <div class="grid grid-cols-1 gap-2">
                         <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
                           <img [src]="getPlatformIconUrl(activity.membershipType)" class="w-4 h-4 platform-icon" alt="platform" />
+                          <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                           <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
                             {{ formatTime(activity.period) }}
                           </a>
@@ -562,7 +607,15 @@
                   </h3>
                   <!-- First Ever Activity Card (moved to top) -->
                   <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
-                    <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
+                    <div class="flex justify-between items-center px-4 pt-4">
+                      <h4 class="text-yellow-300 font-bold mb-2">First Ever Activity ({{ player.game }})</h4>
+                      <button 
+                        (click)="debugReloadFirstEver()" 
+                        class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded"
+                        title="Debug: Reload First Ever Activity">
+                        Debug
+                      </button>
+                    </div>
                     <ng-container *ngIf="getFirstEverForPlayer(player) as first">
                       <div class="relative">
                         <ng-container *ngIf="getActivityImage(first, isD1Player(player)) as img">
@@ -579,8 +632,9 @@
                             </a>
                           </div>
                         </div>
-                        <div class="absolute top-1 right-1">
+                        <div class="absolute top-1 right-1 flex items-center gap-1">
                           <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
+                          <img *ngIf="first.characterClass as c2" [src]="getClassIconUrl(c2)" class="w-5 h-5" [title]="c2" alt="class" />
                         </div>
                       </div>
                     </ng-container>
@@ -614,6 +668,26 @@
                         </div>
                       </div>
                     </div>
+                    <div class="mb-4">
+                      <button class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded"
+                              (click)="togglePerCharacter(player,'raid')">
+                        {{ isPerCharacterExpanded(player,'raid') ? 'Hide per-character' : 'Show per-character' }}
+                      </button>
+                      <div *ngIf="isPerCharacterExpanded(player,'raid')" class="mt-2 space-y-2 bg-slate-700/40 p-3 rounded">
+                        <div *ngFor="let row of getPerCharacterFirsts(player,'raid')" class="flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <img [src]="row.platformIcon" class="w-4 h-4" alt="platform" />
+                            <img *ngIf="row.className as ccR" [src]="getClassIconUrl(ccR)" class="w-4 h-4" [title]="ccR" alt="class" />
+                          </div>
+                          <div class="text-slate-200 text-sm">
+                            <a (click)="onClickPerCharacterFirst(row.first, player)"
+                               class="text-yellow-400 underline cursor-pointer">
+                              {{ formatActivityOrCompletionDate(row.first) }}
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     <div *ngIf="getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
                       No raid firsts found for D1.
                     </div>
@@ -640,6 +714,26 @@
                           </div>
                           <div class="absolute top-1 right-1">
                             <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-5 h-5" alt="platform" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mb-4">
+                      <button class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded"
+                              (click)="togglePerCharacter(player,'raid')">
+                        {{ isPerCharacterExpanded(player,'raid') ? 'Hide per-character' : 'Show per-character' }}
+                      </button>
+                      <div *ngIf="isPerCharacterExpanded(player,'raid')" class="mt-2 space-y-2 bg-slate-700/40 p-3 rounded">
+                        <div *ngFor="let row of getPerCharacterFirsts(player,'raid')" class="flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <img [src]="row.platformIcon" class="w-4 h-4" alt="platform" />
+                            <img *ngIf="row.className as ccR2" [src]="getClassIconUrl(ccR2)" class="w-4 h-4" [title]="ccR2" alt="class" />
+                          </div>
+                          <div class="text-slate-200 text-sm">
+                            <a (click)="onClickPerCharacterFirst(row.first, player)"
+                               class="text-yellow-400 underline cursor-pointer">
+                              {{ formatActivityOrCompletionDate(row.first) }}
+                            </a>
                           </div>
                         </div>
                       </div>
@@ -678,6 +772,26 @@
                           </div>
                           <div class="absolute top-1 right-1">
                             <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-5 h-5" alt="platform" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mt-3">
+                      <button class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded"
+                              (click)="togglePerCharacter(player,'dungeon')">
+                        {{ isPerCharacterExpanded(player,'dungeon') ? 'Hide per-character' : 'Show per-character' }}
+                      </button>
+                      <div *ngIf="isPerCharacterExpanded(player,'dungeon')" class="mt-2 space-y-2 bg-slate-700/40 p-3 rounded">
+                        <div *ngFor="let row of getPerCharacterFirsts(player,'dungeon')" class="flex items-center justify-between">
+                          <div class="flex items-center gap-2">
+                            <img [src]="row.platformIcon" class="w-4 h-4" alt="platform" />
+                            <img *ngIf="row.className as ccD" [src]="getClassIconUrl(ccD)" class="w-4 h-4" [title]="ccD" alt="class" />
+                          </div>
+                          <div class="text-slate-200 text-sm">
+                            <a (click)="onClickPerCharacterFirst(row.first, player)"
+                               class="text-yellow-400 underline cursor-pointer">
+                              {{ formatActivityOrCompletionDate(row.first) }}
+                            </a>
                           </div>
                         </div>
                       </div>
