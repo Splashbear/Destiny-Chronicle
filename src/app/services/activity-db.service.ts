@@ -1082,6 +1082,60 @@ export class ActivityDbService extends Dexie {
       .toArray();
   }
 
+  /**
+   * Returns a lightweight account summary for the specified membershipId.
+   * - totalTime: sum of timePlayedSeconds across all stored activities
+   * - totalActivities: number of stored activities
+   * - totalSeals: placeholder (0). Kept for compatibility with exporters
+   * - totalFirsts: count of unique raid/dungeon families with at least one completion
+   */
+  async getAccountSummary(membershipId: string): Promise<{
+    totalTime: number;
+    totalActivities: number;
+    totalSeals: number;
+    totalFirsts: number;
+  }> {
+    await this.initPromise;
+    const acts = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .toArray();
+
+    const totalActivities = acts.length;
+    const totalTime = acts.reduce((sum, a) => {
+      const seconds = (a as any)?.values?.timePlayedSeconds?.basic?.value ?? 0;
+      return sum + (typeof seconds === 'number' ? seconds : 0);
+    }, 0);
+
+    // Unique families with at least one valid completion
+    const completedFamilies = new Set<string>();
+    for (const a of acts) {
+      if (!this.isCompletion(a)) continue;
+      const referenceId = (a as any)?.activityDetails?.referenceId;
+      const mode = (a as any)?.activityDetails?.mode;
+      if (!referenceId) continue;
+
+      let family: string | undefined;
+      const type = this.manifest.getActivityType(referenceId, mode);
+      const game = (a as any).game as 'D1' | 'D2' | undefined;
+
+      if (game === 'D1') {
+        family = ActivityDbService.D1_FAMILY_MAP[String(referenceId)];
+      } else if (type === 'raid' || type === 'dungeon') {
+        family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
+      }
+      if (!family) continue;
+      completedFamilies.add(family);
+    }
+
+    return {
+      totalTime,
+      totalActivities,
+      totalSeals: 0,
+      totalFirsts: completedFamilies.size,
+    };
+  }
+
   // Phase 3: Memory Management & Caching Optimization Methods
 
   /**

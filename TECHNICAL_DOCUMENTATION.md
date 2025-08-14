@@ -32,27 +32,36 @@ Imagine you're a Destiny player who wants to remember what you did in the game l
 - This means it works even when you're offline
 - It also means your gaming data stays private - only you can see it
 
+#### 5. **Sharing Your Gaming Journey**
+- You can share specific days and player selections with others via permalinks
+- The site creates shareable URLs that others can use to see the exact same view
+- Perfect for sharing memorable gaming sessions or achievements with friends
+
 ### What You Can Do With It
 
 #### **Daily Gaming Journal**
 - Pick any date and see what you played
 - See how long you spent gaming that day
 - Remember which activities you completed
+- Share that day's activities with others
 
 #### **Achievement Tracker**
 - See when you first completed each raid
 - Track your first dungeon completions
 - Remember your earliest gaming moments
+- View achievements per character with class icons
 
 #### **Character History**
 - See which character class you used for each activity
 - Track your progress across different characters
 - Remember your gaming journey
+- Visual representation with Hunter, Titan, Warlock icons
 
 #### **Performance Memory**
 - See how many enemies you defeated in past activities
 - Remember your best gaming sessions
 - Track your improvement over time
+- Detailed statistics from Post Game Carnage Reports
 
 ### Why It's Useful
 
@@ -60,16 +69,19 @@ Imagine you're a Destiny player who wants to remember what you did in the game l
 - "What did I do last week in Destiny?"
 - "When did I first play that new raid?"
 - "How long have I been playing this game?"
+- "Can I share this awesome gaming day with my friends?"
 
 #### **For Hardcore Players**
 - "What's my completion history for each raid?"
 - "When did I achieve my first solo dungeon?"
 - "What's my gaming timeline across multiple platforms?"
+- "Which character class did I use for each achievement?"
 
 #### **For Nostalgia**
 - "What was I doing in Destiny 1 back in 2015?"
 - "What was my first ever Destiny activity?"
 - "How has my gaming changed over the years?"
+- "Can I share my gaming memories with others?"
 
 ### The Magic Behind the Scenes
 Think of it like having a very organized friend who:
@@ -79,6 +91,7 @@ Think of it like having a very organized friend who:
 4. **Tracks your characters** - Remembers which character you used for each activity
 5. **Works offline** - Keeps all your data on your computer, so it's always available
 6. **Respects privacy** - Your gaming data never leaves your computer
+7. **Shares memories** - Creates shareable links for your gaming highlights
 
 This creates a comprehensive gaming diary that helps you relive your Destiny journey, track your progress, and remember all the adventures you've had in both games.
 
@@ -90,12 +103,15 @@ This creates a comprehensive gaming diary that helps you relive your Destiny jou
 - **Database**: IndexedDB (Dexie.js) for client-side caching
 - **Styling**: TailwindCSS for responsive design
 - **Build System**: Angular CLI with Webpack
+- **Routing**: Angular Router with dynamic route parameters
 
 ### Core Components
-- **PlayerSearchComponent**: Main application interface
+- **PlayerSearchComponent**: Main application interface with comprehensive functionality
 - **ActivityDbService**: IndexedDB operations and Bungie API integration
 - **FirstActivityService**: Guardian Firsts computation and caching
 - **TimezoneService**: Date formatting and timezone handling
+- **BungieApiService**: API communication and rate limiting
+- **PGCRCacheService**: Post Game Carnage Report caching and management
 
 ## Data Models
 
@@ -112,11 +128,12 @@ interface ActivityHistory {
   characterId: string;
   game: 'D1' | 'D2';       // Game identifier
   characterClass?: string;  // Hunter, Titan, Warlock
-  membershipType: number;   // Platform identifier
+  membershipType?: number;  // Platform identifier
   values: {                 // Performance metrics
     kills: { basic: { value: number } };
     deaths: { basic: { value: number } };
     assists: { basic: { value: number } };
+    timePlayedSeconds: { basic: { value: number } };
     // ... additional metrics
   };
 }
@@ -132,6 +149,20 @@ interface ActivityFirstCompletion {
   membershipType?: number;
   game: 'D1' | 'D2';
   instanceId: string;
+  family: string;           // Activity family (raid, dungeon, etc.)
+}
+```
+
+### Player Data
+```typescript
+interface PlayerSearchDisplay {
+  displayName: string;
+  membershipId: string;
+  membershipType: number;
+  game: 'D1' | 'D2';
+  platform: string;
+  isPrimary?: boolean;
+  crossSaveOverride?: number;
 }
 ```
 
@@ -143,12 +174,13 @@ interface ActivityFirstCompletion {
 1. **Input Validation**: Username input with debounced search (300ms delay)
 2. **Bungie API Call**: `/Destiny2/SearchDestinyPlayer/` endpoint
 3. **Platform Resolution**: Cross-save account detection and platform selection
-4. **Profile Fetching**: Parallel retrieval of D1 and D2 profiles
+4. **Profile Fetching**: Parallel retrieval of D1 and D2 profiles with improved concurrency
 
 #### Account Management
 - **Favorites System**: Persistent storage of frequently accessed accounts
 - **Multi-Platform Support**: Xbox, PlayStation, Steam, Epic, Stadia
 - **Cross-Save Handling**: Automatic detection and grouping of linked accounts
+- **Concurrent Loading**: D1 and D2 data loads simultaneously for better performance
 
 ### 2. Activity History Retrieval
 
@@ -160,8 +192,9 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 
 #### Caching Strategy
 - **Primary Cache**: IndexedDB with versioned schema (DestinyChronicleDbV4)
-- **In-Memory Cache**: Activity objects and filtered results
-- **Cache Invalidation**: Manual clear via UI or database version changes
+- **In-Memory Cache**: LRU cache system for activities and filtered results
+- **Cache Invalidation**: Automatic cleanup with TTL and manual clear via UI
+- **Memory Management**: Regular cache clearing to prevent memory bloat
 
 #### API Endpoints
 - **D1**: `/Destiny/Stats/ActivityHistory/{membershipType}/{destinyMembershipId}/{characterId}/`
@@ -171,6 +204,7 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 - **D1**: Relies on Bungie's `hasMore` flag with fallback to page size heuristic
 - **D2**: Standard pagination with `page` parameter
 - **Backfilling**: Support for retrieving historical data beyond initial fetch
+- **Concurrent Processing**: Multiple characters processed simultaneously within each player
 
 ### 3. Guardian Firsts Computation
 
@@ -180,7 +214,8 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 1. Filter activities by game (D1/D2)
 2. Sort by period (timestamp) ascending
 3. For same-timestamp activities, use instanceId as tie-breaker
-4. Return earliest activity regardless of type
+4. Return earliest activity regardless of type (D1) or story mission only (D2)
+5. Centralized computation via FirstActivityService for consistency
 ```
 
 #### Firsts Categories
@@ -193,25 +228,35 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 - **Aggregate View**: Combined firsts across all characters
 - **Character Detail**: Individual firsts with class and platform icons
 - **Expandable UI**: Toggle between views with smooth transitions
+- **PGCR Links**: Direct links to activity completion reports
 
 ### 4. Post Game Carnage Report (PGCR) Integration
 
 #### PGCR Retrieval
-- **Batch Processing**: Parallel fetching with concurrency limits
+- **Batch Processing**: Parallel fetching with configurable concurrency limits
 - **Caching Layer**: Separate IndexedDB table (DestinyChroniclePgcrCache)
 - **Validation**: Extraction of character class and platform information
+- **Memory Optimization**: Efficient storage and retrieval of large PGCR datasets
 
 #### Data Enrichment
-- **Character Classes**: Hunter, Titan, Warlock identification
+- **Character Classes**: Hunter, Titan, Warlock identification with SVG icons
 - **Platform Icons**: Visual representation of completion platform
 - **Performance Metrics**: Detailed statistics from activity completion
+- **Class Icon Integration**: Visual class representation throughout the UI
 
-### 5. Date-Based Filtering
+### 5. Date-Based Filtering and Permalinks
 
 #### Date Selection
 - **Month/Day Dropdowns**: User-friendly date selection interface
 - **Current Date Default**: Automatic selection of current date
 - **Historical Range**: Support for any date within Destiny's lifespan
+- **URL Synchronization**: Date changes automatically update the URL
+
+#### Permalink System
+- **Shareable URLs**: `/date/:date` and `/date/:date/players/:players` routes
+- **Web Share API**: Native sharing on supported devices
+- **Fallback Support**: Clipboard copy and new window alternatives
+- **URL Persistence**: Browser back/forward navigation support
 
 #### Timezone Handling
 - **UTC Conversion**: All timestamps stored and compared in UTC
@@ -221,19 +266,28 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 ## Performance Optimizations
 
 ### 1. API Call Management
-- **Concurrency Control**: `runWithPlayerSyncLimit` for parallel operations
+- **Concurrency Control**: `runWithPlayerSyncLimit` with increased limit (4 parallel syncs)
 - **Debouncing**: 300ms delay on search inputs to reduce API calls
 - **ExhaustMap**: Prevents multiple simultaneous searches
+- **D1/D2 Interleaving**: Alternating processing for balanced concurrency
 
 ### 2. Database Optimization
 - **Indexed Queries**: Efficient filtering by date, game, and character
-- **Batch Operations**: Bulk insert/update operations
-- **Memory Management**: Regular cache clearing to prevent memory bloat
+- **Batch Operations**: Bulk insert/update operations for PGCRs
+- **Memory Management**: LRU cache with TTL and automatic cleanup
+- **Cache Statistics**: Monitoring and optimization of cache performance
 
 ### 3. UI Performance
 - **Change Detection**: OnPush strategy for components
-- **Virtual Scrolling**: Efficient rendering of large activity lists
-- **Lazy Loading**: Progressive loading of activity data
+- **TrackBy Functions**: Efficient rendering of large activity lists
+- **Skeleton Loaders**: Prevents layout shifts during loading
+- **Debounced Updates**: Smooth UI updates without performance impact
+
+### 4. Memory Management
+- **LRU Cache System**: Automatic eviction of least recently used data
+- **Cache TTL**: Time-based expiration of cached data
+- **Memory Cleanup**: Scheduled cleanup intervals to prevent memory bloat
+- **Efficient Data Structures**: Optimized storage and retrieval patterns
 
 ## Error Handling and Resilience
 
@@ -241,16 +295,18 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 - **Retry Logic**: Automatic retry for failed API calls
 - **Fallback Data**: Display cached data when API is unavailable
 - **User Feedback**: Clear error messages and loading states
+- **Graceful Degradation**: Continue operation with partial data when possible
 
 ### 2. Data Consistency
 - **Validation**: PGCR data validation before storage
 - **Conflict Resolution**: Handling of duplicate or conflicting records
 - **Recovery**: Automatic database repair and cleanup
+- **Data Integrity**: Checksums and validation for stored data
 
 ### 3. Offline Support
 - **Local Storage**: Full functionality with cached data
 - **Sync Management**: Background synchronization when online
-- **Data Integrity**: Checksums and validation for stored data
+- **Data Integrity**: Robust error handling for offline scenarios
 
 ## Security Considerations
 
@@ -263,6 +319,7 @@ If cache miss → Bungie API call → Store in IndexedDB → Return to component
 - **Local Storage**: All data stored client-side only
 - **No External Sharing**: No transmission of user data to third parties
 - **User Control**: Full control over cached data and favorites
+- **Secure Permalinks**: Shareable URLs contain only public data
 
 ## Deployment and Build
 
@@ -281,43 +338,71 @@ ng e2e
 
 ### 2. Environment Configuration
 - **Development**: Local API endpoints and debug logging
-- **Production**: Optimized builds with minimal logging
+- **Production**: Optimized builds with minimal logging and console filtering
 - **Staging**: Test environment with production-like settings
 
 ### 3. Dependencies
 - **Core**: Angular 17, RxJS, TypeScript
 - **Database**: Dexie.js for IndexedDB operations
-- **UI**: TailwindCSS, Angular Material (if applicable)
+- **UI**: TailwindCSS for responsive design
 - **Testing**: Jasmine, Karma, Protractor
 
 ## Monitoring and Debugging
 
 ### 1. Console Logging
-- **Development**: Comprehensive debug information
-- **Production**: Minimal logging for performance
+- **Development**: Comprehensive debug information with environment.debug flag
+- **Production**: Minimal logging with automatic debug message filtering
 - **User Feedback**: Clear error messages and status updates
 
 ### 2. Performance Metrics
 - **API Response Times**: Monitoring of Bungie API performance
-- **Database Operations**: IndexedDB query performance
+- **Database Operations**: IndexedDB query performance with cache statistics
 - **UI Responsiveness**: Component rendering and update times
+- **Memory Usage**: Cache performance and memory management metrics
 
 ### 3. Error Tracking
 - **Client-Side Errors**: JavaScript error capture and reporting
 - **API Failures**: Detailed logging of failed requests
 - **Data Validation**: Validation error tracking and reporting
+- **Build Errors**: Comprehensive error reporting during development
+
+## Recent Improvements and Features
+
+### 1. Permalink System
+- **Shareable URLs**: Users can share specific dates and player selections
+- **Web Share API**: Native sharing on mobile devices
+- **Fallback Support**: Clipboard and new window alternatives
+- **URL Synchronization**: Automatic URL updates with state changes
+
+### 2. Class Icon Integration
+- **Visual Representation**: Hunter, Titan, Warlock icons throughout the UI
+- **SVG Assets**: High-quality, scalable class icons
+- **Platform Integration**: Class icons displayed alongside platform icons
+- **Firsts Enhancement**: Class icons in Guardian Firsts view
+
+### 3. Performance Optimizations
+- **D1/D2 Concurrency**: Simultaneous loading of both games
+- **Skeleton Loaders**: Prevents layout shifts during loading
+- **LRU Caching**: Efficient memory management and cache performance
+- **TrackBy Functions**: Optimized rendering of large lists
+
+### 4. UI/UX Enhancements
+- **Responsive Design**: Improved mobile and tablet experience
+- **Loading States**: Better visual feedback during operations
+- **Accessibility**: Focus management and reduced motion support
+- **Cross-Platform**: Consistent experience across devices and browsers
 
 ## Future Enhancements
 
 ### 1. Planned Features
-- **Advanced Analytics**: Performance trend analysis
-- **Social Features**: Activity sharing and comparison
-- **Mobile Optimization**: Responsive design improvements
+- **Advanced Analytics**: Performance trend analysis and insights
+- **Social Features**: Enhanced activity sharing and comparison
+- **Mobile Optimization**: Progressive Web App capabilities
 
 ### 2. Technical Improvements
-- **Service Workers**: Offline functionality enhancement
-- **Progressive Web App**: PWA capabilities
+- **Service Workers**: Enhanced offline functionality
 - **Performance Monitoring**: Real-time performance metrics
+- **Advanced Caching**: Intelligent cache prediction and prefetching
 
 ### 3. Data Expansion
 - **Additional Metrics**: More detailed performance data
@@ -328,4 +413,6 @@ ng e2e
 
 Destiny Chronicle represents a sophisticated approach to gaming data analysis, combining modern web technologies with comprehensive Destiny API integration. The application's architecture prioritizes performance, user experience, and data accuracy while maintaining extensibility for future enhancements.
 
-The system's robust caching strategy, efficient data processing, and user-friendly interface make it an invaluable tool for Destiny players seeking to track their gaming journey and analyze their performance across both games and multiple platforms.
+Recent improvements have significantly enhanced the user experience through permalink sharing, class icon integration, performance optimizations, and improved UI/UX. The system's robust caching strategy, efficient data processing, and user-friendly interface make it an invaluable tool for Destiny players seeking to track their gaming journey and analyze their performance across both games and multiple platforms.
+
+The application is now production-ready with comprehensive functionality, excellent performance, and modern sharing capabilities that allow users to easily share their gaming memories with others.

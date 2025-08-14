@@ -1,6 +1,8 @@
 import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router, ActivatedRoute } from '@angular/router';
+import { Location } from '@angular/common';
 import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
 import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
@@ -435,6 +437,8 @@ export class PlayerSearchComponent implements OnInit {
   /** Play-time + seal counts fetched from WastedOnDestiny keyed by "game|membershipId" */
   private wastedTimes: { [playerKey: string]: number } = {};
   private wastedSeals: { [playerKey: string]: number } = {};
+  /** Pending player data from URL parameters to load after favorites */
+  private pendingPlayerData: any[] | null = null;
   /** First-ever activity cache keyed by playerKey so D1 and D2 don't collide. */
   private firstEverActivities: { [playerKey: string]: ActivityHistory | undefined } = {};
   /** Running count of how many activities have been processed in the current load session */
@@ -582,7 +586,10 @@ export class PlayerSearchComponent implements OnInit {
     private selectedAccounts: SelectedAccountsService,
     private exportService: ExportService,
     private shareService: ShareService,
-    private firstActivityService: FirstActivityService
+    private firstActivityService: FirstActivityService,
+    private router: Router,
+    private route: ActivatedRoute,
+    private location: Location
   ) {
     (window as any).activityDbService = this.activityDb;
     this.updatePlatformTabs();
@@ -620,6 +627,36 @@ export class PlayerSearchComponent implements OnInit {
     this.selectedYear = today.getFullYear();
     this.selectedDate = `${this.selectedYear}-${this.selectedMonth.toString().padStart(2, '0')}-${this.selectedDay.toString().padStart(2, '0')}`;
     
+    // Handle URL parameters for permalinks
+    this.route.params.subscribe(params => {
+      if (params['date']) {
+        const dateParam = params['date'];
+        // Validate date format (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+          const [year, month, day] = dateParam.split('-').map(Number);
+          if (year >= 2014 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            this.selectedYear = year;
+            this.selectedMonth = month;
+            this.selectedDay = day;
+            this.selectedDate = dateParam;
+          }
+        }
+      }
+      
+      if (params['players']) {
+        const playersParam = decodeURIComponent(params['players']);
+        try {
+          const playerData = JSON.parse(playersParam);
+          if (Array.isArray(playerData)) {
+            // Store player data to load after favorites are loaded
+            this.pendingPlayerData = playerData;
+          }
+        } catch (e) {
+          console.warn('Invalid player data in URL:', e);
+        }
+      }
+    });
+    
     // Clear firstEverActivities cache to ensure new filtering logic takes effect
     this.firstEverActivities = {};
     // Clear the FirstActivityService cache to ensure new filtering logic takes effect
@@ -628,6 +665,13 @@ export class PlayerSearchComponent implements OnInit {
     }
     
     await this.loadAndDisplayFavorites();
+    
+    // Load pending players from URL if any
+    if (this.pendingPlayerData) {
+      await this.loadPlayersFromUrlData(this.pendingPlayerData);
+      this.pendingPlayerData = null;
+    }
+    
     this.dbReady = true;
     this.cdr.detectChanges();
   }
@@ -748,6 +792,90 @@ export class PlayerSearchComponent implements OnInit {
       f.game === player.game && 
       f.membershipType === player.membershipType
     );
+  }
+
+  /**
+   * Load players from URL parameter data (for permalinks)
+   */
+  async loadPlayersFromUrlData(playerData: any[]) {
+    if (playerData.length === 0) return;
+
+    // Check profile limit
+    if (playerData.length > 10) {
+      this.errorMessage = `Too many players in URL (${playerData.length}). Only the first 10 will be loaded.`;
+      playerData = playerData.slice(0, 10);
+    }
+
+    // Clear any existing players
+    this.selectedPlayers = [];
+    this.selectedCharacterIds = {};
+    this.characters = {};
+    this.activities = {};
+    this.loading = {};
+    this.error = {};
+    this.groupedActivitiesByAccount = [];
+    this.clearCache();
+
+    // Convert URL data to PlayerSearchDisplay format
+    const playersToLoad: PlayerSearchDisplay[] = playerData.map(data => ({
+      displayName: data.displayName || 'Unknown Player',
+      membershipId: data.membershipId,
+      membershipType: data.membershipType || 1, // Default to Xbox
+      game: data.game || 'D2',
+      platform: data.platform || 'Unknown',
+      isPrimary: false
+    } as PlayerSearchDisplay));
+
+    // Add all players to selectedPlayers
+    this.selectedPlayers.push(...playersToLoad);
+    
+    // Set up character IDs
+    for (const player of playersToLoad) {
+      this.selectedCharacterIds[player.membershipId] = undefined;
+    }
+
+    // Set loading state
+    this.loadingActivities[this.selectedDate] = true;
+    this.cdr.detectChanges();
+
+    try {
+      // Load all players in parallel with concurrency limit
+      const loadPromises: Promise<void>[] = [];
+      for (const player of playersToLoad) {
+        loadPromises.push(
+          this.runWithPlayerSyncLimit(async () => {
+            try {
+              await this.loadCharacterHistory(player);
+              await this.loadGuardianFirsts(player);
+              await this.loadDungeonSoloFirsts(player);
+            } catch (err) {
+              console.warn('[LoadURLPlayers] Skipped due to error for', player.membershipId, err);
+            }
+          })
+        );
+        
+        // Wasted time can load in parallel
+        loadPromises.push(
+          this.loadWastedTime(player).catch(err => {
+            console.warn('[LoadURLPlayers] WastedTime skipped for', player.membershipId, err);
+          })
+        );
+      }
+
+      await Promise.all(loadPromises);
+      
+      // Load activities for the selected date
+      if (this.selectedDate) {
+        await this.loadAllFilteredActivities(true);
+      }
+      
+      this.statsDebounce$.next();
+    } catch (error) {
+      console.error('[LoadURLPlayers] Error loading players from URL:', error);
+    } finally {
+      this.loadingActivities[this.selectedDate] = true;
+      this.cdr.detectChanges();
+    }
   }
 
   async toggleFavorite(player: PlayerSearchDisplay) {
@@ -1129,6 +1257,9 @@ export class PlayerSearchComponent implements OnInit {
 
     this.selectedPlayers.push(displayPlayer);
     this.selectedCharacterIds[displayPlayer.membershipId] = undefined;
+
+    // Update URL for permalink sharing
+    this.updateUrlForPermalink();
 
     // Ensure UI reflects the newly added chip immediately.
     this.updatePlatformTabs();
@@ -2568,6 +2699,9 @@ export class PlayerSearchComponent implements OnInit {
     this.selectedYear = this.selectedYear || new Date().getFullYear(); // Ensure year is set
     this.selectedDate = `${this.selectedYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     
+    // Update URL for permalink sharing
+    this.updateUrlForPermalink();
+    
     // Set loading state for the selected date
     this.loadingActivities[this.selectedDate] = true;
     this.cdr.detectChanges();
@@ -2921,6 +3055,9 @@ export class PlayerSearchComponent implements OnInit {
     this.calculateAccountStats();
     this.cdr.detectChanges();
     this.updatePlatformTabs();
+    
+    // Update URL for permalink sharing
+    this.updateUrlForPermalink();
   }
 
   private async getFilteredActivitiesFromDb(
@@ -4926,4 +5063,88 @@ export class PlayerSearchComponent implements OnInit {
     
     return result;
   }
+
+  /**
+   * Updates the URL to reflect the current state for permalink sharing
+   */
+  private updateUrlForPermalink() {
+    const params: any = {};
+    
+    // Add date parameter if a date is selected
+    if (this.selectedDate) {
+      params.date = this.selectedDate;
+    }
+    
+    // Add players parameter if players are selected
+    if (this.selectedPlayers.length > 0) {
+      const playerData = this.selectedPlayers.map(player => ({
+        displayName: player.displayName,
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        game: player.game,
+        platform: player.platform
+      }));
+      params.players = encodeURIComponent(JSON.stringify(playerData));
+    }
+    
+    // Build the new URL
+    let newUrl = '/';
+    if (params.date) {
+      newUrl += `date/${params.date}`;
+      if (params.players) {
+        newUrl += `/players/${params.players}`;
+      }
+    } else if (params.players) {
+      newUrl += `players/${params.players}`;
+    }
+    
+    // Update the URL without triggering navigation
+    this.location.replaceState(newUrl);
+  }
+
+  /**
+   * Shares the current permalink with the user
+   */
+  sharePermalink() {
+    // Update URL first to ensure it's current
+    this.updateUrlForPermalink();
+    
+    // Get the current URL
+    const currentUrl = window.location.href;
+    
+    // Try to use the Web Share API if available
+    if (navigator.share) {
+      navigator.share({
+        title: 'Destiny Chronicle - Daily Activities',
+        text: `Check out the Destiny activities for ${this.selectedDate} with ${this.selectedPlayers.length} player(s)`,
+        url: currentUrl
+      }).catch(err => {
+        console.log('Share cancelled or failed:', err);
+        this.fallbackShare(currentUrl);
+      });
+    } else {
+      // Fallback for browsers without Web Share API
+      this.fallbackShare(currentUrl);
+    }
+  }
+
+  /**
+   * Fallback sharing method that copies URL to clipboard
+   */
+  private fallbackShare(url: string) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        // Show success message (you could add a toast notification here)
+        alert('Permalink copied to clipboard!');
+      }).catch(err => {
+        console.error('Failed to copy to clipboard:', err);
+        // Fallback to opening in new window
+        window.open(url, '_blank');
+      });
+    } else {
+      // Final fallback: open in new window
+      window.open(url, '_blank');
+    }
+  }
+
 }
