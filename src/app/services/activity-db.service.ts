@@ -325,29 +325,50 @@ export class ActivityDbService extends Dexie {
     try {
       // console.log(`[Dexie] Getting all activities for ${membershipId}/${characterId}`);
       const activities = await this.activities.where({ membershipId, characterId }).toArray();
-      
-      // Group activities by year for better analysis
-      const activitiesByYear = activities.reduce((acc, activity) => {
-        if (!activity.period) return acc;
-        const year = new Date(activity.period).getUTCFullYear();
-        if (!acc[year]) acc[year] = [];
-        acc[year].push(activity);
-        return acc;
-      }, {} as { [year: string]: StoredActivity[] });
-
-      // Log the years we have data for
-      // const years = Object.keys(activitiesByYear).sort();
-      // console.log(`[Dexie] Found activities for years: ${years.join(', ')}`);
-      
-      // Log activity counts per year
-      // years.forEach(year => {
-      //   console.log(`[Dexie] Year ${year}: ${activitiesByYear[year].length} activities`);
-      // });
-
       return activities;
     } catch (error) {
       console.error('[Dexie] Error getting all activities:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Gets activity metadata (counts, years) without loading full activity data.
+   * This is more efficient when you only need summary information.
+   */
+  async getActivityMetadataForCharacter(membershipId: string, characterId: string): Promise<{
+    totalCount: number;
+    years: number[];
+    yearsWithCounts: { [year: number]: number };
+  }> {
+    await this.initPromise;
+    try {
+      // Use a more efficient query that only gets the period field
+      const activities = await this.activities
+        .where({ membershipId, characterId })
+        .toArray();
+      
+      const yearsWithCounts: { [year: number]: number } = {};
+      let totalCount = 0;
+      
+      for (const activity of activities) {
+        if (activity.period) {
+          const year = new Date(activity.period).getUTCFullYear();
+          yearsWithCounts[year] = (yearsWithCounts[year] || 0) + 1;
+          totalCount++;
+        }
+      }
+      
+      const years = Object.keys(yearsWithCounts).map(Number).sort((a, b) => a - b);
+      
+      return {
+        totalCount,
+        years,
+        yearsWithCounts
+      };
+    } catch (error) {
+      console.error('[Dexie] Error getting activity metadata:', error);
+      return { totalCount: 0, years: [], yearsWithCounts: {} };
     }
   }
 
@@ -446,41 +467,16 @@ export class ActivityDbService extends Dexie {
         continue;
       }
 
-      // Check for solo and flawless status
-      let isSolo = false;
-      let isSoloFlawless = false;
-      
-      // Fetch PGCR data for raids and dungeons to get character class information
-      if ((game === 'D2' && (type === 'dungeon' || type === 'raid')) || 
-          (game === 'D1' && type === 'raid')) {
-        // Fetch the pruned PGCR (if cached). We cast to <any> to keep the
-        // existing "entries" access until the rest of the codebase is fully
-        // migrated to the typed `PrunedPgcr` shape.
-        const pgcr: any = game === 'D2' 
-          ? await this.pgcrCacheService.getD2PGCR(activity.activityDetails.instanceId)
-          : await this.pgcrCacheService.getD1PGCR(activity.activityDetails.instanceId);
-          
-        if (pgcr) {
-          // For D2 dungeons, check solo and flawless status
-          if (game === 'D2' && type === 'dungeon') {
-            // Check if solo (only one player)
-            const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
-            isSolo = uniquePlayers.size === 1;
-            
-            // Check if flawless (no deaths)
-            if (isSolo) {
-              isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
-            }
-          }
-          
-          // Attach class and membershipType for per-character view (for raids and dungeons in both games)
-          const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
-          if (me) {
-            (activity as any).characterClass = me.player.characterClass;
-            (activity as any).membershipType = me.player.destinyUserInfo.membershipType;
-          }
-        }
-      }
+          // Check for solo and flawless status
+    let isSolo = false;
+    let isSoloFlawless = false;
+    
+    // Store activity for batch PGCR processing
+    if ((game === 'D2' && (type === 'dungeon' || type === 'raid')) || 
+        (game === 'D1' && type === 'raid')) {
+      // We'll process PGCR data in batch after the loop to reduce individual API calls
+      (activity as any).needsPgcrProcessing = true;
+    }
 
       if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
         firstsByFamily[family] = {
@@ -502,6 +498,10 @@ export class ActivityDbService extends Dexie {
         };
       }
     }
+
+    // Batch process PGCR data for all activities that need it
+    await this.batchProcessPGCRData(firstsByFamily, membershipId, game);
+
     const firstCompletions: ActivityFirstCompletion[] = Object.values(firstsByFamily);
     // debug removed
     return {
@@ -770,6 +770,57 @@ export class ActivityDbService extends Dexie {
   }
 
   /**
+   * Batch processes PGCR data for multiple activities to reduce individual API calls.
+   * This method processes all activities that need PGCR data in parallel.
+   */
+  private async batchProcessPGCRData(
+    firstsByFamily: { [family: string]: ActivityFirstCompletion }, 
+    membershipId: string, 
+    game: 'D1' | 'D2'
+  ): Promise<void> {
+    const activitiesNeedingPgcr = Object.values(firstsByFamily).filter(f => (f as any).needsPgcrProcessing);
+    
+    if (activitiesNeedingPgcr.length === 0) return;
+
+    // Process PGCR data in parallel with concurrency control
+    const concurrencyLimit = 3; // Limit concurrent PGCR requests
+    const chunks = this.chunkArray(activitiesNeedingPgcr, concurrencyLimit);
+    
+    for (const chunk of chunks) {
+      const promises = chunk.map(async (first) => {
+        try {
+          const pgcr: any = game === 'D2' 
+            ? await this.pgcrCacheService.getD2PGCR(first.instanceId)
+            : await this.pgcrCacheService.getD1PGCR(first.instanceId);
+            
+          if (pgcr) {
+            // For D2 dungeons, check solo and flawless status
+            if (game === 'D2' && first.type === 'dungeon') {
+              const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
+              (first as any).isSolo = uniquePlayers.size === 1;
+              
+              if ((first as any).isSolo) {
+                (first as any).isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
+              }
+            }
+            
+            // Attach class and membershipType for per-character view
+            const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
+            if (me) {
+              (first as any).characterClass = me.player.characterClass;
+              (first as any).membershipType = me.player.destinyUserInfo.membershipType;
+            }
+          }
+        } catch (error) {
+          console.warn(`[PGCR] Failed to process PGCR for ${first.name}:`, error);
+        }
+      });
+      
+      await Promise.all(promises);
+    }
+  }
+
+  /**
    * Returns the first solo and solo-flawless dungeon completions per dungeon family
    * for the specified Destiny 2 account (all characters).
    *
@@ -862,6 +913,37 @@ export class ActivityDbService extends Dexie {
       .offset(offset)
       .limit(limit)
       .toArray();
+  }
+
+  /**
+   * Gets activities for a specific character with pagination and optional filtering.
+   * More efficient than loading all activities when you only need a subset.
+   */
+  async getCharacterActivitiesPaginated(
+    membershipId: string,
+    characterId: string,
+    offset: number = 0,
+    limit: number = 50,
+    game?: 'D1' | 'D2'
+  ): Promise<StoredActivity[]> {
+    await this.initPromise;
+    try {
+      let query = this.activities
+        .where({ membershipId, characterId })
+        .reverse() // Most recent first
+        .offset(offset)
+        .limit(limit);
+
+      // Apply game filter if specified
+      if (game) {
+        query = query.filter(activity => activity.game === game);
+      }
+
+      return await query.toArray();
+    } catch (error) {
+      console.error('[Dexie] Error getting character activities paginated:', error);
+      return [];
+    }
   }
 
   /**
