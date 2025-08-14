@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -125,6 +125,17 @@ export const PVP_MODE_NAMES: { [mode: number]: string } = {
 };
 
 // Update the type where we need the game property
+interface LoadingStatus {
+  accountKey: string;
+  displayName: string;
+  platform: string;
+  game: 'D1' | 'D2';
+  status: 'fetching-profile' | 'loading-characters' | 'fetching-activities' | 'organizing-pgcrs' | 'displaying-activities' | 'complete' | 'error';
+  progress?: number;
+  message: string;
+  timestamp: Date;
+}
+
 type CharacterWithGame = Character & { 
   game?: 'D1' | 'D2';
   mode?: number;
@@ -334,7 +345,7 @@ interface PlatformStats {
   styleUrls: ['./player-search.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush // Optimize change detection
 })
-export class PlayerSearchComponent implements OnInit {
+export class PlayerSearchComponent implements OnInit, OnDestroy {
   d1XboxSearchTerm: string = '';
   d1PsnSearchTerm: string = '';
   d2SearchTerm: string = '';
@@ -674,6 +685,80 @@ export class PlayerSearchComponent implements OnInit {
     
     this.dbReady = true;
     this.cdr.detectChanges();
+  }
+
+  ngOnDestroy() {
+    // Clean up any subscriptions or timers
+    this.statsDebounce$.complete();
+    this.filteredActivities$.complete();
+  }
+
+  /**
+   * Updates the loading status for a specific account
+   */
+  private updateAccountLoadingStatus(
+    accountKey: string,
+    displayName: string,
+    platform: string,
+    game: 'D1' | 'D2',
+    status: LoadingStatus['status'],
+    message: string,
+    progress?: number
+  ) {
+    const loadingStatus: LoadingStatus = {
+      accountKey,
+      displayName,
+      platform,
+      game,
+      status,
+      message,
+      progress,
+      timestamp: new Date()
+    };
+
+    this.accountLoadingStatus.set(accountKey, loadingStatus);
+    this.accountLoadingStatuses = Array.from(this.accountLoadingStatus.values());
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Removes the loading status for a completed account
+   */
+  private removeAccountLoadingStatus(accountKey: string) {
+    this.accountLoadingStatus.delete(accountKey);
+    this.accountLoadingStatuses = Array.from(this.accountLoadingStatus.values());
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Gets a user-friendly status message
+   */
+  private getStatusMessage(status: LoadingStatus['status'], game: 'D1' | 'D2'): string {
+    switch (status) {
+      case 'fetching-profile':
+        return `Fetching ${game} profile...`;
+      case 'loading-characters':
+        return `Loading ${game} characters...`;
+      case 'fetching-activities':
+        return `Fetching ${game} activities...`;
+      case 'organizing-pgcrs':
+        return `Organizing ${game} data...`;
+      case 'displaying-activities':
+        return `Displaying ${game} activities...`;
+      case 'complete':
+        return `${game} data loaded successfully`;
+      case 'error':
+        return `Error loading ${game} data`;
+      default:
+        return `Processing ${game} data...`;
+    }
+  }
+
+  /**
+   * Formats status for display in the UI
+   */
+  public formatStatusDisplay(status: string): string {
+    return status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
   }
 
   async loadFavorites() {
@@ -1153,6 +1238,10 @@ export class PlayerSearchComponent implements OnInit {
     // Reset initial-sync tracking
     this.firstFullSyncDone = false;
     this.syncedPlayers.clear();
+    
+    // Clear all loading statuses when selecting a new player
+    this.accountLoadingStatus.clear();
+    this.accountLoadingStatuses = [];
 
     // Use the game property from the player object (should be set by search methods)
     const displayPlayer: PlayerSearchDisplay = {
@@ -1221,6 +1310,23 @@ export class PlayerSearchComponent implements OnInit {
         await this.loadAllFilteredActivities(true);
       }
       this.statsDebounce$.next();
+
+      // Mark all accounts as complete
+      this.selectedPlayers.forEach(player => {
+        const accountKey = this.getPlayerKey(player);
+        const isD1 = this.isD1Player(player);
+        const game = isD1 ? 'D1' : 'D2';
+        const platform = this.getPlatformName(player.membershipType);
+        
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          'complete',
+          `${game} data loaded successfully for ${player.displayName}`
+        );
+      });
     } catch (error) {
       this.selectedPlayers = [];
       delete this.selectedCharacterIds[player.membershipId];
@@ -1264,6 +1370,10 @@ export class PlayerSearchComponent implements OnInit {
     // Ensure UI reflects the newly added chip immediately.
     this.updatePlatformTabs();
     this.cdr.detectChanges();
+    
+    // Clear loading statuses for all accounts when appending a new player
+    this.accountLoadingStatus.clear();
+    this.accountLoadingStatuses = [];
 
     try {
       await this.runWithPlayerSyncLimit(async () => {
@@ -1309,8 +1419,23 @@ export class PlayerSearchComponent implements OnInit {
     const key = `characters-${this.getPlayerKey(player)}`;
     this.loading[key] = true;
     this.error[key] = '';
+    
+    const accountKey = this.getPlayerKey(player);
+    const isD1 = this.isD1Player(player);
+    const game = isD1 ? 'D1' : 'D2';
+    const platform = this.getPlatformName(player.membershipType);
+    
     try {
-      const isD1 = this.isD1Player(player);
+      // Update status: fetching profile
+      this.updateAccountLoadingStatus(
+        accountKey,
+        player.displayName,
+        platform,
+        game,
+        'fetching-profile',
+        `Fetching ${game} profile for ${player.displayName}...`
+      );
+
       if (isD1) {
         // D1: characterId is under characterBase.characterId
         const profile = await firstValueFrom(this.bungieService.getD1Profile(player.membershipType, player.membershipId));
@@ -1318,12 +1443,33 @@ export class PlayerSearchComponent implements OnInit {
         if (!profile || !profile.Response) {
           throw new Error('No profile data received');
         }
+        
+        // Update status: loading characters
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          'loading-characters',
+          `Loading ${game} characters for ${player.displayName}...`
+        );
+        
         this.characters[this.getPlayerKey(player)] = profile.Response.data?.characters || [];
         // Set the first character as selected if we have characters
         if (this.characters[this.getPlayerKey(player)].length > 0) {
           // D1: characterBase.characterId
           this.selectedCharacterIds[player.membershipId] = getCharacterId(this.characters[this.getPlayerKey(player)][0]) || '';
         }
+        
+        // Update status: fetching activities
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          'fetching-activities',
+          `Fetching ${game} activities for ${player.displayName}...`
+        );
         
         // Load D1 activities concurrently for all characters
         const characterLoadPromises = this.characters[this.getPlayerKey(player)].map(async (char) => {
@@ -1346,12 +1492,33 @@ export class PlayerSearchComponent implements OnInit {
         if (!profile || !profile.Response) {
           throw new Error('No profile data received');
         }
+        
+        // Update status: loading characters
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          'loading-characters',
+          `Loading ${game} characters for ${player.displayName}...`
+        );
+        
         const characters = Object.values(profile.Response.characters?.data || {}) as Array<{ characterId: string }>;
         this.characters[this.getPlayerKey(player)] = characters;
         // Set the first character as selected if we have characters
         if (characters.length > 0) {
           this.selectedCharacterIds[player.membershipId] = getCharacterId(characters[0]) || '';
         }
+        
+        // Update status: fetching activities
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          'fetching-activities',
+          `Fetching ${game} activities for ${player.displayName}...`
+        );
         
         // Load D2 activities concurrently for all characters
         const characterLoadPromises = characters.map(async (char) => {
@@ -1368,8 +1535,30 @@ export class PlayerSearchComponent implements OnInit {
         // Wait for all D2 character activities to load concurrently
         await Promise.all(characterLoadPromises.filter(Boolean));
       }
+      
+      // Update status: organizing data
+      this.updateAccountLoadingStatus(
+        accountKey,
+        player.displayName,
+        platform,
+        game,
+        'organizing-pgcrs',
+        `Organizing ${game} data for ${player.displayName}...`
+      );
+      
     } catch (error: any) {
       console.error('Error loading character history:', error);
+      
+      // Update status: error
+      this.updateAccountLoadingStatus(
+        accountKey,
+        player.displayName,
+        platform,
+        game,
+        'error',
+        `Error loading ${game} data for ${player.displayName}`
+      );
+      
       if (error.status === 503) {
         this.error[key] = 'Bungie API is temporarily unavailable. Please try again in a few minutes.';
       } else {
@@ -1777,6 +1966,22 @@ export class PlayerSearchComponent implements OnInit {
     const loadingKey = `${character.membershipId}-${character.characterId}`;
     this.loadingActivities[loadingKey] = true;
     
+    // Update account loading status for this character
+    if (character.game) {
+      const accountKey = `${character.membershipId}-${character.game}`;
+      const existingStatus = this.accountLoadingStatus.get(accountKey);
+      if (existingStatus) {
+        this.updateAccountLoadingStatus(
+          accountKey,
+          existingStatus.displayName,
+          existingStatus.platform,
+          character.game,
+          'fetching-activities',
+          `Fetching ${character.game} activities for ${existingStatus.displayName}...`
+        );
+      }
+    }
+    
     try {
       const dbActivities = await this.activityDb.getAllActivitiesForCharacter(
         character.membershipId,
@@ -2028,6 +2233,23 @@ export class PlayerSearchComponent implements OnInit {
 
   public async loadAllFilteredActivities(forceRefresh: boolean = false) {
     const loadToken = ++this.currentLoadToken;
+
+    // Update status for all accounts to show activities are being displayed
+    this.selectedPlayers.forEach(player => {
+      const accountKey = this.getPlayerKey(player);
+      const isD1 = this.isD1Player(player);
+      const game = isD1 ? 'D1' : 'D2';
+      const platform = this.getPlatformName(player.membershipType);
+      
+      this.updateAccountLoadingStatus(
+        accountKey,
+        player.displayName,
+        platform,
+        game,
+        'displaying-activities',
+        `Displaying ${game} activities for ${player.displayName}...`
+      );
+    });
 
     // Kick off render-phase progress bar (will update inside slice loop)
     this.updateLoadingProgress('render', 0, 1, 'Preparing display…');
@@ -2702,6 +2924,10 @@ export class PlayerSearchComponent implements OnInit {
     // Update URL for permalink sharing
     this.updateUrlForPermalink();
     
+    // Clear loading statuses for all accounts when date changes
+    this.accountLoadingStatus.clear();
+    this.accountLoadingStatuses = [];
+    
     // Set loading state for the selected date
     this.loadingActivities[this.selectedDate] = true;
     this.cdr.detectChanges();
@@ -3042,6 +3268,11 @@ export class PlayerSearchComponent implements OnInit {
     this.error = {};
     this.groupedActivitiesByAccount = [];
     this.addMode = false;
+    
+    // Clear all loading statuses
+    this.accountLoadingStatus.clear();
+    this.accountLoadingStatuses = [];
+    
     this.clearCache();
     this.cdr.detectChanges();
   }
@@ -3050,6 +3281,10 @@ export class PlayerSearchComponent implements OnInit {
     const removed = this.selectedPlayers.splice(index, 1)[0];
     if (removed) {
       this.selectedAccounts.remove(removed.membershipId);
+      
+      // Remove loading status for this player
+      const accountKey = this.getPlayerKey(removed);
+      this.removeAccountLoadingStatus(accountKey);
     }
     // Recalculate account stats when a player is removed
     this.calculateAccountStats();
@@ -5146,5 +5381,9 @@ export class PlayerSearchComponent implements OnInit {
       window.open(url, '_blank');
     }
   }
+
+  // Account loading status tracking
+  private accountLoadingStatus = new Map<string, LoadingStatus>();
+  public accountLoadingStatuses: LoadingStatus[] = [];
 
 }

@@ -19,7 +19,7 @@ This iteration introduces a new feature to calculate and display total account s
      - Total time in Destiny (all characters)
      - Total time in activities (sum of durations)
      - Total activity count
-     - Per-type activity counts and times
+     - Per-type activity times (total duration per activity type)
 3. **Performance**
    - Stats calculation is triggered after all activities are loaded.
    - Uses async/await to avoid UI blocking.

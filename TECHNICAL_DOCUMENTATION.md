@@ -2,12 +2,12 @@
 
 ## Overview
 
-Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 1 and Destiny 2 players. Built with Angular 17 and TypeScript, it provides detailed activity history tracking, performance analytics, character progression monitoring, and historical data visualization across both games.
+Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 1 and Destiny 2 players. Built with Angular 17 and TypeScript, it provides detailed activity history tracking, performance analytics, character progression monitoring, and organized data presentation across both games.
 
 ## What This Site Does (In Simple Terms)
 
 ### The Problem It Solves
-Imagine you're a Destiny player who wants to remember what you did in the game last week, or last month, or even years ago. Maybe you want to see when you first completed a raid, or track how many times you've played a specific activity. Destiny Chronicle solves this by creating a personal gaming diary that remembers everything you've ever done in both Destiny 1 and Destiny 2.
+Imagine you're a Destiny player who wants to remember what you did in the game last week, or last month, or even years ago. Maybe you want to see when you first completed a raid, or remember your earliest gaming moments. Destiny Chronicle solves this by creating a personal gaming diary that remembers everything you've ever done in both Destiny 1 and Destiny 2.
 
 ### How It Works (The Simple Version)
 

@@ -98,6 +98,58 @@
             </div>
           </div>
         </div>
+
+        <!-- Account Loading Status Display -->
+        <div *ngIf="accountLoadingStatuses.length > 0" class="flex-1 xl:basis-1/3 bg-slate-800/95 rounded-lg shadow-lg p-4">
+          <h3 class="text-lg font-semibold text-white mb-3">Loading Status</h3>
+          <div class="space-y-3 max-h-48 overflow-y-auto">
+            <div *ngFor="let status of accountLoadingStatuses" 
+                 class="p-3 rounded-lg border transition-all duration-200"
+                 [ngClass]="{
+                   'border-blue-500 bg-blue-900/20': status.status === 'fetching-profile' || status.status === 'loading-characters',
+                   'border-yellow-500 bg-yellow-900/20': status.status === 'fetching-activities',
+                   'border-purple-500 bg-purple-900/20': status.status === 'organizing-pgcrs',
+                   'border-green-500 bg-green-900/20': status.status === 'displaying-activities',
+                   'border-green-600 bg-green-800/30': status.status === 'complete',
+                   'border-red-500 bg-red-900/20': status.status === 'error'
+                 }">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <img [src]="status.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" 
+                       class="w-4 h-4" alt="game" />
+                  <span class="text-sm font-medium text-white">{{ status.displayName }}</span>
+                  <span class="text-xs text-slate-400">({{ status.platform }})</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-1 rounded-full"
+                        [ngClass]="{
+                          'bg-blue-600 text-blue-100': status.status === 'fetching-profile' || status.status === 'loading-characters',
+                          'bg-yellow-600 text-yellow-100': status.status === 'fetching-activities',
+                          'bg-purple-600 text-purple-100': status.status === 'organizing-pgcrs',
+                          'bg-green-600 text-green-100': status.status === 'displaying-activities',
+                          'bg-green-700 text-green-100': status.status === 'complete',
+                          'bg-red-600 text-red-100': status.status === 'error'
+                        }">
+                    {{ formatStatusDisplay(status.status) }}
+                  </span>
+                  <span *ngIf="status.status === 'complete'" class="text-green-400">✓</span>
+                  <span *ngIf="status.status === 'error'" class="text-red-400">✗</span>
+                </div>
+              </div>
+              <div class="text-sm text-slate-300">{{ status.message }}</div>
+              <div *ngIf="status.progress !== undefined" class="mt-2">
+                <div class="w-full bg-slate-700 rounded-full h-2">
+                  <div class="bg-blue-500 h-2 rounded-full transition-all duration-300" 
+                       [style.width.%]="status.progress"></div>
+                </div>
+                <div class="text-xs text-slate-400 mt-1">{{ status.progress }}%</div>
+              </div>
+              <div class="text-xs text-slate-500 mt-2">
+                {{ status.timestamp | date:'HH:mm:ss' }}
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- Date Picker -->
         <div *ngIf="selectedPlayers.length > 0 && dbReady && !loadingActivities[selectedDate]" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:basis-1/3 min-w-0">
           <h2 class="text-xl font-bold text-white mb-4">Date</h2>
