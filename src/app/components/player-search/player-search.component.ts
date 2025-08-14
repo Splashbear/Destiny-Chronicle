@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
@@ -318,6 +318,7 @@ interface PlatformStats {
   lightLevel?: number;       // Character light / power
 }
 
+// Phase 4: UI Rendering Optimization
 @Component({
   selector: 'app-player-search',
   standalone: true,
@@ -328,7 +329,8 @@ interface PlatformStats {
     ExportOptionsDialogComponent
   ],
   templateUrl: './player-search.component.html',
-  styleUrls: ['./player-search.component.scss']
+  styleUrls: ['./player-search.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush // Optimize change detection
 })
 export class PlayerSearchComponent implements OnInit {
   d1XboxSearchTerm: string = '';
@@ -448,6 +450,49 @@ export class PlayerSearchComponent implements OnInit {
   // -----------------------------------------------
   private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
   private syncedPlayers: Set<string> = new Set();
+
+  // Phase 4: UI Rendering Optimization - TrackBy Functions
+  /**
+   * TrackBy function for activities to optimize ngFor performance
+   */
+  trackByActivity: TrackByFunction<ActivityHistory> = (index: number, activity: ActivityHistory): string => {
+    return activity.activityDetails?.instanceId || activity.period || index.toString();
+  };
+
+  /**
+   * TrackBy function for players to optimize ngFor performance
+   */
+  trackByPlayer: TrackByFunction<PlayerSearchDisplay> = (index: number, player: PlayerSearchDisplay): string => {
+    return `${player.membershipId}_${player.membershipType}`;
+  };
+
+  /**
+   * TrackBy function for type groups to optimize ngFor performance
+   */
+  trackByTypeGroup: TrackByFunction<TypeGroup> = (index: number, group: TypeGroup): string => {
+    return `${group.type}_${group.name}_${group.isD1}`;
+  };
+
+  /**
+   * TrackBy function for year groups to optimize ngFor performance
+   */
+  trackByYearGroup: TrackByFunction<YearGroup> = (index: number, group: YearGroup): string => {
+    return group.year;
+  };
+
+  /**
+   * TrackBy function for account groups to optimize ngFor performance
+   */
+  trackByAccountGroup: TrackByFunction<AccountGroup> = (index: number, group: AccountGroup): string => {
+    return `${group.displayName}_${group.platform}_${group.game}`;
+  };
+
+  /**
+   * TrackBy function for guardian firsts to optimize ngFor performance
+   */
+  trackByGuardianFirst: TrackByFunction<ActivityFirstCompletion> = (index: number, first: ActivityFirstCompletion): string => {
+    return `${first.type}_${first.game}_${first.instanceId || first.referenceId || index}`;
+  };
 
   // ------------------------------------------------------------------
   // Concurrency-limited queue for per-account sync (Pattern 2)
@@ -4748,5 +4793,98 @@ export class PlayerSearchComponent implements OnInit {
     if (this.firstActivityService) {
       this.firstActivityService.clearCache();
     }
+  }
+
+  // Phase 4: UI Rendering Optimization - Virtual Scrolling & Performance Methods
+
+  /**
+   * Prepares data for virtual scrolling by chunking large lists
+   */
+  private prepareForVirtualScrolling<T>(items: T[], chunkSize: number = 100): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += chunkSize) {
+      chunks.push(items.slice(i, i + chunkSize));
+    }
+    return chunks;
+  }
+
+  /**
+   * Optimized method to get activities with pagination for virtual scrolling
+   */
+  getActivitiesForVirtualScroll(
+    activities: ActivityHistory[],
+    startIndex: number,
+    endIndex: number
+  ): ActivityHistory[] {
+    return activities.slice(startIndex, endIndex);
+  }
+
+  /**
+   * Debounced method to update UI efficiently
+   */
+  private debouncedUpdateUI = this.debounce(() => {
+    this.cdr.detectChanges();
+  }, 16); // ~60fps
+
+  /**
+   * Debounce utility function for performance optimization
+   */
+  private debounce<T extends (...args: any[]) => any>(
+    func: T,
+    wait: number
+  ): (...args: Parameters<T>) => void {
+    let timeout: NodeJS.Timeout;
+    return (...args: Parameters<T>) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
+  /**
+   * Optimized method to check if an activity should be visible
+   */
+  isActivityVisible(activity: ActivityHistory, currentIndex: number, visibleRange: number = 50): boolean {
+    return currentIndex < visibleRange;
+  }
+
+  /**
+   * Gets performance metrics for monitoring
+   */
+  getPerformanceMetrics(): any {
+    return {
+      changeDetectionRuns: (this.cdr as any)._view?.state || 'Unknown',
+      memoryUsage: (performance as any).memory ? {
+        usedJSHeapSize: Math.round((performance as any).memory.usedJSHeapSize / 1024 / 1024),
+        totalJSHeapSize: Math.round((performance as any).memory.totalJSHeapSize / 1024 / 1024),
+        jsHeapSizeLimit: Math.round((performance as any).memory.jsHeapSizeLimit / 1024 / 1024)
+      } : 'Not available',
+      timestamp: Date.now()
+    };
+  }
+
+  /**
+   * Optimized method to update activities with minimal change detection
+   */
+  updateActivitiesOptimized(newActivities: ActivityHistory[]): void {
+    // Only trigger change detection if the data actually changed
+    if (JSON.stringify(this.activities) !== JSON.stringify(newActivities)) {
+      this.activities = { ...this.activities };
+      this.debouncedUpdateUI();
+    }
+  }
+
+  /**
+   * Batch update method to reduce change detection cycles
+   */
+  batchUpdate<T>(updates: Array<() => void>): void {
+    // Disable change detection temporarily
+    this.cdr.detach();
+    
+    // Apply all updates
+    updates.forEach(update => update());
+    
+    // Re-enable and trigger single change detection
+    this.cdr.reattach();
+    this.cdr.detectChanges();
   }
 }

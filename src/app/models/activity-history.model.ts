@@ -21,6 +21,8 @@ export interface ActivityHistory {
   pgcrUnavailable?: boolean;
   /** Optional: character class string from PGCR (e.g., "Hunter", "Titan", "Warlock"). */
   characterClass?: string;
+  /** Optional: membership type for platform identification (1=Xbox, 2=PSN, 3=Steam, etc.) */
+  membershipType?: number;
 
   /**
    * Explicit game identifier added at persistence time so components can safely
