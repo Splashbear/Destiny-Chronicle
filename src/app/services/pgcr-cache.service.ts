@@ -73,4 +73,85 @@ export class PGCRCacheService {
   async cacheD1PGCR(activityId: string, pgcr: any): Promise<void> {
     return this.set(pgcr);
   }
+
+  /**
+   * Batch retrieves multiple PGCRs from IndexedDB.
+   * More efficient than multiple individual get() calls.
+   */
+  async getBatch(activityIds: string[]): Promise<Map<string, PrunedPgcr | undefined>> {
+    if (activityIds.length === 0) return new Map();
+    
+    const db = await this.dbPromise;
+    const result = new Map<string, PrunedPgcr | undefined>();
+    
+    // Use a single transaction for better performance
+    const tx = db.transaction('pgcr', 'readonly');
+    const store = tx.objectStore('pgcr');
+    
+    for (const id of activityIds) {
+      try {
+        const pgcr = await store.get(id);
+        result.set(id, pgcr);
+      } catch (error) {
+        console.warn(`[PGCR] Failed to get PGCR ${id}:`, error);
+        result.set(id, undefined);
+      }
+    }
+    
+    await tx.done;
+    return result;
+  }
+
+  /**
+   * Batch stores multiple PGCRs in a single transaction.
+   * More efficient than multiple individual set() calls.
+   */
+  async setBatch(pgcrs: Array<{ id: string; data: any; requestedMemberId?: string }>): Promise<void> {
+    if (pgcrs.length === 0) return;
+    
+    const db = await this.dbPromise;
+    const tx = db.transaction('pgcr', 'readwrite');
+    const store = tx.objectStore('pgcr');
+    
+    const promises = pgcrs.map(async ({ id, data, requestedMemberId }) => {
+      try {
+        const pruned = prunePgcr(data, requestedMemberId);
+        await store.put(pruned);
+      } catch (error) {
+        console.warn(`[PGCR] Failed to store PGCR ${id}:`, error);
+      }
+    });
+    
+    await Promise.all(promises);
+    await tx.done;
+  }
+
+  /**
+   * Checks which PGCRs are missing from the cache.
+   * Useful for determining which ones need to be fetched from the API.
+   */
+  async getMissingPGCRs(activityIds: string[]): Promise<string[]> {
+    if (activityIds.length === 0) return [];
+    
+    const db = await this.dbPromise;
+    const missing: string[] = [];
+    
+    const tx = db.transaction('pgcr', 'readonly');
+    const store = tx.objectStore('pgcr');
+    
+    for (const id of activityIds) {
+      try {
+        const exists = await store.count(id);
+        if (exists === 0) {
+          missing.push(id);
+        }
+      } catch (error) {
+        console.warn(`[PGCR] Failed to check PGCR ${id}:`, error);
+        missing.push(id);
+      }
+    }
+    
+    await tx.done;
+    return missing;
+  }
 } 

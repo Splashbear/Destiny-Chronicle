@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
-import { Observable, throwError, of, timer, forkJoin } from 'rxjs';
-import { catchError, map, tap, switchMap, retryWhen, delayWhen, retry } from 'rxjs/operators';
+import { Observable, throwError, of, timer, forkJoin, from } from 'rxjs';
+import { catchError, map, tap, switchMap, retryWhen, delayWhen, retry, mergeMap, reduce } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 
@@ -459,6 +459,59 @@ export class BungieApiService {
       map((response: any) => response.Response),
       catchError(this.handleError)
     );
+  }
+
+  /**
+   * Batch fetches multiple D2 PGCRs with concurrency control.
+   * More efficient than multiple individual requests.
+   */
+  getD2PGCRBatch(activityIds: string[], concurrencyLimit: number = 3): Observable<any[]> {
+    if (activityIds.length === 0) {
+      return of([]);
+    }
+
+    // Process in chunks to avoid overwhelming the API
+    const chunks = this.chunkArray(activityIds, concurrencyLimit);
+    
+    return from(chunks).pipe(
+      mergeMap(chunk => {
+        const chunkRequests = chunk.map(id => this.getPGCR(id, false));
+        return forkJoin(chunkRequests);
+      }, concurrencyLimit),
+      reduce((acc, chunk) => acc.concat(chunk), [] as any[])
+    );
+  }
+
+  /**
+   * Batch fetches multiple D1 PGCRs with concurrency control.
+   * More efficient than multiple individual requests.
+   */
+  getD1PGCRBatch(activityIds: string[], concurrencyLimit: number = 3): Observable<any[]> {
+    if (activityIds.length === 0) {
+      return of([]);
+    }
+
+    // Process in chunks to avoid overwhelming the API
+    const chunks = this.chunkArray(activityIds, concurrencyLimit);
+    
+    return from(chunks).pipe(
+      mergeMap(chunk => {
+        const chunkRequests = chunk.map(id => this.getPGCR(id, true));
+        return forkJoin(chunkRequests);
+      }, concurrencyLimit),
+      reduce((acc, chunk) => acc.concat(chunk), [] as any[])
+    );
+  }
+
+  /**
+   * Helper method to chunk arrays for concurrency control.
+   */
+  private chunkArray<T>(array: T[], chunkSize: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += chunkSize) {
+      chunks.push(array.slice(i, i + chunkSize));
+    }
+    return chunks;
   }
 
   /**

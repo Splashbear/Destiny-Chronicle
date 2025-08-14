@@ -782,8 +782,114 @@ export class ActivityDbService extends Dexie {
     
     if (activitiesNeedingPgcr.length === 0) return;
 
-    // Process PGCR data in parallel with concurrency control
-    const concurrencyLimit = 3; // Limit concurrent PGCR requests
+    // Get all instance IDs that need PGCR processing
+    const instanceIds = activitiesNeedingPgcr.map(f => f.instanceId).filter(id => !!id);
+    
+    if (instanceIds.length === 0) return;
+
+    try {
+      // First, try to get all PGCRs from cache in batch
+      const cachedPgcrMap = await this.pgcrCacheService.getBatch(instanceIds);
+      
+      // Process cached PGCRs
+      for (const first of activitiesNeedingPgcr) {
+        if (!first.instanceId) continue;
+        
+        const pgcr = cachedPgcrMap.get(first.instanceId);
+        if (pgcr) {
+          this.processPGCRData(first, pgcr, game, membershipId);
+        }
+      }
+      
+      // Check which PGCRs are missing from cache
+      const missingIds = await this.pgcrCacheService.getMissingPGCRs(instanceIds);
+      
+      if (missingIds.length > 0) {
+        // Fetch missing PGCRs from API in batch
+        const missingPgcrData = await this.fetchMissingPGCRs(missingIds, game);
+        
+        // Process the newly fetched PGCRs
+        for (const first of activitiesNeedingPgcr) {
+          if (!first.instanceId || !missingPgcrData.has(first.instanceId)) continue;
+          
+          const pgcr = missingPgcrData.get(first.instanceId);
+          if (pgcr) {
+            this.processPGCRData(first, pgcr, game, membershipId);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[PGCR] Batch processing failed, falling back to individual processing:', error);
+      // Fallback to individual processing if batch fails
+      await this.fallbackToIndividualPGCRProcessing(activitiesNeedingPgcr, game, membershipId);
+    }
+  }
+
+  /**
+   * Fetches missing PGCRs from the Bungie API in batch.
+   */
+  private async fetchMissingPGCRs(instanceIds: string[], game: 'D1' | 'D2'): Promise<Map<string, any>> {
+    try {
+      const response = game === 'D2' 
+        ? await firstValueFrom(this.bungieService.getD2PGCRBatch(instanceIds))
+        : await firstValueFrom(this.bungieService.getD1PGCRBatch(instanceIds));
+      
+      const result = new Map<string, any>();
+      for (let i = 0; i < instanceIds.length && i < response.length; i++) {
+        if (response[i]) {
+          result.set(instanceIds[i], response[i]);
+        }
+      }
+      
+      // Cache the newly fetched PGCRs
+      const pgcrData = instanceIds.map((id, index) => ({
+        id,
+        data: response[index],
+        requestedMemberId: undefined
+      })).filter(item => item.data);
+      
+      if (pgcrData.length > 0) {
+        await this.pgcrCacheService.setBatch(pgcrData);
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('[PGCR] Failed to fetch missing PGCRs:', error);
+      return new Map();
+    }
+  }
+
+  /**
+   * Processes PGCR data for a single activity.
+   */
+  private processPGCRData(first: ActivityFirstCompletion, pgcr: any, game: 'D1' | 'D2', membershipId: string): void {
+    // For D2 dungeons, check solo and flawless status
+    if (game === 'D2' && first.type === 'dungeon') {
+      const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
+      (first as any).isSolo = uniquePlayers.size === 1;
+      
+      if ((first as any).isSolo) {
+        (first as any).isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
+      }
+    }
+    
+    // Attach class and membershipType for per-character view
+    const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
+    if (me) {
+      (first as any).characterClass = me.player.characterClass;
+      (first as any).membershipType = me.player.destinyUserInfo.membershipType;
+    }
+  }
+
+  /**
+   * Fallback method for individual PGCR processing if batch processing fails.
+   */
+  private async fallbackToIndividualPGCRProcessing(
+    activitiesNeedingPgcr: ActivityFirstCompletion[], 
+    game: 'D1' | 'D2', 
+    membershipId: string
+  ): Promise<void> {
+    const concurrencyLimit = 3;
     const chunks = this.chunkArray(activitiesNeedingPgcr, concurrencyLimit);
     
     for (const chunk of chunks) {
@@ -794,22 +900,7 @@ export class ActivityDbService extends Dexie {
             : await this.pgcrCacheService.getD1PGCR(first.instanceId);
             
           if (pgcr) {
-            // For D2 dungeons, check solo and flawless status
-            if (game === 'D2' && first.type === 'dungeon') {
-              const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
-              (first as any).isSolo = uniquePlayers.size === 1;
-              
-              if ((first as any).isSolo) {
-                (first as any).isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
-              }
-            }
-            
-            // Attach class and membershipType for per-character view
-            const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
-            if (me) {
-              (first as any).characterClass = me.player.characterClass;
-              (first as any).membershipType = me.player.destinyUserInfo.membershipType;
-            }
+            this.processPGCRData(first, pgcr, game, membershipId);
           }
         } catch (error) {
           console.warn(`[PGCR] Failed to process PGCR for ${first.name}:`, error);
