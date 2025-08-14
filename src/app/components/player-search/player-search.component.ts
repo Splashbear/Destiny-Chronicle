@@ -1357,22 +1357,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.statsDebounce$.next();
 
       // Mark all accounts as complete
-      this.selectedPlayers.forEach(player => {
-        const accountKey = this.getPlayerKey(player);
-        const isD1 = this.isD1Player(player);
-        const game = isD1 ? 'D1' : 'D2';
-        const platform = this.getPlatformName(player.membershipType);
-        
-        this.updateAccountLoadingStatus(
-          accountKey,
-          player.displayName,
-          platform,
-          game,
-          player.membershipType,
-          'complete',
-          `${game} data loaded successfully for ${player.displayName}`
-        );
-      });
+      // Note: Accounts will be marked as complete after rendering is finished in loadAllFilteredActivities
     } catch (error) {
       this.selectedPlayers = [];
       delete this.selectedCharacterIds[player.membershipId];
@@ -2364,6 +2349,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } finally {
       if (loadToken === this.currentLoadToken) {
         this.loadingActivities[this.selectedDate] = false;
+        
+        // Mark all accounts as complete after rendering is finished
+        this.selectedPlayers.forEach(player => {
+          const accountKey = this.getPlayerKey(player);
+          const isD1 = this.isD1Player(player);
+          const game = isD1 ? 'D1' : 'D2';
+          const platform = this.getPlatformName(player.membershipType);
+          
+          this.updateAccountLoadingStatus(
+            accountKey,
+            player.displayName,
+            platform,
+            game,
+            player.membershipType,
+            'complete',
+            `${game} data loaded and displayed successfully for ${player.displayName}`
+          );
+        });
+        
         this.cdr.detectChanges();
       }
     }
