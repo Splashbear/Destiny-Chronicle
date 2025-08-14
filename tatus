@@ -1,0 +1,10 @@
+[33mcommit 7adf798ea2224f4599b87025c4a6d2a3698df721[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m
+Author: Splashbear <knightcelestial@gmail.com>
+Date:   Thu Aug 14 09:00:22 2025 -0400
+
+    Update class icons to use site's destiny-gold color and remove drop shadows
+
+src/app/components/player-search/player-search.component.html
+src/assets/icons/destiny/class-hunter-svgrepo-com.svg
+src/assets/icons/destiny/class-titan-svgrepo-com.svg
+src/assets/icons/destiny/class-warlock-svgrepo-com.svg

@@ -450,26 +450,35 @@ export class ActivityDbService extends Dexie {
       let isSolo = false;
       let isSoloFlawless = false;
       
-        if (game === 'D2' && type === 'dungeon') {
+      // Fetch PGCR data for raids and dungeons to get character class information
+      if ((game === 'D2' && (type === 'dungeon' || type === 'raid')) || 
+          (game === 'D1' && type === 'raid')) {
         // Fetch the pruned PGCR (if cached). We cast to <any> to keep the
         // existing "entries" access until the rest of the codebase is fully
         // migrated to the typed `PrunedPgcr` shape.
-        const pgcr: any = await this.pgcrCacheService.getD2PGCR(activity.activityDetails.instanceId);
-        if (pgcr) {
-          // Check if solo (only one player)
-          const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
-          isSolo = uniquePlayers.size === 1;
+        const pgcr: any = game === 'D2' 
+          ? await this.pgcrCacheService.getD2PGCR(activity.activityDetails.instanceId)
+          : await this.pgcrCacheService.getD1PGCR(activity.activityDetails.instanceId);
           
-          // Check if flawless (no deaths)
-          if (isSolo) {
-            isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
-          }
-            // Attach class and membershipType for per-character view
-            const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
-            if (me) {
-              (activity as any).characterClass = me.player.characterClass;
-              (activity as any).membershipType = me.player.destinyUserInfo.membershipType;
+        if (pgcr) {
+          // For D2 dungeons, check solo and flawless status
+          if (game === 'D2' && type === 'dungeon') {
+            // Check if solo (only one player)
+            const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
+            isSolo = uniquePlayers.size === 1;
+            
+            // Check if flawless (no deaths)
+            if (isSolo) {
+              isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
             }
+          }
+          
+          // Attach class and membershipType for per-character view (for raids and dungeons in both games)
+          const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
+          if (me) {
+            (activity as any).characterClass = me.player.characterClass;
+            (activity as any).membershipType = me.player.destinyUserInfo.membershipType;
+          }
         }
       }
 

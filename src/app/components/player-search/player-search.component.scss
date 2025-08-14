@@ -725,8 +725,8 @@ button {
   }
 }
 
-.activity-row img:not(.platform-icon),
-.flex.items-center.mb-2.gap-3 img.w-8.h-8:not(.platform-icon) {
+.activity-row img:not(.platform-icon):not([src*="class-"]),
+.flex.items-center.mb-2.gap-3 img.w-8.h-8:not(.platform-icon):not([src*="class-"]) {
   box-shadow: 0 0 8px 2px #fff, 0 0 2px #00f2ff;
   background: rgba(255,255,255,0.08);
   border-radius: 6px;
@@ -741,6 +741,13 @@ button {
   filter: drop-shadow(0 0 8px #fff) drop-shadow(0 0 2px #00f2ff);
   border-radius: 6px;
   background: rgba(255,255,255,0.08);
+}
+
+// Ensure class icons display with correct color and no filters
+img[src*="class-"] {
+  filter: none !important;
+  box-shadow: none !important;
+  background: none !important;
 }
 
 // Chip style for selected players
