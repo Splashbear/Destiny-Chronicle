@@ -497,7 +497,7 @@ export class PlayerSearchComponent implements OnInit {
   // ------------------------------------------------------------------
   // Concurrency-limited queue for per-account sync (Pattern 2)
   // ------------------------------------------------------------------
-  private readonly MAX_PARALLEL_PLAYER_SYNCS = 2;
+  private readonly MAX_PARALLEL_PLAYER_SYNCS = 4; // Increased from 2 to 4 for better D1/D2 concurrency
   private activePlayerSyncs = 0;
   private playerSyncQueue: Array<() => void> = [];
 
@@ -1054,9 +1054,18 @@ export class PlayerSearchComponent implements OnInit {
       // Reset running counter for progress UI
       this.overallActivitiesProcessed = 0;
 
-      // Parallel loading of activities, titles, and firsts for each selected player (primary + linked)
+      // Optimized concurrent loading: Separate D1 and D2 players for better parallelization
+      const d1Players = this.selectedPlayers.filter(p => this.isD1Player(p));
+      const d2Players = this.selectedPlayers.filter(p => !this.isD1Player(p));
+      
+      // Load D1 and D2 players concurrently with equal priority
       const loadPromises: Promise<void>[] = [];
-      for (const pl of this.selectedPlayers) {
+      
+      // Process D1 and D2 players in parallel with interleaving for optimal concurrency
+      // This ensures D1 players don't wait for D2 players to finish
+      const allPlayers = this.interleavePlayersForConcurrency(d1Players, d2Players);
+      
+      for (const pl of allPlayers) {
         // Use the concurrency-limited runner so only N accounts are being
         // crawled at the same time.  Each player sync includes character
         // history + guardian firsts + dungeon solo firsts serially.
@@ -1184,16 +1193,21 @@ export class PlayerSearchComponent implements OnInit {
           // D1: characterBase.characterId
           this.selectedCharacterIds[player.membershipId] = getCharacterId(this.characters[this.getPlayerKey(player)][0]) || '';
         }
-        for (const char of this.characters[this.getPlayerKey(player)]) {
+        
+        // Load D1 activities concurrently for all characters
+        const characterLoadPromises = this.characters[this.getPlayerKey(player)].map(async (char) => {
           const charId = getCharacterId(char);
-          if (!charId) continue; // Defensive: skip if no valid ID
-          await this.loadActivityHistoryForCharacter({
+          if (!charId) return; // Defensive: skip if no valid ID
+          return this.loadActivityHistoryForCharacter({
             characterId: charId,
             membershipType: player.membershipType,
             membershipId: player.membershipId,
             game: 'D1'
           });
-        }
+        });
+        
+        // Wait for all D1 character activities to load concurrently
+        await Promise.all(characterLoadPromises.filter(Boolean));
       } else {
         // D2: characterId is top-level
         const profile = await firstValueFrom(this.bungieService.getProfile(player.membershipType, player.membershipId));
@@ -1207,16 +1221,21 @@ export class PlayerSearchComponent implements OnInit {
         if (characters.length > 0) {
           this.selectedCharacterIds[player.membershipId] = getCharacterId(characters[0]) || '';
         }
-        for (const char of characters) {
+        
+        // Load D2 activities concurrently for all characters
+        const characterLoadPromises = characters.map(async (char) => {
           const charId = getCharacterId(char);
-          if (!charId) continue; // Defensive: skip if no valid ID
-          await this.loadActivityHistoryForCharacter({
+          if (!charId) return; // Defensive: skip if no valid ID
+          return this.loadActivityHistoryForCharacter({
             characterId: charId,
             membershipType: player.membershipType,
             membershipId: player.membershipId,
             game: 'D2'
           });
-        }
+        });
+        
+        // Wait for all D2 character activities to load concurrently
+        await Promise.all(characterLoadPromises.filter(Boolean));
       }
     } catch (error: any) {
       console.error('Error loading character history:', error);
@@ -4886,5 +4905,25 @@ export class PlayerSearchComponent implements OnInit {
     // Re-enable and trigger single change detection
     this.cdr.reattach();
     this.cdr.detectChanges();
+  }
+
+  /**
+   * Interleaves D1 and D2 players for optimal concurrent loading
+   * This ensures both game types start loading immediately rather than D1 waiting for D2
+   */
+  private interleavePlayersForConcurrency(d1Players: PlayerSearchDisplay[], d2Players: PlayerSearchDisplay[]): PlayerSearchDisplay[] {
+    const result: PlayerSearchDisplay[] = [];
+    const maxLength = Math.max(d1Players.length, d2Players.length);
+    
+    for (let i = 0; i < maxLength; i++) {
+      if (i < d1Players.length) {
+        result.push(d1Players[i]);
+      }
+      if (i < d2Players.length) {
+        result.push(d2Players[i]);
+      }
+    }
+    
+    return result;
   }
 }
