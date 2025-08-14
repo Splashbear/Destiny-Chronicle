@@ -969,6 +969,24 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     try {
+      // Show loading status for permalink players
+      for (const player of playersToLoad) {
+        const accountKey = this.getPlayerKey(player);
+        const isD1 = this.isD1Player(player);
+        const game = isD1 ? 'D1' : 'D2';
+        const platform = this.getPlatformName(player.membershipType);
+        
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          player.membershipType,
+          'fetching-profile',
+          `Loading ${game} profile for ${player.displayName} from permalink...`
+        );
+      }
+
       // Load all players in parallel with concurrency limit
       const loadPromises: Promise<void>[] = [];
       for (const player of playersToLoad) {
@@ -980,6 +998,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               await this.loadDungeonSoloFirsts(player);
             } catch (err) {
               console.warn('[LoadURLPlayers] Skipped due to error for', player.membershipId, err);
+              // Update status to error
+              const accountKey = this.getPlayerKey(player);
+              const existingStatus = this.accountLoadingStatus.get(accountKey);
+              if (existingStatus) {
+                this.updateAccountLoadingStatus(
+                  accountKey,
+                  existingStatus.displayName,
+                  existingStatus.platform,
+                  existingStatus.game,
+                  existingStatus.membershipType,
+                  'error',
+                  `Failed to load ${existingStatus.game} data for ${existingStatus.displayName}`
+                );
+              }
             }
           })
         );
@@ -1000,10 +1032,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       
       this.statsDebounce$.next();
+      
+      // Show success message for permalink loading
+      if (playersToLoad.length > 0) {
+        this.showSuccessMessage(`Successfully loaded ${playersToLoad.length} player(s) from permalink`);
+      }
     } catch (error) {
       console.error('[LoadURLPlayers] Error loading players from URL:', error);
     } finally {
-      this.loadingActivities[this.selectedDate] = true;
+      this.loadingActivities[this.selectedDate] = false;
       this.cdr.detectChanges();
     }
   }
@@ -5447,6 +5484,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Final fallback: open in new window
       window.open(url, '_blank');
     }
+  }
+
+  /**
+   * Shows a success message to the user
+   */
+  private showSuccessMessage(message: string) {
+    // For now, use a simple alert. In the future, this could be a toast notification
+    alert(message);
   }
 
   // Account loading status tracking

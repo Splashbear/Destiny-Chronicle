@@ -190,6 +190,50 @@ User selects date → Component triggers fetch → Service queries IndexedDB →
 If cache miss → Bungie API call → Store in IndexedDB → Return to component
 ```
 
+### 3. Real-Time Loading Status Modal
+
+#### Overview
+The application features a comprehensive loading status modal that provides users with real-time visibility into the account loading and processing workflow. This modal ensures users understand exactly what's happening during data retrieval and processing phases.
+
+#### Modal Features
+- **Real-Time Status Updates**: Shows current processing phase for each account
+- **Progress Tracking**: Displays "X of Y complete" progress indicator
+- **Visual Status Indicators**: Color-coded borders and status badges for different phases
+- **Platform and Game Icons**: Shows both D1/D2 game icons and platform icons for clear identification
+- **Auto-Hide Functionality**: Automatically disappears after all accounts complete processing
+- **Manual Close Option**: Users can manually close the modal if needed
+
+#### Loading Status Phases
+1. **"Fetching Profile"** - Initial API call to retrieve account profile data
+2. **"Loading Characters"** - Retrieving character information for the account
+3. **"Fetching Activities"** - Getting activity history from Bungie API
+4. **"Organizing PGCRs"** - Processing and organizing Post Game Carnage Reports
+5. **"Displaying Activities"** - Rendering activities to the user interface
+6. **"Complete"** - Account fully loaded and processed (only shown after rendering is finished)
+
+#### Technical Implementation
+```typescript
+interface LoadingStatus {
+  accountKey: string;
+  displayName: string;
+  platform: string;
+  game: 'D1' | 'D2';
+  membershipType: number;
+  status: 'fetching-profile' | 'loading-characters' | 'fetching-activities' | 
+          'organizing-pgcrs' | 'displaying-activities' | 'complete' | 'error';
+  progress?: number;
+  message: string;
+  timestamp: Date;
+}
+```
+
+#### User Experience Benefits
+- **Transparency**: Users always know what's happening with their accounts
+- **Progress Awareness**: Clear indication of overall completion status
+- **Reduced Confusion**: Eliminates uncertainty about whether processing is complete
+- **Professional Feel**: Provides a polished, enterprise-level user experience
+- **Concurrent Processing**: Shows multiple accounts being processed simultaneously
+
 #### Caching Strategy
 - **Primary Cache**: IndexedDB with versioned schema (DestinyChronicleDbV4)
 - **In-Memory Cache**: LRU cache system for activities and filtered results
