@@ -13,6 +13,18 @@ import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 
+// Phase 3: Memory Management & Caching Optimization
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  accessCount: number;
+}
+
+interface LRUCache<T> {
+  maxSize: number;
+  data: Map<string, CacheEntry<T>>;
+}
+
 export interface StoredActivity extends ActivityHistory {
   membershipId: string;
   characterId: string;
@@ -42,6 +54,21 @@ export class ActivityDbService extends Dexie {
   activities!: Table<StoredActivity, number>;
   favorites!: Table<FavoriteAccount, number>;
   initPromise: Promise<void>;
+
+  // Phase 3: Memory Management & Caching Optimization
+  private readonly MAX_CACHE_SIZE = 1000; // Maximum number of cached items
+  private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes cache TTL
+  private readonly MEMORY_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes cleanup interval
+  
+  // LRU caches for different data types
+  private activitiesCache: LRUCache<StoredActivity[]> = { maxSize: 200, data: new Map() };
+  private filteredActivitiesCache: LRUCache<StoredActivity[]> = { maxSize: 100, data: new Map() };
+  private firstEverActivities: LRUCache<ActivityFirstCompletion> = { maxSize: 50, data: new Map() };
+  private wastedTimes: LRUCache<any[]> = { maxSize: 50, data: new Map() };
+  private wastedSeals: LRUCache<any[]> = { maxSize: 50, data: new Map() };
+  
+  private lastCleanup = Date.now();
+  private cleanupTimer?: any;
 
   // Canonical mapping for all D2 and D1 raids/dungeons (2024, expand as needed)
   private static readonly ACTIVITY_FAMILY_MAP: Record<string, string> = {
@@ -1053,5 +1080,238 @@ export class ActivityDbService extends Dexie {
       .between(startPeriod, endPeriod, true, true)
       .and(activity => activity.membershipId === membershipId)
       .toArray();
+  }
+
+  // Phase 3: Memory Management & Caching Optimization Methods
+
+  /**
+   * Gets data from LRU cache with automatic cleanup
+   */
+  private getFromCache<T>(cache: LRUCache<T>, key: string): T | undefined {
+    const entry = cache.data.get(key);
+    if (!entry) return undefined;
+
+    // Check TTL
+    if (Date.now() - entry.timestamp > this.CACHE_TTL) {
+      cache.data.delete(key);
+      return undefined;
+    }
+
+    // Update access count and timestamp for LRU
+    entry.accessCount++;
+    entry.timestamp = Date.now();
+    
+    // Move to end (most recently used)
+    cache.data.delete(key);
+    cache.data.set(key, entry);
+    
+    return entry.data;
+  }
+
+  /**
+   * Sets data in LRU cache with automatic size management
+   */
+  private setInCache<T>(cache: LRUCache<T>, key: string, data: T): void {
+    // Remove oldest entries if cache is full
+    if (cache.data.size >= cache.maxSize) {
+      const oldestKey = cache.data.keys().next().value;
+      if (oldestKey !== undefined) {
+        cache.data.delete(oldestKey);
+      }
+    }
+
+    cache.data.set(key, {
+      data,
+      timestamp: Date.now(),
+      accessCount: 1
+    });
+
+    // Schedule cleanup if needed
+    this.scheduleCleanup();
+  }
+
+  /**
+   * Clears expired cache entries and performs memory cleanup
+   */
+  private performCacheCleanup(): void {
+    const now = Date.now();
+    
+    // Clean up expired entries from all caches
+    [this.activitiesCache, this.filteredActivitiesCache, this.firstEverActivities, this.wastedTimes, this.wastedSeals]
+      .forEach(cache => {
+        for (const [key, entry] of cache.data.entries()) {
+          if (now - entry.timestamp > this.CACHE_TTL) {
+            cache.data.delete(key);
+          }
+        }
+      });
+
+    // Force garbage collection if available
+    if (window.gc) {
+      window.gc();
+    }
+
+    this.lastCleanup = now;
+  }
+
+  /**
+   * Schedules periodic cache cleanup
+   */
+  private scheduleCleanup(): void {
+    if (this.cleanupTimer) {
+      clearTimeout(this.cleanupTimer);
+    }
+
+    this.cleanupTimer = setTimeout(() => {
+      this.performCacheCleanup();
+      this.scheduleCleanup(); // Schedule next cleanup
+    }, this.MEMORY_CLEANUP_INTERVAL);
+  }
+
+  /**
+   * Manually clears all caches (useful for testing or memory pressure)
+   */
+  clearAllCaches(): void {
+    this.activitiesCache.data.clear();
+    this.filteredActivitiesCache.data.clear();
+    this.firstEverActivities.data.clear();
+    this.wastedTimes.data.clear();
+    this.wastedSeals.data.clear();
+    
+    if (this.cleanupTimer) {
+      clearTimeout(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
+  }
+
+  /**
+   * Gets cache statistics for monitoring
+   */
+  getCacheStats(): any {
+    return {
+      activitiesCache: {
+        size: this.activitiesCache.data.size,
+        maxSize: this.activitiesCache.maxSize
+      },
+      filteredActivitiesCache: {
+        size: this.filteredActivitiesCache.data.size,
+        maxSize: this.filteredActivitiesCache.maxSize
+      },
+      firstEverActivities: {
+        size: this.firstEverActivities.data.size,
+        maxSize: this.firstEverActivities.maxSize
+      },
+      wastedTimes: {
+        size: this.wastedTimes.data.size,
+        maxSize: this.wastedTimes.maxSize
+      },
+      wastedSeals: {
+        size: this.wastedSeals.data.size,
+        maxSize: this.wastedSeals.maxSize
+      },
+      lastCleanup: this.lastCleanup,
+      memoryUsage: (performance as any).memory ? {
+        usedJSHeapSize: Math.round((performance as any).memory.usedJSHeapSize / 1024 / 1024),
+        totalJSHeapSize: Math.round((performance as any).memory.totalJSHeapSize / 1024 / 1024),
+        jsHeapSizeLimit: Math.round((performance as any).memory.jsHeapSizeLimit / 1024 / 1024)
+      } : 'Not available'
+    };
+  }
+
+  /**
+   * Optimized method to get activities by date using cache
+   */
+  async getActivitiesByDateCached(date: string, year?: number): Promise<StoredActivity[]> {
+    await this.initPromise;
+    
+    const cacheKey = `date_${date}_${year || 'all'}`;
+    const cached = this.getFromCache(this.activitiesCache, cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      let activities: StoredActivity[];
+      
+      if (year) {
+        // Query specific year
+        const startDate = new Date(year, 0, 1).toISOString();
+        const endDate = new Date(year, 11, 31, 23, 59, 59).toISOString();
+        activities = await this.activities
+          .where('period')
+          .between(startDate, endDate, true, true)
+          .toArray();
+      } else {
+        // Query all years
+        activities = await this.activities.toArray();
+      }
+
+      // Filter by date if specified
+      if (date !== 'all') {
+        const targetDate = new Date(date);
+        const targetDateStr = targetDate.toISOString().split('T')[0];
+        activities = activities.filter(activity => {
+          const activityDate = new Date(activity.period);
+          const activityDateStr = activityDate.toISOString().split('T')[0];
+          return activityDateStr === targetDateStr;
+        });
+      }
+
+      // Cache the result
+      this.setInCache(this.activitiesCache, cacheKey, activities);
+      
+      return activities;
+    } catch (error) {
+      console.error('[Dexie] Error getting activities by date:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Optimized method to get filtered activities using cache
+   */
+  async getFilteredActivities(
+    membershipId: string,
+    game: 'D1' | 'D2',
+    filters: any = {}
+  ): Promise<StoredActivity[]> {
+    await this.initPromise;
+    
+    const cacheKey = `filtered_${membershipId}_${game}_${JSON.stringify(filters)}`;
+    const cached = this.getFromCache(this.filteredActivitiesCache, cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      let query = this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .filter(activity => activity.game === game);
+
+      // Apply additional filters
+      if (filters.characterId) {
+        query = query.filter(activity => activity.characterId === filters.characterId);
+      }
+      if (filters.mode !== undefined) {
+        query = query.filter(activity => activity.activityDetails?.mode === filters.mode);
+      }
+      if (filters.startDate && filters.endDate) {
+        query = query.filter(activity => {
+          const period = new Date(activity.period);
+          return period >= filters.startDate && period <= filters.endDate;
+        });
+      }
+
+      const activities = await query.toArray();
+      
+      // Cache the result
+      this.setInCache(this.filteredActivitiesCache, cacheKey, activities);
+      
+      return activities;
+    } catch (error) {
+      console.error('[Dexie] Error getting filtered activities:', error);
+      return [];
+    }
   }
 } 
