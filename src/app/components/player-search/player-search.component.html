@@ -343,6 +343,7 @@
                       </div>
                       <div class="grid grid-cols-1 gap-2">
                         <div *ngFor="let activity of typeGroup.activities; trackBy: trackByActivity" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
+                          <img [src]="activity.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle " [title]="cls" alt="class" />
                           <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
@@ -382,6 +383,7 @@
                       </div>
                       <div class="grid grid-cols-1 gap-2">
                         <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
+                          <img [src]="activity.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle " [title]="cls" alt="class" />
                           <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
