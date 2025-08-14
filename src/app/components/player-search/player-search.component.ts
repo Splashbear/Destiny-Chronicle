@@ -1839,6 +1839,8 @@ export class PlayerSearchComponent implements OnInit {
 
     try {
       const activities = await this.getAllFilteredActivitiesForDate(forceRefresh);
+      // Ensure class icons can render by enriching activities with character class from PGCRs
+      await this.enrichActivitiesWithCharacterClass(activities);
       if (loadToken !== this.currentLoadToken) return; // Abort if a newer load started
 
       // Ensure Destiny manifest has finished loading so that activity names/types resolve properly
@@ -1884,6 +1886,64 @@ export class PlayerSearchComponent implements OnInit {
         this.loadingActivities[this.selectedDate] = false;
         this.cdr.detectChanges();
       }
+    }
+  }
+
+  /**
+   * Enrich the provided activities list with character class information using cached/fetched PGCRs.
+   * This runs automatically so UI can show class icons without any user action.
+   */
+  private async enrichActivitiesWithCharacterClass(activities: ActivityHistory[]): Promise<void> {
+    try {
+      if (!activities || activities.length === 0) return;
+
+      // Process per selected player so we know which membership/game context to match in PGCR
+      const players = (this.selectedPlayers || []).filter(Boolean);
+      for (const player of players) {
+        const actsForPlayer = activities.filter(a => !a.characterClass && (a as any).membershipId === player.membershipId);
+        if (actsForPlayer.length === 0) continue;
+
+        const character: CharacterWithGame = {
+          characterId: this.selectedCharacterIds[player.membershipId] || '',
+          membershipType: player.membershipType,
+          membershipId: player.membershipId,
+          game: (player as any).game === 'D1' ? 'D1' : 'D2'
+        };
+
+        for (let idx = 0; idx < actsForPlayer.length; idx += this.PGCR_BATCH_SIZE) {
+          const validated = await this.validatePGCRBatch(actsForPlayer, character, idx);
+          if (!validated || validated.length === 0) continue;
+
+          // Merge characterClass back into the activities array by instanceId
+          const clsByInstance = new Map<string, string | undefined>();
+          for (const v of validated) {
+            const iid = v.activityDetails?.instanceId;
+            if (iid && v.characterClass) {
+              clsByInstance.set(iid, v.characterClass);
+            }
+          }
+          if (clsByInstance.size === 0) continue;
+
+          for (const a of activities) {
+            const iid = a.activityDetails?.instanceId;
+            if (iid && !a.characterClass && clsByInstance.has(iid)) {
+              (a as any).characterClass = clsByInstance.get(iid);
+            }
+          }
+        }
+      }
+
+      // Also reflect in the filtered list used by grouping/rendering
+      for (const a of this.filteredActivitiesForDate) {
+        if (!a.characterClass) {
+          const match = activities.find(x => x.activityDetails?.instanceId === a.activityDetails?.instanceId);
+          if (match?.characterClass) {
+            (a as any).characterClass = match.characterClass;
+          }
+        }
+      }
+    } catch (_) {
+      // Non-fatal: if PGCR fetch fails, we simply skip class icons
     }
   }
 
@@ -3853,9 +3913,9 @@ export class PlayerSearchComponent implements OnInit {
   getClassIconUrl(className?: string): string | undefined {
     if (!className) return undefined;
     const c = className.toLowerCase();
-    if (c.includes('hunter')) return 'assets/icons/destiny/hunter.svg';
-    if (c.includes('titan')) return 'assets/icons/destiny/titan.svg';
-    if (c.includes('warlock')) return 'assets/icons/destiny/warlock.svg';
+    if (c.includes('hunter')) return 'assets/icons/destiny/class-hunter-svgrepo-com.svg';
+    if (c.includes('titan')) return 'assets/icons/destiny/class-titan-svgrepo-com.svg';
+    if (c.includes('warlock')) return 'assets/icons/destiny/class-warlock-svgrepo-com.svg';
     return undefined;
   }
 
