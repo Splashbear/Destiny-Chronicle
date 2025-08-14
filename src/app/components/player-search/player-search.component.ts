@@ -718,6 +718,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     this.accountLoadingStatus.set(accountKey, loadingStatus);
     this.accountLoadingStatuses = Array.from(this.accountLoadingStatus.values());
+    
+    // Show modal when first status is added
+    if (this.accountLoadingStatuses.length === 1) {
+      this.showLoadingModal = true;
+      this.isLoadingComplete = false;
+    }
+    
+    // Check if all accounts are complete
+    const allComplete = this.accountLoadingStatuses.every(s => s.status === 'complete');
+    if (allComplete && this.accountLoadingStatuses.length > 0) {
+      this.isLoadingComplete = true;
+      // Auto-hide modal after 3 seconds
+      setTimeout(() => {
+        if (this.isLoadingComplete) {
+          this.closeLoadingModal();
+        }
+      }, 3000);
+    }
+    
     this.cdr.detectChanges();
   }
 
@@ -727,6 +746,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private removeAccountLoadingStatus(accountKey: string) {
     this.accountLoadingStatus.delete(accountKey);
     this.accountLoadingStatuses = Array.from(this.accountLoadingStatus.values());
+    
+    // Hide modal if no more statuses
+    if (this.accountLoadingStatuses.length === 0) {
+      this.showLoadingModal = false;
+      this.isLoadingComplete = false;
+    }
+    
     this.cdr.detectChanges();
   }
 
@@ -759,6 +785,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    */
   public formatStatusDisplay(status: string): string {
     return status.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+  }
+
+  /**
+   * Closes the loading modal
+   */
+  public closeLoadingModal(): void {
+    this.showLoadingModal = false;
+    this.isLoadingComplete = false;
   }
 
   async loadFavorites() {
@@ -5385,5 +5419,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // Account loading status tracking
   private accountLoadingStatus = new Map<string, LoadingStatus>();
   public accountLoadingStatuses: LoadingStatus[] = [];
+  public showLoadingModal = false;
+  public isLoadingComplete = false;
 
 }
