@@ -8,6 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
+import { environment } from '../../../environments/environment';
 
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
@@ -130,6 +131,7 @@ interface LoadingStatus {
   displayName: string;
   platform: string;
   game: 'D1' | 'D2';
+  membershipType: number;
   status: 'fetching-profile' | 'loading-characters' | 'fetching-activities' | 'organizing-pgcrs' | 'displaying-activities' | 'complete' | 'error';
   progress?: number;
   message: string;
@@ -701,6 +703,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     displayName: string,
     platform: string,
     game: 'D1' | 'D2',
+    membershipType: number,
     status: LoadingStatus['status'],
     message: string,
     progress?: number
@@ -710,6 +713,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       displayName,
       platform,
       game,
+      membershipType,
       status,
       message,
       progress,
@@ -793,6 +797,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   public closeLoadingModal(): void {
     this.showLoadingModal = false;
     this.isLoadingComplete = false;
+  }
+
+  /**
+   * Gets the count of completed accounts
+   */
+  public getCompletedCount(): number {
+    return this.accountLoadingStatuses.filter(s => s.status === 'complete').length;
   }
 
   async loadFavorites() {
@@ -1357,6 +1368,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           player.displayName,
           platform,
           game,
+          player.membershipType,
           'complete',
           `${game} data loaded successfully for ${player.displayName}`
         );
@@ -1466,6 +1478,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         player.displayName,
         platform,
         game,
+        player.membershipType,
         'fetching-profile',
         `Fetching ${game} profile for ${player.displayName}...`
       );
@@ -1484,6 +1497,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           player.displayName,
           platform,
           game,
+          player.membershipType,
           'loading-characters',
           `Loading ${game} characters for ${player.displayName}...`
         );
@@ -1501,6 +1515,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           player.displayName,
           platform,
           game,
+          player.membershipType,
           'fetching-activities',
           `Fetching ${game} activities for ${player.displayName}...`
         );
@@ -1533,6 +1548,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           player.displayName,
           platform,
           game,
+          player.membershipType,
           'loading-characters',
           `Loading ${game} characters for ${player.displayName}...`
         );
@@ -1550,6 +1566,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           player.displayName,
           platform,
           game,
+          player.membershipType,
           'fetching-activities',
           `Fetching ${game} activities for ${player.displayName}...`
         );
@@ -1576,6 +1593,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         player.displayName,
         platform,
         game,
+        player.membershipType,
         'organizing-pgcrs',
         `Organizing ${game} data for ${player.displayName}...`
       );
@@ -1589,6 +1607,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         player.displayName,
         platform,
         game,
+        player.membershipType,
         'error',
         `Error loading ${game} data for ${player.displayName}`
       );
@@ -1618,19 +1637,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const validatedActivities: ActivityHistory[] = [];
     
     // Log the character we're looking for with full details
-    console.log(`[DEBUG] Looking for character in PGCRs:`, {
-      membershipId: character.membershipId,
-      characterId: character.characterId,
-      game: character.game,
-      membershipType: character.membershipType,
-      platform: this.getPlatformName(character.membershipType)
-    });
+    if (environment.debug) {
+      console.log(`[DEBUG] Looking for character in PGCRs:`, {
+        membershipId: character.membershipId,
+        characterId: character.characterId,
+        game: character.game,
+        membershipType: character.membershipType,
+        platform: this.getPlatformName(character.membershipType)
+      });
+    }
     
     // Create array of PGCR fetch promises with metadata
     const pgcrPromises = batch.map(activity => {
       const instanceId = activity.activityDetails?.instanceId;
       if (!instanceId) {
-        console.warn('[DEBUG] Activity missing instanceId:', activity);
+        if (environment.debug) {
+          console.warn('[DEBUG] Activity missing instanceId:', activity);
+        }
         return null;
       }
       
@@ -1676,22 +1699,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         
         // Enhanced debug logging for PGCR entries
         if (!pgcr.entries || !Array.isArray(pgcr.entries) || pgcr.entries.length === 0) {
-          console.warn(`[DEBUG] PGCR ${instanceId} has no entries (undefined or empty). Marking as unavailable.`);
+          if (environment.debug) {
+            console.warn(`[DEBUG] PGCR ${instanceId} has no entries (undefined or empty). Marking as unavailable.`);
+          }
           validatedActivities.push({
             ...activity,
             pgcrUnavailable: true
           });
           return;
         }
-        console.log(`[DEBUG] Processing PGCR ${instanceId}:`, {
-          entries: pgcr.entries.map((e: any) => ({
-            membershipId: e.player?.destinyUserInfo?.membershipId,
-            characterId: e.characterId,
-            displayName: e.player?.destinyUserInfo?.displayName,
-            membershipType: e.player?.destinyUserInfo?.membershipType,
-            platform: this.getPlatformName(e.player?.destinyUserInfo?.membershipType)
-          }))
-        });
+        if (environment.debug) {
+          console.log(`[DEBUG] Processing PGCR ${instanceId}:`, {
+            entries: pgcr.entries.map((e: any) => ({
+              membershipId: e.player?.destinyUserInfo?.membershipId,
+              characterId: e.characterId,
+              displayName: e.player?.destinyUserInfo?.displayName,
+              membershipType: e.player?.destinyUserInfo?.membershipType,
+              platform: this.getPlatformName(e.player?.destinyUserInfo?.membershipType)
+            }))
+          });
+        }
 
         // Try multiple matching strategies
         const playerInPgcr = pgcr.entries.some((entry: PGCREntry) => {
@@ -2010,6 +2037,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           existingStatus.displayName,
           existingStatus.platform,
           character.game,
+          character.membershipType,
           'fetching-activities',
           `Fetching ${character.game} activities for ${existingStatus.displayName}...`
         );
@@ -2280,6 +2308,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         player.displayName,
         platform,
         game,
+        player.membershipType,
         'displaying-activities',
         `Displaying ${game} activities for ${player.displayName}...`
       );
