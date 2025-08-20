@@ -271,7 +271,7 @@
                     <div class="w-48 h-6 bg-slate-700 rounded animate-pulse"></div>
                   </div>
                   <div class="flex flex-wrap gap-6">
-                    <div class="flex-1 min-w-[220px]">
+                    <div class="flex-1 min-w-[300px]">
                       <div class="flex items-center mb-2 gap-3">
                         <div class="w-20 h-20 bg-slate-700 rounded animate-pulse"></div>
                         <div class="w-32 h-6 bg-slate-700 rounded animate-pulse"></div>
@@ -300,7 +300,7 @@
                     <div class="w-48 h-6 bg-slate-700 rounded animate-pulse"></div>
                   </div>
                   <div class="flex flex-wrap gap-6">
-                    <div class="flex-1 min-w-[220px]">
+                    <div class="flex-1 min-w-[300px]">
                       <div class="flex items-center mb-2 gap-3">
                         <div class="w-20 h-20 bg-slate-700 rounded animate-pulse"></div>
                         <div class="w-32 h-6 bg-slate-700 rounded animate-pulse"></div>
@@ -331,7 +331,7 @@
                     <span class="text-slate-400">({{ account.displayName }} - {{ account.platform }})</span>
                   </div>
                   <div class="flex flex-wrap gap-6">
-                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[220px]">
+                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[300px]">
                       <div class="flex items-center mb-2 gap-3">
                         <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
                           <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
@@ -350,7 +350,7 @@
                            <!-- Character Class Icon (Hunter, Titan, Warlock) -->
                            <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                            <!-- Timestamp Link -->
-                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
+                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
                              {{ formatTime(activity.period) }}
                            </a>
                            <!-- Account Name -->
@@ -376,7 +376,7 @@
                     <span class="text-slate-400">({{ account.displayName }} - {{ account.platform }})</span>
                   </div>
                   <div class="flex flex-wrap gap-6">
-                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[220px]">
+                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[300px]">
                       <div class="flex items-center mb-2 gap-3">
                         <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
                           <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
@@ -395,7 +395,7 @@
                            <!-- Character Class Icon (Hunter, Titan, Warlock) -->
                            <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                            <!-- Timestamp Link -->
-                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
+                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
                              {{ formatTime(activity.period) }}
                            </a>
                            <!-- Account Name -->
