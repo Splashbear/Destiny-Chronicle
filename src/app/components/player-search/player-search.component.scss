@@ -788,7 +788,6 @@ button {
   height: 32px;
   fill: #fff !important;
   color: #fff !important;
-  filter: drop-shadow(0 0 8px #fff) drop-shadow(0 0 2px #00f2ff);
   border-radius: 6px;
   background: rgba(255,255,255,0.08);
 }
@@ -828,7 +827,6 @@ img[src*="class-"] {
   color: var(--destiny-gold) !important;
   background: rgba(245, 197, 66, 0.12) !important;
   border-bottom: 2px solid var(--destiny-gold) !important;
-  box-shadow: 0 0 8px 2px rgba(245, 197, 66, 0.5), 0 2px 8px 0 rgba(0,0,0,0.15);
   z-index: 2;
 }
 
@@ -837,5 +835,4 @@ img[src*="class-"] {
   color: #60a5fa !important;
   background: rgba(96, 165, 250, 0.12) !important;
   border-bottom: 2px solid #60a5fa !important;
-  box-shadow: 0 0 8px 2px rgba(96, 165, 250, 0.5), 0 2px 8px 0 rgba(0,0,0,0.10);
 } 
