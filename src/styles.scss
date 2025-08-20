@@ -121,3 +121,249 @@ img, video, canvas, svg {
     background: #666;
   }
 }
+
+/* Cross-browser compatibility */
+@supports not (display: grid) {
+  .grid {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  
+  .grid > * {
+    flex: 1 1 auto;
+  }
+}
+
+/* Firefox scrollbar styling */
+@-moz-document url-prefix() {
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #1e293b;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+  }
+}
+
+/* Safari-specific fixes */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  .glass-effect {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+}
+
+/* IE11 and older Edge support */
+@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+  .flex {
+    display: -ms-flexbox;
+  }
+  
+  .grid {
+    display: -ms-grid;
+  }
+}
+
+/* Mobile-First Responsive Design */
+@media (max-width: 640px) {
+  /* Mobile-optimized spacing */
+  .px-4 {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  
+  .py-6 {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+  
+  .gap-6 {
+    gap: 1rem;
+  }
+  
+  .mb-6 {
+    margin-bottom: 1rem;
+  }
+  
+  /* Mobile-optimized text sizes */
+  .text-xl {
+    font-size: 1.125rem;
+  }
+  
+  .text-2xl {
+    font-size: 1.5rem;
+  }
+  
+  /* Mobile-optimized button styles */
+  .d2-btn {
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border-radius: 0.5rem;
+  }
+  
+  /* Mobile-optimized form elements */
+  input, select, button {
+    min-height: 44px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Mobile-optimized card layouts */
+  .bg-slate-800\/95 {
+    padding: 1rem;
+  }
+  
+  /* Mobile-optimized grid layouts */
+  .grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+  
+  /* Mobile-optimized spacing for activity cards */
+  .space-y-6 > * + * {
+    margin-top: 1rem;
+  }
+  
+  .mb-8 {
+    margin-bottom: 1.5rem;
+  }
+  
+  .p-4 {
+    padding: 1rem;
+  }
+  
+  /* Mobile-optimized icon sizes */
+  .w-6.h-6 {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+  
+  .w-20.h-20 {
+    width: 4rem;
+    height: 4rem;
+  }
+  
+  /* Mobile-optimized touch interactions */
+  button, a, input, select {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-optimized scrolling */
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Mobile-optimized focus states */
+  :focus-visible {
+    outline: 3px solid var(--destiny-gold);
+    outline-offset: 2px;
+  }
+  
+  /* Mobile-optimized hover states (disabled on touch devices) */
+  @media (hover: none) and (pointer: coarse) {
+    .hover\:bg-slate-700:hover {
+      background-color: transparent;
+    }
+    
+    .hover\:bg-yellow-500:hover {
+      background-color: rgb(234 179 8);
+    }
+    
+    .hover\:bg-blue-500:hover {
+      background-color: rgb(59 130 246);
+    }
+  }
+}
+
+/* Tablet optimizations */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .px-4 {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .py-6 {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+  
+  .gap-6 {
+    gap: 1.5rem;
+  }
+  
+  .mb-6 {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* Favoriting suggestion notification styles */
+.favoriting-suggestion {
+  animation: slideInRight 0.3s ease-out;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  border-left: 4px solid var(--destiny-gold);
+}
+
+.favoriting-suggestion button {
+  transition: all 0.2s ease;
+}
+
+.favoriting-suggestion button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Mobile optimization for notifications */
+@media (max-width: 640px) {
+  .favoriting-suggestion {
+    right: 1rem;
+    left: 1rem;
+    max-width: none;
+  }
+}
+
+/* PGCR Link Styling */
+.pgcr-link {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pgcr-link:hover {
+  text-decoration-thickness: 2px;
+  transform: translateY(-1px);
+}
+
+/* Activity row link improvements */
+.activity-row a {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.activity-row a:hover {
+  text-decoration-thickness: 2px;
+  transform: translateY(-1px);
+}

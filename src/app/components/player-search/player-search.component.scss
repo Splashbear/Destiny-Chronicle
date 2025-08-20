@@ -7,6 +7,47 @@
   color: #ffffff;
 }
 
+/* Mobile-First Responsive Design */
+@media (max-width: 640px) {
+  .player-search-container {
+    padding: 1rem;
+  }
+  
+  /* Ensure minimum touch target size (44px) for mobile */
+  button, input, select {
+    min-height: 44px;
+  }
+  
+  /* Improve mobile form spacing */
+  .search-form {
+    gap: 0.75rem;
+  }
+  
+  /* Stack form elements vertically on mobile */
+  .form-group {
+    min-width: 100%;
+  }
+  
+  /* Mobile-optimized button sizing */
+  .d2-btn {
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    border-radius: 0.5rem;
+  }
+  
+  /* Mobile tab styling */
+  .d2-tab {
+    width: 100%;
+    text-align: center;
+    border-radius: 0.5rem;
+    margin-bottom: 0.25rem;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+
 .search-section {
   background-color: rgba(0, 0, 0, 0.5);
   border-radius: 8px;
@@ -144,6 +185,18 @@ button {
   background: #232b36;
   border-radius: 6px;
   padding: 0.5rem 1rem;
+  
+  .platform-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  
+  img[src*="class-"] {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
 }
 
 .activity-time {
@@ -727,10 +780,7 @@ button {
 
 .activity-row img:not(.platform-icon):not([src*="class-"]),
 .flex.items-center.mb-2.gap-3 img.w-8.h-8:not(.platform-icon):not([src*="class-"]) {
-  box-shadow: 0 0 8px 2px #fff, 0 0 2px #00f2ff;
-  background: rgba(255,255,255,0.08);
-  border-radius: 6px;
-  filter: brightness(1.2) sepia(1) hue-rotate(10deg) saturate(5) contrast(1.2);
+  /* Glow effect removed - icons now display normally */
 }
 
 .activity-icon svg {

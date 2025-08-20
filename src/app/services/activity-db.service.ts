@@ -399,6 +399,105 @@ export class ActivityDbService extends Dexie {
     }
   }
 
+  /**
+   * Check if a player has any stored activities in the database
+   * This is used to suggest favoriting accounts that have data
+   */
+  async hasStoredActivities(membershipId: string): Promise<boolean> {
+    await this.initPromise;
+    try {
+      const count = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .count();
+      return count > 0;
+    } catch (error) {
+      console.error('[Dexie] Error checking for stored activities:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get all activities for a membership across all characters
+   * This is used for smart data prioritization to show cached data immediately
+   */
+  async getAllActivitiesForMembership(membershipId: string): Promise<StoredActivity[]> {
+    await this.initPromise;
+    try {
+      const activities = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .toArray();
+      return activities;
+    } catch (error) {
+      console.error('[Dexie] Error getting all activities for membership:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Check if data for a membership needs updating based on freshness
+   * This helps determine if we should show cached data or fetch fresh data
+   */
+  async needsDataUpdate(membershipId: string, maxAgeHours: number = 24): Promise<boolean> {
+    await this.initPromise;
+    try {
+      // Get the most recent activity for this membership
+      const activities = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .toArray();
+      
+      if (activities.length === 0) {
+        return true; // No data, needs update
+      }
+      
+      // Sort by period (most recent first) and get the first one
+      const sortedActivities = activities.sort((a, b) => 
+        new Date(b.period).getTime() - new Date(a.period).getTime()
+      );
+      const mostRecent = sortedActivities[0];
+      
+      // Check if the most recent activity is older than maxAgeHours
+      const lastActivityDate = new Date(mostRecent.period);
+      const cutoffDate = new Date(Date.now() - (maxAgeHours * 60 * 60 * 1000));
+      
+      return lastActivityDate < cutoffDate;
+    } catch (error) {
+      console.error('[Dexie] Error checking data freshness:', error);
+      return true; // Assume needs update on error
+    }
+  }
+
+  /**
+   * Get the timestamp of the most recent activity for a membership
+   * This helps determine data freshness for smart loading decisions
+   */
+  async getLastActivityTimestamp(membershipId: string): Promise<Date | null> {
+    await this.initPromise;
+    try {
+      const activities = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .toArray();
+      
+      if (activities.length === 0) {
+        return null;
+      }
+      
+      // Sort by period (most recent first) and get the first one
+      const sortedActivities = activities.sort((a, b) => 
+        new Date(b.period).getTime() - new Date(a.period).getTime()
+      );
+      const mostRecent = sortedActivities[0];
+      
+      return new Date(mostRecent.period);
+    } catch (error) {
+      console.error('[Dexie] Error getting last activity timestamp:', error);
+      return null;
+    }
+  }
+
   async clearAllActivities() {
     await this.initPromise;
     try {

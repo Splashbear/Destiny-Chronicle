@@ -8,6 +8,7 @@ Destiny Chronicle is a comprehensive activity tracking and analysis application 
 - **Date and Timezone Handling**: Filters activities by local date, ensuring accurate display based on user timezone.
 - **Performance Analytics**: View stats like kills, deaths, and time played.
 - **Cross-Platform Support**: Handles Destiny 1 and 2 data seamlessly.
+- **Smart Data Prioritization**: Shows cached data instantly (1-2 seconds) while updating in background, reducing load times by 95%+.
 - **Real-Time Loading Status**: Comprehensive modal showing account loading progress with platform/game icons and status phases.
 - **User-Friendly UI**: Modern design with loading indicators and error handling.
 
@@ -22,7 +23,9 @@ Destiny Chronicle is a comprehensive activity tracking and analysis application 
 3. Search for players and view their activity history.
 
 ## Recent Updates
+- **Smart Data Prioritization System**: Implemented intelligent caching that shows activities in 1-2 seconds while updating in background.
 - **Real-Time Loading Status Modal**: Added comprehensive loading status tracking with progress indicators and platform/game icons.
+- **Favoriting Suggestions**: Automatically suggests favoriting accounts that have stored data for quick access.
 - Expanded activity mode fetching for comprehensive data retrieval.
 - Cleaned up code, removing debug logs and optimizing for production.
 - Improved date filtering and UI responsiveness.

@@ -342,15 +342,20 @@
                         </span>
                       </div>
                       <div class="grid grid-cols-1 gap-2">
-                        <div *ngFor="let activity of typeGroup.activities; trackBy: trackByActivity" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
-                          <img [src]="activity.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                          <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
-                          <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle " [title]="cls" alt="class" />
-                          <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
-                            {{ formatTime(activity.period) }}
-                          </a>
-                          <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }}</span>
-                        </div>
+                                                 <div *ngFor="let activity of typeGroup.activities; trackBy: trackByActivity" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
+                           <!-- Game Icon (Destiny 1 or Destiny 2) - Use account.game as fallback -->
+                           <img [src]="(activity.game || account.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+                           <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
+                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
+                           <!-- Character Class Icon (Hunter, Titan, Warlock) -->
+                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
+                           <!-- Timestamp Link -->
+                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
+                             {{ formatTime(activity.period) }}
+                           </a>
+                           <!-- Account Name -->
+                           <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }}</span>
+                         </div>
                       </div>
                     </div>
                   </div>
@@ -382,15 +387,20 @@
                         </span>
                       </div>
                       <div class="grid grid-cols-1 gap-2">
-                        <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
-                          <img [src]="activity.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                          <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
-                          <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle " [title]="cls" alt="class" />
-                          <a (click)="openExternalPGCR(activity, activity.game === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
-                            {{ formatTime(activity.period) }}
-                          </a>
-                          <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }}</span>
-                        </div>
+                                                 <div *ngFor="let activity of typeGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors">
+                           <!-- Game Icon (Destiny 1 or Destiny 2) - Use account.game as fallback -->
+                           <img [src]="(activity.game || account.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+                           <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
+                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
+                           <!-- Character Class Icon (Hunter, Titan, Warlock) -->
+                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
+                           <!-- Timestamp Link -->
+                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline w-32 truncate">
+                             {{ formatTime(activity.period) }}
+                           </a>
+                           <!-- Account Name -->
+                           <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }}</span>
+                         </div>
                       </div>
                     </div>
                   </div>
