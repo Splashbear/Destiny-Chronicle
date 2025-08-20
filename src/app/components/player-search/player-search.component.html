@@ -217,8 +217,10 @@
         </div>
              </div>
        
-       <!-- Main Content: Yearly Activity Cards -->
-       <div class="flex-1 min-w-0">
+       <!-- Main Content Area with Right Sidebar -->
+       <div class="flex-1 min-w-0 flex flex-col xl:flex-row gap-8">
+         <!-- Main Content: Yearly Activity Cards -->
+         <div class="flex-1 min-w-0">
          <!-- Tab Navigation -->
          <div class="mb-6">
            <div class="flex space-x-4 border-b border-slate-700">
@@ -813,8 +815,8 @@
                        </div>
          </div>
        </div>
-       
-       <!-- Right Sidebar: On This Day -->
+         
+         <!-- Right Sidebar: On This Day -->
        <div class="xl:w-80 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">
         <!-- On This Day Section -->
         <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
@@ -843,9 +845,10 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
+       </div>
+     </div>
+   </div>
+ </div>
 
 <!-- Favorites Modal -->
 <div class="modal" [class.show]="showFavoritesModal">
