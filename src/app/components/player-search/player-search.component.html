@@ -215,26 +215,27 @@
             </button>
           </div>
         </div>
-      </div>
-                    <!-- Main Content: Yearly Activity Cards -->
-        <div class="flex-1 min-w-0">
-        <!-- Tab Navigation -->
-        <div class="mb-6">
-          <div class="flex space-x-4 border-b border-slate-700">
-            <button (click)="onTabChange('activities')" 
-                    class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'activities'}">
-              Activities
-            </button>
-            <button (click)="onTabChange('firsts')"
-                    class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'firsts'}">
-              Guardian Firsts
-            </button>
-            <button (click)="onTabChange('titles')"
-                    class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'titles'}">
-              Titles
-            </button>
-          </div>
-        </div>
+             </div>
+       
+       <!-- Main Content: Yearly Activity Cards -->
+       <div class="flex-1 min-w-0">
+         <!-- Tab Navigation -->
+         <div class="mb-6">
+           <div class="flex space-x-4 border-b border-slate-700">
+             <button (click)="onTabChange('activities')" 
+                     class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'activities'}">
+               Activities
+             </button>
+             <button (click)="onTabChange('firsts')"
+                     class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'firsts'}">
+               Guardian Firsts
+             </button>
+             <button (click)="onTabChange('titles')"
+                     class="d2-tab" [ngClass]="{'d2-tab-active': activeTab === 'titles'}">
+               Titles
+             </button>
+           </div>
+         </div>
 
         <!-- Activities Tab -->
         <div *ngIf="activeTab === 'activities'">
@@ -809,13 +810,12 @@
                   </ng-container>
                 </div>
               </div>
-            </div>
-          </div>
-
-
-      </div>
-                    <!-- Right Sidebar: On This Day -->
-        <div class="xl:w-80 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">
+                       </div>
+         </div>
+       </div>
+       
+       <!-- Right Sidebar: On This Day -->
+       <div class="xl:w-80 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">
         <!-- On This Day Section -->
         <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
           <h3 class="text-lg font-semibold text-white mb-4">On This Day</h3>
