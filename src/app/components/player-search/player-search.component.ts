@@ -702,6 +702,37 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Close modal when clicking on backdrop (outside the modal content)
+   */
+  closeModalOnBackdrop(event: Event): void {
+    // Only close if the click was on the modal backdrop itself, not its children
+    if (event.target === event.currentTarget) {
+      this.showPlatformPicker = false;
+      this.showFavoritesModal = false;
+    }
+  }
+
+  /**
+   * Confirm before clearing cached data
+   */
+  confirmClearData(): void {
+    const confirmed = confirm(
+      'Are you sure you want to clear all cached data?\n\n' +
+      'This will remove:\n' +
+      '• All stored activity history\n' +
+      '• All cached character data\n' +
+      '• All favorite accounts\n' +
+      '• All Guardian Firsts data\n' +
+      '• All Titles data\n\n' +
+      'You will need to re-download all data on your next visit.'
+    );
+    
+    if (confirmed) {
+      this.clearAllActivitiesFromDb();
+    }
+  }
+
+  /**
    * Updates the loading status for a specific account
    */
   private updateAccountLoadingStatus(

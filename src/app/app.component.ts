@@ -17,6 +17,7 @@ import { SharedStateService } from './services/shared-state.service';
 })
 export class AppComponent {
   title = 'Destiny Chronicle';
+  isDarkMode = true; // Default to dark mode
 
   constructor(
     private manifestService: DestinyManifestService,
@@ -34,6 +35,27 @@ export class AppComponent {
       if (state) {
         this.sharedState.pendingShare = state;
       }
+    }
+
+    // Initialize theme from localStorage
+    const savedTheme = localStorage.getItem('theme');
+    this.isDarkMode = savedTheme !== 'light';
+    this.applyTheme();
+  }
+
+  toggleTheme(): void {
+    this.isDarkMode = !this.isDarkMode;
+    this.applyTheme();
+    localStorage.setItem('theme', this.isDarkMode ? 'dark' : 'light');
+  }
+
+  private applyTheme(): void {
+    if (this.isDarkMode) {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
     }
   }
 }

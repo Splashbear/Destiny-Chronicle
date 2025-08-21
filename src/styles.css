@@ -16,6 +16,39 @@
     @apply bg-destiny-bg-primary text-destiny-text-primary font-destiny antialiased;
     @apply selection:bg-destiny-accent-primary/30 selection:text-destiny-text-primary;
   }
+
+  /* Light mode overrides */
+  html.light body {
+    @apply bg-white text-gray-900;
+  }
+  
+  html.light .bg-slate-900 {
+    @apply bg-gray-50;
+  }
+  
+  html.light .bg-slate-800 {
+    @apply bg-white border border-gray-200;
+  }
+  
+  html.light .text-white {
+    @apply text-gray-900;
+  }
+  
+  html.light .text-slate-400 {
+    @apply text-gray-600;
+  }
+  
+  html.light .text-slate-300 {
+    @apply text-gray-700;
+  }
+  
+  html.light .border-slate-600 {
+    @apply border-gray-300;
+  }
+  
+  html.light .border-slate-700 {
+    @apply border-gray-200;
+  }
   
   /* Enhanced focus styles for accessibility */
   *:focus-visible {
