@@ -407,7 +407,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     totalSeals: 0,
     perType: {}
   };
-  private filteredActivitiesForDate: ActivityWithMembership[] = [];
+  filteredActivitiesForDate: ActivityWithMembership[] = [];
   private currentLoadToken = 0;
   /** Incrementing token for stats calculations to avoid stale calls resetting the spinner late. */
   private statsCalcToken = 0;
