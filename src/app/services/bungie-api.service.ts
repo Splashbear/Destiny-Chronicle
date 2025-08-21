@@ -122,11 +122,23 @@ export class BungieApiService {
     });
   }
 
+  private getHeadersForProxy(): HttpHeaders {
+    // When using CORS proxy, we need to ensure headers are properly formatted
+    // Some proxies are sensitive to header formatting
+    return new HttpHeaders({
+      'X-API-Key': this.API_KEY,
+      'User-Agent': 'DestinyChronicle/1.0',
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    });
+  }
+
   searchD1Player(searchTerm: string, membershipType: number): Observable<PlayerSearchResult[]> {
     const url = `${this.D1_BASE_URL}/Destiny/SearchDestinyPlayer/${membershipType}/${encodeURIComponent(searchTerm)}/`;
     const finalUrl = this.buildUrl(url);
+    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
     
-    return this.http.get<any>(finalUrl, { headers: this.getHeaders() }).pipe(
+    return this.http.get<any>(finalUrl, { headers }).pipe(
       map(response => {
         if (response.ErrorCode === 1) {
           return response.Response.map((player: any) => ({
@@ -137,10 +149,18 @@ export class BungieApiService {
         }
         return [];
       }),
-      catchError(error => {
-        console.error('Error in D1 search:', error);
-        return of([]);
-      })
+             catchError(error => {
+         console.error('Error in D1 search:', {
+           error,
+           status: error.status,
+           statusText: error.statusText,
+           url: error.url,
+           message: error.message,
+           usingProxy: this.shouldUseCorsProxy(),
+           userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other'
+         });
+         return of([]);
+       })
     );
   }
 
@@ -160,7 +180,8 @@ export class BungieApiService {
     const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodedTerm}/`;
     const finalUrl = this.buildUrl(url);
     console.log('[DEBUG] Final URL:', finalUrl);
-    return this.http.get<BungieResponse<PlayerSearchResult[]>>(finalUrl, { headers: this.getHeaders() });
+    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
+    return this.http.get<BungieResponse<PlayerSearchResult[]>>(finalUrl, { headers });
   }
 
   getLinkedProfiles(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
@@ -180,9 +201,10 @@ export class BungieApiService {
   getProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=100,200`;
     const finalUrl = this.buildUrl(url);
+    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
     return this.http.get(
       finalUrl,
-      { headers: this.getHeaders() }
+      { headers }
     ).pipe(
       catchError(error => {
         console.error('Error fetching profile:', error);
@@ -232,10 +254,11 @@ export class BungieApiService {
 
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`;
     const finalUrl = this.buildUrl(url);
+    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
     return this.http.get(
       finalUrl,
       {
-        headers: this.getHeaders(),
+        headers,
         params
       }
     ).pipe(
