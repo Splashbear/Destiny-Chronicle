@@ -24,6 +24,22 @@
     /* Light theme is now active */
   }
 
+  /* CSS Custom Properties for Light Theme */
+  html.light,
+  body.light-theme {
+    --destiny-bg-primary: #f8fafc;
+    --destiny-bg-secondary: #e2e8f0;
+    --destiny-bg-tertiary: #cbd5e1;
+    --destiny-text-primary: #1e293b;
+    --destiny-text-secondary: #475569;
+    --destiny-text-tertiary: #64748b;
+    --destiny-border-primary: #cbd5e1;
+    --destiny-border-focus: #3b82f6;
+    --destiny-bg-input: #ffffff;
+    --destiny-bg-button: #3b82f6;
+    --destiny-bg-button-hover: #2563eb;
+  }
+
   /* Light theme body and base styles */
   html.light body,
   body.light-theme {
@@ -55,6 +71,24 @@
   html.light .bg-slate-800\/50,
   body.light-theme .bg-slate-800\/50 {
     background-color: rgba(226, 232, 240, 0.5) !important;
+  }
+
+  /* Critical light theme overrides for main page elements */
+  html.light .destiny-bg-gradient-dark,
+  body.light-theme .destiny-bg-gradient-dark {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+  }
+
+  html.light .glass-effect,
+  body.light-theme .glass-effect {
+    background: rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(10px) !important;
+    border-color: rgba(203, 213, 225, 0.3) !important;
+  }
+
+  html.light .destiny-bg-gradient,
+  body.light-theme .destiny-bg-gradient {
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 50%, #94a3b8 100%) !important;
   }
   
   /* Light theme text overrides */
