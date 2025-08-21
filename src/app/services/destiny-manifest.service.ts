@@ -12,6 +12,22 @@ export class DestinyManifestService {
   private titleDefs: { [key: string]: any } = {};
   private presentationNodes: { [key: string]: any } = {};
   private manifestLoaded = new BehaviorSubject<boolean>(false);
+  
+  // CORS proxy for GitHub Pages deployment
+  private readonly CORS_PROXY = 'https://corsproxy.io/?';
+
+  private shouldUseCorsProxy(): boolean {
+    // Use CORS proxy when hosted on GitHub Pages or other external domains
+    const hostname = window.location.hostname;
+    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+  }
+
+  private buildUrl(url: string): string {
+    if (this.shouldUseCorsProxy()) {
+      return this.CORS_PROXY + encodeURIComponent(url);
+    }
+    return url;
+  }
 
   constructor(
     private http: HttpClient,
@@ -23,16 +39,16 @@ export class DestinyManifestService {
   async loadManifest() {
     try {
       // Step 1: Get manifest metadata
-      const manifestMeta: any = await firstValueFrom(this.http.get('https://www.bungie.net/Platform/Destiny2/Manifest/'));
+      const manifestMeta: any = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net/Platform/Destiny2/Manifest/')));
       const enPath = manifestMeta.Response.jsonWorldComponentContentPaths.en;
       if (!enPath) {
         throw new Error('Manifest metadata missing en path');
       }
       // Step 2: Get activity, title, and presentation node definitions
       const [activityDefsRaw, titleDefsRaw, presentationNodesRaw] = await Promise.all([
-        firstValueFrom(this.http.get('https://www.bungie.net' + enPath.DestinyActivityDefinition)),
-        firstValueFrom(this.http.get('https://www.bungie.net' + enPath.DestinyRecordDefinition)),
-        firstValueFrom(this.http.get('https://www.bungie.net' + enPath.DestinyPresentationNodeDefinition))
+        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyActivityDefinition))),
+        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyRecordDefinition))),
+        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyPresentationNodeDefinition)))
       ]);
       // Defensive: handle both possible structures
       this.activityDefs = (activityDefsRaw as any).DestinyActivityDefinition || activityDefsRaw;

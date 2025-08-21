@@ -74,8 +74,24 @@ export class BungieApiService {
   private readonly API_KEY = environment.bungie.API_KEY;
   private readonly D1_BASE_URL = 'https://www.bungie.net/d1/Platform';
   private readonly D2_BASE_URL = 'https://www.bungie.net/Platform';
+  
+  // CORS proxy for GitHub Pages deployment
+  private readonly CORS_PROXY = 'https://corsproxy.io/?';
 
   constructor(private http: HttpClient) {}
+
+  private shouldUseCorsProxy(): boolean {
+    // Use CORS proxy when hosted on GitHub Pages or other external domains
+    const hostname = window.location.hostname;
+    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+  }
+
+  private buildUrl(url: string): string {
+    if (this.shouldUseCorsProxy()) {
+      return this.CORS_PROXY + encodeURIComponent(url);
+    }
+    return url;
+  }
 
   private getHeaders(): HttpHeaders {
     const origin = window.location.origin || 'http://localhost:4200';
@@ -90,8 +106,9 @@ export class BungieApiService {
 
   searchD1Player(searchTerm: string, membershipType: number): Observable<PlayerSearchResult[]> {
     const url = `${this.D1_BASE_URL}/Destiny/SearchDestinyPlayer/${membershipType}/${encodeURIComponent(searchTerm)}/`;
+    const finalUrl = this.buildUrl(url);
     
-    return this.http.get<any>(url, { headers: this.getHeaders() }).pipe(
+    return this.http.get<any>(finalUrl, { headers: this.getHeaders() }).pipe(
       map(response => {
         if (response.ErrorCode === 1) {
           return response.Response.map((player: any) => ({
@@ -123,14 +140,16 @@ export class BungieApiService {
     const encodedTerm = encodeURIComponent(searchTerm);
     console.log('[DEBUG] Encoded search term:', encodedTerm);
     const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodedTerm}/`;
-    console.log('[DEBUG] Final URL:', url);
-    return this.http.get<BungieResponse<PlayerSearchResult[]>>(url, { headers: this.getHeaders() });
+    const finalUrl = this.buildUrl(url);
+    console.log('[DEBUG] Final URL:', finalUrl);
+    return this.http.get<BungieResponse<PlayerSearchResult[]>>(finalUrl, { headers: this.getHeaders() });
   }
 
   getLinkedProfiles(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/LinkedProfiles/?getAllMemberships=true`;
+    const finalUrl = this.buildUrl(url);
     return this.http.get(
-      url,
+      finalUrl,
       { headers: this.getHeaders() }
     ).pipe(
       catchError(error => {
@@ -141,8 +160,10 @@ export class BungieApiService {
   }
 
   getProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=100,200`;
+    const finalUrl = this.buildUrl(url);
     return this.http.get(
-      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=100,200`,
+      finalUrl,
       { headers: this.getHeaders() }
     ).pipe(
       catchError(error => {
@@ -155,7 +176,8 @@ export class BungieApiService {
   getPlayerTitles(membershipType: number, membershipId: string): Observable<BungieResponse<TitleResponse>> {
     const cacheBuster = Math.floor(Math.random() * 1e9);
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900&_cb=${cacheBuster}`;
-    return this.http.get<BungieResponse<TitleResponse>>(url, {
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<TitleResponse>>(finalUrl, {
       headers: this.getHeaders()
     }).pipe(
       catchError(error => {
@@ -166,8 +188,10 @@ export class BungieApiService {
   }
 
   getD1Profile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
+    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Summary/`;
+    const finalUrl = this.buildUrl(url);
     return this.http.get(
-      `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Summary/`,
+      finalUrl,
       { headers: this.getHeaders() }
     ).pipe(
       catchError(error => {
@@ -188,8 +212,10 @@ export class BungieApiService {
       params.mode = mode;
     }
 
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`;
+    const finalUrl = this.buildUrl(url);
     return this.http.get(
-      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`,
+      finalUrl,
       {
         headers: this.getHeaders(),
         params
@@ -217,8 +243,9 @@ export class BungieApiService {
     };
 
     const url = `${this.D1_BASE_URL}/Destiny/Stats/ActivityHistory/${membershipType}/${membershipId}/${characterId}/`;
+    const finalUrl = this.buildUrl(url);
 
-    return this.http.get<BungieResponse<any>>(url, {
+    return this.http.get<BungieResponse<any>>(finalUrl, {
       headers: this.getHeaders(),
       params
     }).pipe(
@@ -405,6 +432,7 @@ export class BungieApiService {
 
   searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<BungieResponse<PlayerSearchResult[]>> {
     const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
+    const finalUrl = this.buildUrl(url);
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
       'User-Agent': 'DestinyChronicle/1.0',
@@ -415,11 +443,11 @@ export class BungieApiService {
       displayNameCode: parseInt(displayNameCode.toString(), 10)
     };
     console.log('[DEBUG] Bungie Name Search Request:', {
-      url,
+      url: finalUrl,
       headers: headers.keys().reduce((acc, key) => ({ ...acc, [key]: headers.get(key) }), {}),
       body
     });
-    return this.http.post<BungieResponse<PlayerSearchResult[]>>(url, body, { headers }).pipe(
+    return this.http.post<BungieResponse<PlayerSearchResult[]>>(finalUrl, body, { headers }).pipe(
       tap(response => console.log('[DEBUG] Bungie Name Search Response:', response)),
       map(response => {
         if (response.ErrorCode === 1) {
@@ -436,8 +464,10 @@ export class BungieApiService {
   }
 
   getActivityCount(membershipType: number, membershipId: string, characterId: string): Observable<number> {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/?count=1`;
+    const finalUrl = this.buildUrl(url);
     return this.http.get<any>(
-      `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/?count=1`,
+      finalUrl,
       { headers: this.getHeaders() }
     ).pipe(
       map(response => response.Response?.totalResults ?? 0),
@@ -455,7 +485,8 @@ export class BungieApiService {
    */
   getD1PGCR(activityId: string): Observable<any> {
     const url = `${this.D1_BASE_URL}/Destiny/Stats/PostGameCarnageReport/${activityId}/`;
-    return this.http.get(url).pipe(
+    const finalUrl = this.buildUrl(url);
+    return this.http.get(finalUrl).pipe(
       map((response: any) => response.Response),
       catchError(this.handleError)
     );
@@ -521,7 +552,8 @@ export class BungieApiService {
    */
   getPresentationNodeProgressions(membershipType: number, membershipId: string): Observable<any> {
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=1005`;
-    return this.http.get<BungieResponse<any>>(url, {
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, {
       headers: this.getHeaders()
     }).pipe(
       catchError(error => {
@@ -539,12 +571,13 @@ export class BungieApiService {
    */
   searchUsersPrefix(term: string): Observable<BungieResponse<any>> {
     const url = `${this.D2_BASE_URL}/User/Search/GlobalName/0/`;
+    const finalUrl = this.buildUrl(url);
     const body = { displayNamePrefix: term };
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
       'Content-Type': 'application/json'
     });
-    return this.http.post<BungieResponse<any>>(url, body, { headers }).pipe(
+    return this.http.post<BungieResponse<any>>(finalUrl, body, { headers }).pipe(
       catchError(err => {
         console.error('[BungieApi] Error in searchUsersPrefix:', err);
         return throwError(() => err);
@@ -559,7 +592,8 @@ export class BungieApiService {
    */
   getMembershipData(bungieNetUserId: string | number): Observable<BungieResponse<any>> {
     const url = `${this.D2_BASE_URL}/User/GetMembershipsById/${bungieNetUserId}/254/`;
-    return this.http.get<BungieResponse<any>>(url, { headers: this.getHeaders() }).pipe(
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
       catchError(err => {
         console.error('[BungieApi] Error in getMembershipData:', err);
         return throwError(() => err);
@@ -570,7 +604,8 @@ export class BungieApiService {
   // Fetch both ProfileRecords (900) and CharacterRecords (1000) in a single request – used for achievements & triumphs
   getPlayerRecords(membershipType: number, membershipId: string) {
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900,1000`;
-    return this.http.get<BungieResponse<any>>(url, { headers: this.getHeaders() }).pipe(
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
       catchError(error => {
         console.error('[DEBUG] Error fetching player records (900/1000):', error);
         return throwError(() => error);

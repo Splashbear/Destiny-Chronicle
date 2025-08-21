@@ -1,159 +1,193 @@
 import { Injectable } from '@angular/core';
 
-export interface BrowserCapabilities {
-  supportsIndexedDB: boolean;
-  supportsWebShare: boolean;
-  supportsClipboard: boolean;
-  supportsPromiseAllSettled: boolean;
-  supportsGrid: boolean;
-  supportsFlexbox: boolean;
-  supportsBackdropFilter: boolean;
-  isSafari: boolean;
-  isFirefox: boolean;
-  isEdge: boolean;
+export interface BrowserInfo {
+  name: string;
+  version: string;
   isChrome: boolean;
-  isOpera: boolean;
+  isFirefox: boolean;
+  isSafari: boolean;
+  isEdge: boolean;
   isIE: boolean;
+  isOpera: boolean;
+  isMobile: boolean;
+  isTablet: boolean;
+  isDesktop: boolean;
+  supportsES6: boolean;
+  supportsFetch: boolean;
+  supportsLocalStorage: boolean;
+  supportsIndexedDB: boolean;
+  supportsWebWorkers: boolean;
+  supportsServiceWorkers: boolean;
+  userAgent: string;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class BrowserCompatibilityService {
-  private capabilities: BrowserCapabilities;
+  private browserInfo: BrowserInfo;
 
   constructor() {
-    this.capabilities = this.detectCapabilities();
+    this.browserInfo = this.detectBrowser();
   }
 
-  /**
-   * Get browser capabilities
-   */
-  getCapabilities(): BrowserCapabilities {
-    return this.capabilities;
+  getBrowserInfo(): BrowserInfo {
+    return this.browserInfo;
   }
 
-  /**
-   * Check if a specific feature is supported
-   */
-  supports(feature: keyof BrowserCapabilities): boolean {
-    return this.capabilities[feature];
+  isCompatible(): boolean {
+    // Basic compatibility check
+    return this.browserInfo.supportsES6 && 
+           this.browserInfo.supportsFetch && 
+           this.browserInfo.supportsLocalStorage;
   }
 
-  /**
-   * Detect browser capabilities
-   */
-  private detectCapabilities(): BrowserCapabilities {
+  getCompatibilityWarnings(): string[] {
+    const warnings: string[] = [];
+    
+    if (!this.browserInfo.supportsES6) {
+      warnings.push('Your browser may not support modern JavaScript features');
+    }
+    
+    if (!this.browserInfo.supportsFetch) {
+      warnings.push('Your browser may not support modern network requests');
+    }
+    
+    if (!this.browserInfo.supportsLocalStorage) {
+      warnings.push('Your browser may not support local data storage');
+    }
+    
+    if (this.browserInfo.isIE) {
+      warnings.push('Internet Explorer is not fully supported. Please use a modern browser');
+    }
+    
+    return warnings;
+  }
+
+  getRecommendedBrowser(): string {
+    if (this.browserInfo.isChrome) return 'Chrome (latest)';
+    if (this.browserInfo.isFirefox) return 'Firefox (latest)';
+    if (this.browserInfo.isSafari) return 'Safari (latest)';
+    if (this.browserInfo.isEdge) return 'Edge (latest)';
+    return 'Chrome, Firefox, Safari, or Edge (latest versions)';
+  }
+
+  private detectBrowser(): BrowserInfo {
     const userAgent = navigator.userAgent;
-    const isSafari = /Safari/.test(userAgent) && !/(Chrome\/|Edge\/)/.test(userAgent);
-    const isFirefox = /Firefox/.test(userAgent);
-    const isEdge = /Edge/.test(userAgent);
-    const isChrome = /Chrome/.test(userAgent) && !/Edge/.test(userAgent);
-    const isOpera = /Opera|OPR/.test(userAgent);
-    const isIE = /MSIE|Trident/.test(userAgent);
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isTablet = /iPad|Android(?=.*\bMobile\b)(?=.*\bSafari\b)/i.test(userAgent);
+    
+    let name = 'Unknown';
+    let version = 'Unknown';
+    
+    // Chrome
+    if (userAgent.includes('Chrome') && !userAgent.includes('Edg')) {
+      name = 'Chrome';
+      version = this.extractVersion(userAgent, 'Chrome');
+    }
+    // Edge (Chromium-based)
+    else if (userAgent.includes('Edg')) {
+      name = 'Edge';
+      version = this.extractVersion(userAgent, 'Edg');
+    }
+    // Firefox
+    else if (userAgent.includes('Firefox')) {
+      name = 'Firefox';
+      version = this.extractVersion(userAgent, 'Firefox');
+    }
+    // Safari
+    else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+      name = 'Safari';
+      version = this.extractVersion(userAgent, 'Version');
+    }
+    // Opera
+    else if (userAgent.includes('OPR') || userAgent.includes('Opera')) {
+      name = 'Opera';
+      version = this.extractVersion(userAgent, 'OPR') || this.extractVersion(userAgent, 'Opera');
+    }
+    // Internet Explorer
+    else if (userAgent.includes('MSIE') || userAgent.includes('Trident')) {
+      name = 'Internet Explorer';
+      version = this.extractVersion(userAgent, 'MSIE') || this.extractVersion(userAgent, 'rv');
+    }
 
     return {
-      supportsIndexedDB: this.testIndexedDB(),
-      supportsWebShare: this.testWebShare(),
-      supportsClipboard: this.testClipboard(),
-      supportsPromiseAllSettled: this.testPromiseAllSettled(),
-      supportsGrid: this.testCSSGrid(),
-      supportsFlexbox: this.testFlexbox(),
-      supportsBackdropFilter: this.testBackdropFilter(),
-      isSafari,
-      isFirefox,
-      isEdge,
-      isChrome,
-      isOpera,
-      isIE
+      name,
+      version,
+      isChrome: name === 'Chrome',
+      isFirefox: name === 'Firefox',
+      isSafari: name === 'Safari',
+      isEdge: name === 'Edge',
+      isIE: name === 'Internet Explorer',
+      isOpera: name === 'Opera',
+      isMobile,
+      isTablet,
+      isDesktop: !isMobile && !isTablet,
+      supportsES6: this.supportsES6(),
+      supportsFetch: 'fetch' in window,
+      supportsLocalStorage: 'localStorage' in window,
+      supportsIndexedDB: 'indexedDB' in window,
+      supportsWebWorkers: 'Worker' in window,
+      supportsServiceWorkers: 'serviceWorker' in navigator,
+      userAgent
     };
   }
 
-  /**
-   * Test IndexedDB support
-   */
-  private testIndexedDB(): boolean {
+  private extractVersion(userAgent: string, browserName: string): string {
+    const regex = new RegExp(`${browserName}\\/(\\d+(\\.\\d+)*)`);
+    const match = userAgent.match(regex);
+    return match ? match[1] : 'Unknown';
+  }
+
+  private supportsES6(): boolean {
     try {
-      return !!(window.indexedDB && window.IDBTransaction && window.IDBKeyRange);
+      // Test ES6 features
+      eval('const test = () => {}; const obj = { ...{} }; const arr = [...[]];');
+      return true;
     } catch {
       return false;
     }
   }
 
-  /**
-   * Test Web Share API support
-   */
-  private testWebShare(): boolean {
-    return !!(navigator.share && typeof navigator.share === 'function');
-  }
-
-  /**
-   * Test Clipboard API support
-   */
-  private testClipboard(): boolean {
-    return !!(navigator.clipboard && typeof navigator.clipboard.writeText === 'function');
-  }
-
-  /**
-   * Test Promise.allSettled support
-   */
-  private testPromiseAllSettled(): boolean {
-    return typeof Promise.allSettled === 'function';
-  }
-
-  /**
-   * Test CSS Grid support
-   */
-  private testCSSGrid(): boolean {
-    return CSS.supports('display', 'grid');
-  }
-
-  /**
-   * Test Flexbox support
-   */
-  private testFlexbox(): boolean {
-    return CSS.supports('display', 'flex');
-  }
-
-  /**
-   * Test backdrop-filter support
-   */
-  private testBackdropFilter(): boolean {
-    return CSS.supports('backdrop-filter', 'blur(10px)') || 
-           CSS.supports('-webkit-backdrop-filter', 'blur(10px)');
-  }
-
-  /**
-   * Get browser-specific recommendations
-   */
-  getRecommendations(): string[] {
+  // Get device-specific recommendations
+  getDeviceRecommendations(): string[] {
     const recommendations: string[] = [];
     
-    if (!this.capabilities.supportsIndexedDB) {
-      recommendations.push('Your browser doesn\'t support local storage. Some features may not work properly.');
+    if (this.browserInfo.isMobile) {
+      recommendations.push('Use landscape mode for better viewing on mobile devices');
+      recommendations.push('Consider using the app in a web browser for full features');
     }
     
-    if (!this.capabilities.supportsWebShare) {
-      recommendations.push('Sharing features will use fallback methods (copy to clipboard).');
+    if (this.browserInfo.isTablet) {
+      recommendations.push('Tablet view is optimized for touch interaction');
     }
     
-    if (this.capabilities.isSafari && !this.capabilities.supportsIndexedDB) {
-      recommendations.push('Safari users: Please enable "Develop > Experimental Features > IndexedDB" for full functionality.');
-    }
-    
-    if (this.capabilities.isIE) {
-      recommendations.push('Internet Explorer is not supported. Please use a modern browser.');
+    if (this.browserInfo.isDesktop) {
+      recommendations.push('Desktop view provides the best experience with all features');
     }
     
     return recommendations;
   }
 
-  /**
-   * Check if browser is fully supported
-   */
-  isFullySupported(): boolean {
-    return this.capabilities.supportsIndexedDB && 
-           this.capabilities.supportsFlexbox && 
-           !this.capabilities.isIE;
+  // Check if browser supports specific features
+  supportsFeature(feature: string): boolean {
+    switch (feature) {
+      case 'cors':
+        return 'XMLHttpRequest' in window && 'withCredentials' in new XMLHttpRequest();
+      case 'webgl':
+        try {
+          const canvas = document.createElement('canvas');
+          return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+        } catch {
+          return false;
+        }
+      case 'webp':
+        const canvas = document.createElement('canvas');
+        canvas.width = 1;
+        canvas.height = 1;
+        return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+      default:
+        return false;
+    }
   }
 }
