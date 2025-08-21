@@ -380,7 +380,7 @@ export class ActivityDbService extends Dexie {
       
       for (const activity of activities) {
         if (activity.period) {
-          const year = new Date(activity.period).getUTCFullYear();
+        const year = new Date(activity.period).getUTCFullYear();
           yearsWithCounts[year] = (yearsWithCounts[year] || 0) + 1;
           totalCount++;
         }
@@ -442,21 +442,29 @@ export class ActivityDbService extends Dexie {
   async needsDataUpdate(membershipId: string, maxAgeHours: number = 24): Promise<boolean> {
     await this.initPromise;
     try {
-      // Get the most recent activity for this membership
+      // Check memory cache first for faster response
+      const cacheKey = `${membershipId}_freshness`;
+      const cached = this.getFromCache(this.activitiesCache, cacheKey);
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        const mostRecent = cached[0];
+        const lastActivityDate = new Date(mostRecent.period);
+        const cutoffDate = new Date(Date.now() - (maxAgeHours * 60 * 60 * 1000));
+        return lastActivityDate < cutoffDate;
+      }
+
+      // Fallback to database query
       const activities = await this.activities
         .where('membershipId')
         .equals(membershipId)
+        .reverse() // Most recent first
+        .limit(1) // Only need the most recent
         .toArray();
       
       if (activities.length === 0) {
         return true; // No data, needs update
       }
       
-      // Sort by period (most recent first) and get the first one
-      const sortedActivities = activities.sort((a, b) => 
-        new Date(b.period).getTime() - new Date(a.period).getTime()
-      );
-      const mostRecent = sortedActivities[0];
+      const mostRecent = activities[0];
       
       // Check if the most recent activity is older than maxAgeHours
       const lastActivityDate = new Date(mostRecent.period);
@@ -466,6 +474,68 @@ export class ActivityDbService extends Dexie {
     } catch (error) {
       console.error('[Dexie] Error checking data freshness:', error);
       return true; // Assume needs update on error
+    }
+  }
+
+  /**
+   * Optimized method to get activities with instant memory cache fallback
+   */
+  async getAllActivitiesForMembershipOptimized(membershipId: string): Promise<StoredActivity[]> {
+    await this.initPromise;
+    
+    // Check memory cache first for instant response
+    const cacheKey = `${membershipId}_all`;
+    const cached = this.getFromCache(this.activitiesCache, cacheKey);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      console.log(`Cache hit for ${membershipId}: ${cached.length} activities`);
+      return cached;
+    }
+
+    try {
+      // Query database if not in memory cache
+      const activities = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .toArray();
+      
+      // Sort by period (most recent first) for consistent ordering
+      const sortedActivities = activities.sort((a, b) => 
+        new Date(b.period).getTime() - new Date(a.period).getTime()
+      );
+
+      // Cache in memory for next access
+      this.setInCache(this.activitiesCache, cacheKey, sortedActivities);
+      
+      console.log(`Database query for ${membershipId}: ${sortedActivities.length} activities`);
+      return sortedActivities;
+      
+    } catch (error) {
+      console.error('[Dexie] Error retrieving activities for membership:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Preload favorite accounts' data into memory cache for instant access
+   */
+  async preloadFavoritesCache(): Promise<void> {
+    try {
+      const favorites = await this.getFavorites();
+      console.log(`Preloading cache for ${favorites.length} favorite accounts...`);
+      
+      const preloadPromises = favorites.map(async (favorite) => {
+        // Preload activities into memory cache
+        await this.getAllActivitiesForMembershipOptimized(favorite.membershipId);
+        
+        // Preload freshness check
+        await this.needsDataUpdate(favorite.membershipId, 6); // 6 hour threshold for favorites
+      });
+      
+      await Promise.allSettled(preloadPromises);
+      console.log('Favorites cache preloading completed');
+      
+    } catch (error) {
+      console.error('Error preloading favorites cache:', error);
     }
   }
 
@@ -593,16 +663,16 @@ export class ActivityDbService extends Dexie {
         continue;
       }
 
-          // Check for solo and flawless status
-    let isSolo = false;
-    let isSoloFlawless = false;
-    
+      // Check for solo and flawless status
+      let isSolo = false;
+      let isSoloFlawless = false;
+      
     // Store activity for batch PGCR processing
     if ((game === 'D2' && (type === 'dungeon' || type === 'raid')) || 
         (game === 'D1' && type === 'raid')) {
       // We'll process PGCR data in batch after the loop to reduce individual API calls
       (activity as any).needsPgcrProcessing = true;
-    }
+      }
 
       if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
         firstsByFamily[family] = {
@@ -721,28 +791,28 @@ export class ActivityDbService extends Dexie {
         for (const modeChunk of modeChunks) {
           const modePromises = modeChunk.map(async (mode) => {
             const modeActivities: any[] = [];
-            let page = 0;
-            let hasMore = true;
+          let page = 0;
+          let hasMore = true;
             
-            while (hasMore) {
-              let resp: any;
-              try {
-                resp = await firstValueFrom(
-                  this.bungieService.getD1ActivityHistory(membershipType, membershipId, characterId, mode, page)
-                );
-              } catch (err) {
-                console.warn(`[D1] fetch failed for mode ${mode} page ${page}`, err);
-                break; // stop this mode on error to avoid infinite loop
-              }
+          while (hasMore) {
+            let resp: any;
+            try {
+              resp = await firstValueFrom(
+                this.bungieService.getD1ActivityHistory(membershipType, membershipId, characterId, mode, page)
+              );
+            } catch (err) {
+              console.warn(`[D1] fetch failed for mode ${mode} page ${page}`, err);
+              break; // stop this mode on error to avoid infinite loop
+            }
 
-              const pageActs = resp?.data?.activities || [];
+            const pageActs = resp?.data?.activities || [];
               modeActivities.push(...pageActs);
 
               // Continue while Bungie signals more (prefer Bungie's flag); fallback to page-size heuristic
               const bungieHasMore = resp?.hasMore === true;
               hasMore = bungieHasMore || pageActs.length === pageSize;
-              page++;
-            }
+            page++;
+          }
             
             return modeActivities;
           });

@@ -677,6 +677,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.firstActivityService.clearCache();
     }
     
+    // PERFORMANCE OPTIMIZATION: Preload favorites cache in background
+    // This ensures instant display for returning users
+    this.activityDb.preloadFavoritesCache().catch(error => {
+      console.warn('Favorites cache preload failed:', error);
+    });
+    
     await this.loadAndDisplayFavorites();
     
     // Load pending players from URL if any
@@ -813,13 +819,139 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /**
    * Automatically load and display favorite profiles on app startup
+   * Optimized for instant display with background updates
    */
   async loadAndDisplayFavorites() {
     await this.loadFavorites();
     
     // If we have favorites and no currently selected players, load them automatically
     if (this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0) {
-      await this.loadMultipleFavorites(this.favoriteAccounts);
+      // Use optimized instant loading for favorites
+      await this.loadMultipleFavoritesInstant(this.favoriteAccounts);
+    }
+  }
+
+  /**
+   * Optimized loading for favorite accounts with instant cached display
+   * and background refresh for returning users
+   */
+  async loadMultipleFavoritesInstant(favorites: FavoriteAccount[]) {
+    if (favorites.length === 0) return;
+
+    // Convert favorites to PlayerSearchDisplay format
+    const favoritePlayers: PlayerSearchDisplay[] = favorites.map(fav => ({
+      membershipType: fav.membershipType,
+      membershipId: fav.membershipId,
+      displayName: fav.displayName,
+      game: fav.game,
+      platform: fav.platform
+    }));
+
+    // Phase 1: Show cached data instantly for ALL favorites
+    const cachedDataPromises = favoritePlayers.map(async (player) => {
+      const playerKey = this.getPlayerKey(player);
+      const hasCachedData = await this.showCachedDataInstantly(player, playerKey);
+      return { player, playerKey, hasCached: hasCachedData };
+    });
+
+    const cachedResults = await Promise.all(cachedDataPromises);
+    
+    // Add players to selected list immediately if they have cached data
+    const playersWithCache = cachedResults.filter(r => r.hasCached);
+    if (playersWithCache.length > 0) {
+      // Show cached data immediately
+      this.selectedPlayers = playersWithCache.map(r => r.player);
+      this.loadingActivities[this.selectedDate] = false;
+      this.cdr.detectChanges();
+      
+      console.log(`Instantly displayed ${playersWithCache.length} favorite accounts with cached data`);
+    }
+
+    // Phase 2: Background refresh for stale data or load fresh data for cache misses
+    const refreshPromises = cachedResults.map(async ({ player, playerKey, hasCached }) => {
+      if (hasCached) {
+        // Background refresh for cached accounts
+        const needsUpdate = await this.activityDb.needsDataUpdate(player.membershipId, 6); // 6 hour threshold for favorites
+        if (needsUpdate) {
+          console.log(`Background refresh starting for ${player.displayName}`);
+          await this.startSilentBackgroundRefresh(player, playerKey);
+        }
+      } else {
+        // Fresh load for accounts without cache
+        console.log(`Fresh load starting for ${player.displayName}`);
+        await this.loadCharacterHistory(player);
+        this.loadingActivities[this.selectedDate] = false;
+        this.cdr.detectChanges();
+      }
+    });
+
+    // Execute background operations without blocking UI
+    Promise.allSettled(refreshPromises).then(() => {
+      console.log('All favorite accounts fully synchronized');
+      this.loadingActivities[this.selectedDate] = false;
+      this.cdr.detectChanges();
+    });
+  }
+
+  /**
+   * Show cached data instantly if available
+   * Returns true if cached data was displayed, false if no cache
+   */
+  async showCachedDataInstantly(player: PlayerSearchDisplay, playerKey: string): Promise<boolean> {
+    try {
+      const cachedActivities = await this.activityDb.getAllActivitiesForMembershipOptimized(player.membershipId);
+      
+      if (cachedActivities.length === 0) {
+        return false; // No cached data
+      }
+
+      // Convert cached activities to display format
+      const activitiesWithMembership: ActivityWithMembership[] = cachedActivities.map(activity => ({
+        ...activity,
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        displayName: player.displayName,
+        platform: player.platform,
+        characterClass: activity.characterClass || 'Unknown',
+        game: activity.game || player.game // Ensure game is defined
+      }));
+
+      // Store in component state for immediate display
+      this.activities[playerKey] = activitiesWithMembership;
+      
+      // Trigger immediate UI update
+      await this.loadAllFilteredActivities(true);
+      
+      console.log(`Instantly displayed ${cachedActivities.length} cached activities for ${player.displayName}`);
+      return true;
+      
+    } catch (error) {
+      console.error(`Error showing cached data for ${player.displayName}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Silent background refresh that doesn't show loading indicators
+   * Updates data in background while user sees cached content
+   */
+  async startSilentBackgroundRefresh(player: PlayerSearchDisplay, playerKey: string): Promise<void> {
+    try {
+      // Load fresh data without showing loading UI
+      const originalLoadingState = this.loadingActivities[this.selectedDate];
+      
+      await this.loadCharacterHistory(player);
+      
+      // Refresh the filtered activities with new data
+      await this.loadAllFilteredActivities(true);
+      
+      // Restore original loading state (don't show as "loading" to user)
+      this.loadingActivities[this.selectedDate] = originalLoadingState;
+      
+      console.log(`Silent background refresh completed for ${player.displayName}`);
+      
+    } catch (error) {
+      console.error(`Silent background refresh failed for ${player.displayName}:`, error);
     }
   }
 
@@ -3032,9 +3164,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.accountLoadingStatus.clear();
     this.accountLoadingStatuses = [];
     
-    // Set loading state for the selected date
-    this.loadingActivities[this.selectedDate] = true;
-    this.cdr.detectChanges();
+    // OPTIMIZATION: For users with selected players (especially favorites),
+    // show cached data for the new date instantly before any API calls
+    if (this.selectedPlayers.length > 0) {
+      await this.showInstantDateChange();
+    } else {
+      // Set loading state for new users
+      this.loadingActivities[this.selectedDate] = true;
+      this.cdr.detectChanges();
+    }
 
     try {
       await this.loadAllFilteredActivities();
@@ -3044,6 +3182,77 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.loadingActivities[this.selectedDate] = false;
       this.cdr.detectChanges();
     }
+  }
+
+  /**
+   * Instantly show activities for the newly selected date using cached data
+   * This makes date changes feel instantaneous for users with favorites
+   */
+  async showInstantDateChange(): Promise<void> {
+    try {
+      // Filter existing cached activities for the new date immediately
+      const newFilteredActivities: { [playerKey: string]: ActivityWithMembership[] } = {};
+      let hasAnyActivities = false;
+
+      for (const playerKey in this.activities) {
+        const playerActivities = this.activities[playerKey] || [];
+        // Ensure we're working with ActivityWithMembership[] 
+        const typedActivities = playerActivities as ActivityWithMembership[];
+        const dateFilteredActivities = this.filterActivitiesByDate(typedActivities, this.selectedDate);
+        
+        if (dateFilteredActivities.length > 0) {
+          newFilteredActivities[playerKey] = dateFilteredActivities;
+          hasAnyActivities = true;
+        }
+      }
+
+      if (hasAnyActivities) {
+        // Update the display immediately with cached data for the new date
+        this.filteredActivitiesForDate = this.formatActivitiesForDisplay(newFilteredActivities);
+        this.loadingActivities[this.selectedDate] = false;
+        this.cdr.detectChanges();
+        
+        console.log(`Instantly displayed cached activities for ${this.selectedDate}`);
+      } else {
+        // No cached activities for this date, show loading state
+        this.loadingActivities[this.selectedDate] = true;
+        this.cdr.detectChanges();
+      }
+      
+    } catch (error) {
+      console.error('Error showing instant date change:', error);
+      this.loadingActivities[this.selectedDate] = true;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Filter activities array by the selected date (month/day across all years)
+   */
+  private filterActivitiesByDate(activities: ActivityWithMembership[], targetDate: string): ActivityWithMembership[] {
+    const [, targetMonth, targetDay] = targetDate.split('-');
+    
+    return activities.filter(activity => {
+      const activityDate = new Date(activity.period);
+      const activityMonth = (activityDate.getMonth() + 1).toString().padStart(2, '0');
+      const activityDay = activityDate.getDate().toString().padStart(2, '0');
+      
+      return activityMonth === targetMonth && activityDay === targetDay;
+    });
+  }
+
+  /**
+   * Format filtered activities for display in the UI
+   */
+  private formatActivitiesForDisplay(filteredActivities: { [playerKey: string]: ActivityWithMembership[] }): any[] {
+    const allActivities: ActivityWithMembership[] = [];
+    
+    for (const playerKey in filteredActivities) {
+      allActivities.push(...filteredActivities[playerKey]);
+    }
+    
+    // Sort by time (most recent first) and group by account/type as needed
+    return allActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
   }
 
   private isActivityOnSelectedDate(activity: ActivityHistory): boolean {
