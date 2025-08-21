@@ -17,37 +17,497 @@
     @apply selection:bg-destiny-accent-primary/30 selection:text-destiny-text-primary;
   }
 
-  /* Light mode overrides */
+  /* Light mode overrides - Comprehensive Destiny-themed light theme */
+  html.light {
+    /* CSS Custom Properties for light theme */
+    --destiny-bg-primary: #f8fafc;
+    --destiny-bg-secondary: #e2e8f0;
+    --destiny-bg-tertiary: #cbd5e1;
+    --destiny-bg-card: #ffffff;
+    --destiny-bg-modal: #ffffff;
+    --destiny-bg-input: #f1f5f9;
+    --destiny-bg-button: #3b82f6;
+    --destiny-bg-button-hover: #2563eb;
+    --destiny-bg-button-secondary: #64748b;
+    --destiny-bg-button-secondary-hover: #475569;
+    
+    /* Text colors */
+    --destiny-text-primary: #1e293b;
+    --destiny-text-secondary: #475569;
+    --destiny-text-tertiary: #64748b;
+    --destiny-text-muted: #94a3b8;
+    --destiny-text-inverse: #ffffff;
+    
+    /* Border colors */
+    --destiny-border-primary: #e2e8f0;
+    --destiny-border-secondary: #cbd5e1;
+    --destiny-border-focus: #3b82f6;
+    
+    /* Accent colors - Destiny-themed */
+    --destiny-accent-primary: #f59e0b;
+    --destiny-accent-secondary: #ef4444;
+    --destiny-accent-success: #10b981;
+    --destiny-accent-warning: #f59e0b;
+    --destiny-accent-danger: #ef4444;
+    
+    /* Platform colors - adjusted for light theme */
+    --platform-xbox: #16a34a;
+    --platform-playstation: #2563eb;
+    --platform-steam: #475569;
+    --platform-stadia: #dc2626;
+    --platform-epic: #9333ea;
+    --platform-blizzard: #2563eb;
+  }
+
+  /* Light theme body and base styles */
   html.light body {
-    @apply bg-white text-gray-900;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+    color: var(--destiny-text-primary);
   }
   
+  /* Light theme background overrides */
   html.light .bg-slate-900 {
-    @apply bg-gray-50;
+    background-color: var(--destiny-bg-primary);
   }
   
   html.light .bg-slate-800 {
-    @apply bg-white border border-gray-200;
+    background-color: var(--destiny-bg-secondary);
   }
   
+  html.light .bg-slate-700 {
+    background-color: var(--destiny-bg-tertiary);
+  }
+  
+  html.light .bg-slate-800\/95 {
+    background-color: rgba(226, 232, 240, 0.95);
+  }
+  
+  html.light .bg-slate-800\/50 {
+    background-color: rgba(226, 232, 240, 0.5);
+  }
+  
+  /* Light theme text overrides */
   html.light .text-white {
-    @apply text-gray-900;
-  }
-  
-  html.light .text-slate-400 {
-    @apply text-gray-600;
+    color: var(--destiny-text-primary);
   }
   
   html.light .text-slate-300 {
-    @apply text-gray-700;
+    color: var(--destiny-text-secondary);
   }
   
+  html.light .text-slate-400 {
+    color: var(--destiny-text-tertiary);
+  }
+  
+  html.light .text-slate-500 {
+    color: var(--destiny-text-secondary);
+  }
+  
+  html.light .text-slate-600 {
+    color: var(--destiny-text-secondary);
+  }
+  
+  /* Light theme card and modal backgrounds */
+  html.light .bg-slate-800\/95 {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+  
+  html.light .bg-slate-700\/95 {
+    background-color: rgba(241, 245, 249, 0.95);
+  }
+  
+  /* Light theme input fields */
+  html.light input, html.light select, html.light textarea {
+    background-color: var(--destiny-bg-input);
+    border-color: var(--destiny-border-primary);
+    color: var(--destiny-text-primary);
+  }
+  
+  html.light input:focus, html.light select:focus, html.light textarea:focus {
+    border-color: var(--destiny-border-focus);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  
+  /* Light theme buttons */
+  html.light .bg-blue-600 {
+    background-color: var(--destiny-bg-button);
+  }
+  
+  html.light .bg-blue-600:hover {
+    background-color: var(--destiny-bg-button-hover);
+  }
+  
+  html.light .bg-yellow-600 {
+    background-color: var(--destiny-accent-primary);
+  }
+  
+  html.light .bg-yellow-600:hover {
+    background-color: #d97706;
+  }
+  
+  /* Light theme borders */
   html.light .border-slate-600 {
-    @apply border-gray-300;
+    border-color: var(--destiny-border-primary);
   }
   
   html.light .border-slate-700 {
-    @apply border-gray-200;
+    border-color: var(--destiny-border-secondary);
+  }
+  
+  /* Light theme shadows and effects */
+  html.light .shadow-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  html.light .shadow-xl {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  /* Light theme platform colors */
+  html.light .platform-xbox {
+    color: var(--platform-xbox);
+  }
+  
+  html.light .platform-playstation {
+    color: var(--platform-playstation);
+  }
+  
+  html.light .platform-steam {
+    color: var(--platform-steam);
+  }
+  
+  html.light .platform-stadia {
+    color: var(--platform-stadia);
+  }
+  
+  html.light .platform-epic {
+    color: var(--platform-epic);
+  }
+  
+  html.light .platform-blizzard {
+    color: var(--platform-blizzard);
+  }
+  
+  /* Light theme activity cards */
+  html.light .activity-card {
+    background-color: var(--destiny-bg-card);
+    border-color: var(--destiny-border-primary);
+  }
+  
+  /* Light theme modals */
+  html.light .modal-content {
+    background-color: var(--destiny-bg-modal);
+    border-color: var(--destiny-border-primary);
+  }
+  
+  /* Light theme tabs */
+  html.light .bg-slate-800\/50 {
+    background-color: rgba(226, 232, 240, 0.5);
+  }
+  
+  html.light .bg-blue-600 {
+    background-color: var(--destiny-bg-button);
+  }
+  
+  html.light .text-slate-300 {
+    color: var(--destiny-text-secondary);
+  }
+  
+  /* Light theme hover states */
+  html.light .hover\:bg-slate-700\/50:hover {
+    background-color: rgba(203, 213, 225, 0.5);
+  }
+  
+  html.light .hover\:text-white:hover {
+    color: var(--destiny-text-primary);
+  }
+  
+  /* Light theme specific overrides for common classes */
+  html.light .bg-slate-800\/95 {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+  
+  html.light .bg-slate-700\/95 {
+    background-color: rgba(241, 245, 249, 0.95);
+  }
+  
+  html.light .bg-slate-600 {
+    background-color: var(--destiny-bg-tertiary);
+  }
+  
+  html.light .bg-slate-500 {
+    background-color: var(--destiny-bg-secondary);
+  }
+  
+  html.light .bg-slate-400 {
+    background-color: var(--destiny-bg-primary);
+  }
+  
+  /* Light theme text colors for specific elements */
+  html.light .text-slate-200 {
+    color: var(--destiny-text-tertiary);
+  }
+  
+  html.light .text-slate-100 {
+    color: var(--destiny-text-muted);
+  }
+  
+  /* Light theme border colors */
+  html.light .border-slate-500 {
+    border-color: var(--destiny-border-secondary);
+  }
+  
+  html.light .border-slate-400 {
+    border-color: var(--destiny-border-primary);
+  }
+  
+  html.light .border-slate-300 {
+    border-color: var(--destiny-border-primary);
+  }
+  
+  /* Light theme hover and focus states */
+  html.light .hover\:bg-slate-800:hover {
+    background-color: var(--destiny-bg-secondary);
+  }
+  
+  html.light .hover\:bg-slate-700:hover {
+    background-color: var(--destiny-bg-tertiary);
+  }
+  
+  html.light .hover\:bg-slate-600:hover {
+    background-color: var(--destiny-bg-secondary);
+  }
+  
+  html.light .focus\:border-blue-400:focus {
+    border-color: var(--destiny-border-focus);
+  }
+  
+  html.light .focus\:ring-blue-400:focus {
+    --tw-ring-color: var(--destiny-border-focus);
+  }
+  
+  /* Light theme for glass effects and special components */
+  html.light .glass-effect {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(241, 245, 249, 0.8) 100%);
+    border-color: rgba(226, 232, 240, 0.3);
+    backdrop-filter: blur(10px);
+  }
+  
+  html.light .destiny-bg-gradient-dark {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  }
+  
+  html.light .destiny-bg-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #e2e8f0 100%);
+  }
+  
+  /* Light theme for text gradients */
+  html.light .text-gradient {
+    background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Light theme for decorative elements */
+  html.light .bg-destiny-accent-primary\/5 {
+    background-color: rgba(245, 158, 11, 0.05);
+  }
+  
+  html.light .bg-destiny-accent-secondary\/5 {
+    background-color: rgba(239, 68, 68, 0.05);
+  }
+  
+  /* Light theme for destiny-specific text colors */
+  html.light .text-destiny-text-secondary {
+    color: var(--destiny-text-secondary);
+  }
+  
+  html.light .text-destiny-text-tertiary {
+    color: var(--destiny-text-tertiary);
+  }
+  
+  /* Light theme for destiny-specific border colors */
+  html.light .border-destiny-border-primary\/30 {
+    border-color: rgba(226, 232, 240, 0.3);
+  }
+  
+  html.light .border-destiny-border-primary\/50 {
+    border-color: rgba(226, 232, 240, 0.5);
+  }
+  
+  /* Light theme specific component overrides */
+  html.light .bg-slate-900\/95 {
+    background-color: rgba(248, 250, 252, 0.95);
+  }
+  
+  html.light .bg-slate-800\/90 {
+    background-color: rgba(226, 232, 240, 0.9);
+  }
+  
+  html.light .bg-slate-700\/80 {
+    background-color: rgba(203, 213, 225, 0.8);
+  }
+  
+  /* Light theme for Destiny-specific components */
+  html.light .destiny-card {
+    background-color: var(--destiny-bg-card);
+    border-color: var(--destiny-border-primary);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  html.light .destiny-card:hover {
+    border-color: var(--destiny-border-secondary);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  html.light .destiny-card-glass {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(241, 245, 249, 0.9) 100%);
+    border-color: var(--destiny-border-primary);
+    backdrop-filter: blur(10px);
+  }
+  
+  /* Light theme for loading and status indicators */
+  html.light .bg-green-900\/50 {
+    background-color: rgba(16, 185, 129, 0.1);
+  }
+  
+  html.light .bg-yellow-900\/50 {
+    background-color: rgba(245, 158, 11, 0.1);
+  }
+  
+  html.light .bg-red-900\/50 {
+    background-color: rgba(239, 68, 68, 0.1);
+  }
+  
+  html.light .text-green-200 {
+    color: #059669;
+  }
+  
+  html.light .text-yellow-200 {
+    color: #d97706;
+  }
+  
+  html.light .text-red-200 {
+    color: #dc2626;
+  }
+  
+  /* Light theme for scrollbars */
+  html.light ::-webkit-scrollbar-track {
+    background-color: var(--destiny-bg-secondary);
+  }
+  
+  html.light ::-webkit-scrollbar-thumb {
+    background-color: var(--destiny-border-secondary);
+  }
+  
+  html.light ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--destiny-accent-primary);
+  }
+  
+  /* Light theme for focus rings */
+  html.light *:focus-visible {
+    outline: none;
+    ring: 2px;
+    ring-color: var(--destiny-border-focus);
+    ring-offset: 2px;
+    ring-offset-color: var(--destiny-bg-primary);
+  }
+  
+  /* Light theme for header and navigation */
+  html.light .bg-slate-900\/95 {
+    background-color: rgba(248, 250, 252, 0.95);
+    backdrop-filter: blur(10px);
+  }
+  
+  html.light .bg-slate-800\/90 {
+    background-color: rgba(226, 232, 240, 0.9);
+    backdrop-filter: blur(10px);
+  }
+  
+  /* Light theme for destiny button variants */
+  html.light .destiny-btn-ghost {
+    background-color: transparent;
+    color: var(--destiny-text-secondary);
+  }
+  
+  html.light .destiny-btn-ghost:hover {
+    background-color: var(--destiny-bg-secondary);
+    color: var(--destiny-text-primary);
+  }
+  
+  /* Light theme for activity rows and cards */
+  html.light .activity-row {
+    background-color: var(--destiny-bg-card);
+    border-color: var(--destiny-border-primary);
+  }
+  
+  html.light .activity-row:hover {
+    background-color: var(--destiny-bg-secondary);
+    border-color: var(--destiny-border-secondary);
+  }
+  
+  /* Light theme for tab navigation */
+  html.light .bg-slate-800\/50 {
+    background-color: rgba(226, 232, 240, 0.5);
+  }
+  
+  html.light .bg-blue-600 {
+    background-color: var(--destiny-bg-button);
+  }
+  
+  html.light .text-slate-300 {
+    color: var(--destiny-text-secondary);
+  }
+  
+  html.light .hover\:bg-slate-700\/50:hover {
+    background-color: rgba(203, 213, 225, 0.5);
+  }
+  
+  html.light .hover\:text-white:hover {
+    color: var(--destiny-text-primary);
+  }
+  
+  /* Light theme for status badges and indicators */
+  html.light .bg-green-900\/50 {
+    background-color: rgba(16, 185, 129, 0.1);
+  }
+  
+  html.light .bg-yellow-900\/50 {
+    background-color: rgba(245, 158, 11, 0.1);
+  }
+  
+  html.light .bg-red-900\/50 {
+    background-color: rgba(239, 68, 68, 0.1);
+  }
+  
+  html.light .text-green-200 {
+    color: #059669;
+  }
+  
+  html.light .text-yellow-200 {
+    color: #d97706;
+  }
+  
+  html.light .text-red-200 {
+    color: #dc2626;
+  }
+  
+  /* Light theme for form elements */
+  html.light .bg-slate-700\/95 {
+    background-color: rgba(241, 245, 249, 0.95);
+  }
+  
+  html.light .border-slate-600 {
+    border-color: var(--destiny-border-primary);
+  }
+  
+  html.light .focus\:border-blue-400:focus {
+    border-color: var(--destiny-border-focus);
+  }
+  
+  html.light .focus\:ring-blue-400:focus {
+    --tw-ring-color: var(--destiny-border-focus);
   }
   
   /* Enhanced focus styles for accessibility */
