@@ -9,7 +9,7 @@
             <div class="flex items-center justify-between mb-6">
               <h2 class="text-xl font-bold text-white">Search for your Destiny Account</h2>
               <!-- Prominent Favorites Button -->
-              <button (click)="showFavoritesModal = true" 
+              <button (click)="openFavoritesModal()" 
                       class="flex items-center gap-2 px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white rounded-lg transition-colors font-medium shadow-lg">
                 <span class="text-base">★</span>
                 <span class="text-sm">Favorites</span>
@@ -66,12 +66,17 @@
                      (keydown.enter)="addPlayer()"
                      [class.border-red-500]="errorMessage"
                      class="flex-1 px-4 py-2.5 text-sm bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
-                     placeholder="Enter your Destiny username...">
+                     placeholder="Enter your Destiny username..."
+                     aria-label="Destiny username"
+                     aria-describedby="search-help">
               <button (click)="addPlayer()" 
                       [disabled]="!searchUsername"
-                      class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                      class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      [attr.aria-label]="loading['search'] ? 'Searching for accounts' : 'Search for Destiny accounts'"
+                      [attr.aria-busy]="loading['search']">
                 {{ loading['search'] ? 'Searching...' : 'Search' }}
               </button>
+              <div id="search-help" class="sr-only">Search for your Destiny account by username. Press Enter to search, ESC to close modals.</div>
             </div>
             <!-- Add Mode Controls -->
             <div *ngIf="selectedPlayers.length > 0" class="mt-2">
@@ -865,11 +870,13 @@
  </div>
 
 <!-- Favorites Modal -->
-<div class="modal" [class.show]="showFavoritesModal" (click)="closeModalOnBackdrop($event)">
+<div class="modal" [class.show]="showFavoritesModal" (click)="closeModalOnBackdrop($event)"
+     role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title" [attr.aria-hidden]="!showFavoritesModal">
   <div class="modal-content max-w-2xl" (click)="$event.stopPropagation()">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-bold text-white">Favorites</h2>
-      <button (click)="showFavoritesModal = false" class="text-slate-400 hover:text-white text-xl">
+      <h2 id="favorites-modal-title" class="text-xl font-bold text-white">Favorites</h2>
+      <button (click)="showFavoritesModal = false" class="text-slate-400 hover:text-white text-xl"
+              aria-label="Close favorites modal">
         ✕
       </button>
     </div>
@@ -915,11 +922,13 @@
 </div>
 
 <!-- Search Results Modal -->
-<div class="modal" [class.show]="showPlatformPicker" (click)="closeModalOnBackdrop($event)">
+<div class="modal" [class.show]="showPlatformPicker" (click)="closeModalOnBackdrop($event)" 
+     role="dialog" aria-modal="true" aria-labelledby="search-modal-title" [attr.aria-hidden]="!showPlatformPicker">
   <div class="modal-content max-w-2xl" (click)="$event.stopPropagation()">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-bold text-white">Select Accounts</h2>
-      <button (click)="showPlatformPicker = false" class="text-slate-400 hover:text-white text-xl">
+      <h2 id="search-modal-title" class="text-xl font-bold text-white">Select Accounts</h2>
+      <button (click)="showPlatformPicker = false" class="text-slate-400 hover:text-white text-xl"
+              aria-label="Close modal">
         ✕
       </button>
     </div>

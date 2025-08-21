@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -710,6 +710,129 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.showPlatformPicker = false;
       this.showFavoritesModal = false;
     }
+  }
+
+  /**
+   * Handle ESC key press to close modals and other keyboard shortcuts
+   */
+  @HostListener('document:keydown', ['$event'])
+  handleKeydown(event: KeyboardEvent): void {
+    switch (event.key) {
+      case 'Escape':
+        this.handleEscapeKey();
+        break;
+      case 'Enter':
+        this.handleEnterKey(event);
+        break;
+      case 'Tab':
+        this.handleTabKey(event);
+        break;
+    }
+  }
+
+  /**
+   * Handle ESC key - close any open modals
+   */
+  private handleEscapeKey(): void {
+    if (this.showPlatformPicker) {
+      this.showPlatformPicker = false;
+      this.clearModalFocus();
+      this.cdr.detectChanges();
+    } else if (this.showFavoritesModal) {
+      this.showFavoritesModal = false;
+      this.clearModalFocus();
+      this.cdr.detectChanges();
+    } else if (this.showExportDialog) {
+      this.showExportDialog = false;
+      this.clearModalFocus();
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Handle Enter key in specific contexts
+   */
+  private handleEnterKey(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement;
+    
+    // If focused on search input, trigger search
+    if (target.tagName === 'INPUT' && target.getAttribute('placeholder')?.includes('username')) {
+      if (this.searchUsername.trim()) {
+        this.addPlayer();
+      }
+    }
+    
+    // If focused on modal button, prevent default form submission
+    if (target.tagName === 'BUTTON' && (this.showPlatformPicker || this.showFavoritesModal)) {
+      // Let the button handle its own click
+      return;
+    }
+  }
+
+  /**
+   * Handle Tab key for improved keyboard navigation
+   */
+  private handleTabKey(event: KeyboardEvent): void {
+    // If we're in a modal, implement focus trapping
+    if (this.showPlatformPicker || this.showFavoritesModal) {
+      this.trapFocusInModal(event);
+    }
+  }
+
+  /**
+   * Trap focus within modal dialogs for accessibility
+   */
+  private trapFocusInModal(event: KeyboardEvent): void {
+    const modal = document.querySelector('.modal.show');
+    if (!modal) return;
+
+    const focusableElements = modal.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+    if (!event.shiftKey && document.activeElement === lastElement) {
+      // Tab from last element -> focus first element
+      event.preventDefault();
+      firstElement?.focus();
+    } else if (event.shiftKey && document.activeElement === firstElement) {
+      // Shift+Tab from first element -> focus last element
+      event.preventDefault();
+      lastElement?.focus();
+    }
+  }
+
+  /**
+   * Set focus to the first focusable element in a modal
+   */
+  private focusFirstElementInModal(modalSelector: string): void {
+    setTimeout(() => {
+      const modal = document.querySelector(modalSelector);
+      if (modal) {
+        const firstFocusable = modal.querySelector(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        ) as HTMLElement;
+        firstFocusable?.focus();
+      }
+    }, 100); // Small delay to ensure modal is rendered
+  }
+
+  /**
+   * Clear modal focus and return to trigger element
+   */
+  private clearModalFocus(): void {
+    // Return focus to search input or last focused element
+    const searchInput = document.querySelector('input[placeholder*="username"]') as HTMLElement;
+    searchInput?.focus();
+  }
+
+  /**
+   * Open favorites modal with proper focus management
+   */
+  openFavoritesModal(): void {
+    this.showFavoritesModal = true;
+    this.focusFirstElementInModal('.modal.show');
   }
 
   /**
@@ -3566,6 +3689,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         await this.selectPlayer(player);
       } else {
         this.showPlatformPicker = true;
+        this.focusFirstElementInModal('.modal.show');
       }
 
     } catch (error: any) {
