@@ -51,11 +51,11 @@ export class BrowserCompatibilityWarningComponent implements OnInit {
   }
 
   private checkCompatibility(): void {
-    const capabilities = this.browserService.getCapabilities();
+    const browserInfo = this.browserService.getBrowserInfo();
     
-    // Show warning if browser is not fully supported
-    if (!this.browserService.isFullySupported()) {
-      this.recommendations = this.browserService.getRecommendations();
+    // Show warning if browser is not compatible
+    if (!this.browserService.isCompatible()) {
+      this.recommendations = this.browserService.getCompatibilityWarnings();
       this.showWarning = true;
     }
   }

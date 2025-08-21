@@ -141,8 +141,13 @@ export class BrowserCompatibilityService {
 
   private supportsES6(): boolean {
     try {
-      // Test ES6 features
-      eval('const test = () => {}; const obj = { ...{} }; const arr = [...[]];');
+      // Test ES6 features without eval
+      const testArrow = () => {};
+      const testSpread = { ...{} };
+      const testArraySpread = [...[]];
+      const testTemplate = `test`;
+      const testDestructuring = { a: 1, b: 2 };
+      const { a, b } = testDestructuring;
       return true;
     } catch {
       return false;
