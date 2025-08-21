@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef } from '@angular/core';
+import { Component, ChangeDetectorRef, OnInit } from '@angular/core';
 import { PlayerSearchComponent } from './components/player-search/player-search.component';
 import { PerformanceMonitorComponent } from './components/performance-monitor/performance-monitor.component';
 import { BrowserCompatibilityWarningComponent } from './components/browser-compatibility-warning/browser-compatibility-warning.component';
@@ -15,7 +15,7 @@ import { SharedStateService } from './services/shared-state.service';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   title = 'Destiny Chronicle';
   isDarkMode = true; // Default to dark mode
 
@@ -41,6 +41,11 @@ export class AppComponent {
     // Initialize theme from localStorage
     const savedTheme = localStorage.getItem('theme');
     this.isDarkMode = savedTheme !== 'light';
+    
+  }
+
+  ngOnInit(): void {
+    // Apply theme after component is fully initialized
     this.applyTheme();
   }
 
@@ -68,9 +73,6 @@ export class AppComponent {
       // Force light theme styles
       document.body.style.setProperty('--force-light-theme', 'true');
     }
-    
-    // Force a re-render to ensure theme changes are visible
-    this.cdr.detectChanges();
     
     // Log the current state for debugging
     console.log('HTML classes:', document.documentElement.className);
