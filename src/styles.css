@@ -13,98 +13,74 @@
   }
   
   body {
-    @apply bg-destiny-bg-primary text-destiny-text-primary font-destiny antialiased;
-    @apply selection:bg-destiny-accent-primary/30 selection:text-destiny-text-primary;
+    @apply bg-slate-900 text-white antialiased;
+    @apply selection:bg-yellow-500/30 selection:text-white;
   }
 
   /* Light mode overrides - Comprehensive Destiny-themed light theme */
-  html.light {
-    /* CSS Custom Properties for light theme */
-    --destiny-bg-primary: #f8fafc;
-    --destiny-bg-secondary: #e2e8f0;
-    --destiny-bg-tertiary: #cbd5e1;
-    --destiny-bg-card: #ffffff;
-    --destiny-bg-modal: #ffffff;
-    --destiny-bg-input: #f1f5f9;
-    --destiny-bg-button: #3b82f6;
-    --destiny-bg-button-hover: #2563eb;
-    --destiny-bg-button-secondary: #64748b;
-    --destiny-bg-button-secondary-hover: #475569;
-    
-    /* Text colors */
-    --destiny-text-primary: #1e293b;
-    --destiny-text-secondary: #475569;
-    --destiny-text-tertiary: #64748b;
-    --destiny-text-muted: #94a3b8;
-    --destiny-text-inverse: #ffffff;
-    
-    /* Border colors */
-    --destiny-border-primary: #e2e8f0;
-    --destiny-border-secondary: #cbd5e1;
-    --destiny-border-focus: #3b82f6;
-    
-    /* Accent colors - Destiny-themed */
-    --destiny-accent-primary: #f59e0b;
-    --destiny-accent-secondary: #ef4444;
-    --destiny-accent-success: #10b981;
-    --destiny-accent-warning: #f59e0b;
-    --destiny-accent-danger: #ef4444;
-    
-    /* Platform colors - adjusted for light theme */
-    --platform-xbox: #16a34a;
-    --platform-playstation: #2563eb;
-    --platform-steam: #475569;
-    --platform-stadia: #dc2626;
-    --platform-epic: #9333ea;
-    --platform-blizzard: #2563eb;
+  html.light,
+  body.light-theme,
+  body[style*="--force-light-theme: true"] {
+    /* Light theme is now active */
   }
 
   /* Light theme body and base styles */
-  html.light body {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
-    color: var(--destiny-text-primary);
+  html.light body,
+  body.light-theme {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+    color: #1e293b !important;
   }
   
   /* Light theme background overrides */
-  html.light .bg-slate-900 {
-    background-color: var(--destiny-bg-primary);
+  html.light .bg-slate-900,
+  body.light-theme .bg-slate-900 {
+    background-color: #f8fafc !important;
   }
   
-  html.light .bg-slate-800 {
-    background-color: var(--destiny-bg-secondary);
+  html.light .bg-slate-800,
+  body.light-theme .bg-slate-800 {
+    background-color: #e2e8f0 !important;
   }
   
-  html.light .bg-slate-700 {
-    background-color: var(--destiny-bg-tertiary);
+  html.light .bg-slate-700,
+  body.light-theme .bg-slate-700 {
+    background-color: #cbd5e1 !important;
   }
   
-  html.light .bg-slate-800\/95 {
-    background-color: rgba(226, 232, 240, 0.95);
+  html.light .bg-slate-800\/95,
+  body.light-theme .bg-slate-800\/95 {
+    background-color: rgba(226, 232, 240, 0.95) !important;
   }
   
-  html.light .bg-slate-800\/50 {
-    background-color: rgba(226, 232, 240, 0.5);
+  html.light .bg-slate-800\/50,
+  body.light-theme .bg-slate-800\/50 {
+    background-color: rgba(226, 232, 240, 0.5) !important;
   }
   
   /* Light theme text overrides */
-  html.light .text-white {
-    color: var(--destiny-text-primary);
+  html.light .text-white,
+  body.light-theme .text-white {
+    color: #1e293b !important;
   }
   
-  html.light .text-slate-300 {
-    color: var(--destiny-text-secondary);
+  html.light .text-slate-300,
+  body.light-theme .text-slate-300 {
+    color: #475569 !important;
   }
   
-  html.light .text-slate-400 {
-    color: var(--destiny-text-tertiary);
+  html.light .text-slate-400,
+  body.light-theme .text-slate-400 {
+    color: #64748b !important;
   }
   
-  html.light .text-slate-500 {
-    color: var(--destiny-text-secondary);
+  html.light .text-slate-500,
+  body.light-theme .text-slate-500 {
+    color: #475569 !important;
   }
   
-  html.light .text-slate-600 {
-    color: var(--destiny-text-secondary);
+  html.light .text-slate-600,
+  body.light-theme .text-slate-600 {
+    color: #475569 !important;
   }
   
   /* Light theme card and modal backgrounds */
@@ -287,23 +263,27 @@
   }
   
   /* Light theme for glass effects and special components */
-  html.light .glass-effect {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(241, 245, 249, 0.8) 100%);
-    border-color: rgba(226, 232, 240, 0.3);
+  html.light .glass-effect,
+  body.light-theme .glass-effect {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(241, 245, 249, 0.8) 100%) !important;
+    border-color: rgba(226, 232, 240, 0.3) !important;
     backdrop-filter: blur(10px);
   }
   
-  html.light .destiny-bg-gradient-dark {
-    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  html.light .destiny-bg-gradient-dark,
+  body.light-theme .destiny-bg-gradient-dark {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
   }
   
-  html.light .destiny-bg-gradient {
-    background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #e2e8f0 100%);
+  html.light .destiny-bg-gradient,
+  body.light-theme .destiny-bg-gradient {
+    background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 50%, #e2e8f0 100%) !important;
   }
   
   /* Light theme for text gradients */
-  html.light .text-gradient {
-    background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+  html.light .text-gradient,
+  body.light-theme .text-gradient {
+    background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%) !important;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -319,21 +299,25 @@
   }
   
   /* Light theme for destiny-specific text colors */
-  html.light .text-destiny-text-secondary {
-    color: var(--destiny-text-secondary);
+  html.light .text-destiny-text-secondary,
+  body.light-theme .text-destiny-text-secondary {
+    color: #475569 !important;
   }
   
-  html.light .text-destiny-text-tertiary {
-    color: var(--destiny-text-tertiary);
+  html.light .text-destiny-text-tertiary,
+  body.light-theme .text-destiny-text-tertiary {
+    color: #64748b !important;
   }
   
   /* Light theme for destiny-specific border colors */
-  html.light .border-destiny-border-primary\/30 {
-    border-color: rgba(226, 232, 240, 0.3);
+  html.light .border-destiny-border-primary\/30,
+  body.light-theme .border-destiny-border-primary\/30 {
+    border-color: rgba(226, 232, 240, 0.3) !important;
   }
   
-  html.light .border-destiny-border-primary\/50 {
-    border-color: rgba(226, 232, 240, 0.5);
+  html.light .border-destiny-border-primary\/50,
+  body.light-theme .border-destiny-border-primary\/50 {
+    border-color: rgba(226, 232, 240, 0.5) !important;
   }
   
   /* Light theme specific component overrides */
