@@ -19,13 +19,31 @@ export class DestinyManifestService {
   private shouldUseCorsProxy(): boolean {
     // Use CORS proxy when hosted on GitHub Pages or other external domains
     const hostname = window.location.hostname;
-    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+    const isExternalHost = hostname !== 'localhost' && hostname !== '127.0.0.1';
+    
+    // Also use CORS proxy for Firefox in local development due to stricter CORS policies
+    const isFirefox = navigator.userAgent.includes('Firefox');
+    const isLocalDevelopment = hostname === 'localhost' || hostname === '127.0.0.1';
+    
+    return isExternalHost || (isFirefox && isLocalDevelopment);
   }
 
   private buildUrl(url: string): string {
     if (this.shouldUseCorsProxy()) {
-      return this.CORS_PROXY + encodeURIComponent(url);
+      const proxiedUrl = this.CORS_PROXY + encodeURIComponent(url);
+      console.log('[CORS Manifest] Using proxy for Firefox/localhost:', {
+        original: url,
+        proxied: proxiedUrl,
+        userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other',
+        hostname: window.location.hostname
+      });
+      return proxiedUrl;
     }
+    console.log('[CORS Manifest] Direct request (no proxy):', {
+      url,
+      userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other',
+      hostname: window.location.hostname
+    });
     return url;
   }
 
