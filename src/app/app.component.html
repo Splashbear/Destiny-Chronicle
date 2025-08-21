@@ -26,7 +26,7 @@
                  [ngClass]="isDarkMode ? 'bg-slate-400' : 'bg-blue-500'"></div>
           </div>
           
-          <!-- Functional Theme toggle -->
+          <!-- Theme toggle button -->
           <button (click)="toggleTheme()" 
                   class="destiny-btn-ghost p-2 relative group transition-all duration-300 hover:scale-110"
                   [title]="'Switch to ' + (isDarkMode ? 'light' : 'dark') + ' mode'"
@@ -52,8 +52,6 @@
               {{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
             </span>
           </button>
-          
-
         </div>
       </div>
     </div>

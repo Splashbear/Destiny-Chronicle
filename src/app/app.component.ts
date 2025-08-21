@@ -41,7 +41,6 @@ export class AppComponent implements OnInit {
     // Initialize theme from localStorage
     const savedTheme = localStorage.getItem('theme');
     this.isDarkMode = savedTheme !== 'light';
-    
   }
 
   ngOnInit(): void {
@@ -56,27 +55,22 @@ export class AppComponent implements OnInit {
   }
 
   private applyTheme(): void {
-    console.log('Applying theme:', this.isDarkMode ? 'dark' : 'light');
-    
-    // Remove all theme classes first
+    // Remove all existing theme classes
     document.documentElement.classList.remove('light', 'dark');
     document.body.classList.remove('light-theme', 'dark-theme');
     
     if (this.isDarkMode) {
+      // Dark theme: add dark classes
       document.documentElement.classList.add('dark');
       document.body.classList.add('dark-theme');
-      // Remove light theme styles
-      document.body.style.setProperty('--force-light-theme', 'false');
+      // Remove any light theme overrides
+      document.body.style.removeProperty('--force-light-theme');
     } else {
+      // Light theme: add light classes
       document.documentElement.classList.add('light');
       document.body.classList.add('light-theme');
-      // Force light theme styles
+      // Force light theme styles to take precedence
       document.body.style.setProperty('--force-light-theme', 'true');
     }
-    
-    // Log the current state for debugging
-    console.log('HTML classes:', document.documentElement.className);
-    console.log('Body classes:', document.body.className);
-    console.log('Force light theme:', document.body.style.getPropertyValue('--force-light-theme'));
   }
 }
