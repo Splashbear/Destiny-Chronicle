@@ -1,4 +1,4 @@
-import { Component, ChangeDetectorRef, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { PlayerSearchComponent } from './components/player-search/player-search.component';
 import { PerformanceMonitorComponent } from './components/performance-monitor/performance-monitor.component';
 import { BrowserCompatibilityWarningComponent } from './components/browser-compatibility-warning/browser-compatibility-warning.component';
@@ -15,15 +15,13 @@ import { SharedStateService } from './services/shared-state.service';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
-export class AppComponent implements OnInit {
+export class AppComponent {
   title = 'Destiny Chronicle';
-  isDarkMode = true; // Default to dark mode
 
   constructor(
     private manifestService: DestinyManifestService,
     private shareService: ShareService,
-    private sharedState: SharedStateService,
-    private cdr: ChangeDetectorRef
+    private sharedState: SharedStateService
   ) {
     // Expose manifest service globally for debugging
     (window as any).manifestService = this.manifestService;
@@ -36,41 +34,6 @@ export class AppComponent implements OnInit {
       if (state) {
         this.sharedState.pendingShare = state;
       }
-    }
-
-    // Initialize theme from localStorage
-    const savedTheme = localStorage.getItem('theme');
-    this.isDarkMode = savedTheme !== 'light';
-  }
-
-  ngOnInit(): void {
-    // Apply theme after component is fully initialized
-    this.applyTheme();
-  }
-
-  toggleTheme(): void {
-    this.isDarkMode = !this.isDarkMode;
-    this.applyTheme();
-    localStorage.setItem('theme', this.isDarkMode ? 'dark' : 'light');
-  }
-
-  private applyTheme(): void {
-    // Remove all existing theme classes
-    document.documentElement.classList.remove('light', 'dark');
-    document.body.classList.remove('light-theme', 'dark-theme');
-    
-    if (this.isDarkMode) {
-      // Dark theme: add dark classes
-      document.documentElement.classList.add('dark');
-      document.body.classList.add('dark-theme');
-      // Remove any light theme overrides
-      document.body.style.removeProperty('--force-light-theme');
-    } else {
-      // Light theme: add light classes
-      document.documentElement.classList.add('light');
-      document.body.classList.add('light-theme');
-      // Force light theme styles to take precedence
-      document.body.style.setProperty('--force-light-theme', 'true');
     }
   }
 }

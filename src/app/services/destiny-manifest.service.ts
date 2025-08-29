@@ -13,37 +13,11 @@ export class DestinyManifestService {
   private presentationNodes: { [key: string]: any } = {};
   private manifestLoaded = new BehaviorSubject<boolean>(false);
   
-  // CORS proxy for GitHub Pages deployment
-  private readonly CORS_PROXY = 'https://corsproxy.io/?';
 
-  private shouldUseCorsProxy(): boolean {
-    // Use CORS proxy when hosted on GitHub Pages or other external domains
-    const hostname = window.location.hostname;
-    const isExternalHost = hostname !== 'localhost' && hostname !== '127.0.0.1';
-    
-    // Also use CORS proxy for Firefox in local development due to stricter CORS policies
-    const isFirefox = navigator.userAgent.includes('Firefox');
-    const isLocalDevelopment = hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    return isExternalHost || (isFirefox && isLocalDevelopment);
-  }
 
   private buildUrl(url: string): string {
-    if (this.shouldUseCorsProxy()) {
-      const proxiedUrl = this.CORS_PROXY + encodeURIComponent(url);
-      console.log('[CORS Manifest] Using proxy for Firefox/localhost:', {
-        original: url,
-        proxied: proxiedUrl,
-        userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other',
-        hostname: window.location.hostname
-      });
-      return proxiedUrl;
-    }
-    console.log('[CORS Manifest] Direct request (no proxy):', {
-      url,
-      userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other',
-      hostname: window.location.hostname
-    });
+    // For now, use direct API calls to avoid rate limiting issues
+    // We'll need to implement a proper solution for production deployment
     return url;
   }
 

@@ -2,40 +2,12 @@
   "name": "Destiny Chronicle",
   "short_name": "DestinyChron",
   "description": "Track your Destiny 1 & 2 activity history across all platforms",
-  "start_url": "/Destiny-Chronicle/",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0f1c",
   "theme_color": "#0a0f1c",
   "orientation": "portrait-primary",
-  "scope": "/Destiny-Chronicle/",
+  "scope": "/",
   "lang": "en",
-  "categories": ["games", "entertainment", "utilities"],
-  "icons": [
-    {
-      "src": "assets/images/android-chrome-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "assets/images/android-chrome-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "assets/images/screenshot-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    },
-    {
-      "src": "assets/images/screenshot-narrow.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow"
-    }
-  ]
+  "categories": ["games", "entertainment", "utilities"]
 }

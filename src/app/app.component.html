@@ -15,44 +15,6 @@
             </div>
           </div>
         </div>
-        
-        <!-- Header actions area -->
-        <div class="flex items-center space-x-3">
-          <!-- Theme indicator -->
-          <div class="flex items-center space-x-2 px-3 py-1.5 rounded-full transition-all duration-300"
-               [ngClass]="isDarkMode ? 'bg-slate-800/50 text-slate-300' : 'bg-blue-100/50 text-blue-700'">
-            <span class="text-xs font-medium">{{ isDarkMode ? 'Dark' : 'Light' }}</span>
-            <div class="w-2 h-2 rounded-full transition-all duration-300"
-                 [ngClass]="isDarkMode ? 'bg-slate-400' : 'bg-blue-500'"></div>
-          </div>
-          
-          <!-- Theme toggle button -->
-          <button (click)="toggleTheme()" 
-                  class="destiny-btn-ghost p-2 relative group transition-all duration-300 hover:scale-110"
-                  [title]="'Switch to ' + (isDarkMode ? 'light' : 'dark') + ' mode'"
-                  [attr.aria-label]="'Switch to ' + (isDarkMode ? 'light' : 'dark') + ' mode'">
-            <!-- Theme indicator background -->
-            <div class="absolute inset-0 rounded-lg transition-all duration-300"
-                 [ngClass]="isDarkMode ? 'bg-slate-800/50' : 'bg-blue-100/50'"></div>
-            
-            <!-- Icons with smooth transitions -->
-            <svg *ngIf="isDarkMode" class="w-5 h-5 relative z-10 text-yellow-400 transition-all duration-300" 
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m6.01-6.01l.707.707m12.02 12.02l.707.707m-6.01-6.01L12 12m0 0l-6.01 6.01m6.01-6.01L12 12"></path>
-            </svg>
-            <svg *ngIf="!isDarkMode" class="w-5 h-5 relative z-10 text-blue-600 transition-all duration-300" 
-                 fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 006.354-5.646z"></path>
-            </svg>
-            
-            <!-- Theme label on hover -->
-            <span class="absolute -bottom-8 left-1/2 transform -translate-x-1/2 px-2 py-1 text-xs text-white bg-slate-800 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20">
-              {{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
-            </span>
-          </button>
-        </div>
       </div>
     </div>
   </header>

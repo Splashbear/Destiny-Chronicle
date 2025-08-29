@@ -142,28 +142,51 @@ export class ActivityDbService extends Dexie {
     '2192826039': "Salvation's Edge",
     '4129614942': "Salvation's Edge",
     // --- Destiny 2 Dungeons ---
-    '2032534090': 'The Shattered Throne',
-    '1375089621': 'Pit of Heresy',
-    '785700673': 'Pit of Heresy',
-    '785700678': 'Pit of Heresy',
-    '2559374368': 'Pit of Heresy',
-    '2559374374': 'Pit of Heresy',
-    '2559374375': 'Pit of Heresy',
-    '2582501063': 'Pit of Heresy',
-    '1112917203': 'Grasp of Avarice',
-    '4078656646': 'Grasp of Avarice',
-    '1077850348': 'Prophecy',
-    '4148187374': 'Prophecy',
-    '2823159265': 'Duality',
-    '3012587626': 'Duality',
-    '1262462921': 'Spire of the Watcher',
-    '2296818662': 'Spire of the Watcher',
-    '313828469': 'Ghosts of the Deep',
-    '2716998124': 'Ghosts of the Deep',
-    '2004855007': "Warlord's Ruin",
-    '2534833093': "Warlord's Ruin",
-    '300092127': "Vesper's Host",
-    '3834447244': "Sundered Doctrine",
+    // The Shattered Throne - Single version
+    '2032534090': 'The Shattered Throne: Standard',
+    // Pit of Heresy - Multiple versions
+    '1375089621': 'Pit of Heresy: Standard',
+    '785700673': 'Pit of Heresy: Master',
+    '785700678': 'Pit of Heresy: Master',
+    '2559374368': 'Pit of Heresy: Master',
+    '2559374374': 'Pit of Heresy: Master',
+    '2559374375': 'Pit of Heresy: Master',
+    '2582501063': 'Pit of Heresy: Master',
+    // Grasp of Avarice - Multiple versions
+    '1112917203': 'Grasp of Avarice: Standard',
+    '4078656646': 'Grasp of Avarice: Master',
+    // Prophecy - Multiple versions
+    '1077850348': 'Prophecy: Normal',
+    '356348': 'Prophecy: Explorer',
+    '2961030534': 'Prophecy: Eternity',
+    '3193152350': 'Prophecy: Ultimatum',
+    '4148187374': 'Prophecy: Master',
+    // Duality - Multiple versions
+    '2823159265': 'Duality: Standard',
+    '3012587626': 'Duality: Master',
+    // Spire of the Watcher - Multiple versions
+    '1262462921': 'Spire of the Watcher: Normal',
+    '1225969316': 'Spire of the Watcher: Explorer',
+    '4046934917': 'Spire of the Watcher: Eternity',
+    '3339002067': 'Spire of the Watcher: Ultimatum',
+    '2296818662': 'Spire of the Watcher: Master',
+    // Ghosts of the Deep - Multiple versions
+    '313828469': 'Ghosts of the Deep: Normal',
+    '106036': 'Ghosts of the Deep: Explorer',
+    '300026': 'Ghosts of the Deep: Eternity',
+    '124340010': 'Ghosts of the Deep: Ultimatum',
+    '2716998124': 'Ghosts of the Deep: Master',
+    // Warlord's Ruin - Multiple versions
+    '2004855007': "Warlord's Ruin: Standard",
+    '2534833093': "Warlord's Ruin: Master",
+    // Vesper's Host - Multiple versions
+    '1915770060': "Vesper's Host: Explorer",
+    '300092127': "Vesper's Host: Normal", 
+    '3492566689': "Vesper's Host: Eternity",
+    '4293676253': "Vesper's Host: Master",
+    // Sundered Doctrine - Multiple versions
+    '3834447244': "Sundered Doctrine: Normal",
+    '349148': "Sundered Doctrine: Master",
     // --- Destiny 1 Raids ---
     '3801607287': 'Vault of Glass',
     '708693006': 'Vault of Glass',
@@ -1108,7 +1131,7 @@ export class ActivityDbService extends Dexie {
   }
 
   /**
-   * Returns the first solo and solo-flawless dungeon completions per dungeon family
+   * Returns the first solo and solo-flawless dungeon completions per dungeon version
    * for the specified Destiny 2 account (all characters).
    *
    * This method performs an in-memory scan—no extra API calls.
@@ -1119,7 +1142,10 @@ export class ActivityDbService extends Dexie {
     const activities = await this.activities
       .where('membershipId')
       .equals(membershipId)
+      .filter(activity => activity.game === 'D2') // Ensure we only process D2 activities
       .toArray();
+
+    console.log(`[DungeonSoloFirsts] Processing ${activities.length} activities for membership ${membershipId}`);
 
     // Sort by period ascending so the earliest completions are encountered first.
     activities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
@@ -1136,10 +1162,22 @@ export class ActivityDbService extends Dexie {
       const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
       if (!family) continue; // Unknown / unmapped dungeon hash.
 
-      let entry = firstsMap.get(family);
+      console.log(`[DungeonSoloFirsts] Processing dungeon activity:`, {
+        referenceId,
+        family,
+        period: activity.period,
+        playerCount: activity.values?.playerCount?.basic?.value,
+        completed: activity.values?.completed?.basic?.value,
+        deaths: activity.values?.deaths?.basic?.value
+      });
+
+      // Use the full versioned name as the key for version-specific tracking
+      const versionKey = family;
+
+      let entry = firstsMap.get(versionKey);
       if (!entry) {
         entry = {};
-        firstsMap.set(family, entry);
+        firstsMap.set(versionKey, entry);
       }
 
       // Determine solo / flawless status.
@@ -1147,13 +1185,25 @@ export class ActivityDbService extends Dexie {
       const flawless = this.isSoloFlawless(activity);
 
       if (solo && !entry.firstSolo) {
+        console.log(`[DungeonSoloFirsts] Found solo completion for ${versionKey}:`, {
+          referenceId,
+          period: activity.period,
+          playerCount: activity.values?.playerCount?.basic?.value,
+          deaths: activity.values?.deaths?.basic?.value
+        });
         entry.firstSolo = activity;
       }
       if (flawless && !entry.firstFlawless) {
+        console.log(`[DungeonSoloFirsts] Found solo flawless completion for ${versionKey}:`, {
+          referenceId,
+          period: activity.period,
+          playerCount: activity.values?.playerCount?.basic?.value,
+          deaths: activity.values?.deaths?.basic?.value
+        });
         entry.firstFlawless = activity;
       }
 
-      // Early exit optimisation: if we already have both firsts we can skip further processing for this family.
+      // Early exit optimisation: if we already have both firsts we can skip further processing for this version.
       if (entry.firstSolo && entry.firstFlawless) {
         continue;
       }
@@ -1162,10 +1212,31 @@ export class ActivityDbService extends Dexie {
     // Convert to the public model.
     const result: DungeonSoloFirst[] = [];
     firstsMap.forEach((value, key) => {
-      result.push({ family: key, firstSolo: value.firstSolo, firstFlawless: value.firstFlawless });
+      // Extract base dungeon name for the family field
+      const baseDungeonName = this.getBaseDungeonName(key);
+      result.push({ 
+        family: baseDungeonName, 
+        fullName: key,
+        firstSolo: value.firstSolo, 
+        firstFlawless: value.firstFlawless 
+      });
     });
 
+    console.log(`[DungeonSoloFirsts] Final result for ${membershipId}:`, result);
     return result;
+  }
+
+  /**
+   * Extracts the base dungeon name from a versioned dungeon name.
+   * e.g., "Vesper's Host: Master" -> "Vesper's Host"
+   */
+  private getBaseDungeonName(versionedName: string): string {
+    // Remove version suffix (everything after ": ")
+    const colonIndex = versionedName.indexOf(': ');
+    if (colonIndex === -1) {
+      return versionedName; // No version suffix
+    }
+    return versionedName.substring(0, colonIndex);
   }
 
   /** Returns how many activities we have stored for the given list of membershipIds */

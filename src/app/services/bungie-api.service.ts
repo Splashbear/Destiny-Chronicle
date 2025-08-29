@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, of, timer, forkJoin, from } from 'rxjs';
-import { catchError, map, tap, switchMap, retryWhen, delayWhen, retry, mergeMap, reduce } from 'rxjs/operators';
+import { catchError, map, switchMap, retryWhen, delayWhen, retry, mergeMap, reduce } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 
@@ -75,39 +75,13 @@ export class BungieApiService {
   private readonly D1_BASE_URL = 'https://www.bungie.net/d1/Platform';
   private readonly D2_BASE_URL = 'https://www.bungie.net/Platform';
   
-  // CORS proxy for GitHub Pages deployment
-  private readonly CORS_PROXY = 'https://corsproxy.io/?';
+
 
   constructor(private http: HttpClient) {}
 
-  private shouldUseCorsProxy(): boolean {
-    // Use CORS proxy when hosted on GitHub Pages or other external domains
-    const hostname = window.location.hostname;
-    const isExternalHost = hostname !== 'localhost' && hostname !== '127.0.0.1';
-    
-    // Also use CORS proxy for Firefox in local development due to stricter CORS policies
-    const isFirefox = navigator.userAgent.includes('Firefox');
-    const isLocalDevelopment = hostname === 'localhost' || hostname === '127.0.0.1';
-    
-    return isExternalHost || (isFirefox && isLocalDevelopment);
-  }
-
   private buildUrl(url: string): string {
-    if (this.shouldUseCorsProxy()) {
-      const proxiedUrl = this.CORS_PROXY + encodeURIComponent(url);
-      console.log('[CORS] Using proxy for Firefox/localhost:', {
-        original: url,
-        proxied: proxiedUrl,
-        userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other',
-        hostname: window.location.hostname
-      });
-      return proxiedUrl;
-    }
-    console.log('[CORS] Direct request (no proxy):', {
-      url,
-      userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other',
-      hostname: window.location.hostname
-    });
+    // For now, use direct API calls to avoid rate limiting issues
+    // We'll need to implement a proper solution for production deployment
     return url;
   }
 
@@ -122,23 +96,11 @@ export class BungieApiService {
     });
   }
 
-  private getHeadersForProxy(): HttpHeaders {
-    // When using CORS proxy, we need to ensure headers are properly formatted
-    // Some proxies are sensitive to header formatting
-    return new HttpHeaders({
-      'X-API-Key': this.API_KEY,
-      'User-Agent': 'DestinyChronicle/1.0',
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    });
-  }
-
   searchD1Player(searchTerm: string, membershipType: number): Observable<PlayerSearchResult[]> {
     const url = `${this.D1_BASE_URL}/Destiny/SearchDestinyPlayer/${membershipType}/${encodeURIComponent(searchTerm)}/`;
     const finalUrl = this.buildUrl(url);
-    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
     
-    return this.http.get<any>(finalUrl, { headers }).pipe(
+    return this.http.get<any>(finalUrl, { headers: this.getHeaders() }).pipe(
       map(response => {
         if (response.ErrorCode === 1) {
           return response.Response.map((player: any) => ({
@@ -149,39 +111,25 @@ export class BungieApiService {
         }
         return [];
       }),
-             catchError(error => {
-         console.error('Error in D1 search:', {
-           error,
-           status: error.status,
-           statusText: error.statusText,
-           url: error.url,
-           message: error.message,
-           usingProxy: this.shouldUseCorsProxy(),
-           userAgent: navigator.userAgent.includes('Firefox') ? 'Firefox' : 'Other'
-         });
-         return of([]);
-       })
+                     catchError(error => {
+          console.error('Error in D1 search:', error);
+          return of([]);
+        })
     );
   }
 
   searchD2Player(searchTerm: string): Observable<BungieResponse<PlayerSearchResult[]>> {
-    console.log('[DEBUG] Original search term:', searchTerm);
-    
     // Check if the search term contains a Bungie Name (contains #)
     if (searchTerm.includes('#')) {
       const [displayName, displayNameCode] = searchTerm.split('#');
-      console.log('[DEBUG] Using Bungie Name search:', { displayName, displayNameCode });
       return this.searchDestinyPlayerByBungieName(displayName, parseInt(displayNameCode));
     }
     
     // Regular search for non-Bungie Names
     const encodedTerm = encodeURIComponent(searchTerm);
-    console.log('[DEBUG] Encoded search term:', encodedTerm);
     const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayer/-1/${encodedTerm}/`;
     const finalUrl = this.buildUrl(url);
-    console.log('[DEBUG] Final URL:', finalUrl);
-    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
-    return this.http.get<BungieResponse<PlayerSearchResult[]>>(finalUrl, { headers });
+    return this.http.get<BungieResponse<PlayerSearchResult[]>>(finalUrl, { headers: this.getHeaders() });
   }
 
   getLinkedProfiles(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
@@ -201,10 +149,9 @@ export class BungieApiService {
   getProfile(membershipType: BungieMembershipType, membershipId: string): Observable<any> {
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=100,200`;
     const finalUrl = this.buildUrl(url);
-    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
     return this.http.get(
       finalUrl,
-      { headers }
+      { headers: this.getHeaders() }
     ).pipe(
       catchError(error => {
         console.error('Error fetching profile:', error);
@@ -221,7 +168,7 @@ export class BungieApiService {
       headers: this.getHeaders()
     }).pipe(
       catchError(error => {
-        console.error('[DEBUG] Error fetching player titles:', error);
+        console.error('Error fetching player titles:', error);
         return throwError(() => error);
       })
     );
@@ -254,11 +201,10 @@ export class BungieApiService {
 
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Character/${characterId}/Stats/Activities/`;
     const finalUrl = this.buildUrl(url);
-    const headers = this.shouldUseCorsProxy() ? this.getHeadersForProxy() : this.getHeaders();
     return this.http.get(
       finalUrl,
       {
-        headers,
+        headers: this.getHeaders(),
         params
       }
     ).pipe(
@@ -313,17 +259,7 @@ export class BungieApiService {
         };
       }),
       catchError(error => {
-        console.error('[DEBUG] Error fetching D1 activity history:', {
-          mode,
-          page,
-          error,
-          errorMessage: error.message,
-          errorStatus: error.status,
-          errorStatusText: error.statusText,
-          errorUrl: error.url,
-          errorHeaders: error.headers,
-          errorBody: error.error
-        });
+        console.error('Error fetching D1 activity history:', error);
         return throwError(() => error);
       })
     );
@@ -416,9 +352,7 @@ export class BungieApiService {
     
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
-      'User-Agent': 'DestinyChronicle/1.0',
-      'Accept': 'application/json',
-      'Origin': window.location.origin || 'http://localhost:4200'
+      'Accept': 'application/json'
     });
     
     return this.http.get<BungieResponse<any>>(url, { 
@@ -448,14 +382,7 @@ export class BungieApiService {
         }
       }),
       catchError(error => {
-        console.error(`[DEBUG] Error fetching PGCR ${activityId}:`, {
-          status: error.status,
-          statusText: error.statusText,
-          message: error.message,
-          url: error.url,
-          headers: error.headers,
-          body: error.error
-        });
+        console.error(`Error fetching PGCR ${activityId}:`, error);
         throw error;
       })
     );
@@ -476,20 +403,14 @@ export class BungieApiService {
     const finalUrl = this.buildUrl(url);
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
-      'User-Agent': 'DestinyChronicle/1.0',
+      'Accept': 'application/json',
       'Content-Type': 'application/json'
     });
     const body = {
       displayName,
       displayNameCode: parseInt(displayNameCode.toString(), 10)
     };
-    console.log('[DEBUG] Bungie Name Search Request:', {
-      url: finalUrl,
-      headers: headers.keys().reduce((acc, key) => ({ ...acc, [key]: headers.get(key) }), {}),
-      body
-    });
     return this.http.post<BungieResponse<PlayerSearchResult[]>>(finalUrl, body, { headers }).pipe(
-      tap(response => console.log('[DEBUG] Bungie Name Search Response:', response)),
       map(response => {
         if (response.ErrorCode === 1) {
           // The response might be a single object or an array
@@ -598,7 +519,7 @@ export class BungieApiService {
       headers: this.getHeaders()
     }).pipe(
       catchError(error => {
-        console.error('[DEBUG] Error fetching presentation node progressions:', error);
+        console.error('Error fetching presentation node progressions:', error);
         return throwError(() => error);
       })
     );
@@ -616,6 +537,7 @@ export class BungieApiService {
     const body = { displayNamePrefix: term };
     const headers = new HttpHeaders({
       'X-API-Key': this.API_KEY,
+      'Accept': 'application/json',
       'Content-Type': 'application/json'
     });
     return this.http.post<BungieResponse<any>>(finalUrl, body, { headers }).pipe(
@@ -648,7 +570,7 @@ export class BungieApiService {
     const finalUrl = this.buildUrl(url);
     return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
       catchError(error => {
-        console.error('[DEBUG] Error fetching player records (900/1000):', error);
+        console.error('Error fetching player records (900/1000):', error);
         return throwError(() => error);
       })
     );
@@ -683,8 +605,14 @@ export class BungieApiService {
     // ---------------------
     // Choose the correct endpoint depending on whether a Bungie Name code is present
     const d2$ = searchTerm.includes('#')
-      ? this.searchD2Player(searchTerm).pipe(catchError(() => of(null)))
-      : this.searchUsersPrefix(searchTerm).pipe(catchError(() => of(null)));
+      ? this.searchD2Player(searchTerm).pipe(catchError((error) => {
+          console.error('D2 search error:', error);
+          return of(null);
+        }))
+      : this.searchUsersPrefix(searchTerm).pipe(catchError((error) => {
+          console.error('D2 prefix search error:', error);
+          return of(null);
+        }));
 
     // ---------------------
     // Destiny 1 Search
@@ -693,8 +621,14 @@ export class BungieApiService {
     const d1SearchTerm = searchTerm.includes('#') ? searchTerm.split('#')[0] : searchTerm;
 
     // Destiny 1 searches for Xbox (1) and PlayStation (2)
-    const d1Xbox$ = this.searchD1Player(d1SearchTerm, 1).pipe(catchError(() => of([])));
-    const d1Psn$  = this.searchD1Player(d1SearchTerm, 2).pipe(catchError(() => of([])));
+    const d1Xbox$ = this.searchD1Player(d1SearchTerm, 1).pipe(catchError((error) => {
+      console.error('D1 Xbox search error:', error);
+      return of([]);
+    }));
+    const d1Psn$  = this.searchD1Player(d1SearchTerm, 2).pipe(catchError((error) => {
+      console.error('D1 PSN search error:', error);
+      return of([]);
+    }));
 
     // Run them concurrently
     return forkJoin([d2$, d1Xbox$, d1Psn$]);

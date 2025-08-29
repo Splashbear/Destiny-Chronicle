@@ -3945,8 +3945,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.guardianFirsts.filter(f => f.game === game && (f.type === 'raid' || f.type === 'dungeon'));
   }
 
-  getGuardianFirstRaidsForGame(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
-    const raids = this.guardianFirsts.filter(f => f.type === 'raid' && f.game === game);
+  getGuardianFirstRaidsForGame(membershipId: string, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const firsts = this.guardianFirstsMap[membershipId] || [];
+    const raids = firsts.filter((f: ActivityFirstCompletion) => f.type === 'raid' && f.game === game);
 
     // Sort by release date
     const releaseOrder = game === 'D1' ? [
@@ -3971,16 +3972,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       "Salvation's Edge"
     ];
 
-    return raids.sort((a, b) => {
+    return raids.sort((a: ActivityFirstCompletion, b: ActivityFirstCompletion) => {
       const aIndex = releaseOrder.indexOf(a.name);
       const bIndex = releaseOrder.indexOf(b.name);
       return aIndex - bIndex;
     });
   }
 
-  getGuardianFirstDungeonsForGame(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+  getGuardianFirstDungeonsForGame(membershipId: string, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
     if (game === 'D1') return [];
-    const dungeons = this.guardianFirsts.filter(f => f.type === 'dungeon' && f.game === game);
+    const firsts = this.guardianFirstsMap[membershipId] || [];
+    const dungeons = firsts.filter((f: ActivityFirstCompletion) => f.type === 'dungeon' && f.game === game);
     // Sort by release date
     const releaseOrder = [
       'The Shattered Throne',
@@ -3994,7 +3996,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       "Vesper's Host",
       "Sundered Doctrine"
     ];
-    return dungeons.sort((a, b) => {
+    return dungeons.sort((a: ActivityFirstCompletion, b: ActivityFirstCompletion) => {
       const aIndex = releaseOrder.indexOf(a.name);
       const bIndex = releaseOrder.indexOf(b.name);
       return aIndex - bIndex;
@@ -4029,7 +4031,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   // Build per-character earliest for a given list of first completions
   getPerCharacterFirsts(player: PlayerSearchDisplay, type: 'first-ever' | 'raid' | 'dungeon'): Array<{ characterId: string; className?: string; platformIcon: string; first: ActivityHistory | ActivityFirstCompletion }>{
-    const results: Array<{ characterId: string; className?: string; platformIcon: string; first: any }> = [];
+    const results: Array<{ characterId: string; className?: string; platformIcon: string; first: ActivityHistory | ActivityFirstCompletion }> = [];
     const pKey = this.getPlayerKey(player);
     const charIds = (this.characters[pKey] || []).map(getCharacterId).filter((id): id is string => !!id);
     if (type === 'first-ever') {
@@ -4037,7 +4039,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       for (const cid of charIds) {
         const list = (this.activities[`${player.membershipId}|${cid}`] || []) as ActivityHistory[];
         if (!list.length) continue;
-        const earliest = [...list].sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
+        const earliest = [...list].sort((a: ActivityHistory, b: ActivityHistory) => new Date(a.period).getTime() - new Date(b.period).getTime())[0];
         results.push({
           characterId: cid,
           className: earliest.characterClass,
@@ -4047,7 +4049,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
     } else {
       // For raid/dungeon, use per-character earliest from guardianFirstsMap entries for this player
-      const list = this.getFirstsForPlayer(player).filter(f => f.game === player.game && (type === 'raid' ? f.type === 'raid' : f.type === 'dungeon'));
+      const list = this.getFirstsForPlayer(player).filter((f: ActivityFirstCompletion) => f.game === player.game && (type === 'raid' ? f.type === 'raid' : f.type === 'dungeon'));
       const perChar = new Map<string, ActivityFirstCompletion>();
       for (const f of list) {
         const existing = perChar.get(f.characterId);
@@ -4055,7 +4057,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           perChar.set(f.characterId, f);
         }
       }
-      perChar.forEach(f => {
+      perChar.forEach((f: ActivityFirstCompletion) => {
         results.push({
           characterId: f.characterId,
           className: f.characterClass,
@@ -4084,7 +4086,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   groupActivitiesByType(activities: any[]): ActivityGroup[] {
     const groups = new Map<string, ActivityGroup>();
     
-    activities.forEach(activity => {
+    activities.forEach((activity: any) => {
       const key = `${activity.activityDetails?.referenceId}-${activity.game}`;
       if (!groups.has(key)) {
         groups.set(key, {
@@ -4093,12 +4095,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           activities: []
         });
       }
-      groups.get(key)?.activities.push(activity);
+      const group = groups.get(key);
+      if (group) {
+        group.activities.push(activity);
+      }
     });
 
     // Sort activities within each group by time
-    groups.forEach(group => {
-      group.activities.sort((a, b) => 
+    groups.forEach((group: ActivityGroup) => {
+      group.activities.sort((a: any, b: any) => 
         new Date(b.period).getTime() - new Date(a.period).getTime()
       );
     });
@@ -4108,7 +4113,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   getAverageDuration(activities: any[]): number {
     if (!activities.length) return 0;
-    const totalDuration = activities.reduce((sum, activity) => 
+    const totalDuration = activities.reduce((sum: number, activity: any) => 
       sum + this.getActivityDurationSeconds(activity), 0
     );
     return totalDuration / activities.length / 60; // Convert to minutes
@@ -4309,7 +4314,54 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       "Vesper's Host",
       "Sundered Doctrine"
     ];
-    return list.slice().sort((a, b) => releaseOrder.indexOf(a.name) - releaseOrder.indexOf(b.name));
+    
+    return list.slice().sort((a, b) => {
+      // Extract base dungeon name (remove version suffix)
+      const aBase = this.getBaseDungeonName(a.name);
+      const bBase = this.getBaseDungeonName(b.name);
+      
+      const aIndex = releaseOrder.indexOf(aBase);
+      const bIndex = releaseOrder.indexOf(bBase);
+      
+      // If base names are different, sort by release order
+      if (aIndex !== bIndex) {
+        return aIndex - bIndex;
+      }
+      
+      // If base names are the same, sort by version (Normal < Master < Explorer < Eternity < Ultimatum)
+      const versionOrder = ['Normal', 'Standard', 'Explorer', 'Eternity', 'Ultimatum', 'Master'];
+      const aVersion = this.getDungeonVersion(a.name);
+      const bVersion = this.getDungeonVersion(b.name);
+      
+      const aVersionIndex = versionOrder.indexOf(aVersion);
+      const bVersionIndex = versionOrder.indexOf(bVersion);
+      
+      return aVersionIndex - bVersionIndex;
+    });
+  }
+
+  /**
+   * Extracts the base dungeon name from a versioned dungeon name.
+   * e.g., "Vesper's Host: Master" -> "Vesper's Host"
+   */
+  private getBaseDungeonName(versionedName: string): string {
+    const colonIndex = versionedName.indexOf(': ');
+    if (colonIndex === -1) {
+      return versionedName; // No version suffix
+    }
+    return versionedName.substring(0, colonIndex);
+  }
+
+  /**
+   * Extracts the dungeon version from a versioned dungeon name.
+   * e.g., "Vesper's Host: Master" -> "Master"
+   */
+  private getDungeonVersion(versionedName: string): string {
+    const colonIndex = versionedName.indexOf(': ');
+    if (colonIndex === -1) {
+      return 'Normal'; // Default to Normal if no version specified
+    }
+    return versionedName.substring(colonIndex + 2);
   }
 
   /** Loads first solo / solo-flawless completions for all dungeons for the given player. */
@@ -4759,15 +4811,48 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Returns the DungeonSoloFirst entry whose family name is contained within the provided label.
-   * This tolerates labels like "Pit of Heresy: Normal" by fuzzy-matching against the canonical
-   * family name ("Pit of Heresy").
+   * Returns the DungeonSoloFirst entry that matches the exact dungeon version.
+   * This now matches by full version name (e.g., "Vesper's Host: Master") for precise solo tracking.
    */
   getDungeonSoloFirstForPlayer(player: PlayerSearchDisplay, label: string): DungeonSoloFirst | undefined {
     const list = this.dungeonSoloFirsts[player.membershipId];
     if (!list) return undefined;
-    const lower = label.toLowerCase();
-    return list.find(d => lower.includes(d.family.toLowerCase()));
+    
+    console.log(`[getDungeonSoloFirstForPlayer] Looking for "${label}" in player ${player.displayName}`);
+    console.log(`[getDungeonSoloFirstForPlayer] Available solo firsts:`, list);
+    
+    // First, try exact match by full version name
+    let result = list.find(d => d.fullName === label);
+    
+    // If no exact match found and this looks like a dungeon name, try to find by base name
+    if (!result && this.isDungeonName(label)) {
+      // Find all versions of this dungeon that have solo data
+      const matchingVersions = list.filter(d => d.family === label);
+      
+      if (matchingVersions.length > 0) {
+        // Return the version with the earliest solo completion
+        result = matchingVersions.reduce((earliest, current) => {
+          if (!earliest.firstSolo) return current;
+          if (!current.firstSolo) return earliest;
+          return new Date(current.firstSolo.period) < new Date(earliest.firstSolo.period) ? current : earliest;
+        });
+      }
+    }
+    console.log(`[getDungeonSoloFirstForPlayer] Found result for "${label}":`, result);
+    
+    return result;
+  }
+
+  /**
+   * Helper method to determine if a label represents a dungeon name
+   */
+  private isDungeonName(label: string): boolean {
+    const dungeonNames = [
+      'The Shattered Throne', 'Pit of Heresy', 'Prophecy', 'Grasp of Avarice',
+      'Duality', 'Spire of the Watcher', 'Ghosts of the Deep', "Warlord's Ruin",
+      "Vesper's Host", "Sundered Doctrine"
+    ];
+    return dungeonNames.includes(label);
   }
 
   getPlatformIconForFirst(first: { membershipId?: string }): string {
