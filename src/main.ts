@@ -5,18 +5,30 @@ import { AppComponent } from './app/app.component';
 import { isDevMode } from '@angular/core';
 import { environment } from './environments/environment';
 
-// Suppress noisy debug logs when debug flag is off (works in dev and prod)
+// Suppress debug logs in production
 if (!environment.debug) {
 	const originalWarn = console.warn.bind(console);
+	const originalError = console.error.bind(console);
 	const isDebugLike = (firstArg: any): boolean => {
 		if (typeof firstArg !== 'string') return false;
-		return firstArg.includes('[DEBUG]') || firstArg.includes('{debug}') || firstArg.includes('[Date Check]');
+		return firstArg.includes('[DEBUG]') || firstArg.includes('[TITLES DEBUG]') || firstArg.includes('[Date Check]');
 	};
 	console.log = () => {};
 	console.debug = () => {};
+	console.info = () => {};
+	console.time = (_label?: string) => {};
+	console.timeEnd = (_label?: string) => {};
+	// timeLog may not exist in all environments; guard if present
+	if (typeof console.timeLog === 'function') {
+		(console as any).timeLog = (_label?: string, ..._data: any[]) => {};
+	}
 	console.warn = (...args: any[]) => {
 		if (isDebugLike(args[0])) { return; }
 		originalWarn(...args);
+	};
+	console.error = (...args: any[]) => {
+		if (isDebugLike(args[0])) { return; }
+		originalError(...args);
 	};
 }
 

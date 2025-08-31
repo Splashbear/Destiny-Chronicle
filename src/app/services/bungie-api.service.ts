@@ -86,12 +86,8 @@ export class BungieApiService {
   }
 
   private getHeaders(): HttpHeaders {
-    const origin = window.location.origin || 'http://localhost:4200';
     return new HttpHeaders({
       'X-API-Key': this.API_KEY,
-      'User-Agent': 'DestinyChronicle/1.0',
-      'Origin': origin,
-      'Accept': 'application/json',
       'Content-Type': 'application/json'
     });
   }
@@ -350,10 +346,7 @@ export class BungieApiService {
       ? `${baseUrl}/Destiny/Stats/PostGameCarnageReport/${activityId}/`
       : `${baseUrl}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`;
     
-    const headers = new HttpHeaders({
-      'X-API-Key': this.API_KEY,
-      'Accept': 'application/json'
-    });
+    const headers = this.getHeaders();
     
     return this.http.get<BungieResponse<any>>(url, { 
       headers,
@@ -401,11 +394,7 @@ export class BungieApiService {
   searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<BungieResponse<PlayerSearchResult[]>> {
     const url = `${this.D2_BASE_URL}/Destiny2/SearchDestinyPlayerByBungieName/-1/`;
     const finalUrl = this.buildUrl(url);
-    const headers = new HttpHeaders({
-      'X-API-Key': this.API_KEY,
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    });
+    const headers = this.getHeaders();
     const body = {
       displayName,
       displayNameCode: parseInt(displayNameCode.toString(), 10)
@@ -535,11 +524,7 @@ export class BungieApiService {
     const url = `${this.D2_BASE_URL}/User/Search/GlobalName/0/`;
     const finalUrl = this.buildUrl(url);
     const body = { displayNamePrefix: term };
-    const headers = new HttpHeaders({
-      'X-API-Key': this.API_KEY,
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    });
+    const headers = this.getHeaders();
     return this.http.post<BungieResponse<any>>(finalUrl, body, { headers }).pipe(
       catchError(err => {
         console.error('[BungieApi] Error in searchUsersPrefix:', err);

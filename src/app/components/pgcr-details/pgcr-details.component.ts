@@ -180,8 +180,7 @@ export class PGCRDetailsComponent {
   @Input() pgcr: any;
 
   getActivityName(): string {
-    // TODO: Use manifest service to get activity name
-    return 'Activity Name';
+    return this.pgcr?.activityDetails?.displayName || 'Unknown Activity';
   }
 
   getWeaponStats(): Array<{ name: string; kills: number }> {
@@ -191,7 +190,7 @@ export class PGCRDetailsComponent {
 
     return Object.entries(this.pgcr.values.weaponKills)
       .map(([hash, data]: [string, any]) => ({
-        name: `Weapon ${hash}`, // TODO: Use manifest service to get weapon name
+        name: `Weapon ${hash}`, // Weapon name lookup would require manifest service
         kills: data.basic.value
       }))
       .sort((a, b) => b.kills - a.kills);

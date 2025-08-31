@@ -223,8 +223,7 @@ function normalizeTitleName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-// Minimal standalone function to test Bungie API response for profileRecords
-async function testBungieProfileRecords(_bungieService: any, _membershipType: number, _membershipId: string) { /* no-op in production */ }
+
 
 // Utility function to extract characterId for both D1 and D2 character objects
 // D1: character.characterBase.characterId
@@ -1606,7 +1605,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Reset initial-sync tracking
     this.firstFullSyncDone = false;
     this.syncedPlayers.clear();
-    
+
     // Clear all loading statuses when selecting a new player
     this.accountLoadingStatus.clear();
     this.accountLoadingStatuses = [];
@@ -1775,7 +1774,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.error[key] = '';
     
     const accountKey = this.getPlayerKey(player);
-    const isD1 = this.isD1Player(player);
+      const isD1 = this.isD1Player(player);
     const game = isD1 ? 'D1' : 'D2';
     const platform = this.getPlatformName(player.membershipType);
     
@@ -1946,13 +1945,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Log the character we're looking for with full details
     if (environment.debug) {
-      console.log(`[DEBUG] Looking for character in PGCRs:`, {
-        membershipId: character.membershipId,
-        characterId: character.characterId,
-        game: character.game,
-        membershipType: character.membershipType,
-        platform: this.getPlatformName(character.membershipType)
-      });
+    console.log(`[DEBUG] Looking for character in PGCRs:`, {
+      membershipId: character.membershipId,
+      characterId: character.characterId,
+      game: character.game,
+      membershipType: character.membershipType,
+      platform: this.getPlatformName(character.membershipType)
+    });
     }
     
     // Create array of PGCR fetch promises with metadata
@@ -1960,7 +1959,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const instanceId = activity.activityDetails?.instanceId;
       if (!instanceId) {
         if (environment.debug) {
-          console.warn('[DEBUG] Activity missing instanceId:', activity);
+        console.warn('[DEBUG] Activity missing instanceId:', activity);
         }
         return null;
       }
@@ -2008,7 +2007,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         // Enhanced debug logging for PGCR entries
         if (!pgcr.entries || !Array.isArray(pgcr.entries) || pgcr.entries.length === 0) {
           if (environment.debug) {
-            console.warn(`[DEBUG] PGCR ${instanceId} has no entries (undefined or empty). Marking as unavailable.`);
+          console.warn(`[DEBUG] PGCR ${instanceId} has no entries (undefined or empty). Marking as unavailable.`);
           }
           validatedActivities.push({
             ...activity,
@@ -2017,15 +2016,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           return;
         }
         if (environment.debug) {
-          console.log(`[DEBUG] Processing PGCR ${instanceId}:`, {
-            entries: pgcr.entries.map((e: any) => ({
-              membershipId: e.player?.destinyUserInfo?.membershipId,
-              characterId: e.characterId,
-              displayName: e.player?.destinyUserInfo?.displayName,
-              membershipType: e.player?.destinyUserInfo?.membershipType,
-              platform: this.getPlatformName(e.player?.destinyUserInfo?.membershipType)
-            }))
-          });
+        console.log(`[DEBUG] Processing PGCR ${instanceId}:`, {
+          entries: pgcr.entries.map((e: any) => ({
+            membershipId: e.player?.destinyUserInfo?.membershipId,
+            characterId: e.characterId,
+            displayName: e.player?.destinyUserInfo?.displayName,
+            membershipType: e.player?.destinyUserInfo?.membershipType,
+            platform: this.getPlatformName(e.player?.destinyUserInfo?.membershipType)
+          }))
+        });
         }
 
         // Try multiple matching strategies
@@ -2493,7 +2492,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
       await this.setFirstEverActivityFromDb();
-      this.debugLogEarliestActivity();
+
       return;
     }
     // Initialise process-phase progress bar
@@ -2577,7 +2576,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }));
     this.cdr.detectChanges();
     await this.setFirstEverActivityFromDb();
-    this.debugLogEarliestActivity();
+
     console.log('[DEBUG] GroupedAccounts: D1=', this.getAccountGroupsForGame('D1').length,
                 'D2=', this.getAccountGroupsForGame('D2').length);
   }
@@ -3324,8 +3323,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       await this.showInstantDateChange();
     } else {
       // Set loading state for new users
-      this.loadingActivities[this.selectedDate] = true;
-      this.cdr.detectChanges();
+    this.loadingActivities[this.selectedDate] = true;
+    this.cdr.detectChanges();
     }
 
     try {
@@ -4477,7 +4476,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   public runProfileRecordsTest() {
     if (this.selectedPlayers.length > 0) {
       const player = this.selectedPlayers[0];
-      testBungieProfileRecords(this.bungieService, player.membershipType, player.membershipId);
+
     } else {
       console.warn('[TEST] No player selected for test.');
     }
@@ -4498,8 +4497,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game });
   }
 
-  // Deprecated debug method – keep as no-op to avoid template errors
-  async debugLogEarliestActivity() { /* no-op */ }
+
 
   // Add a helper to set firstEverActivity using the centralized service
   private async setFirstEverActivityFromDb() {
@@ -4917,10 +4915,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private async computeFirstEverActivityForPlayer(player: PlayerSearchDisplay): Promise<ActivityHistory | undefined> {
     // Ensure D1 history is fully backfilled before computing earliest
     if (player.game === 'D1') {
-      const charIds = (this.characters[this.getPlayerKey(player)] || [])
-        .map(getCharacterId)
-        .filter((id): id is string => !!id);
-      for (const charId of charIds) {
+    const charIds = (this.characters[this.getPlayerKey(player)] || [])
+      .map(getCharacterId)
+      .filter((id): id is string => !!id);
+    for (const charId of charIds) {
         try {
           await this.activityDb.fetchAndStoreActivities(
             player.membershipType as any,
@@ -5321,8 +5319,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (dateParts.length === 2) {
         // Old MM-DD format
         const [month, day] = dateParts;
-        const year = new Date().getFullYear();
-        options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+      const year = new Date().getFullYear();
+      options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
       } else if (dateParts.length === 3) {
         // New YYYY-MM-DD format
         const [year, month, day] = dateParts;
