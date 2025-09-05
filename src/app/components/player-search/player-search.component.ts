@@ -420,8 +420,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private readonly PGCR_BATCH_SIZE = 30;
   private readonly VALIDATION_DELAY = 50;
 
-  onDatePickerChange(dateString: string) {
-    this.selectedDate = dateString;
+  onDatePickerChange(dateInfo: {month: number, day: number}) {
+    this.selectedMonth = dateInfo.month;
+    this.selectedDay = dateInfo.day;
     this.onDateSearch();
   }
 
@@ -3345,19 +3346,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // If the user clicked "Search" for the same day we're already showing, we
     // just trigger a lightweight refresh instead of blowing away caches and
     // restarting the fast-load logic (which caused the visible refresh loop).
-    // IMPORTANT: Because selectedMonth/selectedDay are two-way bound (ngModel),
-    // comparing against them will always look the same as the newly chosen values.
-    // Compare against the month/day parsed from selectedDate instead.
-    let prevMonth: number | undefined;
-    let prevDay: number | undefined;
-    if (this.selectedDate) {
-      const parts = this.selectedDate.split('-');
-      if (parts.length === 3) {
-        prevMonth = parseInt(parts[1]);
-        prevDay = parseInt(parts[2]);
-      }
-    }
-    const sameDate = prevMonth === newMonth && prevDay === newDay;
+    const sameDate = this.selectedMonth === newMonth && this.selectedDay === newDay;
     if (sameDate) {
       await this.loadAllFilteredActivities();
       return;
@@ -3370,10 +3359,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.clearFilteredActivitiesCache();
     this.selectedMonth = newMonth;
     this.selectedDay = newDay;
-    this.selectedYear = this.selectedYear || new Date().getFullYear(); // Ensure year is set
-    this.selectedDate = `${this.selectedYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     
-    // Update URL for permalink sharing
+    // Update URL for permalink sharing (using current year for URL)
+    this.selectedYear = this.selectedYear || new Date().getFullYear();
+    this.selectedDate = `${this.selectedYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     this.updateUrlForPermalink();
     
     // Clear loading statuses for all accounts when date changes
@@ -3473,50 +3462,36 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   private isActivityOnSelectedDate(activity: ActivityHistory): boolean {
-    if (!activity.period || !this.selectedDate) return false;
+    if (!activity.period || !this.selectedMonth || !this.selectedDay) return false;
     
     const activityDate = new Date(activity.period);
     
-    // Parse selectedDate (format: "YYYY-MM-DD")
-    const dateParts = this.selectedDate.split('-');
-    if (dateParts.length !== 3) {
-      console.warn('[DateFilter] Invalid selectedDate format:', this.selectedDate);
-      return false;
-    }
-
-    const selectedYear = parseInt(dateParts[0]);
-    const selectedMonth = parseInt(dateParts[1]);
-    const selectedDay = parseInt(dateParts[2]);
-
-    // Convert activity date to local midnight for consistent comparison
-    const activityLocalMidnight = new Date(activityDate.getFullYear(), activityDate.getMonth(), activityDate.getDate());
-    
-    // Create selected date as local midnight for comparison
-    const selectedDateLocal = new Date(selectedYear, selectedMonth - 1, selectedDay);
+    // Match month and day across all years
+    const activityMonth = activityDate.getMonth() + 1; // getMonth() returns 0-11, we need 1-12
+    const activityDay = activityDate.getDate();
     
     // Debug logging for D1 activities to help diagnose timezone issues (only for mismatches)
     if (activity.activityDetails?.referenceId && this.isD1Activity(activity)) {
-      const isMatch = activityLocalMidnight.getTime() === selectedDateLocal.getTime();
+      const isMatch = activityMonth === this.selectedMonth && activityDay === this.selectedDay;
       // Only log if there's a potential timezone issue (activity should match but doesn't)
       if (!isMatch && activity.period) {
         const activityDateOnly = activity.period.split('T')[0];
-        const selectedDateOnly = this.selectedDate;
-        // Only log if the date strings match but the comparison failed
-        if (activityDateOnly === selectedDateOnly) {
-          console.warn('[Date Check] D1 Timezone Issue:', {
-            period: activity.period,
-            activityDate: activityDate.toISOString(),
-            activityLocalMidnight: activityLocalMidnight.toISOString(),
-            selectedDateLocal: selectedDateLocal.toISOString(),
-            selectedDate: this.selectedDate,
+        // Only log if the month/day should match but doesn't
+        if (activityMonth === this.selectedMonth && activityDay === this.selectedDay) {
+          console.warn('[Date Check] D1 Activity timezone mismatch:', {
+            activityPeriod: activity.period,
+            activityDateOnly,
+            activityMonth,
+            activityDay,
+            selectedMonth: this.selectedMonth,
+            selectedDay: this.selectedDay,
             referenceId: activity.activityDetails.referenceId
           });
         }
       }
     }
     
-    // Compare dates at local midnight (ignoring time)
-    return activityLocalMidnight.getTime() === selectedDateLocal.getTime();
+    return activityMonth === this.selectedMonth && activityDay === this.selectedDay;
   }
   
   private isD1Activity(activity: ActivityHistory): boolean {

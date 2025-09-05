@@ -186,7 +186,7 @@
         <!-- Date Picker -->
          <div *ngIf="selectedPlayers.length > 0 && dbReady && !loadingActivities[selectedDate]" class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col items-start xl:w-80 min-w-0">
           <h2 class="text-xl font-bold text-white mb-4">Date</h2>
-          <app-date-picker [selectedDate]="selectedDate" (dateChange)="onDatePickerChange($event)"></app-date-picker>
+          <app-date-picker [selectedMonth]="selectedMonth" [selectedDay]="selectedDay" (dateChange)="onDatePickerChange($event)"></app-date-picker>
           <!-- Share Permalink Button -->
           <div class="mt-3 w-full">
             <button (click)="sharePermalink()" 

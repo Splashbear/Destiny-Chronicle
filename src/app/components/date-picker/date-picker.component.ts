@@ -23,25 +23,14 @@ import { FormsModule } from '@angular/forms';
         class="px-3 py-2 bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors">
         <option *ngFor="let day of availableDays" [value]="day">{{ day }}</option>
       </select>
-
-      <!-- Year Selector -->
-      <select 
-        [(ngModel)]="selectedYear" 
-        (ngModelChange)="onDateChange()"
-        class="px-3 py-2 bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors">
-        <option *ngFor="let year of years" [value]="year">{{ year }}</option>
-      </select>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DatePickerComponent implements OnInit {
-  @Input() selectedDate: string = '';
-  @Output() dateChange = new EventEmitter<string>();
-
-  selectedMonth: number = new Date().getMonth() + 1;
-  selectedDay: number = new Date().getDate();
-  selectedYear?: number;
+  @Input() selectedMonth: number = new Date().getMonth() + 1;
+  @Input() selectedDay: number = new Date().getDate();
+  @Output() dateChange = new EventEmitter<{month: number, day: number}>();
 
   months = [
     { value: 1, label: 'January' },
@@ -58,30 +47,17 @@ export class DatePickerComponent implements OnInit {
     { value: 12, label: 'December' }
   ];
 
-  years: number[] = [];
-
   ngOnInit() {
-    // Generate years from 2014 to current year + 1
-    const currentYear = new Date().getFullYear();
-    for (let year = 2014; year <= currentYear + 1; year++) {
-      this.years.push(year);
-    }
-
-    // Set default year to current year
-    this.selectedYear = currentYear;
-
-    // Parse initial date if provided
-    if (this.selectedDate) {
-      this.parseDate(this.selectedDate);
-    }
+    // No year handling needed - we show activities across all years for the selected month/day
   }
 
   get availableDays(): number[] {
-    if (!this.selectedMonth || !this.selectedYear) {
+    if (!this.selectedMonth) {
       return [];
     }
 
-    const daysInMonth = new Date(this.selectedYear, this.selectedMonth, 0).getDate();
+    // Use current year for day calculation (doesn't matter which year for day count)
+    const daysInMonth = new Date(new Date().getFullYear(), this.selectedMonth, 0).getDate();
     const days: number[] = [];
     
     for (let day = 1; day <= daysInMonth; day++) {
@@ -92,24 +68,8 @@ export class DatePickerComponent implements OnInit {
   }
 
   onDateChange() {
-    if (this.selectedMonth && this.selectedDay && this.selectedYear) {
-      const dateString = this.formatDate(this.selectedYear, this.selectedMonth, this.selectedDay);
-      this.dateChange.emit(dateString);
+    if (this.selectedMonth && this.selectedDay) {
+      this.dateChange.emit({month: this.selectedMonth, day: this.selectedDay});
     }
-  }
-
-  private parseDate(dateString: string) {
-    if (!dateString) return;
-    
-    const date = new Date(dateString);
-    if (!isNaN(date.getTime())) {
-      this.selectedYear = date.getFullYear();
-      this.selectedMonth = date.getMonth() + 1;
-      this.selectedDay = date.getDate();
-    }
-  }
-
-  private formatDate(year: number, month: number, day: number): string {
-    return `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
   }
 }
