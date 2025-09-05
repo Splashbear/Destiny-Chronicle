@@ -19,6 +19,9 @@ import { map, shareReplay, switchMap, catchError, distinctUntilChanged, exhaustM
 import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
+import { DatePickerComponent } from '../date-picker/date-picker.component';
+// Removed new summary/list components to revert to previous display
+import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from '../../services/stats.service';
 import type { ActivityIconType } from '../../services/activity-icon.service';
 import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
@@ -340,7 +343,8 @@ interface PlatformStats {
     CommonModule,
     FormsModule,
     AccountStatsComponent,
-    ExportOptionsDialogComponent
+    ExportOptionsDialogComponent,
+    DatePickerComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
@@ -406,12 +410,63 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     totalSeals: 0,
     perType: {}
   };
+  
+  // New computed stats using StatsService
+  computedAccountStats: AccountStats | null = null;
   filteredActivitiesForDate: ActivityWithMembership[] = [];
   private currentLoadToken = 0;
   /** Incrementing token for stats calculations to avoid stale calls resetting the spinner late. */
   private statsCalcToken = 0;
   private readonly PGCR_BATCH_SIZE = 30;
   private readonly VALIDATION_DELAY = 50;
+
+  onDatePickerChange(dateString: string) {
+    this.selectedDate = dateString;
+    this.onDateSearch();
+  }
+
+  /**
+   * Computes account stats using the StatsService
+   */
+  private computeAccountStatsWithService(): void {
+    if (this.selectedPlayers.length === 0 || this.filteredActivitiesForDate.length === 0) {
+      this.computedAccountStats = null;
+      return;
+    }
+
+    // Create activities map for the StatsService
+    const activitiesMap = new Map<string, ActivityHistory[]>();
+    
+    for (const player of this.selectedPlayers) {
+      const playerKey = `${player.game}|${player.membershipId}`;
+      const playerActivities = this.filteredActivitiesForDate.filter(activity => 
+        activity.membershipId === player.membershipId && activity.game === player.game
+      );
+      activitiesMap.set(playerKey, playerActivities);
+    }
+
+    // Compute stats using the service
+    this.computedAccountStats = this.statsService.calculateAccountStats(this.selectedPlayers, activitiesMap);
+  }
+
+  /**
+   * Gets grouped activities for the ActivityListComponent
+   */
+  getGroupedActivitiesForDisplay(): any[] {
+    if (this.filteredActivitiesForDate.length === 0) {
+      return [];
+    }
+
+    // Convert ActivityWithMembership to ActivityHistory for the StatsService
+    const activities: ActivityHistory[] = this.filteredActivitiesForDate.map(activity => ({
+      period: activity.period || '',
+      activityDetails: activity.activityDetails || { referenceId: '0', instanceId: '0', mode: 0 },
+      values: activity.values || {}
+    }));
+
+    const statsGroups = this.statsService.groupActivitiesByBaseName(activities);
+    return statsGroups;
+  }
   guardianFirsts: ActivityFirstCompletion[] = [];
   loadingGuardianFirsts = false;
   readonly guardianGames: ('D1' | 'D2')[] = ['D1', 'D2'];
@@ -513,7 +568,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // ------------------------------------------------------------------
   // Concurrency-limited queue for per-account sync (Pattern 2)
   // ------------------------------------------------------------------
-  private readonly MAX_PARALLEL_PLAYER_SYNCS = 4; // Increased from 2 to 4 for better D1/D2 concurrency
+  private readonly MAX_PARALLEL_PLAYER_SYNCS = 2; // Reduced from 4 to 2 to stay under rate limits
   private activePlayerSyncs = 0;
   private playerSyncQueue: Array<() => void> = [];
 
@@ -583,6 +638,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return [...unlocked, ...locked];
   }
 
+  /**
+   * Returns titles filtered by locked state, respecting current filter/sort options.
+   */
+  private getTitlesByLock(locked: boolean): any[] {
+    let list = this.aggregatedTitles.filter((t: any) => t.locked === locked);
+
+    // Apply legacy/current filters when set
+    if (this.titleFilter !== 'all') {
+      const wantLegacy = this.titleFilter === 'legacy';
+      list = list.filter((t: any) => t.legacy === wantLegacy);
+    }
+
+    const sortAlpha   = (a: any, b: any) => a.name.localeCompare(b.name);
+    const sortRelease = (a: any, b: any) => (b.releaseRank ?? 0) - (a.releaseRank ?? 0);
+    const sortFn = this.titleSort === 'alpha' ? sortAlpha : sortRelease;
+    return [...list].sort(sortFn);
+  }
+
+  /** Earned titles (unlocked). */
+  get unlockedTitlesDisplay(): any[] {
+    return this.getTitlesByLock(false);
+  }
+
+  /** Locked titles. */
+  get lockedTitlesDisplay(): any[] {
+    return this.getTitlesByLock(true);
+  }
+
   constructor(
     private bungieService: BungieApiService,
     public manifest: DestinyManifestService,
@@ -592,6 +675,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private activityDb: ActivityDbService,
     private timezoneService: TimezoneService,
     private activityIconService: ActivityIconService,
+    private statsService: StatsService,
     private wastedService: WastedOnDestinyService,
     private playtimeService: PlaytimeService,
     private titleService: TitleService,
@@ -1045,7 +1129,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     });
   }
-
   /**
    * Show cached data instantly if available
    * Returns true if cached data was displayed, false if no cache
@@ -1659,6 +1742,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               await this.loadCharacterHistory(pl);
               await this.loadGuardianFirsts(pl);
               await this.loadDungeonSoloFirsts(pl);
+              
+              // Debug: Check what activities are actually in the database for this player
+              await this.activityDb.debugPlayerActivities(pl.membershipId);
             } catch (err) {
               console.warn('[LoadCharacterHistory/Firsts] Skipped due to error for', pl.membershipId, err);
             }
@@ -1766,7 +1852,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     };
     this.selectedAccounts.add(acc);
   }
-
   async loadCharacterHistory(player: PlayerSearchResult | PlayerSearchDisplay) {
     console.log('loadCharacterHistory called', { player });
     const key = `characters-${this.getPlayerKey(player)}`;
@@ -2027,45 +2112,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
         }
 
-        // Try multiple matching strategies
+        // Determine if the PGCR belongs to the player: membershipId match is sufficient
         const playerInPgcr = pgcr.entries.some((entry: PGCREntry) => {
-          // Strategy 1: Exact match (both membershipId and characterId)
-          const exactMatch = entry.player?.destinyUserInfo?.membershipId === character.membershipId &&
-                           entry.characterId === character.characterId;
-          
-          // Strategy 2: Just membershipId match
-          const membershipMatch = entry.player?.destinyUserInfo?.membershipId === character.membershipId;
-          
-          // Strategy 3: Just characterId match (for cross-save scenarios)
-          const characterMatch = entry.characterId === character.characterId;
-          
-          // Strategy 4: Platform-specific membershipId match
-          const platformMatch = entry.player?.destinyUserInfo?.membershipType === character.membershipType &&
-                              entry.player?.destinyUserInfo?.membershipId === character.membershipId;
-
-          // Log match attempt details
-          console.log(`[DEBUG] Match attempt for PGCR ${instanceId}:`, {
-            entry: {
-              membershipId: entry.player?.destinyUserInfo?.membershipId,
-              characterId: entry.characterId,
-              membershipType: entry.player?.destinyUserInfo?.membershipType,
-              platform: this.getPlatformName(entry.player?.destinyUserInfo?.membershipType)
-            },
-            character: {
-              membershipId: character.membershipId,
-              characterId: character.characterId,
-              membershipType: character.membershipType,
-              platform: this.getPlatformName(character.membershipType)
-            },
-            matchResults: {
-              exactMatch,
-              membershipMatch,
-              characterMatch,
-              platformMatch
-            }
-          });
-
-          return exactMatch || membershipMatch || characterMatch || platformMatch;
+          return entry.player?.destinyUserInfo?.membershipId === character.membershipId;
         });
 
         if (playerInPgcr) {
@@ -2083,7 +2132,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             ))?.player?.characterClass) || activity.characterClass
           });
         } else {
-          console.warn(`[DEBUG] Player ${character.membershipId} not found in PGCR ${instanceId} using any matching strategy`);
+          console.warn(`[DEBUG] Player ${character.membershipId} not found in PGCR ${instanceId}`);
         }
       } else {
         const error = result.status === 'rejected' ? result.reason : 'Unknown error';
@@ -2479,7 +2528,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     this.cdr.detectChanges();
   }
-
   private async processAndGroupActivities(): Promise<void> {
     const totalToProcess = this.filteredActivitiesForDate.length;
     if (totalToProcess === 0) {
@@ -2518,21 +2566,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
       }
       const yearGroup = account.yearGroups.get(year)!;
-      // Use manifest to get real activity name and type
+      // Use manifest as primary source, custom mapping as backup
       const referenceId = activity.activityDetails?.referenceId;
       const isD1 = activity.game === 'D1';
-      const activityName = this.manifest.getActivityName(referenceId, isD1) || 'Unknown Activity';
+      
+      // Get activity name from manifest first, then fallback to custom mapping
+      let activityName = this.manifest.getActivityName(referenceId, isD1);
+      if (!activityName || activityName === 'Unknown Activity') {
+        // Fallback to custom mapping if manifest doesn't have the name
+        activityName = this.getMappedActivityName(String(referenceId)) || 'Unknown Activity';
+      }
+      
+
+      
       const activityType = this.manifest.getActivityType(referenceId, activity.activityDetails?.mode);
       const normalizedType = (activityType || 'other').toLowerCase().replace(/\s+/g, '-');
-      const groupKey = `${activityName}`;
+      
+      // Group by base activity name (remove version suffixes)
+      const baseActivityName = this.getBaseActivityName(activityName);
+      const groupKey = `${baseActivityName}`;
+      
       if (!yearGroup.typeGroups.has(groupKey)) {
         let icon = this.activityIconService.getActivityIconPath(normalizedType, isD1);
         if (!icon) {
           icon = this.activityIconService.getActivityIconPath('other', isD1);
         }
         yearGroup.typeGroups.set(groupKey, {
-          name: activityName,      // for display
-          type: activityType,      // for icon
+          name: baseActivityName,      // for display (base name)
+          type: activityType,          // for icon
           isD1,
           image: this.getActivityImage(activity, isD1),
           icon,
@@ -2918,9 +2979,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         return isRaid;
       }
       if (!mode) return false;
-      // Special case for Dungeons (D2 only)
+      // Special case for Dungeons (D2 only) - use proper activity type detection
       if (this.selectedActivityType.label === 'Dungeon') {
-        return game === 'D2' && mode === this.selectedActivityType.d2Mode;
+        if (game !== 'D2') return false;
+        // Use the manifest service to properly detect dungeons
+        const activityType = this.manifest.getActivityType(referenceId, mode);
+        return activityType === 'dungeon';
       }
       // Normal case - check mode against game version
       return (game === 'D1' && mode === this.selectedActivityType.d1Mode) ||
@@ -3219,7 +3283,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getActivityTime(type: string): number {
     return this.getPerTypeStats(type).time;
   }
-
   private createActivityEntry(activity: ActivityHistory): ActivityEntry {
     // Log the activity we're trying to process
     console.log('[DEBUG] Creating activity entry for:', {
@@ -3362,6 +3425,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (hasAnyActivities) {
         // Update the display immediately with cached data for the new date
         this.filteredActivitiesForDate = this.formatActivitiesForDisplay(newFilteredActivities);
+        this.computeAccountStatsWithService();
         this.loadingActivities[this.selectedDate] = false;
         this.cdr.detectChanges();
         
@@ -3430,17 +3494,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Create selected date as local midnight for comparison
     const selectedDateLocal = new Date(selectedYear, selectedMonth - 1, selectedDay);
     
-    // Debug logging for D1 activities to help diagnose timezone issues
+    // Debug logging for D1 activities to help diagnose timezone issues (only for mismatches)
     if (activity.activityDetails?.referenceId && this.isD1Activity(activity)) {
-      console.log('[Date Check] D1 Activity:', {
-        period: activity.period,
-        activityDate: activityDate.toISOString(),
-        activityLocalMidnight: activityLocalMidnight.toISOString(),
-        selectedDateLocal: selectedDateLocal.toISOString(),
-        selectedDate: this.selectedDate,
-        referenceId: activity.activityDetails.referenceId,
-        match: activityLocalMidnight.getTime() === selectedDateLocal.getTime()
-      });
+      const isMatch = activityLocalMidnight.getTime() === selectedDateLocal.getTime();
+      // Only log if there's a potential timezone issue (activity should match but doesn't)
+      if (!isMatch && activity.period) {
+        const activityDateOnly = activity.period.split('T')[0];
+        const selectedDateOnly = this.selectedDate;
+        // Only log if the date strings match but the comparison failed
+        if (activityDateOnly === selectedDateOnly) {
+          console.warn('[Date Check] D1 Timezone Issue:', {
+            period: activity.period,
+            activityDate: activityDate.toISOString(),
+            activityLocalMidnight: activityLocalMidnight.toISOString(),
+            selectedDateLocal: selectedDateLocal.toISOString(),
+            selectedDate: this.selectedDate,
+            referenceId: activity.activityDetails.referenceId
+          });
+        }
+      }
     }
     
     // Compare dates at local midnight (ignoring time)
@@ -3881,14 +3953,35 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         // Get activities filtered by mode and date
         const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
         const endDate = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
-        const mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;
+        // For dungeons, we need to use a different approach since they don't have a consistent mode
+        let mode: number | undefined;
+        if (this.selectedActivityType.label === 'Dungeon' && player.game === 'D2') {
+          // For dungeons, we'll get all activities and filter by type later
+          mode = undefined;
+        } else {
+          mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;
+        }
         
-        playerActivities = await this.activityDb.getActivitiesByModeAndDate(
-          player.membershipId,
-          mode ?? 0,
-          startDate,
-          endDate
-        );
+        if (mode !== undefined) {
+          playerActivities = await this.activityDb.getActivitiesByModeAndDate(
+            player.membershipId,
+            mode,
+            startDate,
+            endDate
+          );
+        } else {
+          // For dungeons, get all activities and filter by type
+          const charIds = (this.characters[this.getPlayerKey(player)] || [])
+            .map(getCharacterId)
+            .filter((id): id is string => !!id);
+          
+          const activitiesArrays = await Promise.all(
+            charIds.map(async (charId: string) => {
+              return this.activityDb.getActivitiesByGame(player.membershipId, charId, player.game);
+            })
+          );
+          playerActivities = activitiesArrays.flat();
+        }
       }
 
       // Keep only activities that belong to the same game as this player
@@ -3935,6 +4028,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     
     this.filteredActivitiesForDate = dedupedActivities;
+    this.computeAccountStatsWithService();
     return dedupedActivities;
   }
 
@@ -3977,7 +4071,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return aIndex - bIndex;
     });
   }
-
   getGuardianFirstDungeonsForGame(membershipId: string, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
     if (game === 'D1') return [];
     const firsts = this.guardianFirstsMap[membershipId] || [];
@@ -4209,6 +4302,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       }
       const sorted = Array.from(perName.values()).sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
+      
+      // Per-player deduplication completed
+      
       // store per-player list (keyed by game+membershipId)
       const pKey = this.getPlayerKey(player);
       this.guardianFirstsMap[pKey] = sorted;
@@ -4231,6 +4327,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       });
       this.aggregateGuardianFirsts = aggregate.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
+      
+      // Aggregate guardian firsts computation completed
       // Default existing property points to aggregate so legacy helpers keep working
       this.guardianFirsts = this.aggregateGuardianFirsts;
       // Compute first-ever activity for this specific player once firsts are loaded
@@ -4264,6 +4362,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.sortDungeons(list);
   }
 
+  getPlayerPantheonRaids(player: PlayerSearchDisplay): ActivityFirstCompletion[] {
+    const list = this.getFirstsForPlayer(player).filter(f => 
+      f.type === 'raid' && f.game === 'D2' && 
+      (f.name.includes('The Pantheon:') || f.name.includes('Pantheon:'))
+    );
+    return this.sortRaids(list, 'D2');
+  }
+
+  getPlayerRegularRaids(player: PlayerSearchDisplay, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const list = this.getFirstsForPlayer(player).filter(f => 
+      f.type === 'raid' && f.game === game && 
+      !f.name.includes('The Pantheon:') && !f.name.includes('Pantheon:')
+    );
+    return this.sortRaids(list, game);
+  }
+
   /** Aggregate helpers */
   getAggregateRaids(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
     const earliest = this.getEarliestFirsts(this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'raid'));
@@ -4271,8 +4385,519 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   getAggregateDungeons(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
-    const earliest = this.getEarliestFirsts(this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'dungeon'));
+    const dungeonFirsts = this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'dungeon');
+    
+    // Process dungeon firsts for aggregation
+    
+    const earliest = this.getEarliestFirsts(dungeonFirsts);
     return this.sortDungeons(earliest);
+  }
+
+  /**
+   * Gets raids grouped by base activity name with versions
+   */
+  getGroupedRaids(game: 'D1' | 'D2'): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const raids = this.getAggregateRaids(game);
+    return this.groupActivitiesByBaseName(raids);
+  }
+
+  /**
+   * Gets dungeons grouped by base activity name with versions
+   */
+  getGroupedDungeons(game: 'D1' | 'D2'): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const dungeons = this.getAggregateDungeons(game);
+    return this.groupActivitiesByBaseName(dungeons);
+  }
+
+  /**
+   * Gets Pantheon raids grouped by base activity name with versions
+   */
+  getGroupedPantheonRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const allRaids = this.getAggregateRaids('D2');
+    const pantheonRaids = allRaids.filter(raid => 
+      raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:')
+    );
+    return this.groupActivitiesByBaseName(pantheonRaids);
+  }
+
+  /** Wrapper to allow grouping from template */
+  public groupActivitiesByBaseNamePublic(activities: ActivityFirstCompletion[]): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    return this.groupActivitiesByBaseName(activities);
+  }
+
+  /** Per-player Pantheon groups */
+  public getGroupedPantheonRaidsForPlayer(player: PlayerSearchDisplay): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const list = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === 'D2' && (f.name.includes('The Pantheon:') || f.name.includes('Pantheon:')));
+    return this.groupActivitiesByBaseName(list);
+  }
+
+  /**
+   * Gets regular D2 raids (excluding Pantheon) grouped by base activity name with versions
+   */
+  getGroupedRegularRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const allRaids = this.getAggregateRaids('D2');
+    const regularRaids = allRaids.filter(raid => 
+      !raid.name.includes('The Pantheon:') && !raid.name.includes('Pantheon:')
+    );
+    return this.groupActivitiesByBaseName(regularRaids);
+  }
+
+  /**
+   * Multi-version regular D2 raids (2+ versions) for full grouped display
+   */
+  getGroupedRegularRaidsMulti(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    return this.getGroupedRegularRaids().filter(group => (group.versions?.length || 0) > 1);
+  }
+
+  /**
+   * Single-version regular D2 raids as compact cards
+   */
+  getRegularRaidSingleCards(): Array<{ baseName: string; first: ActivityFirstCompletion }> {
+    return this.getGroupedRegularRaids()
+      .filter(group => (group.versions?.length || 0) === 1)
+      .map(group => ({ baseName: group.baseName, first: group.versions[0] }));
+  }
+
+  /**
+   * Multi-version D1 raids (2+ versions) for full grouped display
+   */
+  getGroupedD1RaidsMulti(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    return this.getGroupedRaids('D1').filter(group => (group.versions?.length || 0) > 1);
+  }
+
+  /**
+   * Single-version D1 raids as compact cards
+   */
+  getD1RaidSingleCards(): Array<{ baseName: string; first: ActivityFirstCompletion }> {
+    return this.getGroupedRaids('D1')
+      .filter(group => (group.versions?.length || 0) === 1)
+      .map(group => ({ baseName: group.baseName, first: group.versions[0] }));
+  }
+
+  /**
+   * Gets all D2 raids with all possible variants (completed or not)
+   */
+  getAllD2RaidVariants(): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }> 
+  }> {
+    const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
+    
+    // Collect all completed raids
+    const allRaids = this.getAggregateRaids('D2');
+    
+    for (const raid of allRaids) {
+      const baseName = this.getBaseActivityName(raid.name);
+      const version = this.getActivityVersion(raid.name);
+      
+      if (!raidVariants.has(baseName)) {
+        raidVariants.set(baseName, new Map());
+      }
+      raidVariants.get(baseName)!.set(version, raid);
+    }
+
+    // Define all possible variants for each raid
+    const raidVariantDefinitions = new Map<string, string[]>([
+      ['Leviathan', ['Normal', 'Prestige']],
+      ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
+      ['Leviathan, Spire of Stars', ['Normal', 'Prestige']],
+      ['Crown of Sorrow', ['Normal']],
+      ['Garden of Salvation', ['Normal']],
+      ['Deep Stone Crypt', ['Normal']],
+      ['Vault of Glass', ['Normal', 'Master', 'Standard']],
+      ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
+      ['King\'s Fall', ['Standard', 'Normal', 'Master', 'Expert']],
+      ['Root of Nightmares', ['Normal']],
+      ['Crota\'s End', ['Standard', 'Normal', 'Master', 'Legend']],
+      ['Salvation\'s Edge', ['Standard', 'Master']],
+      ['Last Wish', ['Standard', 'Normal']]
+    ]);
+
+    const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
+
+    for (const [baseName, possibleVersions] of raidVariantDefinitions) {
+      const completedVariants = raidVariants.get(baseName) || new Map();
+
+      // Merge Normal/Standard into a single base-difficulty entry using earliest completion
+      const hasNormal = completedVariants.get('Normal');
+      const hasStandard = completedVariants.get('Standard');
+      let baseFirst: ActivityFirstCompletion | undefined = undefined;
+      if (hasNormal && hasStandard) {
+        baseFirst = new Date(hasNormal.completionDate) <= new Date(hasStandard.completionDate) ? hasNormal : hasStandard;
+      } else {
+        baseFirst = hasStandard || hasNormal || undefined;
+      }
+      const baseLabel = hasStandard ? 'Standard' : (hasNormal ? 'Normal' : (possibleVersions.includes('Standard') ? 'Standard' : 'Normal'));
+
+      const variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> = [];
+
+      // Push base-difficulty merged row
+      if (possibleVersions.includes('Normal') || possibleVersions.includes('Standard')) {
+        variants.push({ version: baseLabel, first: baseFirst, hasClear: !!baseFirst });
+      }
+
+      // Push remaining versions excluding Normal/Standard
+      for (const version of possibleVersions) {
+        if (version === 'Normal' || version === 'Standard') continue;
+        const first = completedVariants.get(version);
+        variants.push({ version, first, hasClear: !!first });
+      }
+
+      result.push({ baseName, variants });
+    }
+
+    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /** Per-player: D2 raids with variants */
+  getAllD2RaidVariantsForPlayer(player: PlayerSearchDisplay): Array<{
+    baseName: string;
+    variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }>;
+  }> {
+    const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
+    const all = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === 'D2');
+    for (const raid of all) {
+      const baseName = this.getBaseActivityName(raid.name);
+      const version = this.getActivityVersion(raid.name);
+      if (!raidVariants.has(baseName)) raidVariants.set(baseName, new Map());
+      raidVariants.get(baseName)!.set(version, raid);
+    }
+    const defs = new Map<string, string[]>([
+      ['Leviathan', ['Normal', 'Prestige']],
+      ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
+      ['Leviathan, Spire of Stars', ['Normal', 'Prestige']],
+      ['Crown of Sorrow', ['Normal']],
+      ['Garden of Salvation', ['Normal']],
+      ['Deep Stone Crypt', ['Normal']],
+      ['Vault of Glass', ['Normal', 'Master', 'Standard']],
+      ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
+      ["King's Fall", ['Standard', 'Normal', 'Master', 'Expert']],
+      ['Root of Nightmares', ['Normal']],
+      ["Crota's End", ['Standard', 'Normal', 'Master', 'Legend']],
+      ["Salvation's Edge", ['Standard', 'Master']],
+      ['Last Wish', ['Standard', 'Normal']]
+    ]);
+    const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
+    for (const [baseName, possible] of defs) {
+      const completed = raidVariants.get(baseName) || new Map();
+      const hasNormal = completed.get('Normal');
+      const hasStandard = completed.get('Standard');
+      let baseFirst: ActivityFirstCompletion | undefined = hasStandard || hasNormal;
+      if (hasNormal && hasStandard) baseFirst = new Date(hasNormal.completionDate) <= new Date(hasStandard.completionDate) ? hasNormal : hasStandard;
+      const baseLabel = hasStandard ? 'Standard' : (hasNormal ? 'Normal' : (possible.includes('Standard') ? 'Standard' : 'Normal'));
+      const variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> = [];
+      if (possible.includes('Normal') || possible.includes('Standard')) variants.push({ version: baseLabel, first: baseFirst, hasClear: !!baseFirst });
+      for (const v of possible) {
+        if (v === 'Normal' || v === 'Standard') continue;
+        const first = completed.get(v);
+        variants.push({ version: v, first, hasClear: !!first });
+      }
+      result.push({ baseName, variants });
+    }
+    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /**
+   * Gets the first completion image for a raid/dungeon group.
+   * Falls back to manifest-based family maps to locate an appropriate referenceId
+   * when no variant has a clear yet.
+   */
+  getFirstCompletionImageForRaid(raid: { baseName: string; variants: Array<{ hasClear: boolean; first?: ActivityFirstCompletion }> }): any {
+    const firstWithClear = raid.variants.find(v => v.hasClear);
+    if (firstWithClear) {
+      return this.getFirstCompletionImage(firstWithClear.first!);
+    }
+
+    // Fallback: derive a representative referenceId from the manifest family maps
+    const ACTIVITY_FAMILY_MAP = (ActivityDbService as any)['ACTIVITY_FAMILY_MAP'] as Record<string, string> | undefined;
+    const D1_FAMILY_MAP = (ActivityDbService as any)['D1_FAMILY_MAP'] as Record<string, string> | undefined;
+
+    let refId: string | undefined;
+    let isD1 = false;
+
+    if (ACTIVITY_FAMILY_MAP) {
+      for (const [hash, family] of Object.entries(ACTIVITY_FAMILY_MAP)) {
+        if (this.getBaseActivityName(family) === raid.baseName) {
+          refId = hash;
+          break;
+        }
+      }
+    }
+
+    if (!refId && D1_FAMILY_MAP) {
+      for (const [hash, family] of Object.entries(D1_FAMILY_MAP)) {
+        if (this.getBaseActivityName(family) === raid.baseName) {
+          refId = hash;
+          isD1 = true;
+          break;
+        }
+      }
+    }
+
+    if (refId) {
+      const pgcrImage = this.manifest.getActivityPgcrImage(refId, isD1);
+      if (pgcrImage) {
+        // Normalize to absolute URL when needed
+        if (pgcrImage.startsWith('http')) return pgcrImage;
+        return 'https://www.bungie.net' + pgcrImage;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Gets all D2 dungeons with all possible variants (completed or not)
+   */
+  getAllD2DungeonVariants(): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }> 
+  }> {
+    const dungeonVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
+    
+    // Collect all completed dungeons
+    const allDungeons = this.getAggregateDungeons('D2');
+    
+    for (const dungeon of allDungeons) {
+      const baseName = this.getBaseActivityName(dungeon.name);
+      const version = this.getActivityVersion(dungeon.name);
+      
+      if (!dungeonVariants.has(baseName)) {
+        dungeonVariants.set(baseName, new Map());
+      }
+      dungeonVariants.get(baseName)!.set(version, dungeon);
+    }
+
+    // Define all possible variants for each dungeon
+    const dungeonVariantDefinitions = new Map<string, string[]>([
+      ['The Shattered Throne', ['Standard']],
+      ['Pit of Heresy', ['Normal', 'Master']],
+      ['Prophecy', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Grasp of Avarice', ['Normal', 'Master']],
+      ['Duality', ['Normal', 'Master']],
+      ['Spire of the Watcher', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Ghosts of the Deep', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Warlord\'s Ruin', ['Normal', 'Master']],
+      // Removed erroneous 'The Coil'
+      // Fixed incorrect name to Vesper's Host
+      ['Vesper\'s Host', ['Normal', 'Master']],
+      ['Sundered Doctrine', ['Normal', 'Master']]
+    ]);
+
+    const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
+
+    for (const [baseName, possibleVersions] of dungeonVariantDefinitions) {
+      const completedVariants = dungeonVariants.get(baseName) || new Map();
+
+      // Merge Normal/Standard into single base-difficulty entry
+      const hasNormal = completedVariants.get('Normal');
+      const hasStandard = completedVariants.get('Standard');
+      let baseFirst: ActivityFirstCompletion | undefined = undefined;
+      if (hasNormal && hasStandard) {
+        baseFirst = new Date(hasNormal.completionDate) <= new Date(hasStandard.completionDate) ? hasNormal : hasStandard;
+      } else {
+        baseFirst = hasStandard || hasNormal || undefined;
+      }
+      const baseLabel = hasStandard ? 'Standard' : (hasNormal ? 'Normal' : (possibleVersions.includes('Standard') ? 'Standard' : 'Normal'));
+
+      const variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> = [];
+
+      if (possibleVersions.includes('Normal') || possibleVersions.includes('Standard')) {
+        variants.push({ version: baseLabel, first: baseFirst, hasClear: !!baseFirst });
+      }
+      for (const version of possibleVersions) {
+        if (version === 'Normal' || version === 'Standard') continue;
+        const first = completedVariants.get(version);
+        variants.push({ version, first, hasClear: !!first });
+      }
+
+      result.push({ baseName, variants });
+    }
+
+    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /** Per-player: D2 dungeons with variants */
+  getAllD2DungeonVariantsForPlayer(player: PlayerSearchDisplay): Array<{
+    baseName: string;
+    variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }>;
+  }> {
+    const dungeonVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
+    const all = this.getFirstsForPlayer(player).filter(f => f.type === 'dungeon' && f.game === 'D2');
+    for (const d of all) {
+      const baseName = this.getBaseActivityName(d.name);
+      const version = this.getActivityVersion(d.name);
+      if (!dungeonVariants.has(baseName)) dungeonVariants.set(baseName, new Map());
+      dungeonVariants.get(baseName)!.set(version, d);
+    }
+    const defs = new Map<string, string[]>([
+      ['The Shattered Throne', ['Standard']],
+      ['Pit of Heresy', ['Normal', 'Master']],
+      ['Prophecy', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Grasp of Avarice', ['Normal', 'Master']],
+      ['Duality', ['Normal', 'Master']],
+      ['Spire of the Watcher', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Ghosts of the Deep', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ["Warlord's Ruin", ['Normal', 'Master']],
+      ["Vesper's Host", ['Normal', 'Master']],
+      ['Sundered Doctrine', ['Normal', 'Master']]
+    ]);
+    const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
+    for (const [baseName, possible] of defs) {
+      const completed = dungeonVariants.get(baseName) || new Map();
+      const hasNormal = completed.get('Normal');
+      const hasStandard = completed.get('Standard');
+      let baseFirst: ActivityFirstCompletion | undefined = hasStandard || hasNormal;
+      if (hasNormal && hasStandard) baseFirst = new Date(hasNormal.completionDate) <= new Date(hasStandard.completionDate) ? hasNormal : hasStandard;
+      const baseLabel = hasStandard ? 'Standard' : (hasNormal ? 'Normal' : (possible.includes('Standard') ? 'Standard' : 'Normal'));
+      const variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> = [];
+      if (possible.includes('Normal') || possible.includes('Standard')) variants.push({ version: baseLabel, first: baseFirst, hasClear: !!baseFirst });
+      for (const v of possible) {
+        if (v === 'Normal' || v === 'Standard') continue;
+        const first = completed.get(v);
+        variants.push({ version: v, first, hasClear: !!first });
+      }
+      result.push({ baseName, variants });
+    }
+    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /**
+   * Gets all D1 raids with all possible variants (completed or not)
+   */
+  getAllD1RaidVariants(): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }> 
+  }> {
+    const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
+    
+    // Collect all completed raids
+    const allRaids = this.getAggregateRaids('D1');
+    for (const raid of allRaids) {
+      const baseName = this.getBaseActivityName(raid.name);
+      const version = this.getActivityVersion(raid.name);
+      
+      if (!raidVariants.has(baseName)) {
+        raidVariants.set(baseName, new Map());
+      }
+      raidVariants.get(baseName)!.set(version, raid);
+    }
+
+    // Define all possible variants for each D1 raid
+    const raidVariantDefinitions = new Map<string, string[]>([
+      ['Vault of Glass', ['Normal', 'Hard']],
+      ['Crota\'s End', ['Normal', 'Hard']],
+      ['King\'s Fall', ['Normal', 'Hard']],
+      ['Wrath of the Machine', ['Normal', 'Hard']]
+    ]);
+
+    const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
+
+    for (const [baseName, possibleVersions] of raidVariantDefinitions) {
+      const completedVariants = raidVariants.get(baseName) || new Map();
+      const variants = possibleVersions.map(version => {
+        const first = completedVariants.get(version);
+        return {
+          version,
+          first,
+          hasClear: !!first
+        };
+      });
+
+      result.push({ baseName, variants });
+    }
+
+    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /** Per-player: D1 raids with variants */
+  getAllD1RaidVariantsForPlayer(player: PlayerSearchDisplay): Array<{
+    baseName: string;
+    variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }>;
+  }> {
+    const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
+    const all = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === 'D1');
+    for (const raid of all) {
+      const base = this.getBaseActivityName(raid.name);
+      const version = this.getActivityVersion(raid.name);
+      if (!raidVariants.has(base)) raidVariants.set(base, new Map());
+      raidVariants.get(base)!.set(version, raid);
+    }
+    const defs = new Map<string, string[]>([
+      ['Vault of Glass', ['Normal', 'Hard']],
+      ["Crota's End", ['Normal', 'Hard']],
+      ["King's Fall", ['Normal', 'Hard']],
+      ['Wrath of the Machine', ['Normal', 'Hard']]
+    ]);
+    const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
+    for (const [baseName, possible] of defs) {
+      const completed = raidVariants.get(baseName) || new Map();
+      const variants = possible.map(v => {
+        const first = completed.get(v);
+        return { version: v, first, hasClear: !!first };
+      });
+      result.push({ baseName, variants });
+    }
+    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /**
+   * Groups activities by base name and sorts versions
+   */
+  private groupActivitiesByBaseName(activities: ActivityFirstCompletion[]): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const groupMap = new Map<string, ActivityFirstCompletion[]>();
+    
+    for (const activity of activities) {
+      // Get the base name (remove version suffix)
+      const baseName = this.getBaseActivityName(activity.name);
+      
+      if (!groupMap.has(baseName)) {
+        groupMap.set(baseName, []);
+      }
+      groupMap.get(baseName)!.push(activity);
+    }
+    
+    // Convert to array and sort
+    return Array.from(groupMap.entries())
+      .map(([baseName, versions]) => ({
+        baseName,
+        versions: this.sortVersions(versions)
+      }))
+      .sort((a, b) => {
+        // Sort by base name alphabetically
+        return a.baseName.localeCompare(b.baseName);
+      });
+  }
+  /**
+   * Sorts versions within a group (Normal, Standard, Explorer, Eternity, Ultimatum, Master)
+   */
+  private sortVersions(activities: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
+    const versionOrder = ['Normal', 'Standard', 'Explorer', 'Eternity', 'Ultimatum', 'Master'];
+    
+    return activities.sort((a, b) => {
+      const aVersion = this.getActivityVersion(a.name);
+      const bVersion = this.getActivityVersion(b.name);
+      
+      const aIndex = versionOrder.indexOf(aVersion);
+      const bIndex = versionOrder.indexOf(bVersion);
+      
+      if (aIndex === -1 && bIndex === -1) return aVersion.localeCompare(bVersion);
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    });
   }
 
   private sortRaids(list: ActivityFirstCompletion[], game: 'D1' | 'D2'): ActivityFirstCompletion[] {
@@ -4340,15 +4965,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Extracts the base dungeon name from a versioned dungeon name.
-   * e.g., "Vesper's Host: Master" -> "Vesper's Host"
+   * Gets the mapped activity name from our custom mapping
    */
-  private getBaseDungeonName(versionedName: string): string {
+  private getMappedActivityName(referenceId: string): string | null {
+    // Import the mapping from the activity db service
+    const mapping = (this.activityDb as any).ACTIVITY_FAMILY_MAP;
+    return mapping?.[referenceId] || null;
+  }
+
+  /**
+   * Extracts the base activity name from a versioned activity name.
+   * e.g., "Vesper's Host: Master" -> "Vesper's Host"
+   * e.g., "Crota's End: Normal" -> "Crota's End"
+   */
+  private getBaseActivityName(versionedName: string): string {
     const colonIndex = versionedName.indexOf(': ');
     if (colonIndex === -1) {
       return versionedName; // No version suffix
     }
     return versionedName.substring(0, colonIndex);
+  }
+
+  /**
+   * Extracts the base dungeon name from a versioned dungeon name.
+   * e.g., "Vesper's Host: Master" -> "Vesper's Host"
+   */
+  private getBaseDungeonName(versionedName: string): string {
+    return this.getBaseActivityName(versionedName);
   }
 
   /**
@@ -4816,13 +5459,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const list = this.dungeonSoloFirsts[player.membershipId];
     if (!list) return undefined;
     
-    console.log(`[getDungeonSoloFirstForPlayer] Looking for "${label}" in player ${player.displayName}`);
-    console.log(`[getDungeonSoloFirstForPlayer] Available solo firsts:`, list);
-    
     // First, try exact match by full version name
     let result = list.find(d => d.fullName === label);
     
-    // If no exact match found and this looks like a dungeon name, try to find by base name
+    // If no exact match, try to map the label to our custom names
+    if (!result) {
+      const mappedName = this.mapManifestNameToCustomName(label);
+      if (mappedName) {
+        result = list.find(d => d.fullName === mappedName);
+      }
+    }
+    
+    // If still no match and this looks like a dungeon name, try to find by base name
     if (!result && this.isDungeonName(label)) {
       // Find all versions of this dungeon that have solo data
       const matchingVersions = list.filter(d => d.family === label);
@@ -4836,9 +5484,42 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
       }
     }
-    console.log(`[getDungeonSoloFirstForPlayer] Found result for "${label}":`, result);
     
     return result;
+  }
+
+  /**
+   * Maps manifest activity names to our custom fullName mappings
+   */
+  private mapManifestNameToCustomName(manifestName: string): string | null {
+    // Handle common naming differences between manifest and our mappings
+    const mappings: { [key: string]: string } = {
+      // Ghosts of the Deep variations
+      'Ghosts of the Deep: Standard': 'Ghosts of the Deep: Normal',
+      'Ghosts of the Deep': 'Ghosts of the Deep: Normal',
+      
+      // Prophecy variations  
+      'Prophecy: Explorer': 'Prophecy: Explorer', // This should already be correct
+      'Prophecy': 'Prophecy: Normal',
+      
+      // Spire variations
+      'Spire of the Watcher: Standard': 'Spire of the Watcher: Normal',
+      'Spire of the Watcher': 'Spire of the Watcher: Normal',
+      
+      // Vesper's Host variations
+      "Vesper's Host: Standard": "Vesper's Host: Normal",
+      "Vesper's Host": "Vesper's Host: Normal",
+      
+      // Sundered Doctrine variations
+      "Sundered Doctrine: Standard": "Sundered Doctrine: Normal",
+      "Sundered Doctrine": "Sundered Doctrine: Normal",
+      
+      // Warlord's Ruin variations
+      "Warlord's Ruin: Standard": "Warlord's Ruin: Standard", // This should already be correct
+      "Warlord's Ruin": "Warlord's Ruin: Standard"
+    };
+    
+    return mappings[manifestName] || null;
   }
 
   /**
@@ -4985,7 +5666,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       await this.selectPlayer(this.d2SearchResults[0]);
     }
   }
-
   /**
    * Selects every account currently listed in the search-results modal (cross-save, D2, D1).
    * This only selects them in the modal, doesn't load them.
@@ -5262,6 +5942,58 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.groupedActivitiesByAccount.filter(g => g.game === game);
   }
 
+  /**
+   * Groups activities by their version (Normal, Master, Explorer, etc.)
+   */
+  getVersionGroups(activities: ActivityWithMembership[]): Array<{ version: string; activities: ActivityWithMembership[] }> {
+    const versionMap = new Map<string, ActivityWithMembership[]>();
+    
+    for (const activity of activities) {
+      // Use manifest as primary source, custom mapping as backup
+      let activityName = this.manifest.getActivityName(activity.activityDetails?.referenceId, activity.game === 'D1');
+      if (!activityName || activityName === 'Unknown Activity') {
+        activityName = this.getMappedActivityName(String(activity.activityDetails?.referenceId)) || 'Unknown Activity';
+      }
+      const version = this.getActivityVersion(activityName);
+      
+      if (!versionMap.has(version)) {
+        versionMap.set(version, []);
+      }
+      versionMap.get(version)!.push(activity);
+    }
+    
+    // Sort versions in preferred order
+    const versionOrder = ['Normal', 'Standard', 'Explorer', 'Eternity', 'Ultimatum', 'Master'];
+    return Array.from(versionMap.entries())
+      .map(([version, activities]) => ({ version, activities }))
+      .sort((a, b) => {
+        const aIndex = versionOrder.indexOf(a.version);
+        const bIndex = versionOrder.indexOf(b.version);
+        if (aIndex === -1 && bIndex === -1) return a.version.localeCompare(b.version);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+  }
+
+  /**
+   * Extracts the version from an activity name
+   */
+  getActivityVersion(activityName: string): string {
+    const colonIndex = activityName.indexOf(': ');
+    if (colonIndex === -1) {
+      return 'Standard'; // Default for activities without version
+    }
+    return activityName.substring(colonIndex + 2);
+  }
+
+  /**
+   * Track by function for version groups
+   */
+  trackByVersionGroup(index: number, versionGroup: { version: string; activities: ActivityWithMembership[] }): string {
+    return versionGroup.version;
+  }
+
 
 
   // ------------------------------------------------------------------
@@ -5324,7 +6056,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       } else if (dateParts.length === 3) {
         // New YYYY-MM-DD format
         const [year, month, day] = dateParts;
-        options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+      options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
       }
     }
     await this.exportService.exportMultiSheet(options, {
@@ -5724,7 +6456,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       prompt('Copy link', link);
     }
   }
-
   /**
    * Clears the firstEverActivities cache to force recalculation with new filtering logic
    */

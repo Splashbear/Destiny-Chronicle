@@ -134,6 +134,12 @@ export class DestinyManifestService {
   }
 
   getActivityType(referenceId: string | number, mode?: number): string {
+    // Special case: Shattered Throne has wrong mode but is definitely a dungeon
+    const refIdStr = String(referenceId);
+    if (refIdStr === '2032534090' || refIdStr === '1347078175') {
+      return 'dungeon';
+    }
+
     // D1 raid hashes (all known D1 raid activity referenceIds)
     const D1_RAID_HASHES = [
       // Vault of Glass
@@ -190,11 +196,28 @@ export class DestinyManifestService {
     }
     // Use the mapping to determine type
     const ACTIVITY_FAMILY_MAP = ActivityDbService['ACTIVITY_FAMILY_MAP'];
-    const refIdStr = String(referenceId);
     const family = ACTIVITY_FAMILY_MAP[refIdStr];
     if (family) {
-      if (family.toLowerCase().includes('raid')) return 'raid';
-      if (family.toLowerCase().includes('dungeon')) return 'dungeon';
+      // Try to infer from the mapped family name
+      const familyLower = family.toLowerCase();
+      if (familyLower.includes('raid')) return 'raid';
+      if (familyLower.includes('dungeon')) return 'dungeon';
+
+      // If the family string doesn't contain type words, match against known base names
+      const baseName = family.includes(':') ? family.split(':')[0] : family;
+      const D2_DUNGEONS = new Set([
+        'The Shattered Throne', 'Pit of Heresy', 'Prophecy', 'Grasp of Avarice',
+        'Duality', 'Spire of the Watcher', 'Ghosts of the Deep', "Warlord's Ruin",
+        "Vesper's Host", 'Sundered Doctrine'
+      ]);
+      const D2_RAIDS = new Set([
+        'Leviathan', 'Leviathan, Eater of Worlds', 'Leviathan, Spire of Stars', 'Crown of Sorrow',
+        'Garden of Salvation', 'Deep Stone Crypt', 'Vault of Glass', 'Vow of the Disciple',
+        "King's Fall", 'Root of Nightmares', "Crota's End", "Salvation's Edge",
+        'The Pantheon'
+      ]);
+      if (D2_DUNGEONS.has(baseName)) return 'dungeon';
+      if (D2_RAIDS.has(baseName) || baseName.startsWith('The Pantheon')) return 'raid';
     }
     // Fall back to manifest data
     const def = this.activityDefs[referenceId];
@@ -208,7 +231,9 @@ export class DestinyManifestService {
     const typeHash = def.activityTypeHash;
     const modeTypes: number[] = def.activityModeTypes || [];
     if (typeHash === 2043403989 || modeTypes.includes(4)) return 'raid';
-    if (typeHash === 1375089621 || modeTypes.includes(82)) return 'dungeon';
+    // Dungeon detection: check multiple known dungeon type hashes or mode 82
+    const DUNGEON_TYPE_HASHES = [608898761]; // Common dungeon type hash for Shattered Throne, Pit of Heresy, and others
+    if (DUNGEON_TYPE_HASHES.includes(typeHash) || modeTypes.includes(82)) return 'dungeon';
     if (typeHash === 4110605575 || modeTypes.includes(46) || modeTypes.includes(18) || modeTypes.includes(48) || modeTypes.includes(49)) return 'strike';
     if (typeHash === 3789021730 || modeTypes.includes(46)) return 'nightfall';
     if (typeHash === 1164760493 || modeTypes.some(m => [5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66].includes(m))) return 'crucible';
@@ -224,10 +249,6 @@ export class DestinyManifestService {
     const name = (def.displayProperties?.name || '').toLowerCase();
     if (name.includes('dungeon')) return 'dungeon';
     if (name.includes('leviathan') || name.includes('raid')) return 'raid';
-    // If still falling through to 'other', log it
-    // if (typeof referenceId !== 'undefined') {
-    //   console.warn(`[DestinyManifestService] getActivityType: Unmapped activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
-    // }
     return 'other';
   }
 

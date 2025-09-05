@@ -60,11 +60,15 @@ export class TimezoneService {
   /**
    * Formats a date for display in the user's timezone
    * @param utcDateString The UTC date string from the API
-   * @returns Formatted date string
+   * @returns Formatted date string in "Month Day, Year" format
    */
   formatDate(utcDateString: string): string {
     const localDate = this.utcToLocal(utcDateString);
-    return localDate.toLocaleDateString();
+    return localDate.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric', 
+      year: 'numeric'
+    });
   }
 
   /**
@@ -80,11 +84,18 @@ export class TimezoneService {
   /**
    * Formats a date and time for display in the user's timezone
    * @param utcDateString The UTC date string from the API
-   * @returns Formatted date and time string
+   * @returns Formatted date and time string in "Month Day, Year" format
    */
   formatDateTime(utcDateString: string): string {
     const localDate = this.utcToLocal(utcDateString);
-    return localDate.toLocaleString();
+    return localDate.toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
   }
 
   /**

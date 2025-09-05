@@ -618,4 +618,32 @@ export class BungieApiService {
     // Run them concurrently
     return forkJoin([d2$, d1Xbox$, d1Psn$]);
   }
+
+  /**
+   * Get D2 characters for a player
+   */
+  getCharacters(membershipType: number, membershipId: string): Observable<BungieResponse<any>> {
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=200`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D2 characters:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Get D1 characters for a player
+   */
+  getD1Characters(membershipType: number, membershipId: string): Observable<BungieResponse<any>> {
+    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Summary/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D1 characters:', error);
+        return throwError(() => error);
+      })
+    );
+  }
 } 

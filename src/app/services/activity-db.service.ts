@@ -20,6 +20,13 @@ interface CacheEntry<T> {
   accessCount: number;
 }
 
+// Enhanced caching interface with TTL support
+interface CachedData<T> {
+  data: T;
+  timestamp: number;
+  ttl: number;
+}
+
 interface LRUCache<T> {
   maxSize: number;
   data: Map<string, CacheEntry<T>>;
@@ -57,15 +64,23 @@ export class ActivityDbService extends Dexie {
 
   // Phase 3: Memory Management & Caching Optimization
   private readonly MAX_CACHE_SIZE = 1000; // Maximum number of cached items
-  private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes cache TTL
+  private readonly CACHE_TTL = {
+    activities: 24 * 60 * 60 * 1000, // 24 hours for activities
+    manifest: 7 * 24 * 60 * 60 * 1000, // 7 days for manifest
+    playerData: 6 * 60 * 60 * 1000, // 6 hours for player data
+    guardianFirsts: 12 * 60 * 60 * 1000, // 12 hours for guardian firsts
+    dungeonFirsts: 12 * 60 * 60 * 1000 // 12 hours for dungeon firsts
+  };
   private readonly MEMORY_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes cleanup interval
   
-  // LRU caches for different data types
+  // Enhanced LRU caches with TTL support
   private activitiesCache: LRUCache<StoredActivity[]> = { maxSize: 200, data: new Map() };
   private filteredActivitiesCache: LRUCache<StoredActivity[]> = { maxSize: 100, data: new Map() };
   private firstEverActivities: LRUCache<ActivityFirstCompletion> = { maxSize: 50, data: new Map() };
   private wastedTimes: LRUCache<any[]> = { maxSize: 50, data: new Map() };
   private wastedSeals: LRUCache<any[]> = { maxSize: 50, data: new Map() };
+  private guardianFirstsCache: LRUCache<ActivityFirstCompletion[]> = { maxSize: 100, data: new Map() };
+  private dungeonFirstsCache: LRUCache<DungeonSoloFirst[]> = { maxSize: 100, data: new Map() };
   
   private lastCleanup = Date.now();
   private cleanupTimer?: any;
@@ -73,91 +88,106 @@ export class ActivityDbService extends Dexie {
   // Canonical mapping for all D2 and D1 raids/dungeons (2024, expand as needed)
   private static readonly ACTIVITY_FAMILY_MAP: Record<string, string> = {
     // --- Destiny 2 Raids ---
-    '89727599': 'Leviathan',
-    '287649202': 'Leviathan',
-    '417231112': 'Leviathan',
-    '508802457': 'Leviathan',
-    '757116822': 'Leviathan',
-    '771164842': 'Leviathan',
-    '1685065161': 'Leviathan',
-    '1699948563': 'Leviathan',
-    '1800508819': 'Leviathan',
-    '1875726950': 'Leviathan',
-    '2693136600': 'Leviathan',
-    '2693136601': 'Leviathan',
-    '2693136602': 'Leviathan',
-    '2693136603': 'Leviathan',
-    '2693136604': 'Leviathan',
-    '2693136605': 'Leviathan',
-    '3916343513': 'Leviathan',
-    '4039317196': 'Leviathan',
-    '2449714930': 'Leviathan',
-    '3857338478': 'Leviathan',
-    '3446541099': 'Leviathan',
-    '2164432138': 'Leviathan, Eater of Worlds',
-    '809170886': 'Leviathan, Eater of Worlds',
-    '3089205900': 'Leviathan, Eater of Worlds',
-    '3333172150': 'Crown of Sorrow',
-    '960175301': 'Crown of Sorrow',
-    '119944200': 'Leviathan, Spire of Stars',
-    '3004605630': 'Leviathan, Spire of Stars',
-    '3213556450': 'Leviathan, Spire of Stars',
-    '1042180643': 'Garden of Salvation',
-    '2497200493': 'Garden of Salvation',
-    '3458480158': 'Garden of Salvation',
-    '3845997235': 'Garden of Salvation',
-    '2659723068': 'Garden of Salvation',
-    '910380154': 'Deep Stone Crypt',
-    '3976949817': 'Deep Stone Crypt',
-    '548750096': 'Scourge of the Past',
-    '2812525063': 'Scourge of the Past',
-    '2381413764': 'Root of Nightmares',
-    '2918919505': 'Root of Nightmares',
-    '1441982566': 'Vow of the Disciple',
-    '2906950631': 'Vow of the Disciple',
-    '4156879541': 'Vow of the Disciple',
-    '3889634515': 'Vow of the Disciple',
-    '4217492330': 'Vow of the Disciple',
-    '2122313384': 'Last Wish',
-    '1661734046': 'Last Wish',
-    '2214608156': 'Last Wish',
-    '2214608157': 'Last Wish',
-    '3711931140': 'Vault of Glass',
-    '1485585878': 'Vault of Glass',
-    '1681562271': 'Vault of Glass',
-    '3022541210': 'Vault of Glass',
-    '3881495763': 'Vault of Glass',
-    '1374392663': "King's Fall",
-    '2897223272': "King's Fall",
-    '3257594522': "King's Fall",
-    '2964135793': "King's Fall",
-    '1063970578': "King's Fall",
-    '107319834': "Crota's End",
-    '156253568': "Crota's End",
-    '1507509200': "Crota's End",
-    '1566480315': "Crota's End",
-    '4179289725': "Crota's End",
-    '1541433876': "Salvation's Edge",
-    '940375169': "Salvation's Edge",
-    '2192826039': "Salvation's Edge",
-    '4129614942': "Salvation's Edge",
+    // Leviathan - Multiple versions
+    '89727599': 'Leviathan: Normal',
+    '287649202': 'Leviathan: Normal',
+    '417231112': 'Leviathan: Normal',
+    '508802457': 'Leviathan: Normal',
+    '757116822': 'Leviathan: Normal',
+    '771164842': 'Leviathan: Normal',
+    '1685065161': 'Leviathan: Normal',
+    '1699948563': 'Leviathan: Normal',
+    '1800508819': 'Leviathan: Normal',
+    '1875726950': 'Leviathan: Normal',
+    '2693136600': 'Leviathan: Normal',
+    '2693136601': 'Leviathan: Normal',
+    '2693136602': 'Leviathan: Normal',
+    '2693136603': 'Leviathan: Normal',
+    '2693136604': 'Leviathan: Normal',
+    '2693136605': 'Leviathan: Normal',
+    '3916343513': 'Leviathan: Normal',
+    '4039317196': 'Leviathan: Normal',
+    '2449714930': 'Leviathan: Normal',
+    '3857338478': 'Leviathan: Normal',
+    '3446541099': 'Leviathan: Normal',
+    // Leviathan, Eater of Worlds - Multiple versions
+    '2164432138': 'Leviathan, Eater of Worlds: Normal',
+    '809170886': 'Leviathan, Eater of Worlds: Prestige',
+    '3089205900': 'Leviathan, Eater of Worlds: Prestige',
+    // Crown of Sorrow - Multiple versions
+    '3333172150': 'Crown of Sorrow: Normal',
+    '960175301': 'Crown of Sorrow: Normal',
+    // Leviathan, Spire of Stars - Multiple versions
+    '119944200': 'Leviathan, Spire of Stars: Normal',
+    '3004605630': 'Leviathan, Spire of Stars: Normal',
+    '3213556450': 'Leviathan, Spire of Stars: Prestige',
+    // Garden of Salvation - Multiple versions
+    '1042180643': 'Garden of Salvation: Normal',
+    '2497200493': 'Garden of Salvation: Normal',
+    '3458480158': 'Garden of Salvation: Normal',
+    '3845997235': 'Garden of Salvation: Normal',
+    '2659723068': 'Garden of Salvation: Normal',
+    // Deep Stone Crypt - Multiple versions
+    '910380154': 'Deep Stone Crypt: Normal',
+    '3976949817': 'Deep Stone Crypt: Normal',
+    // Scourge of the Past - Multiple versions
+    '548750096': 'Scourge of the Past: Normal',
+    '2812525063': 'Scourge of the Past: Normal',
+    // Root of Nightmares - Multiple versions
+    '2381413764': 'Root of Nightmares: Normal',
+    '2918919505': 'Root of Nightmares: Normal',
+    // Vow of the Disciple - Multiple versions
+    '1441982566': 'Vow of the Disciple: Standard',
+    '4156879541': 'Vow of the Disciple: Legend',
+    '3889634515': 'Vow of the Disciple: Master',
+    // Last Wish - Multiple versions
+    '2122313384': 'Last Wish: Standard',
+    '1661734046': 'Last Wish: Normal',
+    // Vault of Glass - Multiple versions
+    '3711931140': 'Vault of Glass: Normal',
+    '1485585878': 'Vault of Glass: Normal',
+    '1681562271': 'Vault of Glass: Master',
+    '3022541210': 'Vault of Glass: Normal',
+    '3881495763': 'Vault of Glass: Standard',
+    // King's Fall - Multiple versions
+    '1374392663': "King's Fall: Standard",
+    '2897223272': "King's Fall: Normal",
+    '3257594522': "King's Fall: Master",
+    '2964135793': "King's Fall: Master",
+    '1063970578': "King's Fall: Expert",
+    // Crota's End - Multiple versions
+    '107319834': "Crota's End: Standard",
+    '4179289725': "Crota's End: Normal",
+    '1507509200': "Crota's End: Master",
+    '1566480315': "Crota's End: Standard",
+    '156253568': "Crota's End: Legend",
+    // Salvation's Edge - Multiple versions
+    '1541433876': "Salvation's Edge: Standard",
+    '940375169': "Salvation's Edge: Standard",
+    '4129614942': "Salvation's Edge: Master",
+    // --- Pantheon Raids ---
+    '4169648176': 'The Pantheon: Oryx Exalted',
+    '4169648177': 'The Pantheon: Rhulk Indomitable', 
+    '4169648179': 'The Pantheon: Atraks Sovereign',
+    '4169648182': 'The Pantheon: Nezarec Sublime',
     // --- Destiny 2 Dungeons ---
     // The Shattered Throne - Single version
     '2032534090': 'The Shattered Throne: Standard',
+    '1347078175': 'The Shattered Throne: Standard',
     // Pit of Heresy - Multiple versions
-    '1375089621': 'Pit of Heresy: Standard',
+    '1375089621': 'Pit of Heresy: Normal',
     '785700673': 'Pit of Heresy: Master',
-    '785700678': 'Pit of Heresy: Master',
-    '2559374368': 'Pit of Heresy: Master',
+    '785700678': 'Pit of Heresy: Expert',
+    '2559374368': 'Pit of Heresy: Legend',
     '2559374374': 'Pit of Heresy: Master',
     '2559374375': 'Pit of Heresy: Master',
-    '2582501063': 'Pit of Heresy: Master',
+    '2582501063': 'Pit of Heresy: Standard',
     // Grasp of Avarice - Multiple versions
     '1112917203': 'Grasp of Avarice: Standard',
     '4078656646': 'Grasp of Avarice: Master',
     // Prophecy - Multiple versions
     '1077850348': 'Prophecy: Normal',
-    '356348': 'Prophecy: Explorer',
+    '3637651331': 'Prophecy: Explorer', // Updated hash
     '2961030534': 'Prophecy: Eternity',
     '3193152350': 'Prophecy: Ultimatum',
     '4148187374': 'Prophecy: Master',
@@ -165,28 +195,27 @@ export class ActivityDbService extends Dexie {
     '2823159265': 'Duality: Standard',
     '3012587626': 'Duality: Master',
     // Spire of the Watcher - Multiple versions
-    '1262462921': 'Spire of the Watcher: Normal',
+    '1262462921': 'Spire of the Watcher: Standard',
     '1225969316': 'Spire of the Watcher: Explorer',
     '4046934917': 'Spire of the Watcher: Eternity',
     '3339002067': 'Spire of the Watcher: Ultimatum',
     '2296818662': 'Spire of the Watcher: Master',
+    '1801496203': 'Spire of the Watcher: Master',
     // Ghosts of the Deep - Multiple versions
     '313828469': 'Ghosts of the Deep: Normal',
-    '106036': 'Ghosts of the Deep: Explorer',
-    '300026': 'Ghosts of the Deep: Eternity',
+    '1094262727': 'Ghosts of the Deep: Explorer',
+    '32961030534': 'Ghosts of the Deep: Eternity',
     '124340010': 'Ghosts of the Deep: Ultimatum',
     '2716998124': 'Ghosts of the Deep: Master',
     // Warlord's Ruin - Multiple versions
     '2004855007': "Warlord's Ruin: Standard",
     '2534833093': "Warlord's Ruin: Master",
     // Vesper's Host - Multiple versions
-    '1915770060': "Vesper's Host: Explorer",
-    '300092127': "Vesper's Host: Normal", 
-    '3492566689': "Vesper's Host: Eternity",
-    '4293676253': "Vesper's Host: Master",
+      '300092127': "Vesper's Host: Normal", 
+      '4293676253': "Vesper's Host: Master",
     // Sundered Doctrine - Multiple versions
     '3834447244': "Sundered Doctrine: Normal",
-    '349148': "Sundered Doctrine: Master",
+    '3521648250': "Sundered Doctrine: Master",
     // --- Destiny 1 Raids ---
     '3801607287': 'Vault of Glass',
     '708693006': 'Vault of Glass',
@@ -651,6 +680,8 @@ export class ActivityDbService extends Dexie {
         type = 'other';
       }
 
+      // Activity type detection (debug info available if needed)
+
       // --- Game-specific filters ---
       if (game === 'D1') {
         // Treat any activity whose referenceId exists in the D1_FAMILY_MAP as a raid
@@ -698,6 +729,8 @@ export class ActivityDbService extends Dexie {
       }
 
       if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
+        // Process first completion for this activity
+
         firstsByFamily[family] = {
           name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
           type: type as ActivityFirstCompletion['type'],
@@ -722,7 +755,9 @@ export class ActivityDbService extends Dexie {
     await this.batchProcessPGCRData(firstsByFamily, membershipId, game);
 
     const firstCompletions: ActivityFirstCompletion[] = Object.values(firstsByFamily);
-    // debug removed
+    
+    // First completions processing completed
+    
     return {
       firstCompletions,
       membershipId,
@@ -771,7 +806,17 @@ export class ActivityDbService extends Dexie {
   private async storeActivities(activities: any[], membershipId: string, membershipType: number, characterId: string, game: 'D1' | 'D2'): Promise<void> {
     await this.initPromise;
     try {
-      const activitiesToStore = activities.map(activity => ({
+      // Guard: avoid polluting this account with teammate rows derived from PGCRs
+      // Some callers (e.g. PGCR‐processing helpers) may pass raw PGCR entries that still
+      // carry a membershipId property belonging to a teammate.  If that occurs, skip it so
+      // we never persist activities under the wrong owner.
+      const activitiesForOwner = activities.filter(a => {
+        // If the incoming object has its own membershipId field AND it differs from the owner,
+        // treat it as a teammate row and drop it.
+        return !(a as any).membershipId || (a as any).membershipId === membershipId;
+      });
+
+      const activitiesToStore = activitiesForOwner.map(activity => ({
         ...activity,
         membershipId,
         membershipType,
@@ -781,7 +826,9 @@ export class ActivityDbService extends Dexie {
         game
       }));
 
+      if (activitiesToStore.length > 0) {
       await this.addActivities(activitiesToStore);
+      }
     } catch (error) {
       console.error('[DEBUG] Error storing activities:', error);
       throw error;
@@ -796,8 +843,15 @@ export class ActivityDbService extends Dexie {
   ): Promise<void> {
     await this.initPromise;
     try {
-      // Get the last stored activity date for this character
+      // Enhanced incremental sync - get last stored activity date for this character
       const lastActivity = await this.getLastActivityDate(characterId);
+      const lastActivityDate = lastActivity ? new Date((lastActivity as any).period) : null;
+      
+      // For incremental sync, only fetch recent activities if we have existing data
+      const isIncrementalSync = lastActivityDate !== null;
+      const daysToFetch = isIncrementalSync ? 7 : 365; // Only last 7 days for incremental
+      
+      console.log(`[SYNC] ${isIncrementalSync ? 'Incremental' : 'Full'} sync for ${characterId}, fetching last ${daysToFetch} days`);
 
       let activities: any[] = [];
       if (isD1) {
@@ -808,7 +862,7 @@ export class ActivityDbService extends Dexie {
         const pageSize = 250;
         
         // Process all modes in parallel with concurrency control
-        const concurrencyLimit = 5; // Limit concurrent requests to avoid rate limiting
+        const concurrencyLimit = 5; // Reduced from 8 to 5 to stay under rate limits
         const modeChunks = this.chunkArray(D1_MODES, concurrencyLimit);
         
         for (const modeChunk of modeChunks) {
@@ -829,11 +883,25 @@ export class ActivityDbService extends Dexie {
             }
 
             const pageActs = resp?.data?.activities || [];
-              modeActivities.push(...pageActs);
+            
+            // For incremental sync, stop if we've reached activities older than our cutoff
+            if (isIncrementalSync && pageActs.length > 0) {
+              const oldestActivityDate = new Date(pageActs[pageActs.length - 1].period);
+              const cutoffDate = new Date(Date.now() - (daysToFetch * 24 * 60 * 60 * 1000));
+              
+              if (oldestActivityDate < cutoffDate) {
+                // Filter out activities older than cutoff and stop
+                const recentActivities = pageActs.filter((act: any) => new Date(act.period) >= cutoffDate);
+                modeActivities.push(...recentActivities);
+                break;
+              }
+            }
+            
+            modeActivities.push(...pageActs);
 
-              // Continue while Bungie signals more (prefer Bungie's flag); fallback to page-size heuristic
-              const bungieHasMore = resp?.hasMore === true;
-              hasMore = bungieHasMore || pageActs.length === pageSize;
+            // Continue while Bungie signals more (prefer Bungie's flag); fallback to page-size heuristic
+            const bungieHasMore = resp?.hasMore === true;
+            hasMore = bungieHasMore || pageActs.length === pageSize;
             page++;
           }
             
@@ -985,6 +1053,8 @@ export class ActivityDbService extends Dexie {
    */
   private isDungeon(referenceId: string | number, mode?: number): boolean {
     const type = this.manifest.getActivityType(referenceId, mode);
+    
+    
     return type === 'dungeon';
   }
 
@@ -1092,7 +1162,7 @@ export class ActivityDbService extends Dexie {
       }
     }
     
-    // Attach class and membershipType for per-character view
+    // Attach class and membershipType for per-character view (membershipId match is sufficient)
     const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
     if (me) {
       (first as any).characterClass = me.player.characterClass;
@@ -1108,7 +1178,7 @@ export class ActivityDbService extends Dexie {
     game: 'D1' | 'D2', 
     membershipId: string
   ): Promise<void> {
-    const concurrencyLimit = 3;
+    const concurrencyLimit = 3; // Reduced from 5 to 3 to stay under rate limits
     const chunks = this.chunkArray(activitiesNeedingPgcr, concurrencyLimit);
     
     for (const chunk of chunks) {
@@ -1145,14 +1215,21 @@ export class ActivityDbService extends Dexie {
       .filter(activity => activity.game === 'D2') // Ensure we only process D2 activities
       .toArray();
 
-    console.log(`[DungeonSoloFirsts] Processing ${activities.length} activities for membership ${membershipId}`);
+    // Check for Shattered Throne activities for debugging if needed
+    // const shatteredThroneActivities = activities.filter(activity => {
+    //   const { referenceId } = activity.activityDetails;
+    //   return String(referenceId) === '2032534090' || String(referenceId) === '1347078175';
+    // });
 
     // Sort by period ascending so the earliest completions are encountered first.
     activities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
 
     const firstsMap = new Map<string, { firstSolo?: StoredActivity; firstFlawless?: StoredActivity }>();
 
-    for (const activity of activities) {
+    // Ensure we only consider activities that belong to the requested account
+    const ownerActivities = activities.filter(a => a.membershipId === membershipId);
+
+    for (const activity of ownerActivities) {
       // We only care about completed dungeon runs.
       if (!this.isCompletion(activity)) continue;
 
@@ -1160,16 +1237,19 @@ export class ActivityDbService extends Dexie {
       if (!this.isDungeon(referenceId, mode)) continue;
 
       const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
-      if (!family) continue; // Unknown / unmapped dungeon hash.
+      if (!family) {
+        console.warn(`[DungeonSoloFirsts] UNMAPPED dungeon hash found:`, {
+          referenceId,
+          mode,
+          period: activity.period,
+          playerCount: activity.values?.playerCount?.basic?.value,
+          completed: activity.values?.completed?.basic?.value
+        });
+        continue; // Unknown / unmapped dungeon hash.
+      }
 
-      console.log(`[DungeonSoloFirsts] Processing dungeon activity:`, {
-        referenceId,
-        family,
-        period: activity.period,
-        playerCount: activity.values?.playerCount?.basic?.value,
-        completed: activity.values?.completed?.basic?.value,
-        deaths: activity.values?.deaths?.basic?.value
-      });
+      // Process dungeon activity (debug info available if needed)
+
 
       // Use the full versioned name as the key for version-specific tracking
       const versionKey = family;
@@ -1185,21 +1265,9 @@ export class ActivityDbService extends Dexie {
       const flawless = this.isSoloFlawless(activity);
 
       if (solo && !entry.firstSolo) {
-        console.log(`[DungeonSoloFirsts] Found solo completion for ${versionKey}:`, {
-          referenceId,
-          period: activity.period,
-          playerCount: activity.values?.playerCount?.basic?.value,
-          deaths: activity.values?.deaths?.basic?.value
-        });
         entry.firstSolo = activity;
       }
       if (flawless && !entry.firstFlawless) {
-        console.log(`[DungeonSoloFirsts] Found solo flawless completion for ${versionKey}:`, {
-          referenceId,
-          period: activity.period,
-          playerCount: activity.values?.playerCount?.basic?.value,
-          deaths: activity.values?.deaths?.basic?.value
-        });
         entry.firstFlawless = activity;
       }
 
@@ -1222,7 +1290,9 @@ export class ActivityDbService extends Dexie {
       });
     });
 
-    console.log(`[DungeonSoloFirsts] Final result for ${membershipId}:`, result);
+    // Debug dungeon solo firsts results if needed
+    // const debugResults = result.filter(r => r.fullName.includes('Shattered Throne'));
+    // console.log(`[DungeonSoloFirsts] Results: ${debugResults.length} entries`);
     return result;
   }
 
@@ -1237,6 +1307,55 @@ export class ActivityDbService extends Dexie {
       return versionedName; // No version suffix
     }
     return versionedName.substring(0, colonIndex);
+  }
+
+  /**
+   * Debug method to help discover unmapped dungeon activities and their manifest names
+   */
+  async debugDungeonActivities(membershipId: string): Promise<void> {
+    await this.initPromise;
+    const activities = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(activity => activity.game === 'D2')
+      .toArray();
+
+    console.log(`[DEBUG] Analyzing ${activities.length} D2 activities for dungeon detection`);
+
+    const dungeonActivities = activities.filter(activity => {
+      const { referenceId, mode } = activity.activityDetails;
+      return this.isDungeon(referenceId, mode);
+    });
+
+    console.log(`[DEBUG] Found ${dungeonActivities.length} dungeon activities`);
+
+    const hashCounts = new Map<string, { count: number; manifestName?: string; family?: string; periods: string[] }>();
+
+    for (const activity of dungeonActivities) {
+      const { referenceId, mode } = activity.activityDetails;
+      const hashStr = String(referenceId);
+      const family = ActivityDbService.ACTIVITY_FAMILY_MAP[hashStr];
+      const manifestName = this.manifest.getActivityName(referenceId, false);
+      
+      if (!hashCounts.has(hashStr)) {
+        hashCounts.set(hashStr, { count: 0, manifestName, family, periods: [] });
+      }
+      
+      const entry = hashCounts.get(hashStr)!;
+      entry.count++;
+      entry.periods.push(activity.period);
+    }
+
+    console.log(`[DEBUG] Dungeon activity hash analysis:`);
+    for (const [hash, data] of hashCounts) {
+      console.log(`Hash: ${hash}`, {
+        count: data.count,
+        manifestName: data.manifestName,
+        mappedFamily: data.family,
+        isMapped: !!data.family,
+        latestPeriod: data.periods.sort().pop()
+      });
+    }
   }
 
   /** Returns how many activities we have stored for the given list of membershipIds */
@@ -1379,14 +1498,93 @@ export class ActivityDbService extends Dexie {
   // Phase 3: Memory Management & Caching Optimization Methods
 
   /**
+   * Get all favorite accounts
+   */
+  async getFavoriteAccounts(): Promise<FavoriteAccount[]> {
+    await this.initPromise;
+    return this.favorites.toArray();
+  }
+
+  /**
+   * Update last sync time for a favorite account
+   */
+  async updateFavoriteLastSync(membershipId: string): Promise<void> {
+    await this.initPromise;
+    const favorite = await this.favorites.where('membershipId').equals(membershipId).first();
+    if (favorite) {
+      favorite.lastUpdated = new Date().toISOString();
+      await this.favorites.put(favorite);
+    }
+  }
+
+  /**
+   * Debug method to check what activities are stored for a specific player
+   */
+  async debugPlayerActivities(membershipId: string): Promise<void> {
+    await this.initPromise;
+    
+    console.log(`[DEBUG] Checking activities for player ${membershipId}`);
+    
+    // Get all activities for this player
+    const allActivities = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .toArray();
+    
+    console.log(`[DEBUG] Total activities for player: ${allActivities.length}`);
+    
+    // Check for Shattered Throne specifically
+    const shatteredThroneActivities = allActivities.filter(activity => {
+      const referenceId = activity.activityDetails?.referenceId;
+      return String(referenceId) === '2032534090' || String(referenceId) === '1347078175';
+    });
+    
+    console.log(`[DEBUG] Shattered Throne activities found: ${shatteredThroneActivities.length}`);
+    
+    if (shatteredThroneActivities.length > 0) {
+      console.log(`[DEBUG] Shattered Throne activities:`, shatteredThroneActivities.map(a => ({
+        referenceId: a.activityDetails.referenceId,
+        mode: a.activityDetails.mode,
+        period: a.period,
+        playerCount: a.values?.playerCount?.basic?.value,
+        completed: a.values?.completed?.basic?.value,
+        deaths: a.values?.deaths?.basic?.value,
+        isDungeon: this.isDungeon(a.activityDetails.referenceId, a.activityDetails.mode),
+        isCompletion: this.isCompletion(a),
+        isSolo: this.isSolo(a),
+        isSoloFlawless: this.isSoloFlawless(a)
+      })));
+    }
+    
+    // Check for any dungeon activities
+    const dungeonActivities = allActivities.filter(activity => {
+      const { referenceId, mode } = activity.activityDetails;
+      return this.isDungeon(referenceId, mode);
+    });
+    
+    console.log(`[DEBUG] Total dungeon activities: ${dungeonActivities.length}`);
+    
+    if (dungeonActivities.length > 0) {
+      console.log(`[DEBUG] Dungeon activities:`, dungeonActivities.map(a => ({
+        referenceId: a.activityDetails.referenceId,
+        mode: a.activityDetails.mode,
+        period: a.period,
+        playerCount: a.values?.playerCount?.basic?.value,
+        completed: a.values?.completed?.basic?.value,
+        isDungeon: this.isDungeon(a.activityDetails.referenceId, a.activityDetails.mode)
+      })));
+    }
+  }
+
+  /**
    * Gets data from LRU cache with automatic cleanup
    */
   private getFromCache<T>(cache: LRUCache<T>, key: string): T | undefined {
     const entry = cache.data.get(key);
     if (!entry) return undefined;
 
-    // Check TTL
-    if (Date.now() - entry.timestamp > this.CACHE_TTL) {
+    // Check TTL (use activities TTL as default)
+    if (Date.now() - entry.timestamp > this.CACHE_TTL.activities) {
       cache.data.delete(key);
       return undefined;
     }
@@ -1401,6 +1599,8 @@ export class ActivityDbService extends Dexie {
     
     return entry.data;
   }
+
+
 
   /**
    * Sets data in LRU cache with automatic size management
@@ -1434,7 +1634,7 @@ export class ActivityDbService extends Dexie {
     [this.activitiesCache, this.filteredActivitiesCache, this.firstEverActivities, this.wastedTimes, this.wastedSeals]
       .forEach(cache => {
         for (const [key, entry] of cache.data.entries()) {
-          if (now - entry.timestamp > this.CACHE_TTL) {
+          if (now - entry.timestamp > this.CACHE_TTL.activities) {
             cache.data.delete(key);
           }
         }
