@@ -135,7 +135,7 @@ export class ActivityDbService extends Dexie {
     '2812525063': 'Scourge of the Past: Normal',
     // Root of Nightmares - Multiple versions
     '2381413764': 'Root of Nightmares: Normal',
-    '2918919505': 'Root of Nightmares: Normal',
+    '2918919505': 'Root of Nightmares: Master',
     // Vow of the Disciple - Multiple versions
     '1441982566': 'Vow of the Disciple: Standard',
     '4156879541': 'Vow of the Disciple: Legend',

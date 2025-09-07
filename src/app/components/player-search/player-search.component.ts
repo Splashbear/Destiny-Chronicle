@@ -4268,9 +4268,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         allFirsts.push(...firsts.firstCompletions);
       }
       // Deduplicate within the account so we keep only the earliest completion for each (game,type,name)
+      // For D1 raids, use referenceId to keep variants separate since they have the same name
       const perName = new Map<string, ActivityFirstCompletion>();
       for (const f of allFirsts) {
-        const key = `${f.game}|${f.type}|${f.name}`;
+        let key: string;
+        if (f.game === 'D1' && f.type === 'raid') {
+          // For D1 raids, use referenceId to keep Normal/Hard/390 variants separate
+          key = `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
+        } else {
+          // For D2 and other activities, use the original logic
+          key = `${f.game}|${f.type}|${f.name}`;
+        }
         const existing = perName.get(key);
         if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
           perName.set(key, f);
@@ -4284,12 +4292,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const pKey = this.getPlayerKey(player);
       this.guardianFirstsMap[pKey] = sorted;
       // recompute aggregate list (dedup by name + game + type)
+      // For D1 raids, use referenceId to keep variants separate since they have the same name
       const aggregate: ActivityFirstCompletion[] = [];
       const seen = new Set<string>();
       Object.values(this.guardianFirstsMap).forEach(list => {
         for (const f of list) {
-          const key = `${f.game}|${f.type}|${f.name}`;
-          const existing = aggregate.find(x => `${x.game}|${x.type}|${x.name}` === key);
+          let key: string;
+          if (f.game === 'D1' && f.type === 'raid') {
+            // For D1 raids, use referenceId to keep Normal/Hard/390 variants separate
+            key = `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
+          } else {
+            // For D2 and other activities, use the original logic
+            key = `${f.game}|${f.type}|${f.name}`;
+          }
+          const existing = aggregate.find(x => {
+            if (x.game === 'D1' && x.type === 'raid') {
+              return `${x.game}|${x.type}|${x.name}|${x.referenceId}` === key;
+            } else {
+              return `${x.game}|${x.type}|${x.name}` === key;
+            }
+          });
           if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
             if (existing) {
               // replace later completion with earlier one
@@ -4762,7 +4784,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const allRaids = this.getAggregateRaids('D1');
     for (const raid of allRaids) {
       const baseName = this.getBaseActivityName(raid.name);
-      const version = this.getActivityVersion(raid.name);
+      // For D1 raids, use referenceId to determine variant type since all variants have the same name
+      const version = this.getD1RaidVariantName(raid.referenceId, raid.name);
       
       if (!raidVariants.has(baseName)) {
         raidVariants.set(baseName, new Map());
@@ -4806,7 +4829,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const all = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === 'D1');
     for (const raid of all) {
       const base = this.getBaseActivityName(raid.name);
-      const version = this.getActivityVersion(raid.name);
+      // For D1 raids, use referenceId to determine variant type since all variants have the same name
+      const version = this.getD1RaidVariantName(raid.referenceId, raid.name);
       if (!raidVariants.has(base)) raidVariants.set(base, new Map());
       raidVariants.get(base)!.set(version, raid);
     }
@@ -6652,5 +6676,35 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   public accountLoadingStatuses: LoadingStatus[] = [];
   public showLoadingModal = false;
   public isLoadingComplete = false;
+
+  private getD1RaidVariantName(referenceId: string, manifestName: string): string {
+    // Map D1 raid referenceIds to their variant types based on our D1_FAMILY_MAP analysis
+    const variantMap: { [key: string]: string } = {
+      // Vault of Glass variants
+      '2659248071': 'Normal',    // Level 26, Tier 1
+      '2659248068': 'Hard',      // Level 30, Tier 2
+      '856898338': '390 Light',  // Level 42, Tier 2
+      '4038697181': '390 Light', // Level 42, Tier 2
+      '2659248069': '390 Light', // Level 31, Tier 3
+
+      // Crota's End variants
+      '1836893116': 'Normal',    // Level 30, Tier 1
+      '1016659723': '390 Light', // Level 42, Tier 2
+      '3978884648': '390 Light', // Level 42, Tier 2
+
+      // King's Fall variants
+      '2693136600': 'Normal',    // Level 42, Tier 1
+      '2693136601': 'Hard',      // Level 42, Tier 2
+      '2693136602': '390 Light', // Level 42, Tier 2
+
+      // Wrath of the Machine variants
+      '260765522': 'Normal',     // Level 42, Tier 1
+      '1387993552': 'Normal',    // Level 42, Tier 1
+      '430160982': '390 Light',  // Level 42, Tier 2
+      '3356249023': '390 Light'  // Level 42, Tier 2
+    };
+
+    return variantMap[referenceId] || 'Normal';
+  }
 
 }
