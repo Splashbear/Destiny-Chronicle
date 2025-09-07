@@ -4985,6 +4985,68 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return versionedName.substring(0, colonIndex);
   }
 
+  private getBaseRaidName(manifestName: string, game: 'D1' | 'D2'): string {
+    // For D1, all raid variants have the same name, so we can return it as-is
+    if (game === 'D1') {
+      return manifestName;
+    }
+
+    // For D2, handle manifest names that may have variants
+    // Remove common variant suffixes
+    const variantSuffixes = [
+      ': Master',
+      ': Standard', 
+      ': Normal',
+      ': Prestige',
+      ': Challenge',
+      ': Expert',
+      ': Legend',
+      ': Contest',
+      ': Day One',
+      ': World First',
+      ': Hard',
+      ': Easy',
+      ': Heroic',
+      ': Grandmaster'
+    ];
+
+    let baseName = manifestName;
+    
+    // Remove variant suffixes
+    for (const suffix of variantSuffixes) {
+      if (baseName.endsWith(suffix)) {
+        baseName = baseName.replace(suffix, '');
+        break;
+      }
+    }
+
+    // Handle specific D2 raid groupings
+    if (baseName.includes('Leviathan')) return 'Leviathan';
+    if (baseName.includes('Last Wish')) return 'Last Wish';
+    if (baseName.includes('Scourge of the Past')) return 'Scourge of the Past';
+    if (baseName.includes('Crown of Sorrow')) return 'Crown of Sorrow';
+    if (baseName.includes('Garden of Salvation')) return 'Garden of Salvation';
+    if (baseName.includes('Deep Stone Crypt')) return 'Deep Stone Crypt';
+    if (baseName.includes('Vault of Glass')) return 'Vault of Glass';
+    if (baseName.includes('Vow of the Disciple')) return 'Vow of the Disciple';
+    if (baseName.includes('King\'s Fall')) return 'King\'s Fall';
+    if (baseName.includes('Root of Nightmares')) return 'Root of Nightmares';
+    if (baseName.includes('Crota\'s End')) return 'Crota\'s End';
+    if (baseName.includes('Salvation\'s Edge')) return 'Salvation\'s Edge';
+    if (baseName.includes('The Final Shape')) return 'The Final Shape';
+    if (baseName.includes('Duality')) return 'Duality';
+    if (baseName.includes('Grasp of Avarice')) return 'Grasp of Avarice';
+    if (baseName.includes('Prophecy')) return 'Prophecy';
+    if (baseName.includes('Pit of Heresy')) return 'Pit of Heresy';
+    if (baseName.includes('Shattered Throne')) return 'Shattered Throne';
+    if (baseName.includes('Spire of the Watcher')) return 'Spire of the Watcher';
+    if (baseName.includes('Ghosts of the Deep')) return 'Ghosts of the Deep';
+    if (baseName.includes('Warlord\'s Ruin')) return 'Warlord\'s Ruin';
+    if (baseName.includes('Pantheon')) return 'Pantheon';
+
+    return baseName;
+  }
+
   /**
    * Extracts the base dungeon name from a versioned dungeon name.
    * e.g., "Vesper's Host: Master" -> "Vesper's Host"
@@ -6705,6 +6767,265 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     };
 
     return variantMap[referenceId] || 'Normal';
+  }
+
+  // Player-specific variant grouping methods
+  getPlayerD2RaidVariants(player: any): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const raids = this.getPlayerRaids(player, 'D2');
+    return this.groupRaidsByBaseName(raids, 'D2');
+  }
+
+  getPlayerD2DungeonVariants(player: any): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const dungeons = this.getPlayerDungeons(player, 'D2');
+    return this.groupRaidsByBaseName(dungeons, 'D2');
+  }
+
+  getPlayerD1RaidVariants(player: any): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const raids = this.getPlayerRaids(player, 'D1');
+    return this.groupRaidsByBaseName(raids, 'D1');
+  }
+
+  getPlayerPantheonVariants(player: any): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const pantheonRaids = this.getPlayerRaids(player, 'D2').filter(raid =>
+      raid.name.includes('Pantheon') || raid.name.includes('Pantheon')
+    );
+    return this.groupRaidsByBaseName(pantheonRaids, 'D2');
+  }
+
+  // Rite of the Nine Dungeons methods
+  getRiteOfTheNineDungeons(): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const dungeons = this.getAggregateDungeons('D2').filter(dungeon =>
+      dungeon.name.includes('Ghosts of the Deep') || 
+      dungeon.name.includes('Spire of the Watcher') || 
+      dungeon.name.includes('Prophecy')
+    );
+    return this.groupRaidsByBaseName(dungeons, 'D2');
+  }
+
+  getRiteOfTheNineDungeonGroups(variants: Array<{ 
+    version: string; 
+    first?: ActivityFirstCompletion; 
+    hasClear: boolean;
+  }>): Array<{ dungeonName: string; variants: Array<{ 
+    version: string; 
+    first?: ActivityFirstCompletion; 
+    hasClear: boolean;
+  }> }> {
+    const groups = new Map<string, Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>>();
+    
+    variants.forEach(variant => {
+      let dungeonName = 'Unknown';
+      if (variant.first?.name.includes('Ghosts of the Deep')) {
+        dungeonName = 'Ghosts of the Deep';
+      } else if (variant.first?.name.includes('Spire of the Watcher')) {
+        dungeonName = 'Spire of the Watcher';
+      } else if (variant.first?.name.includes('Prophecy')) {
+        dungeonName = 'Prophecy';
+      }
+      
+      if (!groups.has(dungeonName)) {
+        groups.set(dungeonName, []);
+      }
+      groups.get(dungeonName)!.push(variant);
+    });
+    
+    return Array.from(groups.entries()).map(([dungeonName, variants]) => ({
+      dungeonName,
+      variants
+    }));
+  }
+
+  getPlayerRiteOfTheNineVariants(player: any): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const dungeons = this.getPlayerDungeons(player, 'D2').filter(dungeon =>
+      dungeon.name.includes('Ghosts of the Deep') || 
+      dungeon.name.includes('Spire of the Watcher') || 
+      dungeon.name.includes('Prophecy')
+    );
+    return this.groupRaidsByBaseName(dungeons, 'D2');
+  }
+
+  private groupRaidsByBaseName(activities: ActivityFirstCompletion[], game: 'D1' | 'D2'): Array<{ 
+    baseName: string; 
+    variants: Array<{ 
+      version: string; 
+      first?: ActivityFirstCompletion; 
+      hasClear: boolean;
+    }>;
+  }> {
+    const groups = new Map<string, { 
+      baseName: string; 
+      variants: Array<{ 
+        version: string; 
+        first?: ActivityFirstCompletion; 
+        hasClear: boolean;
+      }>;
+    }>();
+
+    activities.forEach(activity => {
+      // Get the manifest name for the base grouping
+      const referenceId = activity.referenceId;
+      const isD1 = activity.game === 'D1';
+      const manifestName = referenceId ? (this.manifest.getActivityName(referenceId, isD1) || activity.name) : activity.name;
+
+      const baseName = this.getBaseRaidName(manifestName, game);
+
+      if (!groups.has(baseName)) {
+        groups.set(baseName, {
+          baseName,
+          variants: []
+        });
+      }
+
+      const group = groups.get(baseName)!;
+      const variant = this.createRaidVariant(activity);
+
+      // Check if this variant already exists (avoid duplicates)
+      const existingVariant = group.variants.find((v: any) => v.version === variant.version);
+
+      if (!existingVariant) {
+        group.variants.push(variant);
+      } else {
+        // If we have a duplicate variant, keep the earlier completion
+        if (variant.first && existingVariant.first) {
+          const variantDate = new Date(variant.first.completionDate);
+          const existingDate = new Date(existingVariant.first.completionDate);
+          if (variantDate < existingDate) {
+            const index = group.variants.indexOf(existingVariant);
+            group.variants[index] = variant;
+          }
+        }
+      }
+    });
+
+    // Sort variants by priority (Normal first, then others)
+    groups.forEach(group => {
+      group.variants.sort((a: any, b: any) => {
+        const priority: { [key: string]: number } = { 'Normal': 0, 'Standard': 0, 'Hard': 1, 'Master': 2, 'Prestige': 2, 'Challenge': 3 };
+        const aPriority = priority[a.version] ?? 999;
+        const bPriority = priority[b.version] ?? 999;
+        return aPriority - bPriority;
+      });
+    });
+
+    return Array.from(groups.values()).sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  private createRaidVariant(activity: ActivityFirstCompletion): { 
+    version: string; 
+    first?: ActivityFirstCompletion; 
+    hasClear: boolean;
+  } {
+    // Get the proper manifest name for the variant
+    const manifestName = this.getManifestVariantName(activity);
+
+    return {
+      version: manifestName,
+      hasClear: true,
+      first: activity
+    };
+  }
+
+  private getManifestVariantName(activity: ActivityFirstCompletion): string {
+    // Get the manifest activity name
+    const referenceId = activity.referenceId;
+    if (!referenceId) return 'Unknown Activity';
+
+    const isD1 = activity.game === 'D1';
+    const manifestName = this.manifest.getActivityName(referenceId, isD1) || 'Unknown Activity';
+
+    // For D1 raids, use referenceId to determine variant type since all variants have the same name
+    if (isD1 && activity.type === 'raid') {
+      return this.getD1RaidVariantName(referenceId, manifestName);
+    }
+
+    // Extract just the variant part from the manifest name
+    // For example: "Leviathan, Eater of Worlds" -> "Eater of Worlds"
+    // "Leviathan, Spire of Stars" -> "Spire of Stars"
+    // "Leviathan (Prestige)" -> "Prestige"
+    // "Leviathan" -> "Normal"
+
+    const baseName = this.getBaseRaidName(manifestName, isD1 ? 'D1' : 'D2');
+
+    // If the manifest name is different from the base name, extract the variant
+    if (manifestName !== baseName) {
+      // Remove the base name and clean up
+      let variant = manifestName.replace(baseName, '').trim();
+
+      // Remove common separators
+      variant = variant.replace(/^[,:\-]\s*/, '').trim();
+      variant = variant.replace(/^\(/, '').replace(/\)$/, '').trim();
+
+      // If we still have a meaningful variant name, return it
+      if (variant && variant !== '') {
+        return variant;
+      }
+    }
+
+    // Fallback to difficulty-based naming
+    return this.getVariantName(activity.name);
+  }
+
+  private getVariantName(activityName: string): string {
+    // Extract variant name (Normal, Prestige, Master, etc.)
+    if (activityName.includes('Master')) return 'Master';
+    if (activityName.includes('Prestige')) return 'Prestige';
+    if (activityName.includes('Challenge')) return 'Challenge';
+    if (activityName.includes('Hard')) return 'Hard';
+    if (activityName.includes('Standard')) return 'Standard';
+    if (activityName.includes('Legend')) return 'Legend';
+    if (activityName.includes('Grandmaster')) return 'Grandmaster';
+    if (activityName.includes('Contest')) return 'Contest';
+    if (activityName.includes('Day One')) return 'Day One';
+    if (activityName.includes('World First')) return 'World First';
+    if (activityName.includes('Heroic')) return 'Heroic';
+    if (activityName.includes('Easy')) return 'Easy';
+    return 'Normal';
   }
 
 }

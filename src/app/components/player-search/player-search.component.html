@@ -565,6 +565,50 @@
 
             <!-- D2 Dungeons -->
             <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
+            
+            <!-- Rite of the Nine Dungeons -->
+            <h5 class="text-sm font-semibold text-cyan-300 mb-2 mt-6">Rite of the Nine Dungeons</h5>
+            <div *ngIf="getRiteOfTheNineDungeons().length > 0" class="space-y-6 mb-4">
+              <div *ngFor="let riteOfTheNine of getRiteOfTheNineDungeons()" class="rounded-lg overflow-hidden">
+                <!-- Rite of the Nine card with full-width background image -->
+                <div class="relative h-40">
+                  <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as img">
+                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
+                  </ng-container>
+                  
+                  <!-- Title (top-left) with grouped dungeon variants -->
+                  <div class="absolute top-3 left-4">
+                    <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ riteOfTheNine.baseName }}</h5>
+                    <div class="rounded-lg p-2 bg-black/35">
+                      <div class="space-y-2">
+                        <!-- Group variants by dungeon in horizontal layout -->
+                        <div class="grid grid-cols-3 gap-4">
+                          <ng-container *ngFor="let dungeonGroup of getRiteOfTheNineDungeonGroups(riteOfTheNine.variants)">
+                            <div>
+                              <div class="text-white text-sm font-semibold mb-2">{{ dungeonGroup.dungeonName }}</div>
+                              <div class="space-y-1">
+                                <div *ngFor="let variant of dungeonGroup.variants" class="flex items-center gap-2">
+                                  <span class="text-white text-xs">{{ variant.version }}</span>
+                                  <ng-container>
+                                    <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">
+                                      {{ formatDateTime(variant.first!.completionDate) }}
+                                    </a>
+                                    <span *ngIf="!variant.hasClear" class="text-slate-400 text-xs">Not completed</span>
+                                  </ng-container>
+                                </div>
+                              </div>
+                            </div>
+                          </ng-container>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div *ngIf="getRiteOfTheNineDungeons().length === 0" class="text-center text-slate-400 py-2 mb-4">No Rite of the Nine dungeon firsts found.</div>
+            
             <div *ngIf="getAllD2DungeonVariants().length > 0" class="space-y-6">
               <div *ngFor="let dungeon of getAllD2DungeonVariants()" class="rounded-lg overflow-hidden">
                 <!-- Dungeon card with full-width background image -->
@@ -732,7 +776,7 @@
                   <ng-container *ngIf="isD1Player(player)">
                     <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
                     <div *ngIf="getPlayerRaids(player,'D1').length > 0" class="space-y-6 mb-4">
-                      <div *ngFor="let raid of getAllD1RaidVariantsForPlayer(player)" class="rounded-lg overflow-hidden">
+                      <div *ngFor="let raid of getPlayerD1RaidVariants(player)" class="rounded-lg overflow-hidden">
                         <div class="relative h-40">
                           <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
                             <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
@@ -793,7 +837,7 @@
                     <!-- D2 Raids -->
                     <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">D2 Raids</h4>
                     <div *ngIf="getPlayerRegularRaids(player,'D2').length > 0" class="space-y-6 mb-4">
-                      <div *ngFor="let raid of getAllD2RaidVariantsForPlayer(player)" class="rounded-lg overflow-hidden">
+                      <div *ngFor="let raid of getPlayerD2RaidVariants(player)" class="rounded-lg overflow-hidden">
                         <div class="relative h-40">
                           <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
                             <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
@@ -820,8 +864,49 @@
                       No raid firsts found for D2.
                     </div>
                     <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
+                    
+                    <!-- Rite of the Nine Dungeons -->
+                    <h5 class="text-sm font-semibold text-cyan-300 mb-2 mt-6">Rite of the Nine Dungeons</h5>
+                    <div *ngIf="getPlayerRiteOfTheNineVariants(player).length > 0" class="space-y-6 mb-4">
+                      <div *ngFor="let riteOfTheNine of getPlayerRiteOfTheNineVariants(player)" class="rounded-lg overflow-hidden">
+                        <div class="relative h-40">
+                          <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as img">
+                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
+                          </ng-container>
+                          <div class="absolute top-3 left-4">
+                            <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ riteOfTheNine.baseName }}</h5>
+                            <div class="rounded-lg p-2 bg-black/35">
+                              <div class="space-y-2">
+                                <!-- Group variants by dungeon in horizontal layout -->
+                                <div class="grid grid-cols-3 gap-4">
+                                  <ng-container *ngFor="let dungeonGroup of getRiteOfTheNineDungeonGroups(riteOfTheNine.variants)">
+                                    <div>
+                                      <div class="text-white text-sm font-semibold mb-2">{{ dungeonGroup.dungeonName }}</div>
+                                      <div class="space-y-1">
+                                        <div *ngFor="let variant of dungeonGroup.variants" class="flex items-center gap-2">
+                                          <span class="text-white text-xs">{{ variant.version }}</span>
+                                          <ng-container>
+                                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">
+                                              {{ formatDateTime(variant.first!.completionDate) }}
+                                            </a>
+                                            <span *ngIf="!variant.hasClear" class="text-slate-400 text-xs">Not completed</span>
+                                          </ng-container>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </ng-container>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div *ngIf="getPlayerRiteOfTheNineVariants(player).length === 0" class="text-center text-slate-400 py-2 mb-4">No Rite of the Nine dungeon firsts found.</div>
+                    
                     <div *ngIf="getPlayerDungeons(player,'D2').length > 0" class="space-y-6">
-                      <div *ngFor="let dungeon of getAllD2DungeonVariantsForPlayer(player)" class="rounded-lg overflow-hidden">
+                      <div *ngFor="let dungeon of getPlayerD2DungeonVariants(player)" class="rounded-lg overflow-hidden">
                         <div class="relative h-40">
                           <ng-container *ngIf="getFirstCompletionImageForRaid(dungeon) as img">
                             <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
