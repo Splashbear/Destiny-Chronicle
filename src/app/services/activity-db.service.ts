@@ -857,7 +857,7 @@ export class ActivityDbService extends Dexie {
       const isIncrementalSync = lastActivityDate !== null;
       const daysToFetch = isIncrementalSync ? 7 : 365; // Only last 7 days for incremental
       
-      // Sync mode logging removed for production
+      console.log(`[SYNC] ${isIncrementalSync ? 'Incremental' : 'Full'} sync for ${characterId}, fetching last ${daysToFetch} days`);
 
       let activities: any[] = [];
       if (isD1) {
@@ -1326,14 +1326,14 @@ export class ActivityDbService extends Dexie {
       .and(activity => activity.game === 'D2')
       .toArray();
 
-      // Dungeon detection analysis removed for production
+    console.log(`[DEBUG] Analyzing ${activities.length} D2 activities for dungeon detection`);
 
     const dungeonActivities = activities.filter(activity => {
       const { referenceId, mode } = activity.activityDetails;
       return this.isDungeon(referenceId, mode);
     });
 
-    // Dungeon count logging removed for production
+    console.log(`[DEBUG] Found ${dungeonActivities.length} dungeon activities`);
 
     const hashCounts = new Map<string, { count: number; manifestName?: string; family?: string; periods: string[] }>();
 
@@ -1352,16 +1352,15 @@ export class ActivityDbService extends Dexie {
       entry.periods.push(activity.period);
     }
 
-    // Dungeon hash analysis removed for production
+    console.log(`[DEBUG] Dungeon activity hash analysis:`);
     for (const [hash, data] of hashCounts) {
-      // Hash analysis logging removed
-      // console.log(`Hash: ${hash}`, {
-      //   count: data.count,
-      //   manifestName: data.manifestName,
-      //   mappedFamily: data.family,
-      //   isMapped: !!data.family,
-      //   latestPeriod: data.periods.sort().pop()
-      // });
+      console.log(`Hash: ${hash}`, {
+        count: data.count,
+        manifestName: data.manifestName,
+        mappedFamily: data.family,
+        isMapped: !!data.family,
+        latestPeriod: data.periods.sort().pop()
+      });
     }
   }
 
@@ -1530,7 +1529,7 @@ export class ActivityDbService extends Dexie {
   async debugPlayerActivities(membershipId: string): Promise<void> {
     await this.initPromise;
     
-    // Player activity checking removed for production
+    console.log(`[DEBUG] Checking activities for player ${membershipId}`);
     
     // Get all activities for this player
     const allActivities = await this.activities
@@ -1538,7 +1537,7 @@ export class ActivityDbService extends Dexie {
       .equals(membershipId)
       .toArray();
     
-    // Total activity count logging removed for production
+    console.log(`[DEBUG] Total activities for player: ${allActivities.length}`);
     
     // Check for Shattered Throne specifically
     const shatteredThroneActivities = allActivities.filter(activity => {
@@ -1546,10 +1545,10 @@ export class ActivityDbService extends Dexie {
       return String(referenceId) === '2032534090' || String(referenceId) === '1347078175';
     });
     
-    // Shattered Throne analysis removed for production
+    console.log(`[DEBUG] Shattered Throne activities found: ${shatteredThroneActivities.length}`);
     
     if (shatteredThroneActivities.length > 0) {
-      // Shattered Throne activity logging removed
+      console.log(`[DEBUG] Shattered Throne activities:`, shatteredThroneActivities.map(a => ({
         referenceId: a.activityDetails.referenceId,
         mode: a.activityDetails.mode,
         period: a.period,
@@ -1569,18 +1568,17 @@ export class ActivityDbService extends Dexie {
       return this.isDungeon(referenceId, mode);
     });
     
-    // Total dungeon activity count removed for production
+    console.log(`[DEBUG] Total dungeon activities: ${dungeonActivities.length}`);
     
     if (dungeonActivities.length > 0) {
-      // Dungeon activity logging removed
-      // console.log(`[DEBUG] Dungeon activities:`, dungeonActivities.map(a => ({
-      //   referenceId: a.activityDetails.referenceId,
-      //   mode: a.activityDetails.mode,
-      //   period: a.period,
-      //   playerCount: a.values?.playerCount?.basic?.value,
-      //   completed: a.values?.completed?.basic?.value,
-      //   isDungeon: this.isDungeon(a.activityDetails.referenceId, a.activityDetails.mode)
-      // })));
+      console.log(`[DEBUG] Dungeon activities:`, dungeonActivities.map(a => ({
+        referenceId: a.activityDetails.referenceId,
+        mode: a.activityDetails.mode,
+        period: a.period,
+        playerCount: a.values?.playerCount?.basic?.value,
+        completed: a.values?.completed?.basic?.value,
+        isDungeon: this.isDungeon(a.activityDetails.referenceId, a.activityDetails.mode)
+      })));
     }
   }
 
