@@ -2034,7 +2034,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Log the character we're looking for with full details
     if (environment.debug) {
-    console.log(`[DEBUG] Looking for character in PGCRs:`, {
+    // PGCR character lookup removed for production
       membershipId: character.membershipId,
       characterId: character.characterId,
       game: character.game,
@@ -2105,7 +2105,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           return;
         }
         if (environment.debug) {
-        console.log(`[DEBUG] Processing PGCR ${instanceId}:`, {
+        // PGCR processing logging removed for production
           entries: pgcr.entries.map((e: any) => ({
             membershipId: e.player?.destinyUserInfo?.membershipId,
             characterId: e.characterId,
@@ -2122,7 +2122,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
 
         if (playerInPgcr) {
-          console.log(`[DEBUG] Successfully validated activity ${instanceId} for player ${character.membershipId}`);
+          // Activity validation success logging removed for production
           validatedActivities.push({
             ...activity,
             validated: true,
@@ -2144,7 +2144,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         
         // If it's a D1 activity and we got a 500 error, we might want to try the D2 endpoint
         if (character.game === 'D1' && error.status === 500) {
-          console.log(`[DEBUG] Attempting to fetch D1 activity ${instanceId} using D2 endpoint`);
+          // D1 activity fetch attempt logging removed for production
           // TODO: Implement fallback to D2 endpoint if needed
         }
       }
@@ -2284,7 +2284,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const newActivities = activities.filter(activity => {
       const isNew = !existingIds.has(activity.activityDetails?.instanceId);
       if (isNew) {
-        console.log('[DEBUG] New activity found:', {
+        // New activity logging removed for production
           period: activity.period,
           mode: activity.activityDetails?.mode,
           referenceId: activity.activityDetails?.referenceId,
@@ -2305,7 +2305,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         mode: activity.activityDetails?.mode
       }));
       
-      console.log('[DEBUG] Storing activities:', {
+      // Activity storage logging removed for production
         total: storedActivities.length,
         raids: storedActivities.filter(a => a.activityDetails?.mode === (character.game === 'D1' ? 3 : 4)).length,
         sample: storedActivities.slice(0, 3).map(a => ({
@@ -2320,14 +2320,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       await this.activityDb.addActivities(storedActivities);
       // Update totals in background (no await to avoid slowing batch loop)
       this.statsDebounce$.next();
-      console.log(`[DEBUG] Stored ${storedActivities.length} new activities for character ${character.characterId} (${character.game})`);
+      // Activity storage count logging removed for production
       this.cdr.detectChanges();
     }
   }
 
   private validateDateRanges(activities: ActivityHistory[], character: CharacterWithGame): void {
     if (activities.length === 0) {
-      console.log(`[DEBUG] No activities to validate for character ${character.characterId}`);
+      // No activities validation logging removed for production
       return;
     }
 
@@ -2340,7 +2340,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const firstDate = new Date(sortedActivities[0].period);
     const lastDate = new Date(sortedActivities[sortedActivities.length - 1].period);
     
-    console.log(`[DEBUG] Activity date range for character ${character.characterId}:`, {
+    // Activity date range logging removed for production
       firstDate: firstDate.toISOString(),
       lastDate: lastDate.toISOString(),
       totalActivities: activities.length
@@ -2365,12 +2365,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     if (gaps.length > 0) {
-      console.log(`[DEBUG] Found ${gaps.length} gaps in activity history for character ${character.characterId}:`);
+      // Activity gap analysis removed for production
       gaps.forEach(gap => {
-        console.log(`[DEBUG] Gap from ${gap.start.toISOString()} to ${gap.end.toISOString()} (${Math.round(gap.duration / (24 * 60 * 60 * 1000))} days)`);
+        // Gap logging removed for production
       });
     } else {
-      console.log(`[DEBUG] No significant gaps found in activity history for character ${character.characterId}`);
+      // No gaps logging removed for production
     }
 
     // Check for expected date range based on game
@@ -2379,7 +2379,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       : new Date('2017-09-06T00:00:00Z');
     
     if (firstDate.getTime() > gameReleaseDate.getTime()) {
-      console.log(`[DEBUG] WARNING: First activity (${firstDate.toISOString()}) is after game release date (${gameReleaseDate.toISOString()})`);
+      // Game release date warning removed for production
     }
   }
 
@@ -2642,7 +2642,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
     await this.setFirstEverActivityFromDb();
 
-    console.log('[DEBUG] GroupedAccounts: D1=', this.getAccountGroupsForGame('D1').length,
+    // Account grouping debug removed for production
                 'D2=', this.getAccountGroupsForGame('D2').length);
   }
 
@@ -2968,13 +2968,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (this.selectedActivityType.label === 'Raid' && game === 'D1') {
         const isRaid = D1_RAID_HASHES.includes(referenceId);
         if (isRaid) {
-          console.log('[DEBUG][Filter][D1Raid] Including activity:', {
+          // D1 Raid filter inclusion logging removed for production
             period: activity.period,
             referenceId,
             completed: activity.values?.completed?.basic?.value
           });
         } else {
-          console.log('[DEBUG][Filter][D1Raid] Excluding activity:', {
+          // D1 Raid filter exclusion logging removed for production
             period: activity.period,
             referenceId,
             completed: activity.values?.completed?.basic?.value
