@@ -229,29 +229,35 @@ export class ActivityDbService extends Dexie {
   // Add D1 family map
   private static readonly D1_FAMILY_MAP: Record<string, string> = {
     // Vault of Glass (Normal & Hard)
-    '3801607287': 'Vault of Glass', // Normal
-    '708693006': 'Vault of Glass',  // Hard
-    '2659248071': 'Vault of Glass', // Challenge
-    '2043403989': 'Vault of Glass', // Variant
+    '3801607287': 'Vault of Glass', // Normal (alt)
+    '708693006': 'Vault of Glass',  // Hard (alt)
+    '2659248071': 'Vault of Glass', // Y1 Normal (26)
+    '2659248068': 'Vault of Glass', // Y1 Hard (30)
+    '2659248069': 'Vault of Glass', // Y1 Hard (31)
+    '856898338': 'Vault of Glass',  // AOT 390
+    '4038697181': 'Vault of Glass', // AOT 390 (alt)
 
     // Crota's End (Normal & Hard)
-    '898834093': "Crota's End",    // Normal
-    '112157962': "Crota's End",    // Hard
-    '3879860662': "Crota's End",   // Variant
-    '1836893116': "Crota's End",   // New from logs
+    '898834093': "Crota's End",    // Normal (alt)
+    '112157962': "Crota's End",    // Hard (alt)
+    '1836893116': "Crota's End",   // Y1 Normal (30)
+    '1836893119': "Crota's End",   // Y1 Hard (33)
+    '2324706853': "Crota's End",   // AOT 390
+    '4000873610': "Crota's End",   // AOT 390 (alt)
 
     // King's Fall (Normal & Hard)
     '1733556769': "King's Fall",   // Normal
-    '421023204': "King's Fall",    // Hard
-    '1661734046': "King's Fall",   // Variant
-    '2964135793': "King's Fall",   // Variant
+    '3534581229': "King's Fall",   // Normal (alt)
+    '1016659723': "King's Fall",   // Hard
+    '3978884648': "King's Fall",   // AOT 390
 
     // Wrath of the Machine (Normal & Hard)
-    '2578867903': 'Wrath of the Machine', // Normal
-    '4007500989': 'Wrath of the Machine', // Hard
-    '1099433614': 'Wrath of the Machine', // Variant
-    '1342567280': 'Wrath of the Machine', // Variant
-    '260765522': 'Wrath of the Machine',  // New from logs
+    '2578867903': 'Wrath of the Machine', // Normal (alt)
+    '4007500989': 'Wrath of the Machine', // Normal (alt)
+    '260765522': 'Wrath of the Machine',  // Normal
+    '1387993552': 'Wrath of the Machine', // Normal (alt)
+    '430160982': 'Wrath of the Machine',  // Heroic/390
+    '3356249023': 'Wrath of the Machine', // Heroic/390 (alt)
   };
 
   constructor(

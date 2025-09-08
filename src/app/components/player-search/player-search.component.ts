@@ -1282,6 +1282,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } finally {
       this.loadingActivities[this.selectedDate] = false;
       this.cdr.detectChanges();
+      // Ensure account summary recomputes once character history sync finishes
+      this.statsDebounce$.next();
     }
   }
 
@@ -1830,6 +1832,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (this.selectedDate) {
         await this.loadAllFilteredActivities(true);
       }
+      // Recompute account summary promptly when a new account is appended
       this.statsDebounce$.next();
 
     } catch (err) {
@@ -3170,7 +3173,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       for (const pl of this.selectedPlayers) {
         const platformName = pl.platform;
         // Use game as part of the key so Destiny 1 and Destiny 2 accounts on the same platform don't overwrite each other
-        const key = `${pl.game}-${platformName}`;
+        // Also include membershipId so each account gets its own card in the summary
+        const key = `${pl.game}-${platformName}-${pl.membershipId}`;
         // Prefer WastedOnDestiny playtime (seconds).  If unavailable (e.g. Destiny 1
         // accounts) fall back to the sum of `minutesPlayedTotal` (D2) or
         // `minutesPlayed` (D1) reported on each character profile.
@@ -4677,11 +4681,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const dungeonVariantDefinitions = new Map<string, string[]>([
       ['The Shattered Throne', ['Standard']],
       ['Pit of Heresy', ['Normal', 'Master']],
-      ['Prophecy', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Prophecy', ['Normal', 'Master']],
       ['Grasp of Avarice', ['Normal', 'Master']],
       ['Duality', ['Normal', 'Master']],
-      ['Spire of the Watcher', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
-      ['Ghosts of the Deep', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Spire of the Watcher', ['Normal', 'Master']],
+      ['Ghosts of the Deep', ['Normal', 'Master']],
       ['Warlord\'s Ruin', ['Normal', 'Master']],
       // Removed erroneous 'The Coil'
       // Fixed incorrect name to Vesper's Host
@@ -4738,11 +4742,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const defs = new Map<string, string[]>([
       ['The Shattered Throne', ['Standard']],
       ['Pit of Heresy', ['Normal', 'Master']],
-      ['Prophecy', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Prophecy', ['Normal', 'Master']],
       ['Grasp of Avarice', ['Normal', 'Master']],
       ['Duality', ['Normal', 'Master']],
-      ['Spire of the Watcher', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
-      ['Ghosts of the Deep', ['Normal', 'Master', 'Explorer', 'Eternity', 'Ultimatum']],
+      ['Spire of the Watcher', ['Normal', 'Master']],
+      ['Ghosts of the Deep', ['Normal', 'Master']],
       ["Warlord's Ruin", ['Normal', 'Master']],
       ["Vesper's Host", ['Normal', 'Master']],
       ['Sundered Doctrine', ['Normal', 'Master']]
@@ -4795,10 +4799,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // Define all possible variants for each D1 raid
     const raidVariantDefinitions = new Map<string, string[]>([
-      ['Vault of Glass', ['Normal', 'Hard']],
-      ['Crota\'s End', ['Normal', 'Hard']],
-      ['King\'s Fall', ['Normal', 'Hard']],
-      ['Wrath of the Machine', ['Normal', 'Hard']]
+      ['Vault of Glass', ['Normal', 'Hard', '390 Light']],
+      ['Crota\'s End', ['Normal', 'Hard', '390 Light']],
+      ['King\'s Fall', ['Normal', 'Hard', '390 Light']],
+      ['Wrath of the Machine', ['Normal', 'Hard', '390 Light']]
     ]);
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
@@ -6743,27 +6747,29 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Map D1 raid referenceIds to their variant types based on our D1_FAMILY_MAP analysis
     const variantMap: { [key: string]: string } = {
       // Vault of Glass variants
-      '2659248071': 'Normal',    // Level 26, Tier 1
-      '2659248068': 'Hard',      // Level 30, Tier 2
-      '856898338': '390 Light',  // Level 42, Tier 2
-      '4038697181': '390 Light', // Level 42, Tier 2
-      '2659248069': '390 Light', // Level 31, Tier 3
+      '2659248071': 'Normal',    // Y1 Normal (26)
+      '2659248068': 'Hard',      // Y1 Hard (30)
+      '2659248069': 'Hard',      // Y1 Hard (31)
+      '856898338': '390 Light',  // AOT 390
+      '4038697181': '390 Light', // AOT 390 (alt)
 
       // Crota's End variants
-      '1836893116': 'Normal',    // Level 30, Tier 1
-      '1016659723': '390 Light', // Level 42, Tier 2
-      '3978884648': '390 Light', // Level 42, Tier 2
+      '1836893116': 'Normal',    // Y1 Normal (30)
+      '1836893119': 'Hard',      // Y1 Hard (33)
+      '2324706853': '390 Light', // AOT 390
+      '4000873610': '390 Light', // AOT 390 (alt)
 
       // King's Fall variants
-      '2693136600': 'Normal',    // Level 42, Tier 1
-      '2693136601': 'Hard',      // Level 42, Tier 2
-      '2693136602': '390 Light', // Level 42, Tier 2
+      '1733556769': 'Normal',    // Normal
+      '3534581229': 'Normal',    // Normal (alt)
+      '1016659723': 'Hard',      // Hard
+      '3978884648': '390 Light', // AOT 390
 
       // Wrath of the Machine variants
-      '260765522': 'Normal',     // Level 42, Tier 1
-      '1387993552': 'Normal',    // Level 42, Tier 1
-      '430160982': '390 Light',  // Level 42, Tier 2
-      '3356249023': '390 Light'  // Level 42, Tier 2
+      '260765522': 'Normal',     // Normal
+      '1387993552': 'Normal',    // Normal (alt)
+      '430160982': '390 Light',  // Heroic/390
+      '3356249023': '390 Light'  // Heroic/390 (alt)
     };
 
     return variantMap[referenceId] || 'Normal';
@@ -6829,12 +6835,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       hasClear: boolean;
     }>;
   }> {
+    // Collect the three Rite of the Nine dungeons only
     const dungeons = this.getAggregateDungeons('D2').filter(dungeon =>
-      dungeon.name.includes('Ghosts of the Deep') || 
-      dungeon.name.includes('Spire of the Watcher') || 
-      dungeon.name.includes('Prophecy')
+      (dungeon.name.includes('Ghosts of the Deep') ||
+       dungeon.name.includes('Spire of the Watcher') ||
+       dungeon.name.includes('Prophecy')) &&
+      // Keep only the Rite variants
+      (dungeon.name.includes('Explorer') ||
+       dungeon.name.includes('Eternity') ||
+       dungeon.name.includes('Ultimatum'))
     );
-    return this.groupRaidsByBaseName(dungeons, 'D2');
+
+    const variants = dungeons.map(activity => ({
+      version: this.getManifestVariantName(activity),
+      first: activity,
+      hasClear: true
+    }));
+
+    // Return a SINGLE card group titled Rite of the Nine
+    return [
+      {
+        baseName: 'Rite of the Nine',
+        variants
+      }
+    ];
   }
 
   getRiteOfTheNineDungeonGroups(variants: Array<{ 
@@ -6883,11 +6907,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }>;
   }> {
     const dungeons = this.getPlayerDungeons(player, 'D2').filter(dungeon =>
-      dungeon.name.includes('Ghosts of the Deep') || 
-      dungeon.name.includes('Spire of the Watcher') || 
-      dungeon.name.includes('Prophecy')
+      (dungeon.name.includes('Ghosts of the Deep') ||
+       dungeon.name.includes('Spire of the Watcher') ||
+       dungeon.name.includes('Prophecy')) &&
+      (dungeon.name.includes('Explorer') ||
+       dungeon.name.includes('Eternity') ||
+       dungeon.name.includes('Ultimatum'))
     );
-    return this.groupRaidsByBaseName(dungeons, 'D2');
+
+    const variants = dungeons.map(activity => ({
+      version: this.getManifestVariantName(activity),
+      first: activity,
+      hasClear: true
+    }));
+
+    return [
+      {
+        baseName: 'Rite of the Nine',
+        variants
+      }
+    ];
   }
 
   private groupRaidsByBaseName(activities: ActivityFirstCompletion[], game: 'D1' | 'D2'): Array<{ 
