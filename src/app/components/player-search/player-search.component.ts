@@ -1830,6 +1830,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Refresh per-day activity list & stats.
       if (this.selectedDate) {
+        console.log('[DEBUG] Loading filtered activities for newly added player:', displayPlayer.displayName, 'on date:', this.selectedDate);
         await this.loadAllFilteredActivities(true);
       }
       // Recompute account summary promptly when a new account is appended
@@ -2533,6 +2534,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
   private async processAndGroupActivities(): Promise<void> {
+    console.log('[DEBUG] processAndGroupActivities - filteredActivitiesForDate length:', this.filteredActivitiesForDate.length);
+    console.log('[DEBUG] processAndGroupActivities - sample activities:', this.filteredActivitiesForDate.slice(0, 3));
     const totalToProcess = this.filteredActivitiesForDate.length;
     if (totalToProcess === 0) {
       // If we have no activities for the current refresh **but** the UI
@@ -3907,6 +3910,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // Get all activities for selected players in parallel
     const playerActivitiesPromises = this.selectedPlayers.map(async player => {
+      console.log('[DEBUG] Getting activities for player:', player.displayName, 'on date:', this.selectedDate);
       
       // Use the new optimized query methods based on activity type
       let playerActivities: StoredActivity[] = [];
@@ -3916,18 +3920,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-          
+        
+        console.log('[DEBUG] Found character IDs for', player.displayName, ':', charIds);
         
         const activitiesPromises = charIds.map(async charId => {
-          
-          
           const activities = await this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
-          
-          
+          console.log('[DEBUG] Found', activities.length, 'activities for character', charId, 'of', player.displayName);
           return activities;
         });
         const activitiesArrays = await Promise.all(activitiesPromises);
         playerActivities = activitiesArrays.flat();
+        console.log('[DEBUG] Total activities for', player.displayName, ':', playerActivities.length);
       } else {
         // Get activities filtered by mode and date
         const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
@@ -3985,21 +3988,41 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     const playerFilteredActivities = await Promise.all(playerActivitiesPromises);
     allFilteredActivities.push(...playerFilteredActivities.flat());
+    
+    console.log('[DEBUG] getAllFilteredActivitiesForDate - allFilteredActivities length before dedup:', allFilteredActivities.length);
+    console.log('[DEBUG] getAllFilteredActivitiesForDate - sample allFilteredActivities:', allFilteredActivities.slice(0, 3));
 
-    // Deduplicate by instanceId
+    // Deduplicate by membershipId + instanceId (per-account dedupe)
     const dedupedMap = new Map<string, ActivityWithMembership>();
+    let activitiesWithInstanceId = 0;
+    let activitiesWithoutInstanceId = 0;
+    
     for (const activity of allFilteredActivities) {
       const instanceId = activity.activityDetails?.instanceId;
-      if (instanceId && !dedupedMap.has(instanceId)) {
-        dedupedMap.set(instanceId, activity);
+      const membershipId = (activity as any).membershipId as string | undefined;
+      if (instanceId && membershipId) {
+        activitiesWithInstanceId++;
+        const key = `${membershipId}|${instanceId}`;
+        if (!dedupedMap.has(key)) {
+          dedupedMap.set(key, activity);
+        } else {
+          // Duplicate of the same activity instance for the same account
+          // This can happen when querying per-character; safe to ignore
+        }
+      } else {
+        activitiesWithoutInstanceId++;
+        console.log('[DEBUG] Activity without instanceId or membershipId:', activity);
       }
     }
+    
+    console.log('[DEBUG] Deduplication stats (per-account) - with instanceId:', activitiesWithInstanceId, 'without instanceId:', activitiesWithoutInstanceId);
 
     const dedupedActivities = Array.from(dedupedMap.values());
     // Sort by period (descending)
     dedupedActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
     
-    
+    console.log('[DEBUG] getAllFilteredActivitiesForDate - dedupedActivities length:', dedupedActivities.length);
+    console.log('[DEBUG] getAllFilteredActivitiesForDate - sample deduped activities:', dedupedActivities.slice(0, 3));
 
     // Cache only after initial full sync completes so early partial lists don't persist
     if (this.firstFullSyncDone) {
@@ -4007,6 +4030,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     
     this.filteredActivitiesForDate = dedupedActivities;
+    console.log('[DEBUG] getAllFilteredActivitiesForDate - set filteredActivitiesForDate to:', this.filteredActivitiesForDate.length, 'activities');
     this.computeAccountStatsWithService();
     return dedupedActivities;
   }
