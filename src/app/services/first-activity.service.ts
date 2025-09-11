@@ -88,6 +88,22 @@ export class FirstActivityService {
         }
       }
 
+      // Prefer D2 tutorial mission when present (e.g., "Homecoming")
+      if (player.game === 'D2' && acts.length) {
+        const D2_TUTORIAL_HASHES = new Set<string>(['1658347443']);
+        const tutorialActs = acts.filter(a => {
+          const ref = String((a as any)?.activityDetails?.referenceId ?? '');
+          if (ref && D2_TUTORIAL_HASHES.has(ref)) return true;
+          const name = this.manifest.getActivityName(ref, false);
+          return name === 'Homecoming';
+        });
+        if (tutorialActs.length) {
+          tutorialActs.sort((x, y) => new Date(x.period).getTime() - new Date(y.period).getTime());
+          this.cache[key] = tutorialActs[0] || null;
+          return tutorialActs[0];
+        }
+      }
+
       // Guard against duplicate-timestamp ordering issues by applying a stable tie-breaker
       // Choose the smallest numeric instanceId among the earliest timestamp set.
       let first: StoredActivity | undefined = acts.length ? acts[0] : undefined;
