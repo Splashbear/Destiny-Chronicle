@@ -5699,8 +5699,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         } catch {}
       }
     }
-    // Force service refresh so we don't reuse stale cache
-    return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game }, true);
+    // Force service refresh and scope to this player's characters to avoid stray rows
+    const scopedCharIds = (this.characters[this.getPlayerKey(player)] || [])
+      .map(getCharacterId)
+      .filter((id): id is string => !!id);
+    return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game, characterIds: scopedCharIds }, true);
   }
 
   /** Called on every keystroke in the username box */

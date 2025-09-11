@@ -5,6 +5,7 @@ import { ActivityHistory } from '../models/activity-history.model';
 export interface PlayerIdentityBasic {
   membershipId: string;
   game: 'D1' | 'D2';
+  characterIds?: string[]; // optional filter to scope earliest by specific characters
 }
 
 @Injectable({ providedIn: 'root' })
@@ -16,7 +17,8 @@ export class FirstActivityService {
   }
 
   private getKey(p: PlayerIdentityBasic): string {
-    return `${p.game}|${p.membershipId}`;
+    const chars = p.characterIds && p.characterIds.length ? `|${p.characterIds.sort().join(',')}` : '';
+    return `${p.game}|${p.membershipId}${chars}`;
   }
 
   /**
@@ -44,7 +46,7 @@ export class FirstActivityService {
 
     try {
       // Query all activities for membershipId, filter by game/date validity, then sort by period asc
-      const acts: StoredActivity[] = await this.db.activities
+      let acts: StoredActivity[] = await this.db.activities
         .where('membershipId')
         .equals(player.membershipId)
         .filter(a => {
@@ -63,6 +65,12 @@ export class FirstActivityService {
           return true; // No mode/type filtering – earliest by date wins
         })
         .sortBy('period');
+
+      // Optional: restrict to specific characterIds if provided
+      if (player.characterIds && player.characterIds.length) {
+        const charSet = new Set(player.characterIds);
+        acts = acts.filter(a => charSet.has((a as any).characterId));
+      }
 
       // Guard against duplicate-timestamp ordering issues by applying a stable tie-breaker
       // Choose the smallest numeric instanceId among the earliest timestamp set.
