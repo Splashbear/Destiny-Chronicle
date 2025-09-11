@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { ActivityDbService, StoredActivity } from './activity-db.service';
+import { DestinyManifestService } from './destiny-manifest.service';
 import { ActivityHistory } from '../models/activity-history.model';
 
 export interface PlayerIdentityBasic {
@@ -11,7 +12,7 @@ export interface PlayerIdentityBasic {
 @Injectable({ providedIn: 'root' })
 export class FirstActivityService {
   private cache: { [key: string]: ActivityHistory | null } = {};
-  constructor(private db: ActivityDbService) {
+  constructor(private db: ActivityDbService, private manifest: DestinyManifestService) {
     // Clear cache when service is instantiated to ensure new filtering logic takes effect
     this.clearCache();
   }
@@ -70,6 +71,21 @@ export class FirstActivityService {
       if (player.characterIds && player.characterIds.length) {
         const charSet = new Set(player.characterIds);
         acts = acts.filter(a => charSet.has((a as any).characterId));
+      }
+
+      // Prefer the tutorial mission "A Guardian Rises" when present (D1 only)
+      if (player.game === 'D1' && acts.length) {
+        const tutorialActs = acts.filter(a => {
+          const ref = (a as any)?.activityDetails?.referenceId;
+          if (ref === undefined || ref === null) return false;
+          const name = this.manifest.getActivityName(String(ref), true);
+          return name === 'A Guardian Rises';
+        });
+        if (tutorialActs.length) {
+          tutorialActs.sort((x, y) => new Date(x.period).getTime() - new Date(y.period).getTime());
+          this.cache[key] = tutorialActs[0] || null;
+          return tutorialActs[0];
+        }
       }
 
       // Guard against duplicate-timestamp ordering issues by applying a stable tie-breaker
