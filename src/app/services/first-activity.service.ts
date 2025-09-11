@@ -104,6 +104,21 @@ export class FirstActivityService {
         }
       }
 
+      // Next preference: any Story mission (avoids Patrols like "Patrol the Dreadnought" being selected)
+      if (acts.length) {
+        const storyActs = acts.filter(a => {
+          const ref = (a as any)?.activityDetails?.referenceId;
+          const mode = (a as any)?.activityDetails?.mode;
+          const type = this.manifest.getActivityType(String(ref), mode);
+          return type === 'story';
+        });
+        if (storyActs.length) {
+          storyActs.sort((x, y) => new Date(x.period).getTime() - new Date(y.period).getTime());
+          this.cache[key] = storyActs[0] || null;
+          return storyActs[0];
+        }
+      }
+
       // Guard against duplicate-timestamp ordering issues by applying a stable tie-breaker
       // Choose the smallest numeric instanceId among the earliest timestamp set.
       let first: StoredActivity | undefined = acts.length ? acts[0] : undefined;
