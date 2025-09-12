@@ -11,7 +11,6 @@ import { FormsModule } from '@angular/forms';
       <!-- Month Selector -->
       <select 
         [(ngModel)]="selectedMonth" 
-        (ngModelChange)="onDateChange()"
         class="px-3 py-2 bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors">
         <option *ngFor="let month of months" [value]="month.value">{{ month.label }}</option>
       </select>
@@ -19,10 +18,17 @@ import { FormsModule } from '@angular/forms';
       <!-- Day Selector -->
       <select 
         [(ngModel)]="selectedDay" 
-        (ngModelChange)="onDateChange()"
         class="px-3 py-2 bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors">
         <option *ngFor="let day of availableDays" [value]="day">{{ day }}</option>
       </select>
+
+      <!-- Search and Today buttons -->
+      <div class="flex items-center gap-2">
+        <button (click)="onSearchClick()"
+                class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors text-sm">
+          Search
+        </button>
+      </div>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -67,9 +73,11 @@ export class DatePickerComponent implements OnInit {
     return days;
   }
 
-  onDateChange() {
+  onSearchClick(): void {
     if (this.selectedMonth && this.selectedDay) {
-      this.dateChange.emit({month: this.selectedMonth, day: this.selectedDay});
+      this.dateChange.emit({ month: this.selectedMonth, day: this.selectedDay });
     }
   }
+
+  // Today button removed per requirements
 }

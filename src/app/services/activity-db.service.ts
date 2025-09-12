@@ -845,7 +845,8 @@ export class ActivityDbService extends Dexie {
     membershipType: BungieMembershipType,
     membershipId: string,
     characterId: string,
-    isD1: boolean = false
+    isD1: boolean = false,
+    forceFull: boolean = false
   ): Promise<void> {
     await this.initPromise;
     try {
@@ -854,8 +855,11 @@ export class ActivityDbService extends Dexie {
       const lastActivityDate = lastActivity ? new Date((lastActivity as any).period) : null;
       
       // For incremental sync, only fetch recent activities if we have existing data
-      const isIncrementalSync = lastActivityDate !== null;
-      const daysToFetch = isIncrementalSync ? 7 : 365; // Only last 7 days for incremental
+      const isIncrementalSync = !forceFull && lastActivityDate !== null;
+      // Full back-fill must cover the entire Destiny 1 lifetime (~11 yrs)
+      // so that early-2014 activities like "A Guardian Rises" are fetched.
+      // 4000 days ≈ 11 years.
+      const daysToFetch = isIncrementalSync ? 7 : 4000;
       
       console.log(`[SYNC] ${isIncrementalSync ? 'Incremental' : 'Full'} sync for ${characterId}, fetching last ${daysToFetch} days`);
 
@@ -903,11 +907,12 @@ export class ActivityDbService extends Dexie {
               }
             }
             
+            // Stop when the API returns an empty page; otherwise accumulate and continue
+            if (pageActs.length === 0) {
+              hasMore = false;
+              break;
+            }
             modeActivities.push(...pageActs);
-
-            // Continue while Bungie signals more (prefer Bungie's flag); fallback to page-size heuristic
-            const bungieHasMore = resp?.hasMore === true;
-            hasMore = bungieHasMore || pageActs.length === pageSize;
             page++;
           }
             

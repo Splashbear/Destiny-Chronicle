@@ -73,12 +73,22 @@ export class FirstActivityService {
         acts = acts.filter(a => charSet.has((a as any).characterId));
       }
 
+      // Only consider completed activities for "first ever" to avoid partial/patrol noise
+      const completedActs = acts.filter(a => {
+        const completed = Number((a as any)?.values?.completed?.basic?.value ?? 0);
+        return completed === 1;
+      });
+      if (completedActs.length) {
+        acts = completedActs;
+      }
+
       // Prefer the tutorial mission "A Guardian Rises" when present (D1 only)
       if (player.game === 'D1' && acts.length) {
+        const D1_TUTORIAL_HASHES = new Set<string>(['1846390409']);
         const tutorialActs = acts.filter(a => {
-          const ref = (a as any)?.activityDetails?.referenceId;
-          if (ref === undefined || ref === null) return false;
-          const name = this.manifest.getActivityName(String(ref), true);
+          const refStr = String((a as any)?.activityDetails?.referenceId ?? '');
+          if (refStr && D1_TUTORIAL_HASHES.has(refStr)) return true;
+          const name = this.manifest.getActivityName(refStr, true);
           return name === 'A Guardian Rises';
         });
         if (tutorialActs.length) {
@@ -119,12 +129,24 @@ export class FirstActivityService {
         }
       }
 
+      // Exclude Patrols by default when picking the generic earliest completed activity
+      let candidateActs = acts;
+      const nonPatrolActs = acts.filter(a => {
+        const ref = (a as any)?.activityDetails?.referenceId;
+        const mode = (a as any)?.activityDetails?.mode;
+        const type = this.manifest.getActivityType(String(ref), mode);
+        return type !== 'patrol';
+      });
+      if (nonPatrolActs.length) {
+        candidateActs = nonPatrolActs;
+      }
+
       // Guard against duplicate-timestamp ordering issues by applying a stable tie-breaker
       // Choose the smallest numeric instanceId among the earliest timestamp set.
-      let first: StoredActivity | undefined = acts.length ? acts[0] : undefined;
+      let first: StoredActivity | undefined = candidateActs.length ? candidateActs[0] : undefined;
       if (first) {
         const firstTs = first.period;
-        const sameTs = acts.filter(a => a.period === firstTs);
+        const sameTs = candidateActs.filter(a => a.period === firstTs);
         if (sameTs.length > 1) {
           const withNumericId = sameTs
             .map(a => ({ a, n: Number(a.activityDetails?.instanceId || 0) }))

@@ -5,6 +5,9 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
 import { firstValueFrom } from 'rxjs';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - global util injected elsewhere
+declare const MemoizationUtil: any;
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
@@ -1856,6 +1859,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       platformGroups: [],
     };
     this.selectedAccounts.add(acc);
+
+    // Clear memoised getters and trigger change-detection so Activities & Firsts
+    // immediately include the newly added account.
+    this.refreshComputedViews();
+  }
+
+  /** Clears memoisation caches and marks the view for check. */
+  private refreshComputedViews(): void {
+    this.invalidateMemoCaches();
+    this.cdr.markForCheck();
+  }
+
+  /** Wipe all memoised getters so newly added players appear immediately. */
+  private invalidateMemoCaches(): void {
+    // Use global util when available
+    // @ts-ignore
+    if (typeof MemoizationUtil?.clear === 'function') {
+      const keys = ['accountGroupsD2','accountGroupsD1','groupedPantheonRaids','d2RaidVariants'];
+      for (const k of keys) MemoizationUtil.clear(k);
+    }
   }
   async loadCharacterHistory(player: PlayerSearchResult | PlayerSearchDisplay) {
     console.log('loadCharacterHistory called', { player });
@@ -2648,7 +2671,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     console.log('[DEBUG] GroupedAccounts: D1=', this.getAccountGroupsForGame('D1').length,
                 'D2=', this.getAccountGroupsForGame('D2').length);
   }
-
   getActivityDurationSeconds(activity: ActivityHistory): number {
     const values = activity.values as any;
     const seconds = values && values['timePlayedSeconds']?.basic?.value;
@@ -3438,7 +3460,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     }
   }
-
   /**
    * Filter activities array by the selected date (month/day across all years)
    */
@@ -4213,7 +4234,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     );
     return totalDuration / activities.length / 60; // Convert to minutes
   }
-
   public getActivityImage(activity: any, isD1: boolean): string | null {
     if (!activity) return null;
     const referenceId = activity.activityDetails?.referenceId;
@@ -5012,7 +5032,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     return versionedName.substring(0, colonIndex);
   }
-
   private getBaseRaidName(manifestName: string, game: 'D1' | 'D2'): string {
     // For D1, all raid variants have the same name, so we can return it as-is
     if (game === 'D1') {
@@ -5694,6 +5713,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             player.membershipType as any,
             player.membershipId,
             charId,
+            true,
             true
           );
         } catch {}
@@ -5785,7 +5805,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private getFavoriteKey(account: { membershipId: string; game: 'D1' | 'D2'; membershipType: number }): string {
     return `${account.membershipId}|${account.game}|${account.membershipType}`;
   }
-
   async addSelectedToFavorites() {
     // Gather all available players
     const all: PlayerSearchDisplay[] = [];
@@ -5940,7 +5959,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Resets the sub-platform selector back to "All" and recalculates the
    * platform chip list for the chosen game.
    */
-  setActiveFirstsGame(game: 'D1' | 'D2'): void {
+  setActiveFirstsGame(game: 'D1' | 'D2' | string): void {
+    // Accept string from template and coerce to union
+    if (game !== 'D1' && game !== 'D2') {
+      return;
+    }
     if (this.activeFirstsGame !== game) {
       this.activeFirstsGame = game;
       this.activeFirstsTab = 'all';
@@ -6548,6 +6571,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       prompt('Copy link', link);
     }
   }
+
   /**
    * Clears the firstEverActivities cache to force recalculation with new filtering logic
    */
