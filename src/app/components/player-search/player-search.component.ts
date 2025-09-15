@@ -3725,6 +3725,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * The APIs are separate for a reason and return different data structures.
    */
   async addPlayer() {
+    console.log('addPlayer called with searchUsername:', this.searchUsername);
+    
     if (!this.searchUsername) {
       this.errorMessage = 'Please enter a username.';
       return;
@@ -3732,6 +3734,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // If not in add mode, clear all existing data first
     if (!this.addMode) {
+      console.log('Not in add mode, clearing all players');
       this.clearAllPlayers();
       // Clear URL parameters to avoid confusion
       this.router.navigate([], {
@@ -3748,6 +3751,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.crossSavePlayer = null;
     this.showPlatformPicker = false;
     this.loading['search'] = true;
+    
+    console.log('Starting search for:', this.searchUsername);
 
     try {
       const [d2Resp, d1Xbox, d1Psn] = await firstValueFrom(
@@ -3824,10 +3829,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     } catch (error: any) {
       console.error('Error searching accounts:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        stack: error.stack
+      });
       if (error.status === 503) {
         this.errorMessage = 'Bungie API is temporarily unavailable. Please try again later.';
       } else {
-        this.errorMessage = 'Error searching for accounts.';
+        this.errorMessage = `Error searching for accounts: ${error.message || 'Unknown error'}`;
       }
     } finally {
       this.loading['search'] = false;
