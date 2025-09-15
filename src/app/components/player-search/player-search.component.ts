@@ -435,7 +435,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   onDatePickerChange(dateInfo: {month: number, day: number}) {
     this.selectedMonth = dateInfo.month;
     this.selectedDay = dateInfo.day;
-    this.onDateSearch();
+    // Don't trigger search immediately - wait for Search button click
   }
 
   /**
@@ -744,7 +744,46 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.selectedYear = today.getFullYear();
     this.selectedDate = `${this.selectedYear}-${this.selectedMonth.toString().padStart(2, '0')}-${this.selectedDay.toString().padStart(2, '0')}`;
     
-    // Handle URL parameters for permalinks
+    // Handle URL parameters for permalinks - process synchronously
+    const params = this.route.snapshot.params;
+    const queryParams = this.route.snapshot.queryParams;
+    
+    // Try manual URL parsing as fallback
+    const pathname = window.location.pathname;
+    const dateMatch = pathname.match(/\/date\/(\d{4}-\d{2}-\d{2})/);
+    const playersMatch = pathname.match(/\/players\/(.+)$/);
+    
+    // Check both route params and query params for date
+    const dateParam = params['date'] || queryParams['date'] || dateMatch?.[1];
+    if (dateParam) {
+      // Validate date format (YYYY-MM-DD)
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        const [year, month, day] = dateParam.split('-').map(Number);
+        if (year >= 2014 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          this.selectedYear = year;
+          this.selectedMonth = month;
+          this.selectedDay = day;
+          this.selectedDate = dateParam;
+        }
+      }
+    }
+    
+    // Check both route params and query params for players
+    const playersParam = params['players'] || queryParams['players'] || playersMatch?.[1];
+    if (playersParam) {
+      const decodedPlayers = decodeURIComponent(playersParam);
+      try {
+        const playerData = JSON.parse(decodedPlayers);
+        if (Array.isArray(playerData)) {
+          // Store player data to load after favorites are loaded
+          this.pendingPlayerData = playerData;
+        }
+      } catch (e) {
+        console.warn('Invalid player data in URL:', e);
+      }
+    }
+    
+    // Also subscribe to future route changes
     this.route.params.subscribe(params => {
       if (params['date']) {
         const dateParam = params['date'];
@@ -787,12 +826,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       console.warn('Favorites cache preload failed:', error);
     });
     
-    await this.loadAndDisplayFavorites();
-    
-    // Load pending players from URL if any
+    // Load pending players from URL if any (prioritize URL over favorites)
     if (this.pendingPlayerData) {
       await this.loadPlayersFromUrlData(this.pendingPlayerData);
       this.pendingPlayerData = null;
+    } else {
+      // Only load favorites if no URL players to load
+      await this.loadAndDisplayFavorites();
     }
     
     this.dbReady = true;
@@ -813,6 +853,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (event.target === event.currentTarget) {
       this.showPlatformPicker = false;
       this.showFavoritesModal = false;
+      this.showShareDropdown = false;
     }
   }
 
@@ -4031,7 +4072,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-        
+          
         console.log('[DEBUG] Found character IDs for', player.displayName, ':', charIds);
         
         const activitiesPromises = charIds.map(async charId => {
@@ -4056,12 +4097,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
         
         if (mode !== undefined) {
-          playerActivities = await this.activityDb.getActivitiesByModeAndDate(
-            player.membershipId,
+        playerActivities = await this.activityDb.getActivitiesByModeAndDate(
+          player.membershipId,
             mode,
-            startDate,
-            endDate
-          );
+          startDate,
+          endDate
+        );
         } else {
           // For dungeons, get all activities and filter by type
           const charIds = (this.characters[this.getPlayerKey(player)] || [])
@@ -4099,7 +4140,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     const playerFilteredActivities = await Promise.all(playerActivitiesPromises);
     allFilteredActivities.push(...playerFilteredActivities.flat());
-    
+
     console.log('[DEBUG] getAllFilteredActivitiesForDate - allFilteredActivities length before dedup:', allFilteredActivities.length);
     console.log('[DEBUG] getAllFilteredActivitiesForDate - sample allFilteredActivities:', allFilteredActivities.slice(0, 3));
 
@@ -6252,6 +6293,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   showExportDialog: boolean = false;
   showFavoritesModal: boolean = false;
+  showShareDropdown: boolean = false;
   modalSelectedPlayers: Set<string> = new Set(); // Track selected players in modal
 
   openExportOptionsDialog() {
@@ -6272,7 +6314,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       } else if (dateParts.length === 3) {
         // New YYYY-MM-DD format
         const [year, month, day] = dateParts;
-      options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
+        options.from = new Date(Date.UTC(year, month - 1, day)).toISOString();
       }
     }
     await this.exportService.exportMultiSheet(options, {
@@ -6821,16 +6863,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       params.players = encodeURIComponent(JSON.stringify(playerData));
     }
     
-    // Build the new URL
-    let newUrl = '/';
+    // Build the new URL using query parameters instead of path parameters
+    let newUrl = '/share';
+    const queryParams = new URLSearchParams();
+    
     if (params.date) {
-      newUrl += `date/${params.date}`;
-      if (params.players) {
-        newUrl += `/players/${params.players}`;
-      }
-    } else if (params.players) {
-      newUrl += `players/${params.players}`;
+      queryParams.set('date', params.date);
     }
+      if (params.players) {
+      queryParams.set('players', params.players);
+      }
+    
+    if (queryParams.toString()) {
+      newUrl += '?' + queryParams.toString();
+    }
+    
     
     // Update the URL without triggering navigation
     this.location.replaceState(newUrl);
@@ -6839,45 +6886,157 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * Shares the current permalink with the user
    */
-  sharePermalink() {
-    // Update URL first to ensure it's current
-    this.updateUrlForPermalink();
-    
-    // Get the current URL
-    const currentUrl = window.location.href;
-    
-    // Try to use the Web Share API if available
-    if (navigator.share) {
-      navigator.share({
-        title: 'Destiny Chronicle - Daily Activities',
-        text: `Check out the Destiny activities for ${this.selectedDate} with ${this.selectedPlayers.length} player(s)`,
-        url: currentUrl
-      }).catch(err => {
-        console.log('Share cancelled or failed:', err);
-        this.fallbackShare(currentUrl);
-      });
+
+  /**
+   * Copy current view data as JSON to clipboard
+   */
+  async copyDataToClipboard() {
+    try {
+      const snapshotData = {
+        date: this.selectedDate,
+        players: this.selectedPlayers.map(player => ({
+          displayName: player.displayName,
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          game: player.game,
+          platform: player.platform
+        })),
+        activities: this.filteredActivitiesForDate,
+        accountStats: this.accountStats,
+        timestamp: new Date().toISOString()
+      };
+
+      const jsonString = JSON.stringify(snapshotData, null, 2);
+      
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(jsonString);
+        alert('Data copied to clipboard!');
+        console.log('[SHARE] Data successfully copied to clipboard');
     } else {
-      // Fallback for browsers without Web Share API
-      this.fallbackShare(currentUrl);
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = jsonString;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert('Data copied to clipboard!');
+      }
+    } catch (error) {
+      console.error('Failed to copy data to clipboard:', error);
+      alert('Failed to copy data to clipboard');
     }
   }
 
   /**
-   * Fallback sharing method that copies URL to clipboard
+   * Export current date view as Excel file
    */
-  private fallbackShare(url: string) {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(() => {
-        // Show success message (you could add a toast notification here)
-        alert('Permalink copied to clipboard!');
-      }).catch(err => {
-        console.error('Failed to copy to clipboard:', err);
-        // Fallback to opening in new window
-        window.open(url, '_blank');
+  async exportCurrentDate() {
+    try {
+      if (!this.selectedDate) {
+        alert('No date selected');
+        return;
+      }
+
+      // Convert selectedDate string to Date object
+      const dateParts = this.selectedDate.split('-').map(Number);
+      const fromDate = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
+
+      const exportOptions = {
+        from: fromDate,
+        includeActivities: true,
+        includeFirsts: true,
+        includeTitles: true,
+        includeSummary: true,
+        showIconsInline: false
+      };
+
+      await this.exportService.exportMultiSheet(exportOptions, {
+        selectedPlayers: this.selectedPlayers,
+        activityDb: this.activityDb,
+        manifestService: this.manifest,
+        characters: this.characters,
+        getPlayerKey: this.getPlayerKey.bind(this),
+        titleService: this.titleService
       });
-    } else {
-      // Final fallback: open in new window
-      window.open(url, '_blank');
+
+      console.log('[SHARE] Current date exported successfully');
+    } catch (error) {
+      console.error('Failed to export current date:', error);
+      alert('Failed to export data');
+    }
+  }
+
+  /**
+   * Capture screenshot of current view
+   */
+  async captureScreenshot() {
+    try {
+      // Hide the share dropdown first
+      this.showShareDropdown = false;
+      this.cdr.detectChanges();
+
+      // Wait a moment for UI to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Find the main content area to capture - try multiple selectors
+      let mainContent = document.querySelector('main') as HTMLElement;
+      
+      if (!mainContent) {
+        // Try alternative selectors
+        mainContent = document.querySelector('app-player-search') as HTMLElement;
+      }
+      
+      if (!mainContent) {
+        // Try the main container div
+        mainContent = document.querySelector('.min-h-screen') as HTMLElement;
+      }
+      
+      if (!mainContent) {
+        // Fallback to body
+        mainContent = document.body;
+      }
+
+      if (!mainContent) {
+        alert('Unable to find content to capture');
+        return;
+      }
+
+      // Use html2canvas to capture the screenshot
+      const html2canvas = (await import('html2canvas')).default;
+      
+      const canvas = await html2canvas(mainContent, {
+        backgroundColor: '#0f172a', // Match the app's dark background
+        scale: 2, // Higher resolution
+        useCORS: true,
+        allowTaint: true,
+        scrollX: 0,
+        scrollY: 0,
+        width: mainContent.scrollWidth,
+        height: mainContent.scrollHeight
+      });
+
+      // Convert canvas to blob and download
+      canvas.toBlob((blob: Blob | null) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `destiny-chronicle-${this.selectedDate || 'screenshot'}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          
+          console.log('[SHARE] Screenshot captured successfully');
+        } else {
+          alert('Failed to capture screenshot');
+        }
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('Failed to capture screenshot:', error);
+      alert('Failed to capture screenshot. Make sure you have a stable internet connection.');
     }
   }
 

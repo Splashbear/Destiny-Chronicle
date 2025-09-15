@@ -4,5 +4,6 @@ import { PlayerSearchComponent } from './components/player-search/player-search.
 export const routes: Routes = [
   { path: '', component: PlayerSearchComponent },
   { path: 'date/:date', component: PlayerSearchComponent },
-  { path: 'date/:date/players/:players', component: PlayerSearchComponent }
+  { path: 'date/:date/players/:players', component: PlayerSearchComponent },
+  { path: 'share', component: PlayerSearchComponent }
 ];

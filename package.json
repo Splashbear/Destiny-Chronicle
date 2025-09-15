@@ -4,7 +4,6 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve --configuration development",
-
     "build": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
@@ -32,6 +31,7 @@
     "core-js": "^3.36.0",
     "dexie": "^4.0.11",
     "file-saver": "^2.0.5",
+    "html2canvas": "^1.4.1",
     "idb": "^8.0.3",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
@@ -43,6 +43,7 @@
     "@angular/cli": "^19.2.9",
     "@angular/compiler-cli": "^19.2.0",
     "@types/file-saver": "^2.0.5",
+    "@types/html2canvas": "^0.5.35",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^18.18.0",
     "adm-zip": "^0.5.10",
