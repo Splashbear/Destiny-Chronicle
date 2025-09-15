@@ -5,9 +5,6 @@ import { Router, ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
 import { firstValueFrom } from 'rxjs';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - global util injected elsewhere
-declare const MemoizationUtil: any;
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
@@ -1893,12 +1890,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Wipe all memoised getters so newly added players appear immediately. */
   private invalidateMemoCaches(): void {
-    // Use global util when available
-    // @ts-ignore
-    if (typeof MemoizationUtil?.clear === 'function') {
-      const keys = ['accountGroupsD2','accountGroupsD1','groupedPantheonRaids','d2RaidVariants'];
-      for (const k of keys) MemoizationUtil.clear(k);
-    }
+    // Clear any cached computed values
+    // This method is kept for future memoization implementation
+    // Currently no memoization is in use, so this is a no-op
   }
   async loadCharacterHistory(player: PlayerSearchResult | PlayerSearchDisplay) {
     console.log('loadCharacterHistory called', { player });
