@@ -27,6 +27,7 @@ export class BackgroundProcessingService {
   private isTabVisible = true;
   private processingQueue: any[] = [];
   private processingStateKey = 'destiny-chronicle-processing-state';
+  private hideIndicatorTimeout: any = null;
 
   constructor() {
     this.initializeWorker();
@@ -73,10 +74,16 @@ export class BackgroundProcessingService {
         });
         break;
       case 'COMPLETE':
+        // Clear the timeout since processing completed normally
+        if (this.hideIndicatorTimeout) {
+          clearTimeout(this.hideIndicatorTimeout);
+          this.hideIndicatorTimeout = null;
+        }
         this.updateState({ 
           isProcessing: false, 
           isPaused: false,
-          progress: 100 
+          progress: 100,
+          isBackground: false
         });
         break;
       case 'PAUSED':
@@ -103,6 +110,15 @@ export class BackgroundProcessingService {
       currentBatch: 0,
       totalBatches: 0
     });
+
+    // Set a timeout to automatically hide the indicator after 30 seconds
+    this.hideIndicatorTimeout = setTimeout(() => {
+      this.updateState({ 
+        isProcessing: false, 
+        isPaused: false,
+        isBackground: false 
+      });
+    }, 30000);
 
     this.worker.postMessage({
       type: 'PROCESS_ACTIVITIES',

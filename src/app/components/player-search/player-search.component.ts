@@ -2710,6 +2710,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private startBackgroundProcessing(activities: any[], manifest: any) {
     if (activities.length === 0) return;
 
+    // Only start background processing for large datasets
+    if (activities.length < 100) return;
+
     // Start background processing
     this.backgroundProcessing.startProcessing(activities, manifest, 50);
     
@@ -4499,7 +4502,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       f.type === 'raid' && f.game === 'D2' && 
       (f.name.includes('The Pantheon:') || f.name.includes('Pantheon:'))
     );
-    return this.sortRaids(list, 'D2');
+    return this.sortPantheonRaids(list);
   }
 
   getPlayerRegularRaids(player: PlayerSearchDisplay, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
@@ -4549,7 +4552,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const pantheonRaids = allRaids.filter(raid => 
       raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:')
     );
-    return this.groupActivitiesByBaseName(pantheonRaids);
+    const sortedPantheonRaids = this.sortPantheonRaids(pantheonRaids);
+    return this.groupActivitiesByBaseName(sortedPantheonRaids);
   }
 
   /** Wrapper to allow grouping from template */
@@ -5057,6 +5061,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       "Salvation's Edge"
     ];
     return list.slice().sort((a, b) => releaseOrder.indexOf(a.name) - releaseOrder.indexOf(b.name));
+  }
+
+  private sortPantheonRaids(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
+    const pantheonOrder = [
+      'The Pantheon: Atraks Sovereign',
+      'The Pantheon: Oryx Exalted', 
+      'The Pantheon: Rhulk Indomitable',
+      'The Pantheon: Nezarec Sublime'
+    ];
+    return list.slice().sort((a, b) => pantheonOrder.indexOf(a.name) - pantheonOrder.indexOf(b.name));
   }
 
   private sortDungeons(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
