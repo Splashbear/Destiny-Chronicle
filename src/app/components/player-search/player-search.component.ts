@@ -41,6 +41,7 @@ import { ExportOptionsDialogComponent } from '../export-options-dialog.component
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
+import { BackgroundProcessingService, ProcessingState } from '../../services/background-processing.service';
 
 interface ActivityEntry {
   game: string;
@@ -423,6 +424,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private readonly PGCR_BATCH_SIZE = 30;
   private readonly VALIDATION_DELAY = 50;
 
+  // Background processing state
+  backgroundProcessingState: ProcessingState = {
+    isProcessing: false,
+    isPaused: false,
+    progress: 0,
+    currentBatch: 0,
+    totalBatches: 0,
+    isBackground: false
+  };
+  showBackgroundProcessingIndicator = false;
+
   onDatePickerChange(dateInfo: {month: number, day: number}) {
     this.selectedMonth = dateInfo.month;
     this.selectedDay = dateInfo.day;
@@ -687,6 +699,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private exportService: ExportService,
     private shareService: ShareService,
     private firstActivityService: FirstActivityService,
+    public backgroundProcessing: BackgroundProcessingService,
     private router: Router,
     private route: ActivatedRoute,
     private location: Location
@@ -720,6 +733,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    // Subscribe to background processing state
+    this.backgroundProcessing.getProcessingState().subscribe(state => {
+      this.backgroundProcessingState = state;
+      this.showBackgroundProcessingIndicator = state.isProcessing || state.isBackground;
+      this.cdr.markForCheck();
+    });
+
     // Set default date to today (use YYYY-MM-DD format)
     const today = new Date();
     this.selectedMonth = today.getMonth() + 1;
@@ -2690,6 +2710,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return seconds;
   }
 
+  /**
+   * Start background processing for activities
+   */
+  private startBackgroundProcessing(activities: any[], manifest: any) {
+    if (activities.length === 0) return;
+
+    // Start background processing
+    this.backgroundProcessing.startProcessing(activities, manifest, 50);
+    
+    // Show notification that processing continues in background
+    this.showBackgroundProcessingIndicator = true;
+  }
+
+  /**
+   * Resume processing when user returns to tab
+   */
+  private resumeBackgroundProcessing() {
+    if (this.backgroundProcessingState.isPaused) {
+      this.backgroundProcessing.resumeProcessing();
+    }
+  }
+
   public async loadAllFilteredActivities(forceRefresh: boolean = false) {
     const loadToken = ++this.currentLoadToken;
 
@@ -2727,6 +2769,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // PROCESS phase handled separately—ensure groups are ready before rendering slices
       this.processAndGroupActivities();
+
+      // Start background processing for heavy operations
+      this.startBackgroundProcessing(activities, this.manifest);
 
       // ---------- RENDER PHASE ----------
       const sliceSize = 250;
@@ -3685,6 +3730,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // If not in add mode, clear all existing data first
+    if (!this.addMode) {
+      this.clearAllPlayers();
+      // Clear URL parameters to avoid confusion
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: {},
+        replaceUrl: true
+      });
+    }
+
     // Reset state for fresh search
     this.errorMessage = '';
     this.d1SearchResults = [];
@@ -3811,11 +3867,37 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.groupedActivitiesByAccount = [];
     this.addMode = false;
     
+    // Clear filtered activities and related data
+    this.filteredActivitiesForDate = [];
+    this.filteredActivities$.next([]);
+    this.processedActivities = [];
+    
+    // Clear first ever activities
+    this.firstEverActivities = {};
+    this.guardianFirstsMap = {};
+    
+    // Clear account stats
+    this.computedAccountStats = null;
+    this.accountStats = {
+      totalTime: 0,
+      totalActivityTime: 0,
+      totalActivityCount: 0,
+      totalSeals: 0,
+      perType: {}
+    };
+    
     // Clear all loading statuses
     this.accountLoadingStatus.clear();
     this.accountLoadingStatuses = [];
     
+    // Clear background processing
+    this.backgroundProcessing.stopProcessing();
+    this.showBackgroundProcessingIndicator = false;
+    
+    // Clear caches
     this.clearCache();
+    this.invalidateMemoCaches();
+    
     this.cdr.detectChanges();
   }
 
