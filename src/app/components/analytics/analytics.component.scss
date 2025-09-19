@@ -1,0 +1,141 @@
+// Analytics component styles
+.analytics-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+.chart-container {
+  position: relative;
+  height: 400px;
+  width: 100%;
+}
+
+// Custom scrollbar for activity lists
+.activity-list {
+  max-height: 400px;
+  overflow-y: auto;
+  
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #1e293b;
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #475569;
+    border-radius: 3px;
+    
+    &:hover {
+      background: #64748b;
+    }
+  }
+}
+
+// Trend indicators
+.trend-up {
+  color: #10b981;
+}
+
+.trend-down {
+  color: #ef4444;
+}
+
+.trend-stable {
+  color: #3b82f6;
+}
+
+// Card hover effects
+.analytics-card {
+  transition: all 0.2s ease-in-out;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+}
+
+// Metric badges
+.metric-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  
+  &.metric-play-count {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+  }
+  
+  &.metric-time-spent {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+  }
+  
+  &.metric-win-rate {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+  }
+  
+  &.metric-completion-rate {
+    background-color: rgba(139, 92, 246, 0.1);
+    color: #8b5cf6;
+  }
+}
+
+// Chart type buttons
+.chart-type-button {
+  transition: all 0.2s ease-in-out;
+  
+  &:hover {
+    transform: scale(1.05);
+  }
+  
+  &.active {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+  }
+}
+
+// Loading animation
+.loading-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// Responsive grid adjustments
+@media (max-width: 768px) {
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-container {
+    height: 300px;
+  }
+}
+
+// Dark theme enhancements
+.dark-theme {
+  .analytics-card {
+    background: linear-gradient(145deg, #1e293b, #334155);
+    border: 1px solid #475569;
+  }
+  
+  .chart-container {
+    background: #0f172a;
+    border-radius: 0.5rem;
+    padding: 1rem;
+  }
+}
+

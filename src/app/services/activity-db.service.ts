@@ -228,36 +228,38 @@ export class ActivityDbService extends Dexie {
 
   // Add D1 family map
   private static readonly D1_FAMILY_MAP: Record<string, string> = {
-    // Vault of Glass (Normal & Hard)
-    '3801607287': 'Vault of Glass', // Normal (alt)
-    '708693006': 'Vault of Glass',  // Hard (alt)
-    '2659248071': 'Vault of Glass', // Y1 Normal (26)
-    '2659248068': 'Vault of Glass', // Y1 Hard (30)
-    '2659248069': 'Vault of Glass', // Y1 Hard (31)
-    '856898338': 'Vault of Glass',  // AOT 390
-    '4038697181': 'Vault of Glass', // AOT 390 (alt)
+    // Vault of Glass (all variants map to base name)
+    '3801607287': 'Vault of Glass',
+    '708693006': 'Vault of Glass',
+    '2659248071': 'Vault of Glass',
+    '2659248068': 'Vault of Glass',
+    '2659248069': 'Vault of Glass',
+    '856898338': 'Vault of Glass',
+    '4038697181': 'Vault of Glass',
 
-    // Crota's End (Normal & Hard)
-    '898834093': "Crota's End",    // Normal (alt)
-    '112157962': "Crota's End",    // Hard (alt)
-    '1836893116': "Crota's End",   // Y1 Normal (30)
-    '1836893119': "Crota's End",   // Y1 Hard (33)
-    '2324706853': "Crota's End",   // AOT 390
-    '4000873610': "Crota's End",   // AOT 390 (alt)
+    // Crota's End (all variants map to base name)
+    '898834093': "Crota's End",
+    '112157962': "Crota's End",
+    '1836893116': "Crota's End",
+    '1836893119': "Crota's End",
+    '2324706853': "Crota's End",
+    '4000873610': "Crota's End",
 
-    // King's Fall (Normal & Hard)
-    '1733556769': "King's Fall",   // Normal
-    '3534581229': "King's Fall",   // Normal (alt)
-    '1016659723': "King's Fall",   // Hard
-    '3978884648': "King's Fall",   // AOT 390
+    // King's Fall (all variants map to base name)
+    '1733556769': "King's Fall",
+    '3534581229': "King's Fall",
+    '1016659723': "King's Fall",
+    '3978884648': "King's Fall",
 
-    // Wrath of the Machine (Normal & Hard)
-    '2578867903': 'Wrath of the Machine', // Normal (alt)
-    '4007500989': 'Wrath of the Machine', // Normal (alt)
-    '260765522': 'Wrath of the Machine',  // Normal
-    '1387993552': 'Wrath of the Machine', // Normal (alt)
-    '430160982': 'Wrath of the Machine',  // Heroic/390
-    '3356249023': 'Wrath of the Machine', // Heroic/390 (alt)
+    // Wrath of the Machine (all variants map to base name)
+    '2578867903': 'Wrath of the Machine',
+    '4007500989': 'Wrath of the Machine',
+    '1099433614': 'Wrath of the Machine',
+    '1342567280': 'Wrath of the Machine',
+    '260765522': 'Wrath of the Machine',
+    '1387993552': 'Wrath of the Machine', // Hard (380) by PGCR verification
+    '430160982': 'Wrath of the Machine',
+    '3356249023': 'Wrath of the Machine',
   };
 
   constructor(
@@ -676,6 +678,8 @@ export class ActivityDbService extends Dexie {
     // Group by raid/dungeon family and find the first activity for each
     const firstsByFamily: { [family: string]: ActivityFirstCompletion } = {};
 
+    console.log(`[DEBUG][D1Firsts] Processing ${activities.length} activities for ${membershipId}/${characterId} (${game})`);
+
     for (const activity of activities) {
       const activityHash = String(activity.activityDetails.referenceId);
 
@@ -691,10 +695,17 @@ export class ActivityDbService extends Dexie {
       // --- Game-specific filters ---
       if (game === 'D1') {
         // Treat any activity whose referenceId exists in the D1_FAMILY_MAP as a raid
-        if (!ActivityDbService.D1_FAMILY_MAP[activityHash]) {
+        const isD1Raid = ActivityDbService.D1_FAMILY_MAP[activityHash];
+        if (!isD1Raid) {
           // Not a D1 raid, skip
           continue;
         }
+        console.log('[DEBUG][D1Firsts] Found D1 raid activity:', {
+          activityHash,
+          family: isD1Raid,
+          period: activity.period,
+          completed: activity.values?.completed?.basic?.value
+        });
         type = 'raid';
       } else {
         // D2: only raids & dungeons
@@ -734,10 +745,15 @@ export class ActivityDbService extends Dexie {
       (activity as any).needsPgcrProcessing = true;
       }
 
-      if (!firstsByFamily[family] || new Date(activity.period) < new Date(firstsByFamily[family].period)) {
+      // For D1 raids, preserve variants by keying firsts by base family + referenceId
+      const firstsKey = (game === 'D1' && type === 'raid')
+        ? `${family}|${activityHash}`
+        : family;
+
+      if (!firstsByFamily[firstsKey] || new Date(activity.period) < new Date(firstsByFamily[firstsKey].period)) {
         // Process first completion for this activity
 
-        firstsByFamily[family] = {
+        firstsByFamily[firstsKey] = {
           name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
           type: type as ActivityFirstCompletion['type'],
           game,

@@ -38,6 +38,7 @@ import { ExportOptionsDialogComponent } from '../export-options-dialog.component
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
+// import { AnalyticsComponent } from '../analytics/analytics.component';
 import { BackgroundProcessingService, ProcessingState } from '../../services/background-processing.service';
 
 interface ActivityEntry {
@@ -344,6 +345,7 @@ interface PlatformStats {
     CommonModule,
     FormsModule,
     AccountStatsComponent,
+    // AnalyticsComponent, // temporarily disabled
     ExportOptionsDialogComponent,
     DatePickerComponent
   ],
@@ -1129,7 +1131,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       await this.loadMultipleFavoritesInstant(this.favoriteAccounts);
     }
   }
-
   /**
    * Optimized loading for favorite accounts with instant cached display
    * and background refresh for returning users
@@ -1767,6 +1768,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.selectedPlayers = [displayPlayer];
     this.selectedCharacterIds[player.membershipId] = undefined;
 
+    // Add to selected accounts service for Analytics component
+    const acc: PlatformAccount = {
+      platformType: player.membershipType,
+      membershipId: player.membershipId,
+      displayName: player.displayName,
+      platformGroups: [],
+    };
+    this.selectedAccounts.add(acc);
+
 
 
     // Ensure a date is selected (use full YYYY-MM-DD format for better date handling)
@@ -1922,7 +1932,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // immediately include the newly added account.
     this.refreshComputedViews();
   }
-
   /** Clears memoisation caches and marks the view for check. */
   private refreshComputedViews(): void {
     this.invalidateMemoCaches();
@@ -3065,10 +3074,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     const D1_RAID_HASHES = [
-      '3801607287', '708693006', '2659248071', '2043403989', // Vault of Glass
-      '898834093', '112157962', '3879860662', '1836893116', // Crota's End
-      '1733556769', '421023204', '1661734046', '2964135793', // King's Fall
-      '2578867903', '4007500989', '1099433614', '1342567280', '260765522' // Wrath of the Machine
+      // Vault of Glass (all variants)
+      '3801607287', '708693006', '2659248071', '2659248068', '2659248069', 
+      '856898338', '4038697181',
+      // Crota's End (all variants)
+      '898834093', '112157962', '3879860662', '1836893116', '1836893119',
+      '2324706853', '4000873610',
+      // King's Fall (all variants)
+      '1733556769', '3534581229', '1016659723', '3978884648',
+      // Wrath of the Machine (all variants)
+      '2578867903', '4007500989', '1099433614', '1342567280', '260765522',
+      '1387993552', '430160982', '3356249023'
     ];
     const filtered = activities.filter(activity => {
       const mode = activity.activityDetails?.mode;
@@ -3173,10 +3189,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     try {
       // <--- INSERT HERE
       const D1_RAID_HASHES = [
-        '3801607287', '708693006', '2659248071', '2043403989', // Vault of Glass
-        '898834093', '112157962', '3879860662', '1836893116', // Crota's End
-        '1733556769', '421023204', '1661734046', '2964135793', // King's Fall
-        '2578867903', '4007500989', '1099433614', '1342567280', '260765522' // Wrath of the Machine
+        // Vault of Glass (all variants)
+        '3801607287', '708693006', '2659248071', '2659248068', '2659248069', 
+        '856898338', '4038697181',
+        // Crota's End (all variants)
+        '898834093', '112157962', '3879860662', '1836893116', '1836893119',
+        '2324706853', '4000873610',
+        // King's Fall (all variants)
+        '1733556769', '3534581229', '1016659723', '3978884648',
+        // Wrath of the Machine (all variants)
+        '2578867903', '4007500989', '1099433614', '1342567280', '260765522',
+        '1387993552', '430160982', '3356249023'
       ];
       const allD1RaidActivities: any[] = [];
       for (const player of this.selectedPlayers) {
@@ -3613,10 +3636,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // D1 activity reference IDs are typically in specific ranges
     // This is a heuristic - D1 activities often have different ID patterns
     const d1RaidHashes = [
-      '3801607287', '708693006', '2659248071', '2043403989', // Vault of Glass
-      '898834093', '112157962', '3879860662', '1836893116', // Crota's End
-      '1733556769', '421023204', '1661734046', '2964135793', // King's Fall
-      '2578867903', '4007500989', '1099433614', '1342567280', '260765522' // Wrath of the Machine
+      // Vault of Glass (all variants)
+      '3801607287', '708693006', '2659248071', '2659248068', '2659248069', 
+      '856898338', '4038697181',
+      // Crota's End (all variants)
+      '898834093', '112157962', '3879860662', '1836893116', '1836893119',
+      '2324706853', '4000873610',
+      // King's Fall (all variants)
+      '1733556769', '3534581229', '1016659723', '3978884648',
+      // Wrath of the Machine (all variants)
+      '2578867903', '4007500989', '1099433614', '1342567280', '260765522',
+      '1387993552', '430160982', '3356249023'
     ];
     
     const refIdStr = String(refId);
@@ -3947,6 +3977,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.clearCache();
     this.invalidateMemoCaches();
     
+    // Clear selected accounts service for Analytics component
+    this.selectedAccounts.clear();
+    
     this.cdr.detectChanges();
   }
 
@@ -4186,7 +4219,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.computeAccountStatsWithService();
     return dedupedActivities;
   }
-
   // Helper for Guardian Firsts template
   getGuardianFirstsForGame(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
     // Only show raids and dungeons
@@ -4504,6 +4536,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       });
       this.aggregateGuardianFirsts = aggregate.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
       
+      // Debug logging for D1 raids
+      const d1Raids = this.aggregateGuardianFirsts.filter(f => f.game === 'D1' && f.type === 'raid');
+      console.log('[DEBUG][D1UI] aggregateGuardianFirsts D1 raids after calculation:', d1Raids.map(r => ({
+        name: r.name,
+        referenceId: r.referenceId,
+        completionDate: r.completionDate
+      })));
+      
       // Aggregate guardian firsts computation completed
       // Default existing property points to aggregate so legacy helpers keep working
       this.guardianFirsts = this.aggregateGuardianFirsts;
@@ -4556,7 +4596,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Aggregate helpers */
   getAggregateRaids(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
-    const earliest = this.getEarliestFirsts(this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'raid'));
+    const d1Raids = this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'raid');
+    console.log('[DEBUG][D1UI] getAggregateRaids - aggregateGuardianFirsts D1 raids:', d1Raids.map(r => ({
+      name: r.name,
+      referenceId: r.referenceId,
+      completionDate: r.completionDate
+    })));
+    const earliest = this.getEarliestFirsts(d1Raids);
+    console.log('[DEBUG][D1UI] getAggregateRaids - after getEarliestFirsts:', earliest.map(r => ({
+      name: r.name,
+      referenceId: r.referenceId,
+      completionDate: r.completionDate
+    })));
     return this.sortRaids(earliest, game);
   }
 
@@ -4946,7 +4997,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
   }
-
   /**
    * Gets all D1 raids with all possible variants (completed or not)
    */
@@ -4962,15 +5012,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Collect all completed raids
     const allRaids = this.getAggregateRaids('D1');
+    console.log('[DEBUG][D1UI] getAllD1RaidVariants - allRaids:', allRaids);
+    
     for (const raid of allRaids) {
       const baseName = this.getBaseActivityName(raid.name);
       // For D1 raids, use referenceId to determine variant type since all variants have the same name
       const version = this.getD1RaidVariantName(raid.referenceId, raid.name);
       
+      console.log('[DEBUG][D1UI] Processing raid:', {
+        name: raid.name,
+        baseName,
+        referenceId: raid.referenceId,
+        version,
+        completionDate: raid.completionDate
+      });
+      
       if (!raidVariants.has(baseName)) {
         raidVariants.set(baseName, new Map());
       }
-      raidVariants.get(baseName)!.set(version, raid);
+      const byVersion = raidVariants.get(baseName)!;
+      const existing = byVersion.get(version);
+      // Keep the earliest completion for a given version (dedupe alt hashes like Normal x2)
+      if (!existing || new Date(raid.completionDate) < new Date(existing.completionDate)) {
+        byVersion.set(version, raid);
+      }
     }
 
     // Define all possible variants for each D1 raid
@@ -5737,7 +5802,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     return result;
   }
-
   /**
    * Maps manifest activity names to our custom fullName mappings
    */
@@ -6171,14 +6235,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private getEarliestFirsts(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
     const map = new Map<string, ActivityFirstCompletion>();
     for (const first of list) {
-      const existing = map.get(first.name);
+      // Preserve D1 raid variants by including referenceId in the key
+      const key = (first.game === 'D1' && first.type === 'raid')
+        ? `${first.name}|${first.referenceId}`
+        : first.name;
+
+      const existing = map.get(key);
       if (!existing) {
-        map.set(first.name, first);
+        map.set(key, first);
         continue;
       }
       // Keep the earliest based on completionDate (ISO string)
       if (new Date(first.completionDate) < new Date(existing.completionDate)) {
-        map.set(first.name, first);
+        map.set(key, first);
       }
     }
     return Array.from(map.values());
@@ -6416,11 +6485,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     await this.titleService.debugAllTitles();
     this.checkForSpecificTitles();
   }
-
-
-
-
-
   async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
     this.activeTab = tab;
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
@@ -7058,6 +7122,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Map D1 raid referenceIds to their variant types based on our D1_FAMILY_MAP analysis
     const variantMap: { [key: string]: string } = {
       // Vault of Glass variants
+      '3801607287': 'Normal',    // Normal (alt)
+      '708693006': 'Hard',       // Hard (alt)
       '2659248071': 'Normal',    // Y1 Normal (26)
       '2659248068': 'Hard',      // Y1 Hard (30)
       '2659248069': 'Hard',      // Y1 Hard (31)
@@ -7065,6 +7131,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       '4038697181': '390 Light', // AOT 390 (alt)
 
       // Crota's End variants
+      '898834093': 'Normal',     // Normal (alt)
+      '112157962': 'Hard',       // Hard (alt)
       '1836893116': 'Normal',    // Y1 Normal (30)
       '1836893119': 'Hard',      // Y1 Hard (33)
       '2324706853': '390 Light', // AOT 390
@@ -7077,8 +7145,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       '3978884648': '390 Light', // AOT 390
 
       // Wrath of the Machine variants
+      '2578867903': 'Normal',    // Normal (alt)
+      '4007500989': 'Normal',    // Normal (alt)
       '260765522': 'Normal',     // Normal
-      '1387993552': 'Normal',    // Normal (alt)
+      '1387993552': 'Hard',      // Hard (380) – verified via PGCR
+      '1099433614': 'Hard',      // Hard (pre-Age of Triumph ~380)
+      '1342567280': 'Hard',      // Hard (alt)
       '430160982': '390 Light',  // Heroic/390
       '3356249023': '390 Light'  // Heroic/390 (alt)
     };
@@ -7208,7 +7280,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       variants
     }));
   }
-
   getPlayerRiteOfTheNineVariants(player: any): Array<{ 
     baseName: string; 
     variants: Array<{ 

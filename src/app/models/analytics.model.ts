@@ -14,7 +14,7 @@ export interface AnalyticsDataPoint {
 export interface ActivityAnalytics {
   activityName: string;
   activityType: string;
-  game: 'D1' | 'D2';
+  game: 'D1' | 'D2' | 'both';
   totalPlayCount: number;
   totalTimeSpent: number; // in minutes
   averageTimePerActivity: number; // in minutes
@@ -33,7 +33,7 @@ export interface AnalyticsView {
   gameFilter: ('D1' | 'D2')[];
   platformFilter: string[];
   timePeriod: AnalyticsTimePeriod;
-  chartType: 'line' | 'bar' | 'pie' | 'area';
+  chartType: 'line' | 'bar' | 'pie';
   metric: 'playCount' | 'timeSpent' | 'winRate' | 'completionRate';
 }
 
@@ -44,4 +44,12 @@ export interface AnalyticsSummary {
   averageSessionsPerDay: number;
   peakActivityDay: string;
   topActivities: ActivityAnalytics[];
+}
+
+export interface ActivityOption {
+  name: string;
+  type: string;
+  game: 'D1' | 'D2' | 'both';
+  playCount: number;
+  timeSpent: number;
 }
