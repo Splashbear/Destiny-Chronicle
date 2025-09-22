@@ -25,14 +25,9 @@ interface PlatformStats {
   imports: [CommonModule],
   template: `
     <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4" *ngIf="stats">
-      <!-- Header with export buttons -->
+      <!-- Header -->
       <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold text-white">Account Summary</h3>
-        <div class="flex items-center gap-2">
-          <button (click)="exportActivities()" class="d2-btn bg-green-600 hover:bg-green-500 text-xs px-3 py-1">Export</button>
-          <button (click)="openExportOptionsDialog()" class="d2-btn bg-blue-600 hover:bg-blue-500 text-xs px-3 py-1">Export Options</button>
-          <button (click)="shareDailyView()" class="d2-btn bg-purple-600 hover:bg-purple-500 text-xs px-3 py-1">Share</button>
-        </div>
       </div>
 
       <!-- Main stats grid -->
