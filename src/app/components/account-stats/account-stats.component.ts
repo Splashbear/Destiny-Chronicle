@@ -74,7 +74,7 @@ interface PlatformStats {
               </div>
               <div class="flex items-center gap-2 text-slate-300 text-sm">
                 <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform icon" />
-                <img [src]="plat.game === 'D1' ? '/assets/icons/destiny/Destiny 1 icon.jpg' : '/assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+                <img [src]="plat.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
                 <span>{{ plat.platform }}</span>
                 <span *ngIf="plat.className">· {{ plat.className }}</span>
                 <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
@@ -126,13 +126,13 @@ export class AccountStatsComponent {
 
   getPlatformIconUrl(membershipType: number): string {
     switch (membershipType) {
-      case 1: return '/assets/icons/platforms/xbox.png';
-      case 2: return '/assets/icons/platforms/ps.png';
-      case 3: return '/assets/icons/platforms/steam.png';
-      case 4: return '/assets/icons/platforms/blizzard.svg';
-      case 5: return '/assets/icons/platforms/stadia.png';
-      case 6: return '/assets/icons/platforms/egs.png';
-      default: return '/assets/icons/platforms/xbox.png';
+      case 1: return 'assets/icons/platforms/xbox.png';
+      case 2: return 'assets/icons/platforms/ps.png';
+      case 3: return 'assets/icons/platforms/steam.png';
+      case 4: return 'assets/icons/platforms/blizzard.svg';
+      case 5: return 'assets/icons/platforms/stadia.png';
+      case 6: return 'assets/icons/platforms/egs.png';
+      default: return 'assets/icons/platforms/xbox.png';
     }
   }
 

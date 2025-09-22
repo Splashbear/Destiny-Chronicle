@@ -210,19 +210,19 @@ interface ProfileRecordsResponse {
 
 // Mapping of title names (lowercase) to standardized gilded seal image paths
 const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
-  'conqueror': '/assets/gilded-seals/Conqueror-Gilded.png',
-  'flawless': '/assets/gilded-seals/Flawless-Gilded.png',
-  'heavymetal': '/assets/gilded-seals/Heavy-Metal-Gilded.png',
-  'dredgen': '/assets/gilded-seals/Dredgen-Gilded.png',
-  'deadeye': '/assets/gilded-seals/Deadeye-Gilded.png',
-  'champ': '/assets/gilded-seals/Champ-Gilded.png',
-  'ghostwriter': '/assets/gilded-seals/Ghost-Writer-Gilded.png',
-  'glorious': '/assets/gilded-seals/Glorious-Gilded.png',
-  'flamekeeper': '/assets/gilded-seals/Flamekeeper-Gilded.png',
-  'ironlord': '/assets/gilded-seals/Iron-Lord-Gilded.png',
-  'reveler': '/assets/gilded-seals/Reveler-Gilded.png',
-  'starbaker': '/assets/gilded-seals/Star-Baker-Gilded.png',
-  'unbroken': '/assets/gilded-seals/Unbroken-Gilded.png'
+  'conqueror': 'assets/gilded-seals/Conqueror-Gilded.png',
+  'flawless': 'assets/gilded-seals/Flawless-Gilded.png',
+  'heavymetal': 'assets/gilded-seals/Heavy-Metal-Gilded.png',
+  'dredgen': 'assets/gilded-seals/Dredgen-Gilded.png',
+  'deadeye': 'assets/gilded-seals/Deadeye-Gilded.png',
+  'champ': 'assets/gilded-seals/Champ-Gilded.png',
+  'ghostwriter': 'assets/gilded-seals/Ghost-Writer-Gilded.png',
+  'glorious': 'assets/gilded-seals/Glorious-Gilded.png',
+  'flamekeeper': 'assets/gilded-seals/Flamekeeper-Gilded.png',
+  'ironlord': 'assets/gilded-seals/Iron-Lord-Gilded.png',
+  'reveler': 'assets/gilded-seals/Reveler-Gilded.png',
+  'starbaker': 'assets/gilded-seals/Star-Baker-Gilded.png',
+  'unbroken': 'assets/gilded-seals/Unbroken-Gilded.png'
 };
 
 // Utility to normalize title names for mapping
@@ -4466,17 +4466,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getPlatformIconUrl(membershipType: number): string {
     switch (membershipType) {
       case 1:
-        return '/assets/icons/platforms/xbox.png';
+        return 'assets/icons/platforms/xbox.png';
       case 2:
-        return '/assets/icons/platforms/ps.png';
+        return 'assets/icons/platforms/ps.png';
       case 3:
-        return '/assets/icons/platforms/steam.png';
+        return 'assets/icons/platforms/steam.png';
       case 4:
-        return '/assets/icons/platforms/blizzard.svg';
+        return 'assets/icons/platforms/blizzard.svg';
       case 5:
-        return '/assets/icons/platforms/stadia.png';
+        return 'assets/icons/platforms/stadia.png';
       case 6:
-        return '/assets/icons/platforms/egs.png';
+        return 'assets/icons/platforms/egs.png';
       default:
         return '';
     }
@@ -5381,8 +5381,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   handleImageError(event: Event, isD1: boolean): void {
     const imgElement = event.target as HTMLImageElement;
     // Prevent infinite loop: only set if not already the fallback
-    if (!imgElement.src.includes('/assets/icons/activities/ghost.png')) {
-      imgElement.src = '/assets/icons/activities/ghost.png';
+    if (!imgElement.src.includes('assets/icons/activities/ghost.png')) {
+      imgElement.src = 'assets/icons/activities/ghost.png';
     } else {
       // Remove error handler to prevent further loops
       imgElement.onerror = null;
@@ -5913,9 +5913,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getClassIconUrl(className?: string): string | undefined {
     if (!className) return undefined;
     const c = className.toLowerCase();
-    if (c.includes('hunter')) return '/assets/icons/destiny/class-hunter-svgrepo-com.svg';
-    if (c.includes('titan')) return '/assets/icons/destiny/class-titan-svgrepo-com.svg';
-    if (c.includes('warlock')) return '/assets/icons/destiny/class-warlock-svgrepo-com.svg';
+    if (c.includes('hunter')) return 'assets/icons/destiny/class-hunter-svgrepo-com.svg';
+    if (c.includes('titan')) return 'assets/icons/destiny/class-titan-svgrepo-com.svg';
+    if (c.includes('warlock')) return 'assets/icons/destiny/class-warlock-svgrepo-com.svg';
     return undefined;
   }
 
