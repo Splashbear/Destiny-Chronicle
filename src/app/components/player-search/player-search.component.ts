@@ -40,6 +40,7 @@ import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 // import { AnalyticsComponent } from '../analytics/analytics.component';
 import { BackgroundProcessingService, ProcessingState } from '../../services/background-processing.service';
+import { WorkerService, WorkerResponse } from '../../services/worker.service';
 
 interface ActivityEntry {
   game: string;
@@ -538,6 +539,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // -----------------------------------------------
   private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
   private syncedPlayers: Set<string> = new Set();
+  
+  // Web Worker related properties
+  private workerProcessing = false;
+  private workerQueue: Array<() => void> = [];
 
   // Phase 4: UI Rendering Optimization - TrackBy Functions
   /**
@@ -616,6 +621,70 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.playerSyncQueue.push(exec);
       }
     });
+  }
+
+  private initializeWorker(): void {
+    if (this.workerService.isWorkerAvailable()) {
+      this.workerService.messages$.subscribe((response: WorkerResponse | null) => {
+        if (response) {
+          this.handleWorkerResponse(response);
+        }
+      });
+    }
+  }
+
+  private handleWorkerResponse(response: WorkerResponse): void {
+    switch (response.type) {
+      case 'ACTIVITIES_PROCESSED':
+        this.handleProcessedActivities(response.data);
+        break;
+      case 'STATS_CALCULATED':
+        this.handleCalculatedStats(response.data);
+        break;
+      case 'FIRSTS_PROCESSED':
+        this.handleProcessedFirsts(response.data);
+        break;
+      case 'DISPLAY_DATA_PROCESSED':
+        this.handleDisplayDataProcessed(response.data);
+        break;
+    }
+  }
+
+  private handleProcessedActivities(data: any): void {
+    // Handle processed activities from worker
+    console.log('[Worker] Activities processed:', data.length);
+    this.workerProcessing = false;
+    this.processWorkerQueue();
+  }
+
+  private handleCalculatedStats(data: any): void {
+    // Handle calculated stats from worker
+    console.log('[Worker] Stats calculated:', data);
+    this.workerProcessing = false;
+    this.processWorkerQueue();
+  }
+
+  private handleProcessedFirsts(data: any): void {
+    // Handle processed firsts from worker
+    console.log('[Worker] Firsts processed:', data);
+    this.workerProcessing = false;
+    this.processWorkerQueue();
+  }
+
+  private handleDisplayDataProcessed(data: any): void {
+    // Handle display data from worker
+    console.log('[Worker] Display data processed:', data);
+    this.groupedActivitiesByAccount = data.grouped;
+    this.cdr.detectChanges();
+    this.workerProcessing = false;
+    this.processWorkerQueue();
+  }
+
+  private processWorkerQueue(): void {
+    if (this.workerQueue.length > 0 && !this.workerProcessing) {
+      const task = this.workerQueue.shift()!;
+      task();
+    }
   }
 
   /**
@@ -701,6 +770,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private shareService: ShareService,
     private firstActivityService: FirstActivityService,
     public backgroundProcessing: BackgroundProcessingService,
+    private workerService: WorkerService,
     private router: Router,
     private route: ActivatedRoute,
     private location: Location
@@ -734,6 +804,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    // Initialize Web Worker
+    this.initializeWorker();
+    
     // Subscribe to background processing state
     this.backgroundProcessing.getProcessingState().subscribe(state => {
       this.backgroundProcessingState = state;
@@ -2644,6 +2717,43 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       return;
     }
+
+    // Use Web Worker for heavy processing if available
+    if (this.workerService.isWorkerAvailable()) {
+      this.processWithWorker();
+      return;
+    }
+
+    // Fallback to main thread processing
+    this.processInMainThread();
+  }
+
+  private processWithWorker(): void {
+    if (this.workerProcessing) {
+      // Queue the task if worker is busy
+      this.workerQueue.push(() => this.processWithWorker());
+      return;
+    }
+
+    this.workerProcessing = true;
+    this.updateLoadingProgress('process', 0, this.filteredActivitiesForDate.length, 'Processing activities with worker…');
+
+    // Send data to worker
+    this.workerService.postMessage({
+      type: 'PROCESS_ACTIVITIES_FOR_DISPLAY',
+      data: {
+        activities: this.filteredActivitiesForDate,
+        manifestData: {
+          activities: this.manifest['activityDefs'],
+          titles: this.manifest['titleDefs'],
+          presentationNodes: this.manifest['presentationNodes']
+        }
+      }
+    });
+  }
+
+  private async processInMainThread(): Promise<void> {
+    const totalToProcess = this.filteredActivitiesForDate.length;
     // Initialise process-phase progress bar
     this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
     let processedCount = 0;
@@ -3199,6 +3309,51 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const token = ++this.statsCalcToken; // capture token for this invocation
     this.loadingAccountStats = true;
     this.loadingGuardianFirsts = true;
+
+    // Use Web Worker for stats calculation if available
+    if (this.workerService.isWorkerAvailable()) {
+      this.calculateStatsWithWorker();
+      return;
+    }
+
+    // Fallback to main thread calculation
+    this.calculateStatsInMainThread();
+  }
+
+  private calculateStatsWithWorker(): void {
+    if (this.workerProcessing) {
+      // Queue the task if worker is busy
+      this.workerQueue.push(() => this.calculateStatsWithWorker());
+      return;
+    }
+
+    this.workerProcessing = true;
+
+    // Collect all activities for all selected players
+    const allActivities: any[] = [];
+    const allCharacters: any[] = [];
+
+    for (const player of this.selectedPlayers) {
+      const playerKey = this.getPlayerKey(player);
+      const playerActivities = this.activities[playerKey] || [];
+      const playerCharacters = this.characters[playerKey] || [];
+      
+      allActivities.push(...playerActivities);
+      allCharacters.push(...playerCharacters);
+    }
+
+    // Send data to worker
+    this.workerService.postMessage({
+      type: 'CALCULATE_STATS',
+      data: {
+        activities: allActivities,
+        characters: allCharacters
+      }
+    });
+  }
+
+  private async calculateStatsInMainThread(): Promise<void> {
+    const token = this.statsCalcToken; // capture token for this invocation
     let totalTime = 0;
     let totalActivityTime = 0;
     const perType: { [type: string]: { count: number, time: number } } = {};
