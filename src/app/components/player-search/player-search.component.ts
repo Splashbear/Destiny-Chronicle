@@ -2725,7 +2725,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     // Fallback to main thread processing
-    this.processInMainThread();
+    this.processInMainThread(totalToProcess);
   }
 
   private processWithWorker(): void {
@@ -2752,8 +2752,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     });
   }
 
-  private async processInMainThread(): Promise<void> {
-    const totalToProcess = this.filteredActivitiesForDate.length;
+  private async processInMainThread(totalToProcess: number): Promise<void> {
     // Initialise process-phase progress bar
     this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
     let processedCount = 0;
