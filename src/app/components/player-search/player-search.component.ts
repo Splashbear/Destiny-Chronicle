@@ -543,6 +543,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // Web Worker related properties
   private workerProcessing = false;
   private workerQueue: Array<() => void> = [];
+  private workerDisabled = false; // Disable workers if they cause issues
 
   // Phase 4: UI Rendering Optimization - TrackBy Functions
   /**
@@ -634,6 +635,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   private handleWorkerResponse(response: WorkerResponse): void {
+    // Clear any pending timeout
+    if ((this as any).workerTimeoutId) {
+      clearTimeout((this as any).workerTimeoutId);
+      (this as any).workerTimeoutId = null;
+    }
+
     switch (response.type) {
       case 'ACTIVITIES_PROCESSED':
         this.handleProcessedActivities(response.data);
@@ -647,6 +654,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       case 'DISPLAY_DATA_PROCESSED':
         this.handleDisplayDataProcessed(response.data);
         break;
+      case 'ERROR':
+        console.error('[Worker] Error response:', response.data);
+        this.workerProcessing = false;
+        // Disable workers after error and fallback to main thread
+        this.workerDisabled = true;
+        console.warn('[Worker] Workers disabled due to error, using main thread processing');
+        this.processInMainThread(this.filteredActivitiesForDate.length);
+        break;
+      default:
+        console.warn('[Worker] Unknown response type:', response.type);
+        this.workerProcessing = false;
     }
   }
 
@@ -2718,8 +2736,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Use Web Worker for heavy processing if available
-    if (this.workerService.isWorkerAvailable()) {
+    // Use Web Worker for heavy processing if available and not disabled
+    if (!this.workerDisabled && this.workerService.isWorkerAvailable()) {
       this.processWithWorker();
       return;
     }
@@ -2738,16 +2756,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.workerProcessing = true;
     this.updateLoadingProgress('process', 0, this.filteredActivitiesForDate.length, 'Processing activities with worker…');
 
+    // Add timeout protection
+    const timeoutId = setTimeout(() => {
+      console.warn('[Worker] Processing timeout, falling back to main thread');
+      this.workerProcessing = false;
+      this.processInMainThread(this.filteredActivitiesForDate.length);
+    }, 10000); // 10 second timeout
+
+    // Store timeout ID for cleanup
+    (this as any).workerTimeoutId = timeoutId;
+
     // Send data to worker
     this.workerService.postMessage({
       type: 'PROCESS_ACTIVITIES_FOR_DISPLAY',
       data: {
-        activities: this.filteredActivitiesForDate,
-        manifestData: {
-          activities: this.manifest['activityDefs'],
-          titles: this.manifest['titleDefs'],
-          presentationNodes: this.manifest['presentationNodes']
-        }
+        activities: this.filteredActivitiesForDate.slice(0, 1000) // Limit to 1000 activities to prevent memory issues
       }
     });
   }
@@ -3309,8 +3332,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.loadingAccountStats = true;
     this.loadingGuardianFirsts = true;
 
-    // Use Web Worker for stats calculation if available
-    if (this.workerService.isWorkerAvailable()) {
+    // Use Web Worker for stats calculation if available and not disabled
+    if (!this.workerDisabled && this.workerService.isWorkerAvailable()) {
       this.calculateStatsWithWorker();
       return;
     }
