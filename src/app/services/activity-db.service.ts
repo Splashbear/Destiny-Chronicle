@@ -377,6 +377,45 @@ export class ActivityDbService extends Dexie {
     }
   }
 
+  /**
+   * Get all activities for a membership across ALL characters for a given month/day (and optional year)
+   * This avoids relying on UI character state when exporting.
+   */
+  async getActivitiesByDateForMembership(
+    membershipId: string,
+    month: number,
+    day: number,
+    year?: number
+  ): Promise<StoredActivity[]> {
+    await this.initPromise;
+    try {
+      if (!membershipId || !month || !day) {
+        console.error('[Dexie] Invalid key for getActivitiesByDateForMembership:', { membershipId, month, day });
+        return [];
+      }
+      // Query by membershipId, then filter by date
+      const activities = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .toArray();
+
+      return activities.filter(activity => {
+        if (!activity.period) return false;
+        const d = new Date(activity.period);
+        const m = d.getUTCMonth() + 1;
+        const dy = d.getUTCDate();
+        const y = d.getUTCFullYear();
+        if (year) {
+          return m === month && dy === day && y === year;
+        }
+        return m === month && dy === day;
+      });
+    } catch (error) {
+      console.error('[Dexie] Error in getActivitiesByDateForMembership:', error);
+      return [];
+    }
+  }
+
   async getActivitiesByMode(membershipId: string, characterId: string, mode: number): Promise<StoredActivity[]> {
     await this.initPromise;
     try {

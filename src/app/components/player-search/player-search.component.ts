@@ -1891,6 +1891,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.accountLoadingStatuses = [];
 
     try {
+      // Clear date-scoped aggregates to avoid mixing prior users' rows
+      this.filteredActivitiesForDate = [];
+      this.filteredActivities$.next([]);
+      this.groupedActivitiesByAccount = [];
+
       await this.runWithPlayerSyncLimit(async () => {
         await this.loadCharacterHistory(displayPlayer);
         await this.loadGuardianFirsts(displayPlayer);
@@ -3422,7 +3427,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getPerTypeStats(type: string): { count: number, time: number } {
     return this.accountStats.perType[type] || { count: 0, time: 0 };
   }
-
   // Helper method to safely get activity count
   getActivityCount(type: string): number {
     return this.getPerTypeStats(type).count;
@@ -4005,6 +4009,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const accountKey = this.getPlayerKey(removed);
       this.removeAccountLoadingStatus(accountKey);
     }
+    // Clear date-scoped aggregates so UI reflects only current selections
+    this.filteredActivitiesForDate = [];
+    this.filteredActivities$.next([]);
+    this.groupedActivitiesByAccount = [];
     // Recalculate account stats when a player is removed
     this.calculateAccountStats();
     this.cdr.detectChanges();
@@ -4079,7 +4087,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     return allActivities;
   }
-
   /**
    * Retrieves all filtered activities for the selected date and players.
    */
@@ -4841,7 +4848,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
   }
-
   /**
    * Gets the first completion image for a raid/dungeon group.
    * Falls back to manifest-based family maps to locate an appropriate referenceId
@@ -5480,7 +5486,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     this.cdr.detectChanges();
   }
-
   private async onTabChangeLegacy(tab: 'activities' | 'firsts' | 'titles') {
     this.activeTab = tab;
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
@@ -6280,7 +6285,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getAccountGroupsForGame(game: 'D1' | 'D2') {
     return this.groupedActivitiesByAccount.filter(g => g.game === game);
   }
-
   /**
    * Groups activities by their version (Normal, Master, Explorer, etc.)
    */
@@ -7043,7 +7047,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       alert('Failed to export data');
     }
   }
-
   /**
    * Capture screenshot of current view
    */

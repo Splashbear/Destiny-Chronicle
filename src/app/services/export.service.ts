@@ -164,15 +164,16 @@ export class ExportService {
       const activities: any[] = [];
       if (options.allDates) {
         for (const player of selectedPlayers) {
-          let playerActivities = await activityDb.getAllActivities(player.membershipId);
+          // Use existing optimized membership fetch
+          const playerActivities = await activityDb.getAllActivitiesForMembershipOptimized(player.membershipId);
           for (const activity of playerActivities) {
             activities.push({
               Player: player.displayName,
               Platform: player.platform,
-              Date: activity.date,
-              Name: manifestService.getActivityName(activity.activityHash),
-              Type: manifestService.getActivityType(activity.activityHash),
-              Hash: activity.activityHash,
+              Date: activity.period,
+              Name: manifestService.getActivityName(activity.activityDetails?.referenceId, player.game === 'D1'),
+              Type: manifestService.getActivityType(activity.activityDetails?.referenceId, activity.activityDetails?.mode),
+              Hash: activity.activityDetails?.referenceId,
               PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
             });
           }
@@ -192,21 +193,18 @@ export class ExportService {
         const day = date.getUTCDate();
         console.log('[ExportService] Exporting for date:', { from: options.from, month, day });
         for (const player of selectedPlayers) {
-          const charObjs = (characters && getPlayerKey) ? (characters[getPlayerKey(player)] || []) : [];
-          const charIds = charObjs.map((c: any) => c.characterId).filter((id: any) => !!id);
-          for (const charId of charIds) {
-            const acts = await activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
-            for (const activity of acts) {
-              activities.push({
-                Player: player.displayName,
-                Platform: player.platform,
-                Date: activity.period,
-                Name: manifestService.getActivityName(activity.activityDetails?.referenceId, player.game === 'D1'),
-                Type: manifestService.getActivityType(activity.activityDetails?.referenceId, activity.activityDetails?.mode),
-                Hash: activity.activityDetails?.referenceId,
-                PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
-              });
-            }
+          // Gather per-membership activities for the date across all characters
+          const acts = await activityDb.getActivitiesByDateForMembership(player.membershipId, month, day);
+          for (const activity of acts) {
+            activities.push({
+              Player: player.displayName,
+              Platform: player.platform,
+              Date: activity.period,
+              Name: manifestService.getActivityName(activity.activityDetails?.referenceId, player.game === 'D1'),
+              Type: manifestService.getActivityType(activity.activityDetails?.referenceId, activity.activityDetails?.mode),
+              Hash: activity.activityDetails?.referenceId,
+              PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
+            });
           }
         }
       }
