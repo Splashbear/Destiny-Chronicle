@@ -64,7 +64,7 @@
                      [ngClass]="isFavorite(player) ? 'border border-yellow-400 bg-slate-700/95' : 'bg-slate-700/60 hover:bg-slate-700/80'">
                   <div class="flex items-center gap-2 flex-1 min-w-0">
                     <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-4 h-4 flex-shrink-0" alt="platform" />
-                    <img [src]="player.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4 flex-shrink-0" alt="game" />
+                    <img [src]="player.game === 'D1' ? '/assets/icons/destiny/Destiny 1 icon.jpg' : '/assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4 flex-shrink-0" alt="game" />
                     <span class="text-sm text-white truncate" [title]="player.displayName + ' (' + player.platform + ', ' + player.game + ')'">
                       {{ player.displayName }}
                     </span>
@@ -164,7 +164,7 @@
                    }">
                 <div class="flex items-center justify-between mb-2">
                   <div class="flex items-center gap-2">
-                    <img [src]="status.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" 
+                    <img [src]="status.game === 'D1' ? '/assets/icons/destiny/Destiny 1 icon.jpg' : '/assets/icons/destiny/Destiny 2 icon.png'" 
                          class="w-4 h-4" alt="game" />
                     <img [src]="getPlatformIconUrl(status.membershipType)" class="w-4 h-4" alt="platform" />
                     <span class="text-sm font-medium text-white">{{ status.displayName }}</span>
@@ -400,14 +400,13 @@
             <!-- Destiny 2 Panel -->
             <div *ngIf="getAccountGroupsForGame('D2').length > 0" class="space-y-6">
               <div class="flex items-center mb-4">
-                <img src="assets/icons/destiny/destiny.svg" class="w-6 h-6 mr-2" alt="Destiny 2 icon" />
+                <img src="/assets/icons/destiny/destiny.svg" class="w-6 h-6 mr-2" alt="Destiny 2 icon" />
                 <h2 class="text-2xl font-bold text-d2-gold">Destiny 2</h2>
               </div>
-              <div *ngFor="let account of getAccountGroupsForGame('D2')" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
-                <div *ngFor="let yearGroup of account.yearGroups" class="mb-8 border-2 border-blue-700 rounded-lg p-4 bg-slate-900/80">
+              <div *ngFor="let gameGroup of getAccountGroupsForGame('D2')" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
+                <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-8 border-2 border-blue-700 rounded-lg p-4 bg-slate-900/80">
                   <div class="flex items-center mb-4">
                     <span class="text-2xl font-bold text-blue-300 mr-3">{{ yearGroup.year }}</span>
-                    <span class="text-slate-400">({{ account.displayName }} - {{ account.platform }})</span>
                   </div>
                   <div class="flex flex-wrap gap-6">
                     <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[500px]">
@@ -433,17 +432,16 @@
                           </div>
                           <div *ngFor="let activity of versionGroup.activities; trackBy: trackByActivity" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors ml-4">
                            <!-- Game Icon (Destiny 1 or Destiny 2) - Use account.game as fallback -->
-                           <img [src]="(activity.game || account.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+                          <img [src]="(activity.game || gameGroup.game) === 'D1' ? '/assets/icons/destiny/Destiny 1 icon.jpg' : '/assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
                            <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
                            <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
                            <!-- Character Class Icon (Hunter, Titan, Warlock) -->
                            <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                            <!-- Timestamp Link -->
-                           <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
+                          <a (click)="openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
                             {{ formatTime(activity.period) }}
                           </a>
-                           <!-- Account Name -->
-                          <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }}</span>
+                           <!-- Account Name removed in consolidated view -->
                          </div>
                         </div>
                       </div>
@@ -456,14 +454,13 @@
             <!-- Destiny 1 Panel -->
             <div *ngIf="getAccountGroupsForGame('D1').length > 0" class="space-y-6 mt-10">
               <div class="flex items-center mb-4">
-                <img src="assets/icons/destiny/destiny.svg" class="w-6 h-6 mr-2" alt="Destiny 1 icon" />
+                <img src="/assets/icons/destiny/destiny.svg" class="w-6 h-6 mr-2" alt="Destiny 1 icon" />
                 <h2 class="text-2xl font-bold text-d1-silver">Destiny 1</h2>
               </div>
-              <div *ngFor="let account of getAccountGroupsForGame('D1')" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
-                <div *ngFor="let yearGroup of account.yearGroups" class="mb-8 border-2 border-blue-700 rounded-lg p-4 bg-slate-900/80">
+              <div *ngFor="let gameGroup of getAccountGroupsForGame('D1')" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
+                <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-8 border-2 border-blue-700 rounded-lg p-4 bg-slate-900/80">
                   <div class="flex items-center mb-4">
                     <span class="text-2xl font-bold text-blue-300 mr-3">{{ yearGroup.year }}</span>
-                    <span class="text-slate-400">({{ account.displayName }} - {{ account.platform }})</span>
                   </div>
                   <div class="flex flex-wrap gap-6">
                     <div *ngFor="let typeGroup of yearGroup.typeGroups" class="flex-1 min-w-[500px]">
@@ -489,17 +486,16 @@
                           </div>
                           <div *ngFor="let activity of versionGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors ml-4">
                           <!-- Game Icon (Destiny 1 or Destiny 2) - Use account.game as fallback -->
-                          <img [src]="(activity.game || account.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+                          <img [src]="(activity.game || gameGroup.game) === 'D1' ? '/assets/icons/destiny/Destiny 1 icon.jpg' : '/assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
                           <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
                           <!-- Character Class Icon (Hunter, Titan, Warlock) -->
                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                           <!-- Timestamp Link -->
-                          <a (click)="openExternalPGCR(activity, (activity.game || account.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
+                           <a (click)="openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1')" class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
                             {{ formatTime(activity.period) }}
                           </a>
-                          <!-- Account Name -->
-                          <span class="text-xs text-slate-500 whitespace-nowrap">{{ account.displayName }}</span>
+                          <!-- Account Name removed in consolidated view -->
                         </div>
                         </div>
                       </div>
@@ -1113,10 +1109,10 @@
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0">
             <div class="space-y-4">
-              <div *ngFor="let account of groupedActivitiesByAccount" class="bg-slate-900 rounded-lg p-4">
-                <h4 class="text-white font-medium mb-2">{{ account.displayName }} ({{ account.platform }})</h4>
+              <div *ngFor="let gameGroup of groupedActivitiesByAccount" class="bg-slate-900 rounded-lg p-4">
+                <h4 class="text-white font-medium mb-2">{{ gameGroup.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</h4>
                 <div class="text-sm text-slate-400">
-                  <div *ngFor="let yearGroup of account.yearGroups" class="mb-2">
+                  <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-2">
                     <div class="font-medium text-slate-300">{{ yearGroup.year }}</div>
                     <div *ngFor="let typeGroup of yearGroup.typeGroups" class="ml-2">
                       {{ typeGroup.name }}: {{ typeGroup.activities.length }} activities
@@ -1162,7 +1158,7 @@
            class="flex items-center justify-between p-3 bg-slate-700/60 rounded hover:bg-slate-700/80 transition-colors">
         <div class="flex items-center gap-3 flex-1 min-w-0">
           <img [src]="getPlatformIconUrl(fav.membershipType)" class="w-5 h-5 flex-shrink-0" alt="platform" />
-          <img [src]="fav.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-5 h-5 flex-shrink-0" alt="game" />
+          <img [src]="fav.game === 'D1' ? '/assets/icons/destiny/Destiny 1 icon.jpg' : '/assets/icons/destiny/Destiny 2 icon.png'" class="w-5 h-5 flex-shrink-0" alt="game" />
           <div class="min-w-0">
             <div class="text-white font-medium truncate" [title]="fav.displayName">
               {{ fav.displayName }}

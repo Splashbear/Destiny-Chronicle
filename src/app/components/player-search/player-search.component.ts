@@ -64,6 +64,8 @@ interface TypeGroup {
   activities: ActivityWithMembership[];
   image?: SafeHtml | null;
   isD1: boolean;
+  /** Track PGCR instanceIds already included to prevent cross-platform duplicates */
+  seenInstanceIds?: Set<string>;
 }
 
 interface YearGroup {
@@ -208,19 +210,19 @@ interface ProfileRecordsResponse {
 
 // Mapping of title names (lowercase) to standardized gilded seal image paths
 const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
-  'conqueror': 'assets/gilded-seals/Conqueror-Gilded.png',
-  'flawless': 'assets/gilded-seals/Flawless-Gilded.png',
-  'heavymetal': 'assets/gilded-seals/Heavy-Metal-Gilded.png',
-  'dredgen': 'assets/gilded-seals/Dredgen-Gilded.png',
-  'deadeye': 'assets/gilded-seals/Deadeye-Gilded.png',
-  'champ': 'assets/gilded-seals/Champ-Gilded.png',
-  'ghostwriter': 'assets/gilded-seals/Ghost-Writer-Gilded.png',
-  'glorious': 'assets/gilded-seals/Glorious-Gilded.png',
-  'flamekeeper': 'assets/gilded-seals/Flamekeeper-Gilded.png',
-  'ironlord': 'assets/gilded-seals/Iron-Lord-Gilded.png',
-  'reveler': 'assets/gilded-seals/Reveler-Gilded.png',
-  'starbaker': 'assets/gilded-seals/Star-Baker-Gilded.png',
-  'unbroken': 'assets/gilded-seals/Unbroken-Gilded.png'
+  'conqueror': '/assets/gilded-seals/Conqueror-Gilded.png',
+  'flawless': '/assets/gilded-seals/Flawless-Gilded.png',
+  'heavymetal': '/assets/gilded-seals/Heavy-Metal-Gilded.png',
+  'dredgen': '/assets/gilded-seals/Dredgen-Gilded.png',
+  'deadeye': '/assets/gilded-seals/Deadeye-Gilded.png',
+  'champ': '/assets/gilded-seals/Champ-Gilded.png',
+  'ghostwriter': '/assets/gilded-seals/Ghost-Writer-Gilded.png',
+  'glorious': '/assets/gilded-seals/Glorious-Gilded.png',
+  'flamekeeper': '/assets/gilded-seals/Flamekeeper-Gilded.png',
+  'ironlord': '/assets/gilded-seals/Iron-Lord-Gilded.png',
+  'reveler': '/assets/gilded-seals/Reveler-Gilded.png',
+  'starbaker': '/assets/gilded-seals/Star-Baker-Gilded.png',
+  'unbroken': '/assets/gilded-seals/Unbroken-Gilded.png'
 };
 
 // Utility to normalize title names for mapping
@@ -2640,26 +2642,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Initialise process-phase progress bar
     this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
     let processedCount = 0;
-    const accountGroups = new Map<string, AccountGroup>();
+    // Group by game first, then by year, consolidating all accounts
+    const gameGroups = new Map<string, { game: 'D1' | 'D2'; yearGroups: Map<string, YearGroup> }>();
+    
     for (const activity of this.filteredActivitiesForDate) {
-      const accountKey = `${activity.game}|${activity.membershipId}`;
-      if (!accountGroups.has(accountKey)) {
-        accountGroups.set(accountKey, {
-          displayName: activity.displayName,
-          platform: activity.platform,
-          game: activity.game,
+      const game = activity.game;
+      if (!gameGroups.has(game)) {
+        gameGroups.set(game, {
+          game,
           yearGroups: new Map<string, YearGroup>()
         });
       }
-      const account = accountGroups.get(accountKey)!;
+      const gameGroup = gameGroups.get(game)!;
       const year = new Date(activity.period).getFullYear().toString();
-      if (!account.yearGroups.has(year)) {
-        account.yearGroups.set(year, {
+      if (!gameGroup.yearGroups.has(year)) {
+        gameGroup.yearGroups.set(year, {
           year,
           typeGroups: new Map<string, TypeGroup>()
         });
       }
-      const yearGroup = account.yearGroups.get(year)!;
+      const yearGroup = gameGroup.yearGroups.get(year)!;
       // Use manifest as primary source, custom mapping as backup
       const referenceId = activity.activityDetails?.referenceId;
       const isD1 = activity.game === 'D1';
@@ -2691,10 +2693,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           isD1,
           image: this.getActivityImage(activity, isD1),
           icon,
-          activities: []
+          activities: [],
+          seenInstanceIds: new Set<string>()
         });
       }
-      yearGroup.typeGroups.get(groupKey)!.activities.push(activity);
+      const typeGroup = yearGroup.typeGroups.get(groupKey)!;
+      const instanceId = String(activity.activityDetails?.instanceId || '');
+      // Deduplicate by PGCR instance across platforms/accounts
+      if (instanceId) {
+        if (typeGroup.seenInstanceIds!.has(instanceId)) {
+          continue; // already included from another platform/account
+        }
+        typeGroup.seenInstanceIds!.add(instanceId);
+      }
+      typeGroup.activities.push(activity);
 
       // Increment progress periodically to keep UI responsive
       processedCount++;
@@ -2714,17 +2726,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.updateLoadingProgress('process', totalToProcess, totalToProcess, 'Processing complete');
 
     // Sort activities within each group by time (descending)
-    for (const account of accountGroups.values()) {
-      for (const yearGroup of account.yearGroups.values()) {
+    for (const gameGroup of gameGroups.values()) {
+      for (const yearGroup of gameGroup.yearGroups.values()) {
         for (const typeGroup of yearGroup.typeGroups.values()) {
           typeGroup.activities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
         }
       }
     }
 
-    this.groupedActivitiesByAccount = Array.from(accountGroups.values()).map(account => ({
-      ...account,
-      yearGroups: Array.from(account.yearGroups.values()).map(yearGroup => ({
+    // Convert to the expected format for the template
+    this.groupedActivitiesByAccount = Array.from(gameGroups.values()).map(gameGroup => ({
+      game: gameGroup.game,
+      yearGroups: Array.from(gameGroup.yearGroups.values()).map(yearGroup => ({
         year: yearGroup.year,
         typeGroups: Array.from(yearGroup.typeGroups.values())
       }))
@@ -4446,17 +4459,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getPlatformIconUrl(membershipType: number): string {
     switch (membershipType) {
       case 1:
-        return 'assets/icons/platforms/xbox.png';
+        return '/assets/icons/platforms/xbox.png';
       case 2:
-        return 'assets/icons/platforms/ps.png';
+        return '/assets/icons/platforms/ps.png';
       case 3:
-        return 'assets/icons/platforms/steam.png';
+        return '/assets/icons/platforms/steam.png';
       case 4:
-        return 'assets/icons/platforms/blizzard.svg';
+        return '/assets/icons/platforms/blizzard.svg';
       case 5:
-        return 'assets/icons/platforms/stadia.png';
+        return '/assets/icons/platforms/stadia.png';
       case 6:
-        return 'assets/icons/platforms/egs.png';
+        return '/assets/icons/platforms/egs.png';
       default:
         return '';
     }
@@ -5895,9 +5908,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getClassIconUrl(className?: string): string | undefined {
     if (!className) return undefined;
     const c = className.toLowerCase();
-    if (c.includes('hunter')) return 'assets/icons/destiny/class-hunter-svgrepo-com.svg';
-    if (c.includes('titan')) return 'assets/icons/destiny/class-titan-svgrepo-com.svg';
-    if (c.includes('warlock')) return 'assets/icons/destiny/class-warlock-svgrepo-com.svg';
+    if (c.includes('hunter')) return '/assets/icons/destiny/class-hunter-svgrepo-com.svg';
+    if (c.includes('titan')) return '/assets/icons/destiny/class-titan-svgrepo-com.svg';
+    if (c.includes('warlock')) return '/assets/icons/destiny/class-warlock-svgrepo-com.svg';
     return undefined;
   }
 
@@ -7069,16 +7082,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Use html2canvas to capture the screenshot
       const html2canvas = (await import('html2canvas')).default;
       
-      const canvas = await html2canvas(mainContent, {
-        backgroundColor: '#0f172a', // Match the app's dark background
-        scale: 2, // Higher resolution
+      const canvas = await html2canvas(mainContent as HTMLElement, {
+        background: '#0f172a',
         useCORS: true,
         allowTaint: true,
         scrollX: 0,
         scrollY: 0,
-        width: mainContent.scrollWidth,
-        height: mainContent.scrollHeight
-      });
+        width: (mainContent as HTMLElement).scrollWidth,
+        height: (mainContent as HTMLElement).scrollHeight
+      } as any);
 
       // Convert canvas to blob and download
       canvas.toBlob((blob: Blob | null) => {
