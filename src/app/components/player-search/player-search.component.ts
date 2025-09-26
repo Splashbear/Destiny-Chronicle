@@ -39,7 +39,6 @@ import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 // import { AnalyticsComponent } from '../analytics/analytics.component';
-import { BackgroundProcessingService, ProcessingState } from '../../services/background-processing.service';
 
 interface ActivityEntry {
   game: string;
@@ -425,15 +424,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private readonly PGCR_BATCH_SIZE = 30;
   private readonly VALIDATION_DELAY = 50;
 
-  // Background processing state
-  backgroundProcessingState: ProcessingState = {
-    isProcessing: false,
-    isPaused: false,
-    progress: 0,
-    currentBatch: 0,
-    totalBatches: 0,
-    isBackground: false
-  };
   showBackgroundProcessingIndicator = false;
 
   onDatePickerChange(dateInfo: {month: number, day: number}) {
@@ -700,7 +690,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private exportService: ExportService,
     private shareService: ShareService,
     private firstActivityService: FirstActivityService,
-    public backgroundProcessing: BackgroundProcessingService,
     private router: Router,
     private route: ActivatedRoute,
     private location: Location
@@ -734,12 +723,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    // Subscribe to background processing state
-    this.backgroundProcessing.getProcessingState().subscribe(state => {
-      this.backgroundProcessingState = state;
-      this.showBackgroundProcessingIndicator = state.isProcessing || state.isBackground;
-      this.cdr.markForCheck();
-    });
 
     // Set default date to today (use YYYY-MM-DD format)
     const today = new Date();
@@ -2781,8 +2764,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Only start background processing for large datasets
     if (activities.length < 100) return;
 
-    // Start background processing
-    this.backgroundProcessing.startProcessing(activities, manifest, 50);
     
     // Show notification that processing continues in background
     this.showBackgroundProcessingIndicator = true;
@@ -2791,11 +2772,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * Resume processing when user returns to tab
    */
-  private resumeBackgroundProcessing() {
-    if (this.backgroundProcessingState.isPaused) {
-      this.backgroundProcessing.resumeProcessing();
-    }
-  }
 
   public async loadAllFilteredActivities(forceRefresh: boolean = false) {
     const loadToken = ++this.currentLoadToken;
@@ -3986,8 +3962,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.accountLoadingStatus.clear();
     this.accountLoadingStatuses = [];
     
-    // Clear background processing
-    this.backgroundProcessing.stopProcessing();
     this.showBackgroundProcessingIndicator = false;
     
     // Clear caches

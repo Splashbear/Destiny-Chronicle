@@ -1,30 +1,4 @@
 <div class="min-h-screen bg-slate-900">
-  <!-- Background Processing Indicator -->
-  <div *ngIf="showBackgroundProcessingIndicator" 
-       class="fixed top-4 right-4 z-50 bg-blue-900/95 text-white p-4 rounded-lg shadow-lg border border-blue-700 max-w-sm">
-    <div class="flex items-center gap-3">
-      <div class="flex-shrink-0">
-        <div class="w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-      <div class="flex-1 min-w-0">
-        <div class="text-sm font-medium">
-          {{ backgroundProcessingState.isBackground ? 'Processing in background...' : 'Processing activities...' }}
-        </div>
-        <div *ngIf="backgroundProcessingState.isProcessing" class="text-xs text-blue-200 mt-1">
-          {{ backgroundProcessingState.currentBatch }} / {{ backgroundProcessingState.totalBatches }} batches
-          ({{ backgroundProcessingState.progress | number:'1.0-0' }}%)
-        </div>
-        <div class="w-full bg-blue-800 rounded-full h-1.5 mt-2">
-          <div class="bg-blue-300 h-1.5 rounded-full transition-all duration-300" 
-               [style.width.%]="backgroundProcessingState.progress"></div>
-        </div>
-      </div>
-      <button (click)="backgroundProcessing.stopProcessing()" 
-              class="text-blue-300 hover:text-white text-xs px-2 py-1 rounded">
-        ×
-      </button>
-    </div>
-  </div>
 
   <div class="w-full px-8 py-6">
     <div class="flex flex-col gap-8">
