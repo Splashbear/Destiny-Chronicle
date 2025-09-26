@@ -1098,6 +1098,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.accountLoadingStatuses.filter(s => s.status === 'complete').length;
   }
 
+  public getOverallProgress(): number {
+    if (this.accountLoadingStatuses.length === 0) return 0;
+    return Math.round((this.getCompletedCount() / this.accountLoadingStatuses.length) * 100);
+  }
+
+  public continueInBackground(): void {
+    // Hide the progress UI but keep loading in background
+    this.showLoadingModal = false;
+    // The loading will continue in the background and update the UI when complete
+  }
+
   async loadFavorites() {
     this.favoriteAccounts = await this.activityDb.getFavorites();
     this.cdr.detectChanges();
@@ -1250,6 +1261,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.errorMessage = `Too many favorites (${favorites.length}). Only the first 10 will be loaded.`;
       favorites = favorites.slice(0, 10);
     }
+
+    // Show immediate feedback - non-blocking progress UI
+    this.showLoadingModal = true;
+    this.accountLoadingStatuses = [];
 
     // Clear any existing players
     this.selectedPlayers = [];
@@ -2802,6 +2817,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Ensure class icons can render by enriching activities with character class from PGCRs
       await this.enrichActivitiesWithCharacterClass(activities);
       if (loadToken !== this.currentLoadToken) return; // Abort if a newer load started
+
+      // Show partial results immediately if we have some activities
+      if (activities.length > 0) {
+        this.filteredActivitiesForDate = activities;
+        this.processAndGroupActivities();
+        this.cdr.detectChanges(); // Update UI immediately with partial results
+      }
 
       // Ensure Destiny manifest has finished loading so that activity names/types resolve properly
       if (!this.manifest.isLoadedSync) {
