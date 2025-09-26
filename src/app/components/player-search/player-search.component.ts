@@ -424,6 +424,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private readonly PGCR_BATCH_SIZE = 30;
   private readonly VALIDATION_DELAY = 50;
 
+  // Progressive loading properties
+  private updateBatchTimer: any = null;
+  private pendingActivityUpdates = false;
+  private readonly BATCH_UPDATE_DELAY = 500; // 500ms batching
+  
+  // Smart caching for performance
+  private lastProcessedActivitiesHash = '';
+  private lastGroupedActivities: any[] = [];
+
   showBackgroundProcessingIndicator = false;
 
   onDatePickerChange(dateInfo: {month: number, day: number}) {
@@ -1107,6 +1116,64 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Hide the progress UI but keep loading in background
     this.showLoadingModal = false;
     // The loading will continue in the background and update the UI when complete
+  }
+
+  /**
+   * Batched UI update to prevent excessive re-renders during progressive loading
+   */
+  private scheduleBatchedUpdate(): void {
+    if (this.pendingActivityUpdates) {
+      return; // Already scheduled
+    }
+
+    this.pendingActivityUpdates = true;
+    
+    if (this.updateBatchTimer) {
+      clearTimeout(this.updateBatchTimer);
+    }
+
+    this.updateBatchTimer = setTimeout(() => {
+      this.performBatchedUpdate();
+    }, this.BATCH_UPDATE_DELAY);
+  }
+
+  private performBatchedUpdate(): void {
+    if (!this.pendingActivityUpdates) {
+      return;
+    }
+
+    // Update the activities display
+    this.processAndGroupActivities();
+    this.cdr.detectChanges();
+    
+    // Reset flags
+    this.pendingActivityUpdates = false;
+    this.updateBatchTimer = null;
+  }
+
+  /**
+   * Generate a hash for activities to detect changes and avoid unnecessary processing
+   */
+  private generateActivitiesHash(activities: ActivityWithMembership[]): string {
+    if (!activities || activities.length === 0) {
+      return 'empty';
+    }
+    
+    // Create a simple hash based on activity IDs and timestamps
+    const hashData = activities
+      .map(activity => `${activity.activityDetails?.instanceId || ''}-${activity.period}`)
+      .sort()
+      .join('|');
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < hashData.length; i++) {
+      const char = hashData.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return hash.toString();
   }
 
   async loadFavorites() {
@@ -2821,8 +2888,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Show partial results immediately if we have some activities
       if (activities.length > 0) {
         this.filteredActivitiesForDate = activities;
-        this.processAndGroupActivities();
-        this.cdr.detectChanges(); // Update UI immediately with partial results
+        // Use batched updates to prevent excessive re-renders
+        this.scheduleBatchedUpdate();
       }
 
       // Ensure Destiny manifest has finished loading so that activity names/types resolve properly
