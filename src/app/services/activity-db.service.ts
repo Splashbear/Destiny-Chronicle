@@ -446,6 +446,47 @@ export class ActivityDbService extends Dexie {
     }
   }
 
+  /**
+   * Clear all activities for a specific membership (all characters)
+   * This is useful when switching between different users
+   */
+  async clearActivitiesForMembership(membershipId: string) {
+    await this.initPromise;
+    try {
+      console.log(`[CLEAR] Clearing all activities for membership ${membershipId}`);
+      
+      // First, count how many activities exist for this membership
+      const beforeCount = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .count();
+      console.log(`[CLEAR] Found ${beforeCount} activities for membership ${membershipId} before clearing`);
+      
+      // Delete all activities for this membership
+      const deletedCount = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .delete();
+      console.log(`[CLEAR] Deleted ${deletedCount} activities for membership ${membershipId}`);
+      
+      // Verify the deletion worked
+      const afterCount = await this.activities
+        .where('membershipId')
+        .equals(membershipId)
+        .count();
+      console.log(`[CLEAR] Verification: ${afterCount} activities remaining for membership ${membershipId} after clearing`);
+      
+      if (afterCount > 0) {
+        console.warn(`[CLEAR] WARNING: ${afterCount} activities still exist for membership ${membershipId} after clearing!`);
+      }
+      
+      return deletedCount;
+    } catch (error) {
+      console.error('[CLEAR] Error clearing activities for membership:', error);
+      throw error;
+    }
+  }
+
   async getAllActivitiesForCharacter(membershipId: string, characterId: string): Promise<StoredActivity[]> {
     await this.initPromise;
     try {
@@ -670,10 +711,22 @@ export class ActivityDbService extends Dexie {
   async clearAllActivities() {
     await this.initPromise;
     try {
+      console.log('[CLEAR] Clearing ALL activities from database');
+      const beforeCount = await this.activities.count();
+      console.log(`[CLEAR] Found ${beforeCount} total activities before clearing all`);
+      
       await this.activities.clear();
-      // console.log('[Dexie] All activities cleared.');
+      
+      const afterCount = await this.activities.count();
+      console.log(`[CLEAR] Verification: ${afterCount} activities remaining after clearing all`);
+      
+      if (afterCount > 0) {
+        console.warn(`[CLEAR] WARNING: ${afterCount} activities still exist after clearing all!`);
+      } else {
+        console.log('[CLEAR] Successfully cleared all activities from database');
+      }
     } catch (error) {
-      console.error('[Dexie] Error clearing all activities:', error);
+      console.error('[CLEAR] Error clearing all activities:', error);
       throw error;
     }
   }
@@ -1732,16 +1785,27 @@ export class ActivityDbService extends Dexie {
    * Manually clears all caches (useful for testing or memory pressure)
    */
   clearAllCaches(): void {
+    console.log('[CLEAR] Clearing all ActivityDbService caches');
+    
+    // Clear all LRU caches
     this.activitiesCache.data.clear();
     this.filteredActivitiesCache.data.clear();
     this.firstEverActivities.data.clear();
     this.wastedTimes.data.clear();
     this.wastedSeals.data.clear();
+    this.guardianFirstsCache.data.clear();
+    this.dungeonFirstsCache.data.clear();
     
+    // Clear cleanup timer
     if (this.cleanupTimer) {
       clearTimeout(this.cleanupTimer);
       this.cleanupTimer = undefined;
     }
+    
+    // Reset cleanup tracking
+    this.lastCleanup = Date.now();
+    
+    console.log('[CLEAR] All ActivityDbService caches cleared');
   }
 
   /**

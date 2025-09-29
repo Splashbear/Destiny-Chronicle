@@ -1973,7 +1973,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Refresh per-day activity list & stats.
       if (this.selectedDate) {
-        console.log('[DEBUG] Loading filtered activities for newly added player:', displayPlayer.displayName, 'on date:', this.selectedDate);
         await this.loadAllFilteredActivities(true);
       }
       // Recompute account summary promptly when a new account is appended
@@ -2008,6 +2007,57 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private refreshComputedViews(): void {
     this.invalidateMemoCaches();
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Cancel any ongoing background operations to prevent interference with new searches
+   */
+  private cancelBackgroundOperations(): void {
+    console.log('[CLEAR] Cancelling background operations');
+    
+    // Cancel any pending timers
+    if (this.updateBatchTimer) {
+      clearTimeout(this.updateBatchTimer);
+      this.updateBatchTimer = null;
+    }
+    
+    // Cancel any ongoing background processing by incrementing load token
+    // This will cause any ongoing loads to abort when they check the token
+    this.currentLoadToken++;
+    
+    // Reset background processing flags
+    this.pendingActivityUpdates = false;
+    this.showBackgroundProcessingIndicator = false;
+    
+    // Clear any pending activity updates
+    this.pendingActivityUpdates = false;
+    
+    console.log('[CLEAR] Background operations cancelled, new load token:', this.currentLoadToken);
+  }
+
+  /**
+   * Clear player-specific caches to prevent leftover data
+   */
+  private clearPlayerSpecificCaches(): void {
+    console.log('[CLEAR] Clearing player-specific caches');
+    
+    // Clear activity cache entries for all current players
+    for (const player of this.selectedPlayers) {
+      const playerKey = this.getPlayerKey(player);
+      this.activityCache.delete(playerKey);
+    }
+    
+    // Clear any cached character data
+    Object.keys(this.characters).forEach(key => {
+      delete this.characters[key];
+    });
+    
+    // Clear any cached activities data
+    Object.keys(this.activities).forEach(key => {
+      delete this.activities[key];
+    });
+    
+    console.log('[CLEAR] Player-specific caches cleared');
   }
 
   /** Wipe all memoised getters so newly added players appear immediately. */
@@ -2693,8 +2743,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
   private async processAndGroupActivities(): Promise<void> {
-    console.log('[DEBUG] processAndGroupActivities - filteredActivitiesForDate length:', this.filteredActivitiesForDate.length);
-    console.log('[DEBUG] processAndGroupActivities - sample activities:', this.filteredActivitiesForDate.slice(0, 3));
     const totalToProcess = this.filteredActivitiesForDate.length;
     if (totalToProcess === 0) {
       // If we have no activities for the current refresh **but** the UI
@@ -2815,8 +2863,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
     await this.setFirstEverActivityFromDb();
 
-    console.log('[DEBUG] GroupedAccounts: D1=', this.getAccountGroupsForGame('D1').length,
-                'D2=', this.getAccountGroupsForGame('D2').length);
   }
   getActivityDurationSeconds(activity: ActivityHistory): number {
     const values = activity.values as any;
@@ -3502,13 +3548,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.getPerTypeStats(type).time;
   }
   private createActivityEntry(activity: ActivityHistory): ActivityEntry {
-    // Log the activity we're trying to process
-    console.log('[DEBUG] Creating activity entry for:', {
-      activityId: activity.activityDetails?.instanceId,
-      period: activity.period,
-      mode: activity.activityDetails?.mode,
-      referenceId: activity.activityDetails?.referenceId
-    });
 
     // Find the player by looking through all activities
     const player = this.selectedPlayers.find(p => {
@@ -3801,14 +3840,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    */
   onDateInput(event: Event): void {
     const value = (event.target as HTMLInputElement).value;
-    console.log('[DEBUG] Date input value:', value);
     
     // Accept only valid yyyy-MM-dd format
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       // Convert input date to local midnight
       const inputDate = new Date(value);
       inputDate.setHours(0, 0, 0, 0);
-      console.log(`[DEBUG] Input date converted to local: ${inputDate.toLocaleString()}, UTC: ${inputDate.toISOString()}`);
       this.validateAndSetDate(inputDate.toISOString().split('T')[0]);
       this.cdr.detectChanges();
     }
@@ -3885,7 +3922,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // If not in add mode, clear all existing data first
     if (!this.addMode) {
       console.log('Not in add mode, clearing all players');
-      this.clearAllPlayers();
+      
+      // Only clear if there are actually players to clear
+      if (this.selectedPlayers.length > 0) {
+        console.log('[CLEAR] Clearing database activities for', this.selectedPlayers.length, 'previous players');
+        
+        // Clear activities for each previous player individually
+        const clearPromises = this.selectedPlayers.map(async player => {
+          console.log('[CLEAR] Clearing activities for membership:', player.membershipId, player.displayName);
+          const result = await this.activityDb.clearActivitiesForMembership(player.membershipId);
+          console.log('[CLEAR] Database clearing completed for:', player.displayName);
+          return result;
+        });
+        
+        // Wait for database clearing to complete
+        await Promise.allSettled(clearPromises);
+        console.log('[CLEAR] All database clearing operations completed');
+        
+        this.clearAllPlayers();
+      } else {
+        console.log('[CLEAR] No previous players to clear, skipping database clearing');
+        // Still clear UI state but don't touch database
+        this.clearAllPlayers();
+      }
+      
       // Clear URL parameters to avoid confusion
       this.router.navigate([], {
         relativeTo: this.route,
@@ -3901,6 +3961,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.crossSavePlayer = null;
     this.showPlatformPicker = false;
     this.loading['search'] = true;
+    
+    // Clear any previous search errors
+    this.error = {};
+    
+    // Reset search input to ensure clean state
+    this.searchUsername = this.searchUsername.trim();
     
     console.log('Starting search for:', this.searchUsername);
 
@@ -4019,6 +4085,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Clear all selected players and reset to replace mode
    */
   clearAllPlayers(): void {
+    console.log('[CLEAR] Starting clearAllPlayers - current state:', {
+      selectedPlayers: this.selectedPlayers.length,
+      filteredActivities: this.filteredActivitiesForDate.length,
+      processedActivities: this.processedActivities.length,
+      cacheSize: this.filteredActivitiesCache.size,
+      activityCacheSize: this.activityCache.size
+    });
+
+    // Cancel any ongoing background operations first
+    this.cancelBackgroundOperations();
+    
+    // Clear player-specific caches before clearing player data
+    this.clearPlayerSpecificCaches();
+    
+    // Clear core player data
     this.selectedPlayers = [];
     this.selectedCharacterIds = {};
     this.characters = {};
@@ -4053,12 +4134,38 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     this.showBackgroundProcessingIndicator = false;
     
-    // Clear caches
+    // Clear ALL caches more thoroughly
     this.clearCache();
     this.invalidateMemoCaches();
     
+    // Clear filtered activities cache completely
+    this.filteredActivitiesCache.clear();
+    
+    // Clear activity cache completely
+    this.activityCache.clear();
+    
+    // Clear database service caches
+    this.activityDb.clearAllCaches();
+    
+    // Reset all observables
+    this.filteredActivities$.next([]);
+    this.statsDebounce$.next();
+    
     // Clear selected accounts service for Analytics component
     this.selectedAccounts.clear();
+    
+    // Reset sync tracking
+    this.syncedPlayers.clear();
+    this.firstFullSyncDone = false;
+    this.initialDisplayShown = false;
+    
+    console.log('[CLEAR] clearAllPlayers completed - new state:', {
+      selectedPlayers: this.selectedPlayers.length,
+      filteredActivities: this.filteredActivitiesForDate.length,
+      processedActivities: this.processedActivities.length,
+      cacheSize: this.filteredActivitiesCache.size,
+      activityCacheSize: this.activityCache.size
+    });
     
     this.cdr.detectChanges();
   }
@@ -4121,14 +4228,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Check cache first
     const cachedActivities = this.activitiesCache.get(membershipId);
     if (cachedActivities) {
-      console.log('[DEBUG] Using cached activities for player:', membershipId);
       return cachedActivities;
     }
 
     // Get all characters for the player
     const characters = this.characters[membershipId] || [];
     if (characters.length === 0) {
-      console.log('[DEBUG] No characters found for player:', membershipId);
       return [];
     }
 
@@ -4161,7 +4266,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const cacheKey = `filtered-${this.selectedDate}-${this.selectedActivityType.label}`;
     const cachedEntry = this.filteredActivitiesCache.get(cacheKey);
     if (cachedEntry && !forceRefresh && !cachedEntry.dirty && this.firstFullSyncDone) {
-      console.log('[DEBUG] Using cached filtered activities for date:', this.selectedDate);
       return cachedEntry.list;
     }
 
@@ -4178,7 +4282,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // Get all activities for selected players in parallel
     const playerActivitiesPromises = this.selectedPlayers.map(async player => {
-      console.log('[DEBUG] Getting activities for player:', player.displayName, 'on date:', this.selectedDate);
+      // Verify that this player's activities were actually cleared from database
+      const totalActivitiesForPlayer = await this.activityDb.activities
+        .where('membershipId')
+        .equals(player.membershipId)
+        .count();
+      
+      if (totalActivitiesForPlayer > 0) {
+        console.log(`[CLEAR] Database verification: ${totalActivitiesForPlayer} activities found for ${player.displayName} - this should be 0 after clearing`);
+      }
       
       // Use the new optimized query methods based on activity type
       let playerActivities: StoredActivity[] = [];
@@ -4188,17 +4300,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-          
-        console.log('[DEBUG] Found character IDs for', player.displayName, ':', charIds);
         
         const activitiesPromises = charIds.map(async charId => {
           const activities = await this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
-          console.log('[DEBUG] Found', activities.length, 'activities for character', charId, 'of', player.displayName);
           return activities;
         });
         const activitiesArrays = await Promise.all(activitiesPromises);
         playerActivities = activitiesArrays.flat();
-        console.log('[DEBUG] Total activities for', player.displayName, ':', playerActivities.length);
       } else {
         // Get activities filtered by mode and date
         const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
@@ -4256,41 +4364,36 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     const playerFilteredActivities = await Promise.all(playerActivitiesPromises);
     allFilteredActivities.push(...playerFilteredActivities.flat());
-
-    console.log('[DEBUG] getAllFilteredActivitiesForDate - allFilteredActivities length before dedup:', allFilteredActivities.length);
-    console.log('[DEBUG] getAllFilteredActivitiesForDate - sample allFilteredActivities:', allFilteredActivities.slice(0, 3));
+    
+    // Additional verification: check if there are any activities in database for other players
+    const currentMembershipIds = this.selectedPlayers.map(p => p.membershipId);
+    const allActivitiesInDb = await this.activityDb.activities.toArray();
+    const activitiesForOtherPlayers = allActivitiesInDb.filter(activity => 
+      !currentMembershipIds.includes(activity.membershipId)
+    );
+    
+    if (activitiesForOtherPlayers.length > 0) {
+      console.warn(`[CLEAR] WARNING: Found ${activitiesForOtherPlayers.length} activities in database for other players:`, 
+        activitiesForOtherPlayers.map(a => a.membershipId));
+    }
 
     // Deduplicate by membershipId + instanceId (per-account dedupe)
     const dedupedMap = new Map<string, ActivityWithMembership>();
-    let activitiesWithInstanceId = 0;
-    let activitiesWithoutInstanceId = 0;
     
     for (const activity of allFilteredActivities) {
       const instanceId = activity.activityDetails?.instanceId;
       const membershipId = (activity as any).membershipId as string | undefined;
       if (instanceId && membershipId) {
-        activitiesWithInstanceId++;
         const key = `${membershipId}|${instanceId}`;
         if (!dedupedMap.has(key)) {
           dedupedMap.set(key, activity);
-        } else {
-          // Duplicate of the same activity instance for the same account
-          // This can happen when querying per-character; safe to ignore
         }
-      } else {
-        activitiesWithoutInstanceId++;
-        console.log('[DEBUG] Activity without instanceId or membershipId:', activity);
       }
     }
-    
-    console.log('[DEBUG] Deduplication stats (per-account) - with instanceId:', activitiesWithInstanceId, 'without instanceId:', activitiesWithoutInstanceId);
 
     const dedupedActivities = Array.from(dedupedMap.values());
     // Sort by period (descending)
     dedupedActivities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
-    
-    console.log('[DEBUG] getAllFilteredActivitiesForDate - dedupedActivities length:', dedupedActivities.length);
-    console.log('[DEBUG] getAllFilteredActivitiesForDate - sample deduped activities:', dedupedActivities.slice(0, 3));
 
     // Cache only after initial full sync completes so early partial lists don't persist
     if (this.firstFullSyncDone) {
@@ -4298,7 +4401,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     
     this.filteredActivitiesForDate = dedupedActivities;
-    console.log('[DEBUG] getAllFilteredActivitiesForDate - set filteredActivitiesForDate to:', this.filteredActivitiesForDate.length, 'activities');
     this.computeAccountStatsWithService();
     return dedupedActivities;
   }
