@@ -381,6 +381,12 @@
                 <h2 class="text-2xl font-bold text-d2-gold">Destiny 2</h2>
               </div>
               <div *ngFor="let gameGroup of getAccountGroupsForGame('D2')" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
+                <!-- Account Header -->
+                <div class="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700">
+                  <img [src]="getPlatformIconUrl(getPlatformId(gameGroup.platform))" class="w-5 h-5" alt="platform" />
+                  <span class="text-lg font-semibold text-white">{{ gameGroup.displayName }}</span>
+                  <span class="text-sm text-slate-400">({{ gameGroup.platform }})</span>
+                </div>
                 <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-8 border-2 border-blue-700 rounded-lg p-4 bg-slate-900/80">
                   <div class="flex items-center mb-4">
                     <span class="text-2xl font-bold text-blue-300 mr-3">{{ yearGroup.year }}</span>
@@ -435,6 +441,12 @@
                 <h2 class="text-2xl font-bold text-d1-silver">Destiny 1</h2>
               </div>
               <div *ngFor="let gameGroup of getAccountGroupsForGame('D1')" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
+                <!-- Account Header -->
+                <div class="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700">
+                  <img [src]="getPlatformIconUrl(getPlatformId(gameGroup.platform))" class="w-5 h-5" alt="platform" />
+                  <span class="text-lg font-semibold text-white">{{ gameGroup.displayName }}</span>
+                  <span class="text-sm text-slate-400">({{ gameGroup.platform }})</span>
+                </div>
                 <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-8 border-2 border-blue-700 rounded-lg p-4 bg-slate-900/80">
                   <div class="flex items-center mb-4">
                     <span class="text-2xl font-bold text-blue-300 mr-3">{{ yearGroup.year }}</span>

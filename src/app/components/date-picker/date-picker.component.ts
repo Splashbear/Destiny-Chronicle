@@ -10,25 +10,19 @@ import { FormsModule } from '@angular/forms';
     <div class="flex flex-col sm:flex-row gap-3 items-center">
       <!-- Month Selector -->
       <select 
-        [(ngModel)]="selectedMonth" 
+        [(ngModel)]="selectedMonth"
+        (ngModelChange)="onDateChange()"
         class="px-3 py-2 bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors">
         <option *ngFor="let month of months" [value]="month.value">{{ month.label }}</option>
       </select>
 
       <!-- Day Selector -->
       <select 
-        [(ngModel)]="selectedDay" 
+        [(ngModel)]="selectedDay"
+        (ngModelChange)="onDateChange()"
         class="px-3 py-2 bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors">
         <option *ngFor="let day of availableDays" [value]="day">{{ day }}</option>
       </select>
-
-      <!-- Search and Today buttons -->
-      <div class="flex items-center gap-2">
-        <button (click)="onSearchClick()"
-                class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors text-sm">
-          Search
-        </button>
-      </div>
     </div>
   `,
   changeDetection: ChangeDetectionStrategy.OnPush
@@ -57,12 +51,15 @@ export class DatePickerComponent implements OnInit {
     // No year handling needed - we show activities across all years for the selected month/day
   }
 
+  onDateChange() {
+    this.dateChange.emit({ month: this.selectedMonth, day: this.selectedDay });
+  }
+
   get availableDays(): number[] {
     if (!this.selectedMonth) {
       return [];
     }
 
-    // Use current year for day calculation (doesn't matter which year for day count)
     const daysInMonth = new Date(new Date().getFullYear(), this.selectedMonth, 0).getDate();
     const days: number[] = [];
     
@@ -72,12 +69,4 @@ export class DatePickerComponent implements OnInit {
     
     return days;
   }
-
-  onSearchClick(): void {
-    if (this.selectedMonth && this.selectedDay) {
-      this.dateChange.emit({ month: this.selectedMonth, day: this.selectedDay });
-    }
-  }
-
-  // Today button removed per requirements
 }
