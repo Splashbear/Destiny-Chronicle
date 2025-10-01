@@ -732,6 +732,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
+    console.log('[INIT] Component initializing');
 
     // Set default date to today (use YYYY-MM-DD format)
     const today = new Date();
@@ -776,6 +777,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       } catch (e) {
         console.warn('Invalid player data in URL:', e);
+      }
+    } else {
+      // Clean page load (no players in URL) - clear any leftover data from previous sessions
+      console.log('[INIT] Clean page load detected, clearing leftover database entries');
+      await this.activityDb.clearAllActivities();
+      const remainingCount = await this.activityDb.activities.count();
+      if (remainingCount > 0) {
+        console.error(`[INIT] CRITICAL: ${remainingCount} activities still in database after initial clear!`);
+      } else {
+        console.log('[INIT] Database cleared on initial load - verified 0 activities remaining');
       }
     }
     
@@ -3921,30 +3932,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // If not in add mode, clear all existing data first
     if (!this.addMode) {
-      console.log('Not in add mode, clearing all players');
+      console.log('[CLEAR] Not in add mode, clearing all data for replace mode');
       
-      // Only clear if there are actually players to clear
-      if (this.selectedPlayers.length > 0) {
-        console.log('[CLEAR] Clearing database activities for', this.selectedPlayers.length, 'previous players');
-        
-        // Clear activities for each previous player individually
-        const clearPromises = this.selectedPlayers.map(async player => {
-          console.log('[CLEAR] Clearing activities for membership:', player.membershipId, player.displayName);
-          const result = await this.activityDb.clearActivitiesForMembership(player.membershipId);
-          console.log('[CLEAR] Database clearing completed for:', player.displayName);
-          return result;
-        });
-        
-        // Wait for database clearing to complete
-        await Promise.allSettled(clearPromises);
-        console.log('[CLEAR] All database clearing operations completed');
-        
-        this.clearAllPlayers();
+      // AGGRESSIVE CLEARING: Clear ALL activities from database
+      // This ensures no leftover activities from any previous searches (current session or old sessions)
+      console.log('[CLEAR] Clearing ALL activities from database to ensure clean state');
+      await this.activityDb.clearAllActivities();
+      
+      // Verify the database is actually empty
+      const remainingCount = await this.activityDb.activities.count();
+      if (remainingCount > 0) {
+        console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
       } else {
-        console.log('[CLEAR] No previous players to clear, skipping database clearing');
-        // Still clear UI state but don't touch database
-        this.clearAllPlayers();
+        console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
       }
+      
+      // Clear UI state
+      this.clearAllPlayers();
       
       // Clear URL parameters to avoid confusion
       this.router.navigate([], {
