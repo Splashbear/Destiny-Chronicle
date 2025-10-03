@@ -69,14 +69,16 @@ interface TypeGroup {
 
 interface YearGroup {
   year: string;
-  typeGroups: Map<string, TypeGroup>;
+  // For template rendering we keep arrays, not Maps
+  typeGroups: TypeGroup[];
 }
 
 interface AccountGroup {
   displayName: string;
   platform: string;
   game: 'D1' | 'D2';
-  yearGroups: Map<string, YearGroup>;
+  // For template rendering we keep arrays, not Maps
+  yearGroups: YearGroup[];
 }
 
 interface ActivityGroup {
@@ -2772,7 +2774,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
     let processedCount = 0;
     // Group by account+game combination first, then by year
-    const accountGroups = new Map<string, AccountGroup>();
+    // Internal working structure uses Maps for easy grouping
+    const accountGroups = new Map<string, { displayName: string; platform: string; game: 'D1' | 'D2'; yearGroups: Map<string, { year: string; typeGroups: Map<string, TypeGroup> }> }>();
     
     for (const activity of this.filteredActivitiesForDate) {
       const game = activity.game;
@@ -2783,7 +2786,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           displayName: activity.displayName || 'Unknown Player',
           platform: activity.platform || 'Unknown',
           game,
-          yearGroups: new Map<string, YearGroup>()
+          yearGroups: new Map<string, { year: string; typeGroups: Map<string, TypeGroup> }>()
         });
       }
       const gameGroup = accountGroups.get(accountKey)!;
@@ -2867,8 +2870,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
     }
 
-    // Convert to array for template (already in AccountGroup format)
-    this.groupedActivitiesByAccount = Array.from(accountGroups.values());
+    // Convert Maps to Arrays for template (avoids NG0900/NG0200 map errors)
+    this.groupedActivitiesByAccount = Array.from(accountGroups.values()).map(acc => ({
+      displayName: acc.displayName,
+      platform: acc.platform,
+      game: acc.game,
+      yearGroups: Array.from(acc.yearGroups.values()).map(yg => ({
+        year: yg.year,
+        typeGroups: Array.from(yg.typeGroups.values())
+      }))
+    }));
     this.cdr.detectChanges();
     await this.setFirstEverActivityFromDb();
 
