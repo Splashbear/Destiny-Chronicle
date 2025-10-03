@@ -2771,18 +2771,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Initialise process-phase progress bar
     this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
     let processedCount = 0;
-    // Group by game first, then by year, consolidating all accounts
-    const gameGroups = new Map<string, { game: 'D1' | 'D2'; yearGroups: Map<string, YearGroup> }>();
+    // Group by account+game combination first, then by year
+    const accountGroups = new Map<string, AccountGroup>();
     
     for (const activity of this.filteredActivitiesForDate) {
       const game = activity.game;
-      if (!gameGroups.has(game)) {
-        gameGroups.set(game, {
+      const accountKey = `${activity.membershipId}_${game}`;
+      
+      if (!accountGroups.has(accountKey)) {
+        accountGroups.set(accountKey, {
+          displayName: activity.displayName || 'Unknown Player',
+          platform: activity.platform || 'Unknown',
           game,
           yearGroups: new Map<string, YearGroup>()
         });
       }
-      const gameGroup = gameGroups.get(game)!;
+      const gameGroup = accountGroups.get(accountKey)!;
       const year = new Date(activity.period).getFullYear().toString();
       if (!gameGroup.yearGroups.has(year)) {
         gameGroup.yearGroups.set(year, {
@@ -2855,22 +2859,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.updateLoadingProgress('process', totalToProcess, totalToProcess, 'Processing complete');
 
     // Sort activities within each group by time (descending)
-    for (const gameGroup of gameGroups.values()) {
-      for (const yearGroup of gameGroup.yearGroups.values()) {
+    for (const accountGroup of accountGroups.values()) {
+      for (const yearGroup of accountGroup.yearGroups.values()) {
         for (const typeGroup of yearGroup.typeGroups.values()) {
           typeGroup.activities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
         }
       }
     }
 
-    // Convert to the expected format for the template
-    this.groupedActivitiesByAccount = Array.from(gameGroups.values()).map(gameGroup => ({
-      game: gameGroup.game,
-      yearGroups: Array.from(gameGroup.yearGroups.values()).map(yearGroup => ({
-        year: yearGroup.year,
-        typeGroups: Array.from(yearGroup.typeGroups.values())
-      }))
-    }));
+    // Convert to array for template (already in AccountGroup format)
+    this.groupedActivitiesByAccount = Array.from(accountGroups.values());
     this.cdr.detectChanges();
     await this.setFirstEverActivityFromDb();
 
@@ -6067,7 +6065,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /** Map a platform string (Xbox, PlayStation, Steam, etc.) to Bungie membershipType so we can reuse getPlatformIcon */
-  getPlatformId(platform: string): number {
+  getPlatformId(platform: string | undefined): number {
+    if (!platform) return 0;
     const p = platform.toLowerCase();
     if (p.includes('xbox')) return 1;
     if (p.includes('playstation') || p.includes('psn') || p.includes('ps')) return 2;
