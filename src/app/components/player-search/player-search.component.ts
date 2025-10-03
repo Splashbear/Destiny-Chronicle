@@ -1134,9 +1134,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   public continueInBackground(): void {
-    // Hide the progress UI but keep loading in background
-    this.showLoadingModal = false;
-    // The loading will continue in the background and update the UI when complete
+    // Deprecated: replaced by passive notice. Keep no-op for safety.
+    this.showLoadingModal = true;
   }
 
   /**

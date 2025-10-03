@@ -176,15 +176,8 @@
           </div>
           
           <!-- Continue in Background Option -->
-          <div *ngIf="!isLoadingComplete" class="mt-3 text-center">
-            <button 
-              (click)="continueInBackground()" 
-              class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm transition-colors">
-              Continue in Background
-            </button>
-            <div class="text-xs text-slate-400 mt-1">
-              You can continue using the app while data loads
-            </div>
+          <div *ngIf="!isLoadingComplete" class="mt-3 text-center text-xs text-slate-400">
+            Please keep this tab open while the app loads your data.
           </div>
         </div>
         <!-- Date Picker -->
