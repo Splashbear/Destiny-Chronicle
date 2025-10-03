@@ -3938,14 +3938,27 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Bulk add: when in Add mode, allow comma-separated usernames
-    if (this.addMode && (this.searchUsername.includes(',') || this.searchUsername.includes('\n'))) {
+    // Bulk add: allow comma/newline-separated usernames for BOTH add mode and initial (replace) search
+    if (this.searchUsername.includes(',') || this.searchUsername.includes('\n')) {
       const names = this.parseUsernames(this.searchUsername);
       if (names.length > 1) {
+        // If not in add mode, run a one-time clear just like a normal replace search
+        if (!this.addMode) {
+          console.log('[CLEAR] Bulk initial search – clearing all data for replace mode');
+          await this.activityDb.clearAllActivities();
+          const remainingCount = await this.activityDb.activities.count();
+          if (remainingCount > 0) {
+            console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
+          } else {
+            console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
+          }
+          this.clearAllPlayers();
+          this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+        }
+
         for (const name of names) {
           await this.addPlayerByName(name);
         }
-        // Clear the input after bulk processing
         this.searchUsername = '';
         return;
       }
