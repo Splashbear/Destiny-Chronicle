@@ -413,7 +413,7 @@
                            <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
                            <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
                             <!-- Account Display Name -->
-                            <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ activity.displayName }}</span>
+                          <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ getActivityDisplayName(activity) }}</span>
                            <!-- Character Class Icon (Hunter, Titan, Warlock) -->
                            <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                            <!-- Timestamp Link -->
@@ -469,7 +469,7 @@
                           <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
                           <!-- Account Display Name -->
-                          <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ activity.displayName }}</span>
+                          <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ getActivityDisplayName(activity) }}</span>
                           <!-- Character Class Icon (Hunter, Titan, Warlock) -->
                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
                           <!-- Timestamp Link -->

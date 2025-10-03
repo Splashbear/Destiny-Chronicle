@@ -542,9 +542,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * TrackBy function for activities to optimize ngFor performance
    */
-  trackByActivity: TrackByFunction<ActivityHistory> = (index: number, activity: ActivityHistory): string => {
+  trackByActivity: TrackByFunction<ActivityWithMembership | ActivityHistory> = (index: number, activity: any): string => {
     return activity.activityDetails?.instanceId || activity.period || index.toString();
   };
+
+  /** Safely extract display name for activity rows without template type errors */
+  getActivityDisplayName(activity: any): string {
+    try {
+      const name = (activity as any)?.displayName;
+      return typeof name === 'string' && name.trim().length > 0 ? name : 'Unknown';
+    } catch {
+      return 'Unknown';
+    }
+  }
 
   /**
    * TrackBy function for players to optimize ngFor performance
