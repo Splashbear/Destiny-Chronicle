@@ -24,8 +24,7 @@ import { FormsModule } from '@angular/forms';
         <option *ngFor="let day of availableDays" [value]="day">{{ day }}</option>
       </select>
     </div>
-  `,
-  changeDetection: ChangeDetectionStrategy.OnPush
+  `
 })
 export class DatePickerComponent implements OnInit {
   @Input() selectedMonth: number = new Date().getMonth() + 1;
@@ -52,7 +51,10 @@ export class DatePickerComponent implements OnInit {
   }
 
   onDateChange() {
-    this.dateChange.emit({ month: this.selectedMonth, day: this.selectedDay });
+    // Only emit if both month and day are valid
+    if (this.selectedMonth && this.selectedDay) {
+      this.dateChange.emit({ month: this.selectedMonth, day: this.selectedDay });
+    }
   }
 
   get availableDays(): number[] {
