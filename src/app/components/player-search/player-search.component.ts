@@ -73,9 +73,7 @@ interface YearGroup {
   typeGroups: TypeGroup[];
 }
 
-interface AccountGroup {
-  displayName: string;
-  platform: string;
+interface GameGroup {
   game: 'D1' | 'D2';
   // For template rendering we keep arrays, not Maps
   yearGroups: YearGroup[];
@@ -572,8 +570,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * TrackBy function for account groups to optimize ngFor performance
    */
-  trackByAccountGroup: TrackByFunction<AccountGroup> = (index: number, group: AccountGroup): string => {
-    return `${group.displayName}_${group.platform}_${group.game}`;
+  trackByAccountGroup: TrackByFunction<GameGroup> = (index: number, group: GameGroup): string => {
+    return `${group.game}_${index}`;
   };
 
   /**
@@ -2775,29 +2773,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     let processedCount = 0;
     // Group by account+game combination first, then by year
     // Internal working structure uses Maps for easy grouping
-    const accountGroups = new Map<string, { displayName: string; platform: string; game: 'D1' | 'D2'; yearGroups: Map<string, { year: string; typeGroups: Map<string, TypeGroup> }> }>();
+    // First level: game -> year -> activityName -> aggregated ActivityWithMembership[] (multiple accounts)
+    const gameGroups = new Map<'D1' | 'D2', Map<string, { year: string; typeGroups: Map<string, TypeGroup> }>>();
     
     for (const activity of this.filteredActivitiesForDate) {
       const game = activity.game;
-      const accountKey = `${activity.membershipId}_${game}`;
-      
-      if (!accountGroups.has(accountKey)) {
-        accountGroups.set(accountKey, {
-          displayName: activity.displayName || 'Unknown Player',
-          platform: activity.platform || 'Unknown',
-          game,
-          yearGroups: new Map<string, { year: string; typeGroups: Map<string, TypeGroup> }>()
-        });
+      if (!gameGroups.has(game)) {
+        gameGroups.set(game, new Map<string, { year: string; typeGroups: Map<string, TypeGroup> }>());
       }
-      const gameGroup = accountGroups.get(accountKey)!;
+      const gameGroup = gameGroups.get(game)!;
       const year = new Date(activity.period).getFullYear().toString();
-      if (!gameGroup.yearGroups.has(year)) {
-        gameGroup.yearGroups.set(year, {
+      if (!gameGroup.has(year)) {
+        gameGroup.set(year, {
           year,
           typeGroups: new Map<string, TypeGroup>()
         });
       }
-      const yearGroup = gameGroup.yearGroups.get(year)!;
+      const yearGroup = gameGroup.get(year)!;
       // Use manifest as primary source, custom mapping as backup
       const referenceId = activity.activityDetails?.referenceId;
       const isD1 = activity.game === 'D1';
@@ -2862,8 +2854,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.updateLoadingProgress('process', totalToProcess, totalToProcess, 'Processing complete');
 
     // Sort activities within each group by time (descending)
-    for (const accountGroup of accountGroups.values()) {
-      for (const yearGroup of accountGroup.yearGroups.values()) {
+    for (const yearMap of gameGroups.values()) {
+      for (const yearGroup of yearMap.values()) {
         for (const typeGroup of yearGroup.typeGroups.values()) {
           typeGroup.activities.sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime());
         }
@@ -2871,11 +2863,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     // Convert Maps to Arrays for template (avoids NG0900/NG0200 map errors)
-    this.groupedActivitiesByAccount = Array.from(accountGroups.values()).map(acc => ({
-      displayName: acc.displayName,
-      platform: acc.platform,
-      game: acc.game,
-      yearGroups: Array.from(acc.yearGroups.values()).map(yg => ({
+    this.groupedActivitiesByAccount = Array.from(gameGroups.entries()).map(([game, years]) => ({
+      game,
+      yearGroups: Array.from(years.values()).map(yg => ({
         year: yg.year,
         typeGroups: Array.from(yg.typeGroups.values())
       }))
