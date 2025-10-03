@@ -3938,6 +3938,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
 
+    // Bulk add: when in Add mode, allow comma-separated usernames
+    if (this.addMode && (this.searchUsername.includes(',') || this.searchUsername.includes('\n'))) {
+      const names = this.parseUsernames(this.searchUsername);
+      if (names.length > 1) {
+        for (const name of names) {
+          await this.addPlayerByName(name);
+        }
+        // Clear the input after bulk processing
+        this.searchUsername = '';
+        return;
+      }
+    }
+
     // If not in add mode, clear all existing data first
     if (!this.addMode) {
       console.log('[CLEAR] Not in add mode, clearing all data for replace mode');
@@ -4070,6 +4083,95 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.loading['search'] = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /** Split input by comma/newline, trim and dedupe */
+  private parseUsernames(input: string): string[] {
+    const raw = (input || '').split(/[\n,]+/g).map(s => s.trim()).filter(Boolean);
+    return Array.from(new Set(raw));
+  }
+
+  /**
+   * Add a single player by name without clearing existing selections (used for bulk add)
+   */
+  private async addPlayerByName(name: string): Promise<void> {
+    const originalAddMode = this.addMode;
+    try {
+      this.addMode = true; // ensure append behavior
+      this.errorMessage = '';
+      this.d1SearchResults = [];
+      this.d2SearchResults = [];
+      this.crossSavePlayer = null;
+      this.showPlatformPicker = false;
+      this.loading['search'] = true;
+      this.error = {};
+      const query = name.trim();
+      if (!query) return;
+
+      const [d2Resp, d1Xbox, d1Psn] = await firstValueFrom(
+        this.bungieService.searchAllGames(query)
+      );
+
+      // D2 results
+      if (query.includes('#')) {
+        await this.processExactD2SearchResponse(d2Resp);
+      } else {
+        const results = d2Resp?.Response?.searchResults as any[] | undefined;
+        if (d2Resp && d2Resp.ErrorCode === 1 && results && results.length > 0) {
+          const players: PlayerSearchDisplay[] = [];
+          for (const user of results) {
+            const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
+            const memberships = user.destinyMemberships as any[];
+            for (const m of memberships) {
+              const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
+                ? m.crossSaveOverride
+                : m.membershipType;
+              players.push({
+                displayName: bungieName,
+                membershipId: m.membershipId,
+                membershipType: effectiveType,
+                game: 'D2',
+                platform: this.getPlatformName(effectiveType),
+                isCrossSavePrimary: m.isCrossSavePrimary,
+                crossSaveOverride: m.crossSaveOverride
+              } as PlayerSearchDisplay);
+            }
+          }
+          const unique = players.filter((p, idx, arr) => {
+            const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+            return arr.findIndex(x => `${(x as any).game || 'D2'}|${x.membershipId}` === key) === idx;
+          });
+          this.d2SearchResults = unique;
+          this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+        }
+      }
+
+      // D1 results
+      const d1Players = [...(d1Xbox || []), ...(d1Psn || [])];
+      this.d1SearchResults = d1Players.map(pl => ({
+        ...pl,
+        game: 'D1',
+        platform: this.getPlatformName(pl.membershipType)
+      }));
+
+      const total = this.d1SearchResults.length + this.d2SearchResults.length;
+      if (total === 1) {
+        const player = this.d2SearchResults[0] || this.d1SearchResults[0];
+        await this.selectPlayer(player);
+      } else if (total === 0) {
+        // Collect a soft warning but do not interrupt bulk flow
+        console.warn(`[BulkAdd] No accounts found for "${name}"`);
+      } else {
+        // Ambiguous – ask user to search this name individually later
+        console.warn(`[BulkAdd] Multiple accounts found for "${name}" – skipping. Search individually to choose.`);
+      }
+    } catch (err) {
+      console.warn(`[BulkAdd] Failed to add "${name}":`, err);
+    } finally {
+      this.loading['search'] = false;
+      this.addMode = originalAddMode;
       this.cdr.detectChanges();
     }
   }
