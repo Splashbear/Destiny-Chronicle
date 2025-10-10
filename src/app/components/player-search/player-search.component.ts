@@ -3956,9 +3956,44 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
         }
 
+        // Accumulate results across all names so the modal shows everything at once
+        this.d1SearchResults = [];
+        this.d2SearchResults = [];
+        this.crossSavePlayer = null;
+        this.showPlatformPicker = false;
+
         for (const name of names) {
-          await this.addPlayerByName(name);
+          await this.addPlayerByName(name, { accumulate: true });
         }
+
+        // Deduplicate merged arrays
+        const dedupe = (arr: PlayerSearchDisplay[]) => {
+          const seen = new Set<string>();
+          const out: PlayerSearchDisplay[] = [];
+          for (const p of arr) {
+            const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              out.push(p);
+            }
+          }
+          return out;
+        };
+        this.d1SearchResults = dedupe(this.d1SearchResults);
+        this.d2SearchResults = dedupe(this.d2SearchResults);
+        this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+
+        const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+        if (total === 0) {
+          this.errorMessage = 'No Destiny accounts found for the provided names.';
+        } else if (total === 1) {
+          const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
+          await this.selectPlayer(player);
+        } else {
+          this.showPlatformPicker = true;
+          this.focusFirstElementInModal('.modal.show');
+        }
+
         this.searchUsername = '';
         return;
       }
@@ -4109,16 +4144,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * Add a single player by name without clearing existing selections (used for bulk add)
    */
-  private async addPlayerByName(name: string): Promise<void> {
+  private async addPlayerByName(name: string, options?: { accumulate?: boolean }): Promise<void> {
     const originalAddMode = this.addMode;
+    const accumulate = options?.accumulate === true;
     try {
-      this.addMode = true; // ensure append behavior
-      this.errorMessage = '';
-      this.d1SearchResults = [];
-      this.d2SearchResults = [];
-      this.crossSavePlayer = null;
-      this.showPlatformPicker = false;
-      this.loading['search'] = true;
+      if (!accumulate) {
+        this.addMode = true; // ensure append behavior
+        this.errorMessage = '';
+        this.d1SearchResults = [];
+        this.d2SearchResults = [];
+        this.crossSavePlayer = null;
+        this.showPlatformPicker = false;
+        this.loading['search'] = true;
+      }
       this.error = {};
       const query = name.trim();
       if (!query) return;
@@ -4129,7 +4167,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // D2 results
       if (query.includes('#')) {
-        await this.processExactD2SearchResponse(d2Resp);
+        if (accumulate) {
+          if (d2Resp && d2Resp.ErrorCode === 1 && Array.isArray(d2Resp.Response)) {
+            const exactPlayers = (d2Resp.Response as any[]).map((player: any) => ({
+              ...player,
+              game: 'D2',
+              platform: this.getPlatformName(player.membershipType)
+            })) as PlayerSearchDisplay[];
+            this.d2SearchResults.push(...exactPlayers);
+          }
+        } else {
+          await this.processExactD2SearchResponse(d2Resp);
+        }
       } else {
         const results = d2Resp?.Response?.searchResults as any[] | undefined;
         if (d2Resp && d2Resp.ErrorCode === 1 && results && results.length > 0) {
@@ -4156,36 +4205,59 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
             return arr.findIndex(x => `${(x as any).game || 'D2'}|${x.membershipId}` === key) === idx;
           });
-          this.d2SearchResults = unique;
-          this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+          if (accumulate) {
+            this.d2SearchResults.push(...unique);
+          } else {
+            this.d2SearchResults = unique;
+            this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+          }
         }
       }
 
       // D1 results
       const d1Players = [...(d1Xbox || []), ...(d1Psn || [])];
-      this.d1SearchResults = d1Players.map(pl => ({
+      const d1Mapped: PlayerSearchDisplay[] = d1Players.map((pl: any) => ({
         ...pl,
-        game: 'D1',
+        game: 'D1' as 'D1',
         platform: this.getPlatformName(pl.membershipType)
       }));
-
-      const total = this.d1SearchResults.length + this.d2SearchResults.length;
-      if (total === 1) {
-        const player = this.d2SearchResults[0] || this.d1SearchResults[0];
-        await this.selectPlayer(player);
-      } else if (total === 0) {
-        // Collect a soft warning but do not interrupt bulk flow
-        console.warn(`[BulkAdd] No accounts found for "${name}"`);
+      if (accumulate) {
+        this.d1SearchResults.push(...d1Mapped);
       } else {
-        // Ambiguous – ask user to search this name individually later
-        console.warn(`[BulkAdd] Multiple accounts found for "${name}" – skipping. Search individually to choose.`);
+        this.d1SearchResults = d1Mapped;
+      }
+
+      // Handle results for this individual name
+      if (!accumulate) {
+        const total = this.d1SearchResults.length + this.d2SearchResults.length;
+        if (total === 1) {
+          const player = this.d2SearchResults[0] || this.d1SearchResults[0];
+          await this.selectPlayer(player);
+        } else if (total === 0) {
+          console.warn(`[BulkAdd] No accounts found for "${name}"`);
+        } else {
+          // Ambiguous – open multi-select modal to let user choose accounts
+          this.showPlatformPicker = true;
+          this.focusFirstElementInModal('.modal.show');
+        }
+      } else {
+        // In accumulate mode, just log ambiguous results but don't interrupt the flow
+        // The platform picker will be shown at the end after processing all names
+        const total = this.d1SearchResults.length + this.d2SearchResults.length;
+        if (total === 0) {
+          console.warn(`[BulkAdd] No accounts found for "${name}"`);
+        } else if (total > 1) {
+          console.log(`[BulkAdd] Multiple accounts found for "${name}" - will show in platform picker`);
+        }
       }
     } catch (err) {
       console.warn(`[BulkAdd] Failed to add "${name}":`, err);
     } finally {
-      this.loading['search'] = false;
-      this.addMode = originalAddMode;
-      this.cdr.detectChanges();
+      if (!accumulate) {
+        this.loading['search'] = false;
+        this.addMode = originalAddMode;
+        this.cdr.detectChanges();
+      }
     }
   }
 
@@ -4476,11 +4548,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         return !g || g === player.game;
       });
 
-      
+      // CRITICAL: Verify activities actually belong to this player before stamping displayName
+      // This prevents one player's name from appearing on another player's activities
+      playerActivities = playerActivities.filter(a => a.membershipId === player.membershipId);
       
       return playerActivities.map(activity => ({
         ...activity,
-        membershipId: player.membershipId,
+        // PRESERVE the stored membershipId - don't overwrite it
+        membershipId: activity.membershipId,
         membershipType: player.membershipType,
         displayName: player.displayName,
         platform: player.platform,
@@ -6610,6 +6685,39 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         if (bIndex === -1) return -1;
         return aIndex - bIndex;
       });
+  }
+
+  /**
+   * Group a list of activities by account (membershipId + game) so the UI
+   * can render clear subsections per account within each activity type.
+   */
+  getActivitiesGroupedByAccount(
+    activities: ActivityWithMembership[]
+  ): Array<{ membershipId: string; membershipType: number; displayName: string; platform: string; activities: ActivityWithMembership[] }> {
+    const accountMap = new Map<string, { membershipId: string; membershipType: number; displayName: string; platform: string; activities: ActivityWithMembership[] }>();
+    for (const activity of activities) {
+      const key = `${activity.membershipId}|${activity.game}`;
+      if (!accountMap.has(key)) {
+        const displayName = (activity as any)?.displayName || 'Unknown Player';
+        const platformName = activity.platform || this.getPlatformName(activity.membershipType || 0);
+        accountMap.set(key, {
+          membershipId: activity.membershipId,
+          membershipType: activity.membershipType || 0,
+          displayName,
+          platform: platformName,
+          activities: []
+        });
+      }
+      accountMap.get(key)!.activities.push(activity);
+    }
+    // Stable ordering by display name, then platform
+    const groups = Array.from(accountMap.values());
+    groups.sort((a, b) => {
+      const nameCmp = a.displayName.localeCompare(b.displayName);
+      if (nameCmp !== 0) return nameCmp;
+      return a.platform.localeCompare(b.platform);
+    });
+    return groups;
   }
 
   /**
