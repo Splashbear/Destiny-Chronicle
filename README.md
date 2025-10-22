@@ -1,7 +1,7 @@
 # Destiny Chronicle
 
 ## Overview
-Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 1 and Destiny 2 players. It provides detailed activity history, performance analytics, character progression monitoring, and historical data visualization. The app interacts with the Bungie API to fetch and display player data, focusing on a clean, responsive UI built with Angular. 
+Destiny Chronicle is a activity history application for Destiny 1 and Destiny 2 players. 
 I have about .01% coding skill, the app was built using Cursor AI agents and took about 6 months. This a niche project for a specific desire of mine, but hopefully it's helpful for others. 
 
 ## Features
