@@ -25,7 +25,11 @@ I have about .01% coding skill, the app was built using Cursor AI agents and too
 2. Access at `http://localhost:4200`
 3. Search for players and view their activity history.
 
-
+##Acknowledgements
+- The Destiny Devs Discord was invaluable in helping me with questions regarding the API's and methods of displaying the information. If you're serious about making your Destiny API app, this is a "must join".
+- Destiny Item Manager has made available some of their API to the Destiny Dev community, and their tools were incredibly helpful in speeding up the site building process.
+- User NoLifeKing on the Destiny Dev Discord was inspired by my question of how to display the PGCR's and whipped up a display site. He has generously opened that site up for developers and it is this site that I use in my PCGR links. 
+-User Chrisfried, of the Destiny Heatmap site, has allowed his site's code to be open source and available, and it provided both the intial code and the motivation for my site. 
 
 ## Deployment
 - Build for production: `ng build --prod`
