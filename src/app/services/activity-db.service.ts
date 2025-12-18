@@ -136,6 +136,7 @@ export class ActivityDbService extends Dexie {
     // Root of Nightmares - Multiple versions
     '2381413764': 'Root of Nightmares: Normal',
     '2918919505': 'Root of Nightmares: Master',
+    '2381413763': 'Root of Nightmares: Standard',
     // Vow of the Disciple - Multiple versions
     '1441982566': 'Vow of the Disciple: Standard',
     '4156879541': 'Vow of the Disciple: Legend',
@@ -806,14 +807,40 @@ export class ActivityDbService extends Dexie {
         }
       }
 
-      let family = game === 'D2'
-        ? ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash]
-        : ActivityDbService.D1_FAMILY_MAP[activityHash];
-      if (!family) {
-        // Fallback to manifest name when mapping is missing so dungeons/raids still render
-        const name = this.manifest.getActivityName(activityHash, game === 'D1');
-        if (!name) continue;
-        family = name;
+      // Automatic grouping: Check hardcoded maps first (faster, ensures all released activities work),
+      // then fall back to manifest-based detection for new activities
+      let family: string;
+      if (game === 'D2') {
+        // First check hardcoded map (ensures all currently released activities are covered)
+        family = ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash];
+        
+        // If not in hardcoded map, try automatic manifest-based grouping (for new activities)
+        if (!family) {
+          family = this.manifest.getActivityFamilyName(activityHash);
+        }
+        
+        // If still no family, use manifest name and normalize it
+        if (!family || family === 'Unknown Activity') {
+          const name = this.manifest.getActivityName(activityHash, false);
+          if (!name || name === 'Unknown Activity') continue;
+          // Normalize the name to get base (remove variant suffixes)
+          const colonIndex = name.indexOf(': ');
+          family = colonIndex !== -1 ? name.substring(0, colonIndex).trim() : name.trim();
+        } else {
+          // Normalize the family name (remove variant suffixes if any)
+          const colonIndex = family.indexOf(': ');
+          if (colonIndex !== -1) {
+            family = family.substring(0, colonIndex).trim();
+          }
+        }
+      } else {
+        // D1: Still use hardcoded map (D1 manifest doesn't have family definitions)
+        family = ActivityDbService.D1_FAMILY_MAP[activityHash];
+        if (!family) {
+          const name = this.manifest.getActivityName(activityHash, true);
+          if (!name || name === 'Unknown Activity') continue;
+          family = name;
+        }
       }
       const completed = activity.values?.completed?.basic?.value ?? 0;
       if (completed !== 1) {
@@ -837,10 +864,23 @@ export class ActivityDbService extends Dexie {
       (activity as any).needsPgcrProcessing = true;
       }
 
+      // Generate key for tracking first completions
       // For D1 raids, preserve variants by keying firsts by base family + referenceId
-      const firstsKey = (game === 'D1' && type === 'raid')
-        ? `${family}|${activityHash}`
-        : family;
+      // For D2, track contest mode separately from normal completions
+      let firstsKey: string;
+      if (game === 'D1' && type === 'raid') {
+        firstsKey = `${family}|${activityHash}`;
+      } else if (game === 'D2') {
+        // Check if this is contest mode - track separately
+        const isContest = this.manifest.isContestMode(activityHash);
+        if (isContest) {
+          firstsKey = `${family}|Contest`;
+        } else {
+          firstsKey = family;
+        }
+      } else {
+        firstsKey = family;
+      }
 
       if (!firstsByFamily[firstsKey] || new Date(activity.period) < new Date(firstsByFamily[firstsKey].period)) {
         // Process first completion for this activity
@@ -1355,23 +1395,41 @@ export class ActivityDbService extends Dexie {
       const { referenceId, mode } = activity.activityDetails;
       if (!this.isDungeon(referenceId, mode)) continue;
 
-      const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
-      if (!family) {
+      // Automatic detection: Check hardcoded map first (faster, ensures all released dungeons work),
+      // then fall back to manifest for new dungeons
+      let fullName: string;
+      
+      // First check hardcoded map (ensures all currently released dungeons are covered)
+      fullName = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
+      
+      // If not in hardcoded map, try manifest (for new dungeons)
+      let manifestName: string | undefined;
+      if (!fullName) {
+        manifestName = this.manifest.getActivityName(referenceId, false);
+        if (manifestName && manifestName !== 'Unknown Activity') {
+          fullName = manifestName;
+        }
+      }
+      
+      // If still no name, skip this activity (shouldn't happen for known dungeons)
+      if (!fullName) {
+        // Only warn if we truly can't identify it (manifest not loaded and not in map)
         console.warn(`[DungeonSoloFirsts] UNMAPPED dungeon hash found:`, {
           referenceId,
           mode,
           period: activity.period,
           playerCount: activity.values?.playerCount?.basic?.value,
-          completed: activity.values?.completed?.basic?.value
+          completed: activity.values?.completed?.basic?.value,
+          manifestName: manifestName || 'Unknown'
         });
         continue; // Unknown / unmapped dungeon hash.
       }
+      
+      // Use the full versioned name as the key for version-specific tracking
+      // e.g., "Equilibrium: Epic", "Equilibrium: Master", etc.
+      const versionKey = fullName;
 
       // Process dungeon activity (debug info available if needed)
-
-
-      // Use the full versioned name as the key for version-specific tracking
-      const versionKey = family;
 
       let entry = firstsMap.get(versionKey);
       if (!entry) {

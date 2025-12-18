@@ -70,5 +70,9 @@ export const RAID_NAMES: Record<string, { name: string; game: 'D1' | 'D2' }> = {
   '2381413762': { name: 'King\'s Fall', game: 'D2' },
   '3711931140': { name: 'Crota\'s End', game: 'D2' },
   '2381413763': { name: 'Root of Nightmares', game: 'D2' },
-  '548750096': { name: 'Scourge of the Past', game: 'D2' }
+  '2381413764': { name: 'Root of Nightmares', game: 'D2' },
+  '548750096': { name: 'Scourge of the Past', game: 'D2' },
+  '1541433876': { name: 'Salvation\'s Edge', game: 'D2' },
+  '940375169': { name: 'Salvation\'s Edge', game: 'D2' },
+  '4129614942': { name: 'Salvation\'s Edge', game: 'D2' }
 }; 

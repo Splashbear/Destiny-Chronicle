@@ -11,6 +11,7 @@ export class DestinyManifestService {
   private activityDefs: { [key: string]: any } = {};
   private titleDefs: { [key: string]: any } = {};
   private presentationNodes: { [key: string]: any } = {};
+  private activityFamilyDefs: { [key: string]: any } = {};
   private manifestLoaded = new BehaviorSubject<boolean>(false);
   
 
@@ -36,16 +37,18 @@ export class DestinyManifestService {
       if (!enPath) {
         throw new Error('Manifest metadata missing en path');
       }
-      // Step 2: Get activity, title, and presentation node definitions
-      const [activityDefsRaw, titleDefsRaw, presentationNodesRaw] = await Promise.all([
+      // Step 2: Get activity, title, presentation node, and activity family definitions
+      const [activityDefsRaw, titleDefsRaw, presentationNodesRaw, activityFamilyDefsRaw] = await Promise.all([
         firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyActivityDefinition))),
         firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyRecordDefinition))),
-        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyPresentationNodeDefinition)))
+        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyPresentationNodeDefinition))),
+        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyActivityFamilyDefinition))).catch(() => ({}) as any) // Optional, may not exist
       ]);
       // Defensive: handle both possible structures
       this.activityDefs = (activityDefsRaw as any).DestinyActivityDefinition || activityDefsRaw;
       this.titleDefs = (titleDefsRaw as any).DestinyRecordDefinition || titleDefsRaw;
       this.presentationNodes = (presentationNodesRaw as any).DestinyPresentationNodeDefinition || presentationNodesRaw;
+      this.activityFamilyDefs = (activityFamilyDefsRaw as any)?.DestinyActivityFamilyDefinition || activityFamilyDefsRaw || {};
       if (!this.activityDefs || Object.keys(this.activityDefs).length === 0) {
         throw new Error('Activity definitions failed to load');
       }
@@ -194,32 +197,8 @@ export class DestinyManifestService {
       if (mode === 90 || mode === 91) return 'exotic-mission';
       if (mode === 92 || mode === 93) return 'seasonal-event';
     }
-    // Use the mapping to determine type
-    const ACTIVITY_FAMILY_MAP = ActivityDbService['ACTIVITY_FAMILY_MAP'];
-    const family = ACTIVITY_FAMILY_MAP[refIdStr];
-    if (family) {
-      // Try to infer from the mapped family name
-      const familyLower = family.toLowerCase();
-      if (familyLower.includes('raid')) return 'raid';
-      if (familyLower.includes('dungeon')) return 'dungeon';
-
-      // If the family string doesn't contain type words, match against known base names
-      const baseName = family.includes(':') ? family.split(':')[0] : family;
-      const D2_DUNGEONS = new Set([
-        'The Shattered Throne', 'Pit of Heresy', 'Prophecy', 'Grasp of Avarice',
-        'Duality', 'Spire of the Watcher', 'Ghosts of the Deep', "Warlord's Ruin",
-        "Vesper's Host", 'Sundered Doctrine'
-      ]);
-      const D2_RAIDS = new Set([
-        'Leviathan', 'Leviathan, Eater of Worlds', 'Leviathan, Spire of Stars', 'Crown of Sorrow',
-        'Garden of Salvation', 'Deep Stone Crypt', 'Vault of Glass', 'Vow of the Disciple',
-        "King's Fall", 'Root of Nightmares', "Crota's End", "Salvation's Edge",
-        'The Pantheon'
-      ]);
-      if (D2_DUNGEONS.has(baseName)) return 'dungeon';
-      if (D2_RAIDS.has(baseName) || baseName.startsWith('The Pantheon')) return 'raid';
-    }
-    // Fall back to manifest data
+    // Primary detection: Use manifest data first for automatic detection of new activities
+    // This ensures any new raid/dungeon is detected automatically based on Bungie's type definitions
     const def = this.activityDefs[referenceId];
     if (!def) {
       // if (typeof referenceId !== 'undefined') {
@@ -227,13 +206,23 @@ export class DestinyManifestService {
       // }
       return 'other';
     }
-    // Destiny 2: Use activityTypeHash or activityModeTypes
+    
+    // Destiny 2: Use activityTypeHash or activityModeTypes - fully automatic detection
     const typeHash = def.activityTypeHash;
     const modeTypes: number[] = def.activityModeTypes || [];
+    
+    // Raid detection: activityTypeHash 2043403989 OR mode type 4
     if (typeHash === 2043403989 || modeTypes.includes(4)) return 'raid';
+    
     // Dungeon detection: check multiple known dungeon type hashes or mode 82
-    const DUNGEON_TYPE_HASHES = [608898761]; // Common dungeon type hash for Shattered Throne, Pit of Heresy, and others
+    // Common dungeon type hashes: 608898761 (most common), and others
+    const DUNGEON_TYPE_HASHES = [608898761, 1375089621]; // Add more as discovered
     if (DUNGEON_TYPE_HASHES.includes(typeHash) || modeTypes.includes(82)) return 'dungeon';
+    
+    // Additional automatic detection: check display name for keywords (fallback)
+    const name = (def.displayProperties?.name || '').toLowerCase();
+    if (name.includes('dungeon') && !name.includes('raid')) return 'dungeon';
+    if (name.includes('raid') || name.includes('leviathan')) return 'raid';
     if (typeHash === 4110605575 || modeTypes.includes(46) || modeTypes.includes(18) || modeTypes.includes(48) || modeTypes.includes(49)) return 'strike';
     if (typeHash === 3789021730 || modeTypes.includes(46)) return 'nightfall';
     if (typeHash === 1164760493 || modeTypes.some(m => [5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66].includes(m))) return 'crucible';
@@ -415,5 +404,167 @@ export class DestinyManifestService {
    */
   public getTitleDefs(): any {
     return this.titleDefs;
+  }
+
+  /**
+   * Gets the activity family hash for an activity, if available.
+   * This allows automatic grouping of activity variants.
+   */
+  getActivityFamilyHash(referenceId: string | number): number | undefined {
+    if (!this.manifestLoaded.value) return undefined;
+    const def = this.activityDefs[String(referenceId)];
+    return def?.activityFamilyHash;
+  }
+
+  /**
+   * Gets all activity hashes that belong to the same family as the given activity.
+   * This enables automatic grouping of variants (Normal, Master, Contest, Epic, etc.)
+   */
+  getActivityFamilyMembers(referenceId: string | number): string[] {
+    if (!this.manifestLoaded.value) return [];
+    const familyHash = this.getActivityFamilyHash(referenceId);
+    if (!familyHash) return [];
+
+    // Find the family definition
+    const familyDef = this.activityFamilyDefs[String(familyHash)];
+    if (!familyDef) return [];
+
+    // Handle different possible structures for family members
+    let members: any[] = [];
+    if (familyDef.members) {
+      members = Array.isArray(familyDef.members) ? familyDef.members : [];
+    } else if (familyDef.activityHashes) {
+      members = Array.isArray(familyDef.activityHashes) ? familyDef.activityHashes : [];
+    } else if (familyDef.children && familyDef.children.activities) {
+      members = Array.isArray(familyDef.children.activities) ? familyDef.children.activities : [];
+    }
+
+    // Return all activity hashes in this family
+    return members.map((member: any) => {
+      if (typeof member === 'string' || typeof member === 'number') {
+        return String(member);
+      }
+      return String(member.activityHash || member.hash || member);
+    }).filter(Boolean);
+  }
+
+  /**
+   * Automatically determines the base activity name by grouping variants.
+   * Uses manifest family data when available, falls back to name parsing.
+   */
+  getBaseActivityNameFromManifest(referenceId: string | number): string {
+    if (!this.manifestLoaded.value) {
+      const name = this.getActivityName(referenceId, false);
+      return this.normalizeBaseName(name);
+    }
+
+    const def = this.activityDefs[String(referenceId)];
+    if (!def) {
+      const name = this.getActivityName(referenceId, false);
+      return this.normalizeBaseName(name);
+    }
+
+    const name = def.displayProperties?.name || 'Unknown Activity';
+    
+    // Try to get family members to find the "base" activity (usually the first or standard one)
+    const familyMembers = this.getActivityFamilyMembers(referenceId);
+    if (familyMembers.length > 0) {
+      // Find the base activity (usually Standard/Normal variant, or first one)
+      // Check all family members to find the canonical base name
+      let baseName: string | null = null;
+      
+      for (const memberHash of familyMembers) {
+        const memberDef = this.activityDefs[memberHash];
+        if (memberDef) {
+          const memberName = memberDef.displayProperties?.name || '';
+          // Prefer Standard, Normal, or base name without variant suffix
+          if (!memberName.includes(': ')) {
+            // Found a name without variant - this is likely the base
+            baseName = memberName;
+            break;
+          } else if (!baseName && (
+              memberName.includes(': Standard') || 
+              memberName.includes(': Normal'))) {
+            baseName = this.normalizeBaseName(memberName);
+          }
+        }
+      }
+      
+      // If we found a base name, use it; otherwise normalize the current activity's name
+      if (baseName) {
+        return this.normalizeBaseName(baseName);
+      }
+      
+      // If no standard found, use the first family member's normalized name
+      const firstDef = this.activityDefs[familyMembers[0]];
+      if (firstDef) {
+        const firstName = firstDef.displayProperties?.name || name;
+        return this.normalizeBaseName(firstName);
+      }
+    }
+
+    // Fallback to name normalization
+    return this.normalizeBaseName(name);
+  }
+
+  /**
+   * Normalizes an activity name by removing variant suffixes.
+   * Handles any variant naming convention (Master, Epic, Contest, etc.)
+   */
+  private normalizeBaseName(name: string): string {
+    // Remove variant suffixes (anything after ": ")
+    const colonIndex = name.indexOf(': ');
+    if (colonIndex !== -1) {
+      return name.substring(0, colonIndex).trim();
+    }
+    return name.trim();
+  }
+
+  /**
+   * Checks if an activity is in Contest mode based on manifest data.
+   * Contest mode is typically indicated by modifiers or specific naming.
+   */
+  isContestMode(referenceId: string | number): boolean {
+    if (!this.manifestLoaded.value) return false;
+    const def = this.activityDefs[String(referenceId)];
+    if (!def) return false;
+
+    const name = (def.displayProperties?.name || '').toLowerCase();
+    
+    // Check for contest mode indicators in name
+    if (name.includes('contest') || name.includes('day one')) {
+      return true;
+    }
+
+    // Check modifiers for contest mode
+    if (def.modifiers) {
+      for (const modifier of def.modifiers) {
+        const modifierDef = this.activityDefs[String(modifier)];
+        if (modifierDef) {
+          const modifierName = (modifierDef.displayProperties?.name || '').toLowerCase();
+          if (modifierName.includes('contest')) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Gets the activity family name (base name) for grouping.
+   * This is the primary method for automatic grouping.
+   */
+  getActivityFamilyName(referenceId: string | number): string {
+    // First try manifest-based grouping
+    const baseName = this.getBaseActivityNameFromManifest(referenceId);
+    if (baseName && baseName !== 'Unknown Activity') {
+      return baseName;
+    }
+    
+    // Fallback to simple name normalization
+    const name = this.getActivityName(referenceId, false);
+    return this.normalizeBaseName(name);
   }
 } 

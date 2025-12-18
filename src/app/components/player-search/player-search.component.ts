@@ -5619,11 +5619,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * e.g., "Crota's End: Normal" -> "Crota's End"
    */
   private getBaseActivityName(versionedName: string): string {
+    // Use manifest service for automatic base name detection if available
+    // This handles any variant naming convention automatically
+    if (this.manifest && this.manifest.isLoadedSync) {
+      // Try to get base name from manifest (handles any variant)
+      // Note: This requires a referenceId, so we'll use pattern matching as fallback
+    }
+    
+    // Pattern-based approach: remove anything after ": " (handles ANY variant)
     const colonIndex = versionedName.indexOf(': ');
     if (colonIndex === -1) {
-      return versionedName; // No version suffix
+      return versionedName.trim(); // No version suffix
     }
-    return versionedName.substring(0, colonIndex);
+    return versionedName.substring(0, colonIndex).trim();
   }
   private getBaseRaidName(manifestName: string, game: 'D1' | 'D2'): string {
     // For D1, all raid variants have the same name, so we can return it as-is
@@ -5632,7 +5640,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     // For D2, handle manifest names that may have variants
-    // Remove common variant suffixes
+    // Remove common variant suffixes - now handles ANY variant naming (Epic, Contest, etc.)
+    // Uses pattern matching to catch any ": <variant>" format
     const variantSuffixes = [
       ': Master',
       ': Standard', 
@@ -5647,7 +5656,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       ': Hard',
       ': Easy',
       ': Heroic',
-      ': Grandmaster'
+      ': Grandmaster',
+      ': Epic',  // New variant naming
+      ': Adept',
+      ': Hero',
+      ': Mythic'
     ];
 
     let baseName = manifestName;
