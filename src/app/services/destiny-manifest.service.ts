@@ -201,9 +201,12 @@ export class DestinyManifestService {
     // This ensures any new raid/dungeon is detected automatically based on Bungie's type definitions
     const def = this.activityDefs[referenceId];
     if (!def) {
-      // if (typeof referenceId !== 'undefined') {
-      //   console.warn(`[DestinyManifestService] getActivityType: Unknown activity for referenceId=${referenceId}, mode=${mode} (returning 'other')`);
-      // }
+      // If manifest not loaded yet, return 'other' - will be retried when manifest loads
+      if (!this.manifestLoaded.value) {
+        return 'other';
+      }
+      // Manifest loaded but activity not found - might be a new activity not yet in cache
+      // Try to fetch it or return 'other' for now
       return 'other';
     }
     
@@ -234,8 +237,7 @@ export class DestinyManifestService {
     if (typeHash === 1063765675 || modeTypes.includes(80) || modeTypes.includes(81)) return 'seasonal';
     if (typeHash === 1234567890 || modeTypes.includes(90) || modeTypes.includes(91)) return 'exotic-mission';
     if (typeHash === 987654321 || modeTypes.includes(92) || modeTypes.includes(93)) return 'seasonal-event';
-    // As a last resort, try to infer from display name
-    const name = (def.displayProperties?.name || '').toLowerCase();
+    // As a last resort, try to infer from display name (name already declared above)
     if (name.includes('dungeon')) return 'dungeon';
     if (name.includes('leviathan') || name.includes('raid')) return 'raid';
     return 'other';
@@ -341,7 +343,7 @@ export class DestinyManifestService {
    * Debug: List all Destiny 2 titles (seals) with their hashes and names, waiting for manifest load if needed
    */
   public debugListAllD2TitlesWhenLoaded(): void {
-    this.isLoaded().subscribe(loaded => {
+    this.isLoaded().subscribe((loaded: boolean) => {
       if (loaded) {
         this.debugListAllD2Titles();
       } else {

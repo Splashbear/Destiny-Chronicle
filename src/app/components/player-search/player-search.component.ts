@@ -5115,7 +5115,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       raidVariants.get(baseName)!.set(version, raid);
     }
 
-    // Define all possible variants for each raid
+    // Define all possible variants for each raid (hardcoded for known raids)
     const raidVariantDefinitions = new Map<string, string[]>([
       ['Leviathan', ['Normal', 'Prestige']],
       ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
@@ -5126,11 +5126,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       ['Vault of Glass', ['Normal', 'Master', 'Standard']],
       ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
       ['King\'s Fall', ['Standard', 'Normal', 'Master', 'Expert']],
-      ['Root of Nightmares', ['Normal']],
+      ['Root of Nightmares', ['Normal', 'Master', 'Standard']],
       ['Crota\'s End', ['Standard', 'Normal', 'Master', 'Legend']],
       ['Salvation\'s Edge', ['Standard', 'Master']],
-      ['Last Wish', ['Standard', 'Normal']]
+      ['Last Wish', ['Standard', 'Normal']],
+      ['Desert Perpetual', ['Standard', 'Epic', 'Contest', 'Master']], // New raid - automatic detection will add more
+      ['The Pantheon', ['Oryx Exalted', 'Rhulk Indomitable', 'Atraks Sovereign', 'Nezarec Sublime']]
     ]);
+
+    // Dynamically add any discovered raids not in the hardcoded list (for new raids)
+    for (const [baseName, variants] of raidVariants) {
+      if (!raidVariantDefinitions.has(baseName)) {
+        // New raid discovered - extract all variants found
+        const discoveredVersions = Array.from(variants.keys());
+        // Add common variants that might exist
+        const commonVariants = ['Standard', 'Normal', 'Epic', 'Contest', 'Master', 'Legend', 'Expert'];
+        const allPossibleVersions = [...new Set([...discoveredVersions, ...commonVariants])];
+        raidVariantDefinitions.set(baseName, allPossibleVersions);
+      }
+    }
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
 
@@ -5191,11 +5205,24 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       ['Vault of Glass', ['Normal', 'Master', 'Standard']],
       ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
       ["King's Fall", ['Standard', 'Normal', 'Master', 'Expert']],
-      ['Root of Nightmares', ['Normal']],
+      ['Root of Nightmares', ['Normal', 'Master', 'Standard']],
       ["Crota's End", ['Standard', 'Normal', 'Master', 'Legend']],
       ["Salvation's Edge", ['Standard', 'Master']],
-      ['Last Wish', ['Standard', 'Normal']]
+      ['Last Wish', ['Standard', 'Normal']],
+      ['Desert Perpetual', ['Standard', 'Epic', 'Contest', 'Master']], // New raid
+      ['The Pantheon', ['Oryx Exalted', 'Rhulk Indomitable', 'Atraks Sovereign', 'Nezarec Sublime']]
     ]);
+
+    // Dynamically add any discovered raids not in the hardcoded list
+    for (const [baseName, variants] of raidVariants) {
+      if (!defs.has(baseName)) {
+        const discoveredVersions = Array.from(variants.keys());
+        const commonVariants = ['Standard', 'Normal', 'Epic', 'Contest', 'Master', 'Legend', 'Expert', 'Prestige'];
+        const allPossibleVersions = [...new Set([...discoveredVersions, ...commonVariants])];
+        defs.set(baseName, allPossibleVersions);
+      }
+    }
+
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
     for (const [baseName, possible] of defs) {
       const completed = raidVariants.get(baseName) || new Map();
@@ -5218,7 +5245,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * Gets the first completion image for a raid/dungeon group.
    * Falls back to manifest-based family maps to locate an appropriate referenceId
-   * when no variant has a clear yet.
+   * when no variant has a clear yet. Works automatically for new activities via manifest.
    */
   getFirstCompletionImageForRaid(raid: { baseName: string; variants: Array<{ hasClear: boolean; first?: ActivityFirstCompletion }> }): any {
     const firstWithClear = raid.variants.find(v => v.hasClear);
@@ -5226,7 +5253,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return this.getFirstCompletionImage(firstWithClear.first!);
     }
 
-    // Fallback: derive a representative referenceId from the manifest family maps
+    // Try to get referenceId from any variant (even without clear) for image lookup
+    const anyVariant = raid.variants.find(v => v.first);
+    if (anyVariant?.first?.referenceId) {
+      const pgcrImage = this.manifest.getActivityPgcrImage(anyVariant.first.referenceId, anyVariant.first.game === 'D1');
+      if (pgcrImage) {
+        if (pgcrImage.startsWith('http')) return pgcrImage;
+        if (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/')) {
+          return 'https://www.bungie.net' + pgcrImage;
+        }
+        return pgcrImage;
+      }
+    }
+
+    // Fallback: derive a representative referenceId from the hardcoded maps
     const ACTIVITY_FAMILY_MAP = (ActivityDbService as any)['ACTIVITY_FAMILY_MAP'] as Record<string, string> | undefined;
     const D1_FAMILY_MAP = (ActivityDbService as any)['D1_FAMILY_MAP'] as Record<string, string> | undefined;
 
@@ -5252,12 +5292,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
     }
 
+    // If still no refId, try to find it via manifest by searching for activities with matching base name
+    if (!refId && this.manifest.isLoadedSync) {
+      // Search manifest for activities matching the base name
+      const activityDefs = (this.manifest as any).activityDefs || {};
+      for (const [hash, def] of Object.entries(activityDefs)) {
+        const name = (def as any)?.displayProperties?.name || '';
+        const baseName = this.getBaseActivityName(name);
+        if (baseName === raid.baseName) {
+          // Check if it's a raid or dungeon
+          const type = this.manifest.getActivityType(hash, undefined);
+          if (type === 'raid' || type === 'dungeon') {
+            refId = hash;
+            break;
+          }
+        }
+      }
+    }
+
     if (refId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(refId, isD1);
       if (pgcrImage) {
         // Normalize to absolute URL when needed
         if (pgcrImage.startsWith('http')) return pgcrImage;
-        return 'https://www.bungie.net' + pgcrImage;
+        if (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/')) {
+          return 'https://www.bungie.net' + pgcrImage;
+        }
+        return pgcrImage;
       }
     }
 
@@ -5290,21 +5351,32 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       dungeonVariants.get(baseName)!.set(version, dungeon);
     }
 
-    // Define all possible variants for each dungeon
+    // Define all possible variants for each dungeon (hardcoded for known dungeons)
     const dungeonVariantDefinitions = new Map<string, string[]>([
       ['The Shattered Throne', ['Standard']],
-      ['Pit of Heresy', ['Normal', 'Master']],
-      ['Prophecy', ['Normal', 'Master']],
-      ['Grasp of Avarice', ['Normal', 'Master']],
-      ['Duality', ['Normal', 'Master']],
-      ['Spire of the Watcher', ['Normal', 'Master']],
-      ['Ghosts of the Deep', ['Normal', 'Master']],
-      ['Warlord\'s Ruin', ['Normal', 'Master']],
-      // Removed erroneous 'The Coil'
-      // Fixed incorrect name to Vesper's Host
+      ['Pit of Heresy', ['Normal', 'Master', 'Expert', 'Legend']],
+      ['Prophecy', ['Normal', 'Explorer', 'Eternity', 'Ultimatum', 'Master']],
+      ['Grasp of Avarice', ['Standard', 'Master']],
+      ['Duality', ['Standard', 'Master']],
+      ['Spire of the Watcher', ['Standard', 'Explorer', 'Eternity', 'Ultimatum', 'Master']],
+      ['Ghosts of the Deep', ['Normal', 'Explorer', 'Eternity', 'Ultimatum', 'Master']],
+      ['Warlord\'s Ruin', ['Standard', 'Master']],
       ['Vesper\'s Host', ['Normal', 'Master']],
-      ['Sundered Doctrine', ['Normal', 'Master']]
+      ['Sundered Doctrine', ['Normal', 'Master']],
+      ['Equilibrium', ['Standard', 'Epic', 'Master']] // New dungeon - automatic detection will add more
     ]);
+
+    // Dynamically add any discovered dungeons not in the hardcoded list (for new dungeons)
+    for (const [baseName, variants] of dungeonVariants) {
+      if (!dungeonVariantDefinitions.has(baseName)) {
+        // New dungeon discovered - extract all variants found
+        const discoveredVersions = Array.from(variants.keys());
+        // Add common variants that might exist
+        const commonVariants = ['Standard', 'Normal', 'Epic', 'Master', 'Explorer', 'Eternity', 'Ultimatum'];
+        const allPossibleVersions = [...new Set([...discoveredVersions, ...commonVariants])];
+        dungeonVariantDefinitions.set(baseName, allPossibleVersions);
+      }
+    }
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
 
@@ -5354,16 +5426,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     const defs = new Map<string, string[]>([
       ['The Shattered Throne', ['Standard']],
-      ['Pit of Heresy', ['Normal', 'Master']],
-      ['Prophecy', ['Normal', 'Master']],
-      ['Grasp of Avarice', ['Normal', 'Master']],
-      ['Duality', ['Normal', 'Master']],
-      ['Spire of the Watcher', ['Normal', 'Master']],
-      ['Ghosts of the Deep', ['Normal', 'Master']],
-      ["Warlord's Ruin", ['Normal', 'Master']],
+      ['Pit of Heresy', ['Normal', 'Master', 'Expert', 'Legend']],
+      ['Prophecy', ['Normal', 'Explorer', 'Eternity', 'Ultimatum', 'Master']],
+      ['Grasp of Avarice', ['Standard', 'Master']],
+      ['Duality', ['Standard', 'Master']],
+      ['Spire of the Watcher', ['Standard', 'Explorer', 'Eternity', 'Ultimatum', 'Master']],
+      ['Ghosts of the Deep', ['Normal', 'Explorer', 'Eternity', 'Ultimatum', 'Master']],
+      ["Warlord's Ruin", ['Standard', 'Master']],
       ["Vesper's Host", ['Normal', 'Master']],
-      ['Sundered Doctrine', ['Normal', 'Master']]
+      ['Sundered Doctrine', ['Normal', 'Master']],
+      ['Equilibrium', ['Standard', 'Epic', 'Master']] // New dungeon
     ]);
+
+    // Dynamically add any discovered dungeons not in the hardcoded list
+    for (const [baseName, variants] of dungeonVariants) {
+      if (!defs.has(baseName)) {
+        const discoveredVersions = Array.from(variants.keys());
+        const commonVariants = ['Standard', 'Normal', 'Epic', 'Master', 'Explorer', 'Eternity', 'Ultimatum'];
+        const allPossibleVersions = [...new Set([...discoveredVersions, ...commonVariants])];
+        defs.set(baseName, allPossibleVersions);
+      }
+    }
+
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
     for (const [baseName, possible] of defs) {
       const completed = dungeonVariants.get(baseName) || new Map();

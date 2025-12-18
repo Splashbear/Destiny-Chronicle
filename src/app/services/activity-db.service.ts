@@ -776,14 +776,12 @@ export class ActivityDbService extends Dexie {
     for (const activity of activities) {
       const activityHash = String(activity.activityDetails.referenceId);
 
-      // Determine activity type
+      // Determine activity type - ensure manifest is checked properly
       let type = this.manifest.getActivityType(activityHash, activity.activityDetails.mode);
       const allowedTypes = ['raid', 'dungeon', 'strike', 'nightfall', 'crucible', 'gambit', 'other'];
       if (!allowedTypes.includes(type)) {
         type = 'other';
       }
-
-      // Activity type detection (debug info available if needed)
 
       // --- Game-specific filters ---
       if (game === 'D1') {
@@ -802,7 +800,25 @@ export class ActivityDbService extends Dexie {
         type = 'raid';
       } else {
         // D2: only raids & dungeons
+        // Debug logging for new activities that might not be detected
         if (type !== 'raid' && type !== 'dungeon') {
+          // Log potential new raids/dungeons that aren't being detected
+          const manifestName = this.manifest.getActivityName(activityHash, false);
+          if (manifestName && manifestName !== 'Unknown Activity') {
+            const nameLower = manifestName.toLowerCase();
+            // Check if name suggests it's a raid/dungeon but wasn't detected
+            if ((nameLower.includes('raid') || nameLower.includes('desert perpetual') || 
+                 nameLower.includes('equilibrium') || nameLower.includes('dungeon')) && 
+                activity.values?.completed?.basic?.value === 1) {
+              console.warn('[DEBUG][Firsts] Potential raid/dungeon not detected:', {
+                activityHash,
+                name: manifestName,
+                detectedType: type,
+                mode: activity.activityDetails.mode,
+                period: activity.period
+              });
+            }
+          }
           continue;
         }
       }
