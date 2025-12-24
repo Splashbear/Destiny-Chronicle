@@ -4866,15 +4866,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         allFirsts.push(...firsts.firstCompletions);
       }
       // Deduplicate within the account so we keep only the earliest completion for each (game,type,name)
-      // For D1 raids, use referenceId to keep variants separate since they have the same name
+      // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
       const perName = new Map<string, ActivityFirstCompletion>();
       for (const f of allFirsts) {
         let key: string;
-        if (f.game === 'D1' && f.type === 'raid') {
-          // For D1 raids, use referenceId to keep Normal/Hard/390 variants separate
+        if ((f.game === 'D1' && f.type === 'raid') || (f.game === 'D2' && (f.type === 'raid' || f.type === 'dungeon'))) {
+          // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
           key = `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
         } else {
-          // For D2 and other activities, use the original logic
+          // For other activities, use the original logic
           key = `${f.game}|${f.type}|${f.name}`;
         }
         const existing = perName.get(key);
@@ -4890,21 +4890,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const pKey = this.getPlayerKey(player);
       this.guardianFirstsMap[pKey] = sorted;
       // recompute aggregate list (dedup by name + game + type)
-      // For D1 raids, use referenceId to keep variants separate since they have the same name
+      // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
       const aggregate: ActivityFirstCompletion[] = [];
       const seen = new Set<string>();
       Object.values(this.guardianFirstsMap).forEach(list => {
         for (const f of list) {
           let key: string;
-          if (f.game === 'D1' && f.type === 'raid') {
-            // For D1 raids, use referenceId to keep Normal/Hard/390 variants separate
+          if ((f.game === 'D1' && f.type === 'raid') || (f.game === 'D2' && (f.type === 'raid' || f.type === 'dungeon'))) {
+            // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
             key = `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
           } else {
-            // For D2 and other activities, use the original logic
+            // For other activities, use the original logic
             key = `${f.game}|${f.type}|${f.name}`;
           }
           const existing = aggregate.find(x => {
-            if (x.game === 'D1' && x.type === 'raid') {
+            if ((x.game === 'D1' && x.type === 'raid') || (x.game === 'D2' && (x.type === 'raid' || x.type === 'dungeon'))) {
               return `${x.game}|${x.type}|${x.name}|${x.referenceId}` === key;
             } else {
               return `${x.game}|${x.type}|${x.name}` === key;
@@ -4966,10 +4966,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   getPlayerPantheonRaids(player: PlayerSearchDisplay): ActivityFirstCompletion[] {
-    const list = this.getFirstsForPlayer(player).filter(f => 
-      f.type === 'raid' && f.game === 'D2' && 
-      (f.name.includes('The Pantheon:') || f.name.includes('Pantheon:'))
-    );
+    // Check by hash to ensure we catch all Pantheon raids
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    const list = this.getFirstsForPlayer(player).filter(f => {
+      if (f.type !== 'raid' || f.game !== 'D2') return false;
+      const isPantheonByName = f.name.includes('The Pantheon:') || f.name.includes('Pantheon:');
+      const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
+      return isPantheonByName || isPantheonByHash;
+    });
     return this.sortPantheonRaids(list);
   }
 
@@ -4983,27 +4987,44 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Aggregate helpers */
   getAggregateRaids(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
-    const d1Raids = this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'raid');
-    console.log('[DEBUG][D1UI] getAggregateRaids - aggregateGuardianFirsts D1 raids:', d1Raids.map(r => ({
-      name: r.name,
-      referenceId: r.referenceId,
-      completionDate: r.completionDate
-    })));
-    const earliest = this.getEarliestFirsts(d1Raids);
-    console.log('[DEBUG][D1UI] getAggregateRaids - after getEarliestFirsts:', earliest.map(r => ({
-      name: r.name,
-      referenceId: r.referenceId,
-      completionDate: r.completionDate
-    })));
+    const raids = this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'raid');
+    // Note: getEarliestFirsts is redundant here since loadGuardianFirsts already aggregates
+    // by keeping the earliest completion for each activity across all players.
+    // However, we keep it for safety in case there are edge cases.
+    // For D2, we need to exclude Pantheon raids (they have their own card)
+    // Check by hash to ensure we catch all Pantheon raids
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    const filteredRaids = game === 'D2' 
+      ? raids.filter(r => {
+          const isPantheonByName = r.name.includes('The Pantheon:') || r.name.includes('Pantheon:');
+          const isPantheonByHash = PANTHEON_HASHES.includes(String(r.referenceId));
+          return !isPantheonByName && !isPantheonByHash;
+        })
+      : raids;
+    const earliest = this.getEarliestFirsts(filteredRaids);
     return this.sortRaids(earliest, game);
   }
 
   getAggregateDungeons(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
     const dungeonFirsts = this.aggregateGuardianFirsts.filter(f => f.game === game && f.type === 'dungeon');
     
-    // Process dungeon firsts for aggregation
+    // For D2, exclude Rite of the Nine variants (they have their own card)
+    const filteredDungeons = game === 'D2'
+      ? dungeonFirsts.filter(d => {
+          const isRiteOfTheNine = (d.name.includes('Ghosts of the Deep') ||
+                                   d.name.includes('Spire of the Watcher') ||
+                                   d.name.includes('Prophecy')) &&
+                                  (d.name.includes('Explorer') ||
+                                   d.name.includes('Eternity') ||
+                                   d.name.includes('Ultimatum'));
+          return !isRiteOfTheNine;
+        })
+      : dungeonFirsts;
     
-    const earliest = this.getEarliestFirsts(dungeonFirsts);
+    // Note: getEarliestFirsts is redundant here since loadGuardianFirsts already aggregates
+    // by keeping the earliest completion for each activity across all players.
+    // However, we keep it for safety in case there are edge cases.
+    const earliest = this.getEarliestFirsts(filteredDungeons);
     return this.sortDungeons(earliest);
   }
 
@@ -5027,10 +5048,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Gets Pantheon raids grouped by base activity name with versions
    */
   getGroupedPantheonRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
-    const allRaids = this.getAggregateRaids('D2');
-    const pantheonRaids = allRaids.filter(raid => 
-      raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:')
-    );
+    // Get Pantheon raids from aggregate, checking by hash to ensure we catch all
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    const allRaids = this.aggregateGuardianFirsts.filter(f => f.game === 'D2' && f.type === 'raid');
+    const pantheonRaids = allRaids.filter(raid => {
+      const isPantheonByName = raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:');
+      const isPantheonByHash = PANTHEON_HASHES.includes(String(raid.referenceId));
+      return isPantheonByName || isPantheonByHash;
+    });
     const sortedPantheonRaids = this.sortPantheonRaids(pantheonRaids);
     return this.groupActivitiesByBaseName(sortedPantheonRaids);
   }
@@ -5042,7 +5067,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Per-player Pantheon groups */
   public getGroupedPantheonRaidsForPlayer(player: PlayerSearchDisplay): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
-    const list = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === 'D2' && (f.name.includes('The Pantheon:') || f.name.includes('Pantheon:')));
+    // Check by hash to ensure we catch all Pantheon raids
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    const list = this.getFirstsForPlayer(player).filter(f => {
+      if (f.type !== 'raid' || f.game !== 'D2') return false;
+      const isPantheonByName = f.name.includes('The Pantheon:') || f.name.includes('Pantheon:');
+      const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
+      return isPantheonByName || isPantheonByHash;
+    });
     return this.groupActivitiesByBaseName(list);
   }
 
@@ -5102,12 +5134,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }> {
     const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
     
-    // Collect all completed raids
-    const allRaids = this.getAggregateRaids('D2');
+    // Collect all completed raids, excluding Pantheon (they have their own card)
+    // Check by hash to ensure we catch all Pantheon raids
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    const allRaids = this.getAggregateRaids('D2').filter(raid => {
+      const isPantheonByName = raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:');
+      const isPantheonByHash = PANTHEON_HASHES.includes(String(raid.referenceId));
+      return !isPantheonByName && !isPantheonByHash;
+    });
     
     for (const raid of allRaids) {
-      const baseName = this.getBaseActivityName(raid.name);
-      const version = this.getActivityVersion(raid.name);
+      // Handle special case: "The Desert Perpetual (Epic): Contest" -> base: "The Desert Perpetual", version: "Epic: Contest"
+      let baseName = this.getBaseActivityName(raid.name);
+      let version = this.getActivityVersion(raid.name);
+      
+      // Normalize "The Desert Perpetual (Epic): Contest" to base "The Desert Perpetual" with version "Epic: Contest"
+      if (baseName.includes('The Desert Perpetual') && baseName.includes('(Epic)')) {
+        baseName = 'The Desert Perpetual';
+        version = `Epic: ${version}`;
+      }
       
       if (!raidVariants.has(baseName)) {
         raidVariants.set(baseName, new Map());
@@ -5126,10 +5171,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       ['Vault of Glass', ['Normal', 'Master', 'Standard']],
       ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
       ['King\'s Fall', ['Standard', 'Normal', 'Master', 'Expert']],
-      ['Root of Nightmares', ['Normal']],
+      ['Root of Nightmares', ['Normal', 'Master']],
       ['Crota\'s End', ['Standard', 'Normal', 'Master', 'Legend']],
       ['Salvation\'s Edge', ['Standard', 'Master']],
-      ['Last Wish', ['Standard', 'Normal']]
+      ['Last Wish', ['Standard', 'Normal']],
+      ['The Desert Perpetual', ['Standard', 'Normal', 'Contest', 'Epic: Contest', 'Epic: Standard']]
     ]);
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
@@ -5165,7 +5211,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
 
-    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+    // Sort by earliest completion date, with Pantheon first
+    return result.sort((a, b) => {
+      // Pantheon always comes first
+      if (a.baseName.includes('Pantheon')) return -1;
+      if (b.baseName.includes('Pantheon')) return 1;
+      
+      // Get earliest completion date for each group
+      const getEarliestDate = (group: typeof a) => {
+        const dates = group.variants
+          .filter(v => v.first)
+          .map(v => new Date(v.first!.completionDate).getTime());
+        return dates.length > 0 ? Math.min(...dates) : Infinity;
+      };
+      
+      const aDate = getEarliestDate(a);
+      const bDate = getEarliestDate(b);
+      
+      // If both have completions, sort by date (earliest first)
+      if (aDate !== Infinity && bDate !== Infinity) {
+        return aDate - bDate;
+      }
+      // If only one has completions, it comes first
+      if (aDate !== Infinity) return -1;
+      if (bDate !== Infinity) return 1;
+      // If neither has completions, sort alphabetically
+      return a.baseName.localeCompare(b.baseName);
+    });
   }
 
   /** Per-player: D2 raids with variants */
@@ -5174,10 +5246,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }>;
   }> {
     const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
-    const all = this.getFirstsForPlayer(player).filter(f => f.type === 'raid' && f.game === 'D2');
+    // Exclude Pantheon raids (they have their own card)
+    // Check by hash to ensure we catch all Pantheon raids
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    const all = this.getFirstsForPlayer(player).filter(f => {
+      if (f.type !== 'raid' || f.game !== 'D2') return false;
+      const isPantheonByName = f.name.includes('The Pantheon:') || f.name.includes('Pantheon:');
+      const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
+      return !isPantheonByName && !isPantheonByHash;
+    });
     for (const raid of all) {
-      const baseName = this.getBaseActivityName(raid.name);
-      const version = this.getActivityVersion(raid.name);
+      // Handle special case: "The Desert Perpetual (Epic): Contest" -> base: "The Desert Perpetual", version: "Epic: Contest"
+      let baseName = this.getBaseActivityName(raid.name);
+      let version = this.getActivityVersion(raid.name);
+      
+      // Normalize "The Desert Perpetual (Epic): Contest" to base "The Desert Perpetual" with version "Epic: Contest"
+      if (baseName.includes('The Desert Perpetual') && baseName.includes('(Epic)')) {
+        baseName = 'The Desert Perpetual';
+        version = `Epic: ${version}`;
+      }
+      
       if (!raidVariants.has(baseName)) raidVariants.set(baseName, new Map());
       raidVariants.get(baseName)!.set(version, raid);
     }
@@ -5191,10 +5279,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       ['Vault of Glass', ['Normal', 'Master', 'Standard']],
       ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
       ["King's Fall", ['Standard', 'Normal', 'Master', 'Expert']],
-      ['Root of Nightmares', ['Normal']],
+      ['Root of Nightmares', ['Normal', 'Master']],
       ["Crota's End", ['Standard', 'Normal', 'Master', 'Legend']],
       ["Salvation's Edge", ['Standard', 'Master']],
-      ['Last Wish', ['Standard', 'Normal']]
+      ['Last Wish', ['Standard', 'Normal']],
+      ['The Desert Perpetual', ['Standard', 'Normal', 'Contest', 'Epic: Contest', 'Epic: Standard']]
     ]);
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
     for (const [baseName, possible] of defs) {
@@ -5213,7 +5302,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       result.push({ baseName, variants });
     }
-    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+    
+    // Sort by earliest completion date, with Pantheon first
+    return result.sort((a, b) => {
+      // Pantheon always comes first
+      if (a.baseName.includes('Pantheon')) return -1;
+      if (b.baseName.includes('Pantheon')) return 1;
+      
+      // Get earliest completion date for each group
+      const getEarliestDate = (group: typeof a) => {
+        const dates = group.variants
+          .filter(v => v.first)
+          .map(v => new Date(v.first!.completionDate).getTime());
+        return dates.length > 0 ? Math.min(...dates) : Infinity;
+      };
+      
+      const aDate = getEarliestDate(a);
+      const bDate = getEarliestDate(b);
+      
+      // If both have completions, sort by date (earliest first)
+      if (aDate !== Infinity && bDate !== Infinity) {
+        return aDate - bDate;
+      }
+      // If only one has completions, it comes first
+      if (aDate !== Infinity) return -1;
+      if (bDate !== Infinity) return 1;
+      // If neither has completions, sort alphabetically
+      return a.baseName.localeCompare(b.baseName);
+    });
   }
   /**
    * Gets the first completion image for a raid/dungeon group.
@@ -5277,8 +5393,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }> {
     const dungeonVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
     
-    // Collect all completed dungeons
-    const allDungeons = this.getAggregateDungeons('D2');
+    // Collect all completed dungeons, excluding Rite of the Nine variants (they have their own card)
+    const allDungeons = this.getAggregateDungeons('D2').filter(dungeon => {
+      // Exclude Rite of the Nine variants (Explorer, Eternity, Ultimatum) for Ghosts, Spire, and Prophecy
+      const isRiteOfTheNine = (dungeon.name.includes('Ghosts of the Deep') ||
+                                dungeon.name.includes('Spire of the Watcher') ||
+                                dungeon.name.includes('Prophecy')) &&
+                               (dungeon.name.includes('Explorer') ||
+                                dungeon.name.includes('Eternity') ||
+                                dungeon.name.includes('Ultimatum'));
+      return !isRiteOfTheNine;
+    });
     
     for (const dungeon of allDungeons) {
       const baseName = this.getBaseActivityName(dungeon.name);
@@ -5293,17 +5418,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Define all possible variants for each dungeon
     const dungeonVariantDefinitions = new Map<string, string[]>([
       ['The Shattered Throne', ['Standard']],
-      ['Pit of Heresy', ['Normal', 'Master']],
-      ['Prophecy', ['Normal', 'Master']],
+      ['Pit of Heresy', ['Normal']],
+      ['Prophecy', ['Normal']],
       ['Grasp of Avarice', ['Normal', 'Master']],
       ['Duality', ['Normal', 'Master']],
       ['Spire of the Watcher', ['Normal', 'Master']],
       ['Ghosts of the Deep', ['Normal', 'Master']],
       ['Warlord\'s Ruin', ['Normal', 'Master']],
-      // Removed erroneous 'The Coil'
-      // Fixed incorrect name to Vesper's Host
       ['Vesper\'s Host', ['Normal', 'Master']],
-      ['Sundered Doctrine', ['Normal', 'Master']]
+      ['Sundered Doctrine', ['Normal', 'Master']],
+      ['Equilibrium', ['Normal', 'Master']]
     ]);
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
@@ -5336,7 +5460,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
 
-    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+    // Sort by earliest completion date, with Rite of the Nine first
+    return result.sort((a, b) => {
+      // Rite of the Nine always comes first
+      if (a.baseName.includes('Rite of the Nine')) return -1;
+      if (b.baseName.includes('Rite of the Nine')) return 1;
+      
+      // Get earliest completion date for each group
+      const getEarliestDate = (group: typeof a) => {
+        const dates = group.variants
+          .filter(v => v.first)
+          .map(v => new Date(v.first!.completionDate).getTime());
+        return dates.length > 0 ? Math.min(...dates) : Infinity;
+      };
+      
+      const aDate = getEarliestDate(a);
+      const bDate = getEarliestDate(b);
+      
+      // If both have completions, sort by date (earliest first)
+      if (aDate !== Infinity && bDate !== Infinity) {
+        return aDate - bDate;
+      }
+      // If only one has completions, it comes first
+      if (aDate !== Infinity) return -1;
+      if (bDate !== Infinity) return 1;
+      // If neither has completions, sort alphabetically
+      return a.baseName.localeCompare(b.baseName);
+    });
   }
 
   /** Per-player: D2 dungeons with variants */
@@ -5345,7 +5495,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }>;
   }> {
     const dungeonVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
-    const all = this.getFirstsForPlayer(player).filter(f => f.type === 'dungeon' && f.game === 'D2');
+    // Exclude Rite of the Nine variants (they have their own card)
+    const all = this.getFirstsForPlayer(player).filter(f => {
+      if (f.type !== 'dungeon' || f.game !== 'D2') return false;
+      // Exclude Rite of the Nine variants
+      const isRiteOfTheNine = (f.name.includes('Ghosts of the Deep') ||
+                                f.name.includes('Spire of the Watcher') ||
+                                f.name.includes('Prophecy')) &&
+                               (f.name.includes('Explorer') ||
+                                f.name.includes('Eternity') ||
+                                f.name.includes('Ultimatum'));
+      return !isRiteOfTheNine;
+    });
     for (const d of all) {
       const baseName = this.getBaseActivityName(d.name);
       const version = this.getActivityVersion(d.name);
@@ -5354,15 +5515,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     const defs = new Map<string, string[]>([
       ['The Shattered Throne', ['Standard']],
-      ['Pit of Heresy', ['Normal', 'Master']],
-      ['Prophecy', ['Normal', 'Master']],
+      ['Pit of Heresy', ['Normal']],
+      ['Prophecy', ['Normal']],
       ['Grasp of Avarice', ['Normal', 'Master']],
       ['Duality', ['Normal', 'Master']],
       ['Spire of the Watcher', ['Normal', 'Master']],
       ['Ghosts of the Deep', ['Normal', 'Master']],
       ["Warlord's Ruin", ['Normal', 'Master']],
       ["Vesper's Host", ['Normal', 'Master']],
-      ['Sundered Doctrine', ['Normal', 'Master']]
+      ['Sundered Doctrine', ['Normal', 'Master']],
+      ['Equilibrium', ['Normal', 'Master']]
     ]);
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
     for (const [baseName, possible] of defs) {
@@ -5381,7 +5543,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       result.push({ baseName, variants });
     }
-    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+    
+    // Sort by earliest completion date, with Rite of the Nine first
+    return result.sort((a, b) => {
+      // Rite of the Nine always comes first
+      if (a.baseName.includes('Rite of the Nine')) return -1;
+      if (b.baseName.includes('Rite of the Nine')) return 1;
+      
+      // Get earliest completion date for each group
+      const getEarliestDate = (group: typeof a) => {
+        const dates = group.variants
+          .filter(v => v.first)
+          .map(v => new Date(v.first!.completionDate).getTime());
+        return dates.length > 0 ? Math.min(...dates) : Infinity;
+      };
+      
+      const aDate = getEarliestDate(a);
+      const bDate = getEarliestDate(b);
+      
+      // If both have completions, sort by date (earliest first)
+      if (aDate !== Infinity && bDate !== Infinity) {
+        return aDate - bDate;
+      }
+      // If only one has completions, it comes first
+      if (aDate !== Infinity) return -1;
+      if (bDate !== Infinity) return 1;
+      // If neither has completions, sort alphabetically
+      return a.baseName.localeCompare(b.baseName);
+    });
   }
   /**
    * Gets all D1 raids with all possible variants (completed or not)
@@ -5673,6 +5862,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (baseName.includes('Root of Nightmares')) return 'Root of Nightmares';
     if (baseName.includes('Crota\'s End')) return 'Crota\'s End';
     if (baseName.includes('Salvation\'s Edge')) return 'Salvation\'s Edge';
+    if (baseName.includes('The Desert Perpetual')) return 'The Desert Perpetual';
     if (baseName.includes('The Final Shape')) return 'The Final Shape';
     if (baseName.includes('Duality')) return 'Duality';
     if (baseName.includes('Grasp of Avarice')) return 'Grasp of Avarice';
@@ -6905,6 +7095,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
   async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
     this.activeTab = tab;
+    if (tab === 'firsts' && this.selectedPlayers.length > 0) {
+      // Update platform tabs when switching to firsts tab
+      this.updatePlatformTabs();
+    }
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
       this.loadingTitlesOverall = true;
       for (const player of this.selectedPlayers) {
@@ -7635,7 +7829,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }>;
   }> {
     // Collect the three Rite of the Nine dungeons only
-    const dungeons = this.getAggregateDungeons('D2').filter(dungeon =>
+    // Get directly from aggregateGuardianFirsts since getAggregateDungeons filters them out
+    const allDungeonFirsts = this.aggregateGuardianFirsts.filter(f => f.game === 'D2' && f.type === 'dungeon');
+    const earliest = this.getEarliestFirsts(allDungeonFirsts);
+    const dungeons = earliest.filter(dungeon =>
       (dungeon.name.includes('Ghosts of the Deep') ||
        dungeon.name.includes('Spire of the Watcher') ||
        dungeon.name.includes('Prophecy')) &&

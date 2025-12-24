@@ -139,6 +139,12 @@ export class DestinyManifestService {
     if (refIdStr === '2032534090' || refIdStr === '1347078175') {
       return 'dungeon';
     }
+    
+    // Explicit Pantheon raid hash detection
+    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
+    if (PANTHEON_HASHES.includes(refIdStr)) {
+      return 'raid';
+    }
 
     // D1 raid hashes (all known D1 raid activity referenceIds)
     const D1_RAID_HASHES = [
@@ -208,13 +214,13 @@ export class DestinyManifestService {
       const D2_DUNGEONS = new Set([
         'The Shattered Throne', 'Pit of Heresy', 'Prophecy', 'Grasp of Avarice',
         'Duality', 'Spire of the Watcher', 'Ghosts of the Deep', "Warlord's Ruin",
-        "Vesper's Host", 'Sundered Doctrine'
+        "Vesper's Host", 'Sundered Doctrine', 'Equilibrium'
       ]);
       const D2_RAIDS = new Set([
         'Leviathan', 'Leviathan, Eater of Worlds', 'Leviathan, Spire of Stars', 'Crown of Sorrow',
         'Garden of Salvation', 'Deep Stone Crypt', 'Vault of Glass', 'Vow of the Disciple',
         "King's Fall", 'Root of Nightmares', "Crota's End", "Salvation's Edge",
-        'The Pantheon'
+        'The Pantheon', 'The Desert Perpetual'
       ]);
       if (D2_DUNGEONS.has(baseName)) return 'dungeon';
       if (D2_RAIDS.has(baseName) || baseName.startsWith('The Pantheon')) return 'raid';

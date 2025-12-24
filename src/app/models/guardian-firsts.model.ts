@@ -15,6 +15,10 @@ export interface ActivityFirstCompletion {
   completed: number;
   isSolo?: boolean;
   isSoloFlawless?: boolean;
+  /** Optional flawless status for raids (all players with 0 deaths) */
+  isFlawless?: boolean;
+  /** Optional fireteam size from PGCR data */
+  fireteamSize?: number;
 }
 
 export interface GuardianFirsts {

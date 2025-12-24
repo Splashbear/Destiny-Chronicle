@@ -216,6 +216,15 @@ export class ActivityDbService extends Dexie {
     // Sundered Doctrine - Multiple versions
     '3834447244': "Sundered Doctrine: Normal",
     '3521648250': "Sundered Doctrine: Master",
+    // Equilibrium - Multiple versions
+    '1754635208': "Equilibrium: Contest", // Contest mode hash
+    // TODO: Add Equilibrium Normal and Master hashes when discovered
+    // --- Destiny 2 Raids (continued) ---
+    // Desert Perpetual - Multiple versions
+    '1044919065': "The Desert Perpetual: Standard", // Standard mode
+    '3896382790': "The Desert Perpetual: Contest", // Standard contest mode hash
+    '3817322389': "The Desert Perpetual: Epic", // Epic mode
+    '2586252122': "The Desert Perpetual (Epic): Contest", // Epic contest mode hash
     // --- Destiny 1 Raids ---
     '3801607287': 'Vault of Glass',
     '708693006': 'Vault of Glass',
@@ -770,7 +779,12 @@ export class ActivityDbService extends Dexie {
     // Group by raid/dungeon family and find the first activity for each
     const firstsByFamily: { [family: string]: ActivityFirstCompletion } = {};
 
-    console.log(`[DEBUG][D1Firsts] Processing ${activities.length} activities for ${membershipId}/${characterId} (${game})`);
+    console.log(`[DEBUG][Firsts] Processing ${activities.length} activities for ${membershipId}/${characterId} (${game})`);
+
+    let skippedByType = 0;
+    let skippedByCompletion = 0;
+    let skippedByFamily = 0;
+    let processedCount = 0;
 
     for (const activity of activities) {
       const activityHash = String(activity.activityDetails.referenceId);
@@ -801,8 +815,63 @@ export class ActivityDbService extends Dexie {
         type = 'raid';
       } else {
         // D2: only raids & dungeons
+        // Check if this might be a contest mode raid or dungeon that wasn't identified
         if (type !== 'raid' && type !== 'dungeon') {
-          continue;
+          // Check if the manifest name suggests this is a raid or dungeon (e.g., contains "Contest" or known names)
+          const manifestName = this.manifest.getActivityName(activityHash, false);
+          if (manifestName && manifestName !== 'Unknown Activity') {
+            const nameLower = manifestName.toLowerCase();
+            // Check if it's a contest mode activity
+            const isContestMode = nameLower.includes('contest') || nameLower.includes('day one');
+            
+            // Known raid base names (used to identify raids even if not in the map)
+            const knownRaidNames = [
+              'leviathan', 'last wish', 'garden of salvation', 'deep stone crypt',
+              'vault of glass', "king's fall", "crota's end", 'vow of the disciple',
+              'root of nightmares', "salvation's edge", 'scourge of the past',
+              'crown of sorrow', 'eater of worlds', 'spire of stars', 'pantheon',
+              'desert perpetual'
+            ];
+            
+            // Known dungeon base names
+            const knownDungeonNames = [
+              'shattered throne', 'pit of heresy', 'prophecy', 'grasp of avarice',
+              'duality', 'spire of the watcher', 'ghosts of the deep', "warlord's ruin",
+              "vesper's host", 'sundered doctrine', 'equilibrium'
+            ];
+            
+            const isKnownRaid = knownRaidNames.some(raidName => nameLower.includes(raidName));
+            const isKnownDungeon = knownDungeonNames.some(dungeonName => nameLower.includes(dungeonName));
+            
+            // Check if mode is raid mode (4) or dungeon mode (82)
+            const isRaidMode = activity.activityDetails.mode === 4;
+            const isDungeonMode = activity.activityDetails.mode === 82;
+            
+            // If it's contest mode with a known raid/dungeon name, or known name with matching mode, treat accordingly
+            if ((isContestMode && isKnownRaid) || (isKnownRaid && isRaidMode)) {
+              type = 'raid';
+              console.log(`[DEBUG][Firsts] Identified contest/unknown raid activity as raid:`, {
+                activityHash,
+                manifestName,
+                mode: activity.activityDetails.mode,
+                period: activity.period
+              });
+            } else if ((isContestMode && isKnownDungeon) || (isKnownDungeon && isDungeonMode)) {
+              type = 'dungeon';
+              console.log(`[DEBUG][Firsts] Identified contest/unknown dungeon activity as dungeon:`, {
+                activityHash,
+                manifestName,
+                mode: activity.activityDetails.mode,
+                period: activity.period
+              });
+            } else {
+              skippedByType++;
+              continue;
+            }
+          } else {
+            skippedByType++;
+            continue;
+          }
         }
       }
 
@@ -812,17 +881,52 @@ export class ActivityDbService extends Dexie {
       if (!family) {
         // Fallback to manifest name when mapping is missing so dungeons/raids still render
         const name = this.manifest.getActivityName(activityHash, game === 'D1');
-        if (!name) continue;
+        if (!name || name === 'Unknown Activity') {
+          skippedByFamily++;
+          console.warn(`[Firsts] Skipping activity - no family mapping and no manifest name:`, {
+            activityHash,
+            type,
+            mode: activity.activityDetails.mode,
+            period: activity.period,
+            instanceId: activity.activityDetails.instanceId
+          });
+          continue;
+        }
         family = name;
+        
+        // Log when we're using manifest name fallback for raids/dungeons (might need to add to map)
+        if (type === 'raid' || type === 'dungeon') {
+          console.log(`[Firsts] Using manifest name fallback for ${type}:`, {
+            activityHash,
+            manifestName: name,
+            mode: activity.activityDetails.mode,
+            period: activity.period,
+            instanceId: activity.activityDetails.instanceId,
+            note: 'Consider adding to ACTIVITY_FAMILY_MAP if this is a valid raid/dungeon'
+          });
+        }
+        
+        // For contest mode activities, try to extract the base raid/dungeon name
+        // e.g., "Last Wish: Contest" -> "Last Wish: Normal" (or just "Last Wish")
+        // e.g., "Equilibrium: Contest" -> "Equilibrium: Contest" (keep as is since it's in the map)
+        if (family.includes(': Contest') || family.includes(': Day One')) {
+          // Extract base name and normalize to match family mapping format
+          const baseName = family.split(':')[0].trim();
+          // Try to find a matching family entry for this base name
+          const matchingFamily = Object.values(ActivityDbService.ACTIVITY_FAMILY_MAP)
+            .find(f => f.startsWith(baseName));
+          if (matchingFamily) {
+            // Use the base family name but keep the contest variant in the name
+            // This ensures contest mode activities are grouped with their base activity
+            const baseFamilyName = matchingFamily.split(':')[0];
+            family = baseFamilyName + ': Contest';
+          }
+          // If no matching family found but it's in the map (like Equilibrium: Contest), keep it as is
+        }
       }
       const completed = activity.values?.completed?.basic?.value ?? 0;
       if (completed !== 1) {
-        // console.log('[DEBUG][Firsts][Skip] Not a completion:', {
-        //   name: this.manifest.getActivityName(activityHash, game === 'D1'),
-        //   completed,
-        //   period: activity.period,
-        //   referenceId: activityHash
-        // });
+        skippedByCompletion++;
         continue;
       }
 
@@ -835,23 +939,29 @@ export class ActivityDbService extends Dexie {
         (game === 'D1' && type === 'raid')) {
       // We'll process PGCR data in batch after the loop to reduce individual API calls
       (activity as any).needsPgcrProcessing = true;
+      console.log(`[DEBUG][Firsts] Marked ${this.manifest.getActivityName(activityHash, game === 'D1')} (${type}) for PGCR processing, instanceId: ${activity.activityDetails.instanceId}`);
       }
 
-      // For D1 raids, preserve variants by keying firsts by base family + referenceId
-      const firstsKey = (game === 'D1' && type === 'raid')
+      // For D1 raids and D2 raids/dungeons, preserve variants by keying firsts by family + referenceId
+      // This ensures different difficulty variants (Normal, Master, etc.) are tracked separately
+      const firstsKey = ((game === 'D1' && type === 'raid') || (game === 'D2' && (type === 'raid' || type === 'dungeon')))
         ? `${family}|${activityHash}`
         : family;
 
+      // Note: We use Activity History period for initial comparison, but for raids/dungeons,
+      // we will fetch PGCR and use PGCR period (the authoritative timestamp) in processPGCRData.
+      // This initial comparison is just to narrow down candidates - final period comes from PGCR.
       if (!firstsByFamily[firstsKey] || new Date(activity.period) < new Date(firstsByFamily[firstsKey].period)) {
         // Process first completion for this activity
+        processedCount++;
 
         firstsByFamily[firstsKey] = {
           name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
           type: type as ActivityFirstCompletion['type'],
           game,
-          completionDate: activity.period,
+          completionDate: activity.period, // Will be updated from PGCR period in processPGCRData
           referenceId: activityHash,
-          period: activity.period,
+          period: activity.period, // Will be updated from PGCR period in processPGCRData
           instanceId: activity.activityDetails.instanceId,
           mode: activity.activityDetails.mode,
           characterId,
@@ -861,14 +971,75 @@ export class ActivityDbService extends Dexie {
           completed,
           isSolo,
           isSoloFlawless
-        };
+        } as ActivityFirstCompletion & { needsPgcrProcessing?: boolean };
+        
+        // Copy the needsPgcrProcessing flag from activity (internal processing flag, not part of interface)
+        (firstsByFamily[firstsKey] as any).needsPgcrProcessing = (activity as any).needsPgcrProcessing || false;
       }
     }
 
+    console.log(`[DEBUG][Firsts] Processed ${processedCount} potential first clears`);
+    console.log(`[DEBUG][Firsts] Skipped: ${skippedByType} by type, ${skippedByCompletion} by completion, ${skippedByFamily} by family`);
+    console.log(`[DEBUG][Firsts] First clears by family before PGCR filtering:`, Object.keys(firstsByFamily).map(key => ({
+      key,
+      name: firstsByFamily[key].name,
+      instanceId: firstsByFamily[key].instanceId,
+      period: firstsByFamily[key].period
+    })));
+    
     // Batch process PGCR data for all activities that need it
-    await this.batchProcessPGCRData(firstsByFamily, membershipId, game);
+    console.log(`[DEBUG][Firsts] CALLING batchProcessPGCRData with ${Object.keys(firstsByFamily).length} first clears`);
+    const pgcrAvailable = await this.batchProcessPGCRData(firstsByFamily, membershipId, game);
+    console.log(`[DEBUG][Firsts] batchProcessPGCRData RETURNED with ${pgcrAvailable.size} PGCRs`);
 
-    const firstCompletions: ActivityFirstCompletion[] = Object.values(firstsByFamily);
+      // For raids and dungeons, we REQUIRE PGCR data because:
+      // 1. We need it for accurate solo/solo flawless detection
+      // 2. instanceId IS the PGCR identifier - if we have instanceId, we should be able to get the PGCR
+      // 3. Without PGCR, we can't verify the completion details or provide the PGCR link
+      const allFirsts = Object.values(firstsByFamily);
+      const filteredFirsts = allFirsts.filter(first => {
+        // All first clears need an instanceId to link to the PGCR
+        if (!first.instanceId) {
+          console.warn(`[Firsts] Skipping ${first.name} - no instanceId`);
+          return false;
+        }
+        
+        // For raids and dungeons, require PGCR data (instanceId = PGCR identifier, so we should be able to get it)
+        // Ensure instanceId is a string for consistent lookup (matches how we stored it in pgcrAvailable)
+        const instanceIdStr = first.instanceId ? String(first.instanceId) : null;
+        const hasPgcr = instanceIdStr ? pgcrAvailable.has(instanceIdStr) : false;
+        if ((first as any).needsPgcrProcessing) {
+          if (!hasPgcr) {
+            // Check if instanceId exists in pgcrAvailable set (debug)
+            const availableIds = Array.from(pgcrAvailable);
+            console.warn(`[Firsts] Skipping ${first.name} (${instanceIdStr}) - PGCR required but not available`, {
+              name: first.name,
+              type: first.type,
+              instanceId: instanceIdStr,
+              instanceIdOriginal: first.instanceId,
+              instanceIdType: typeof first.instanceId,
+              referenceId: first.referenceId,
+              period: first.period,
+              pgcrAvailableCount: pgcrAvailable.size,
+              sampleAvailableIds: availableIds.slice(0, 5),
+              instanceIdInSet: instanceIdStr ? pgcrAvailable.has(instanceIdStr) : false,
+              note: 'PGCR should be in cache from initial load - check if PGCR fetch failed or instanceId mismatch'
+            });
+            return false;
+          }
+          // PGCR data is available - solo/flawless info will be set by processPGCRData
+          console.log(`[Firsts] Including ${first.name} (${instanceIdStr}) - PGCR available`);
+        }
+        
+        // For other activity types (strikes, crucible, etc.), PGCR is optional
+        // They don't need solo/flawless detection, so we can show them without PGCR
+        
+        return true;
+      });
+    
+    const firstCompletions: ActivityFirstCompletion[] = filteredFirsts;
+    
+    console.log(`[Firsts] Returning ${firstCompletions.length} first clears (${pgcrAvailable.size} with PGCR data)`);
     
     // First completions processing completed
     
@@ -1032,11 +1203,71 @@ export class ActivityDbService extends Dexie {
           activities.push(...chunkResults.flat());
         }
       } else {
-        // Existing D2 activity fetching logic
-        const response = await firstValueFrom(
-          this.bungieService.getActivityHistory(membershipType, membershipId, characterId)
-        );
-        activities = (response as any).data.activities || [];
+        // D2 activity fetching - fetch with multiple modes to ensure we get all raids and dungeons
+        // Mode undefined = all activities, mode 4 = raids, mode 82 = dungeons
+        const D2_MODES: (number | undefined)[] = [undefined, 4, 82];
+        
+        console.log(`[D2 Fetch] Starting fetch for character ${characterId} with modes: ${D2_MODES.join(', ')}`);
+        
+        const allModeActivities: any[] = [];
+        
+        for (const mode of D2_MODES) {
+          let page = 0;
+          let hasMore = true;
+          const modeActivities: any[] = [];
+          
+          while (hasMore) {
+            try {
+              const response = await firstValueFrom(
+                this.bungieService.getActivityHistory(membershipType, membershipId, characterId, mode, page)
+              );
+              const pageActivities = (response as any).data?.activities || [];
+              
+              // For incremental sync, stop if we've reached activities older than our cutoff
+              if (isIncrementalSync && pageActivities.length > 0) {
+                const oldestActivityDate = new Date(pageActivities[pageActivities.length - 1].period);
+                const cutoffDate = new Date(Date.now() - (daysToFetch * 24 * 60 * 60 * 1000));
+                
+                if (oldestActivityDate < cutoffDate) {
+                  // Filter out activities older than cutoff and stop
+                  const recentActivities = pageActivities.filter((act: any) => new Date(act.period) >= cutoffDate);
+                  modeActivities.push(...recentActivities);
+                  break;
+                }
+              }
+              
+              // Stop when the API returns an empty page; otherwise accumulate and continue
+              if (pageActivities.length === 0) {
+                hasMore = false;
+                break;
+              }
+              
+              modeActivities.push(...pageActivities);
+              page++;
+            } catch (err) {
+              console.warn(`[D2] fetch failed for mode ${mode} page ${page}`, err);
+              break; // stop this mode on error to avoid infinite loop
+            }
+          }
+          
+          console.log(`[D2 Fetch] Mode ${mode}: fetched ${modeActivities.length} activities`);
+          allModeActivities.push(...modeActivities);
+        }
+        
+        console.log(`[D2 Fetch] Total activities fetched across all modes: ${allModeActivities.length}`);
+        
+        // Deduplicate activities across modes by instanceId
+        const seenInstanceIds = new Set<string>();
+        const uniqueActivities = allModeActivities.filter(activity => {
+          const instanceId = activity?.activityDetails?.instanceId;
+          if (!instanceId) return false;
+          if (seenInstanceIds.has(instanceId)) return false;
+          seenInstanceIds.add(instanceId);
+          return true;
+        });
+        
+        console.log(`[D2 Fetch] After deduplication: ${uniqueActivities.length} unique activities`);
+        activities = uniqueActivities;
       }
 
       // Filter out activities we already have by instanceId (allows backfilling older pages)
@@ -1180,143 +1411,337 @@ export class ActivityDbService extends Dexie {
   /**
    * Batch processes PGCR data for multiple activities to reduce individual API calls.
    * This method processes all activities that need PGCR data in parallel.
+   * Returns a set of instanceIds that successfully got PGCRs (for filtering).
    */
   private async batchProcessPGCRData(
     firstsByFamily: { [family: string]: ActivityFirstCompletion }, 
     membershipId: string, 
     game: 'D1' | 'D2'
-  ): Promise<void> {
+  ): Promise<Set<string>> {
+    console.log(`[PGCR] batchProcessPGCRData called for ${game}, firstsByFamily keys:`, Object.keys(firstsByFamily));
     const activitiesNeedingPgcr = Object.values(firstsByFamily).filter(f => (f as any).needsPgcrProcessing);
+    const pgcrAvailable = new Set<string>();
     
-    if (activitiesNeedingPgcr.length === 0) return;
+    console.log(`[PGCR] Activities needing PGCR: ${activitiesNeedingPgcr.length} of ${Object.values(firstsByFamily).length} total firsts`);
+    
+    if (activitiesNeedingPgcr.length === 0) {
+      console.log(`[PGCR] No activities need PGCR processing - returning empty set`);
+      return pgcrAvailable;
+    }
 
     // Get all instance IDs that need PGCR processing
-    const instanceIds = activitiesNeedingPgcr.map(f => f.instanceId).filter(id => !!id);
+    const instanceIds = activitiesNeedingPgcr.map(f => {
+      const id = f.instanceId;
+      // Ensure instanceId is a string for consistent lookup
+      return id ? String(id) : null;
+    }).filter((id): id is string => !!id);
     
-    if (instanceIds.length === 0) return;
+    console.log(`[PGCR] Looking for ${instanceIds.length} PGCRs for activities:`, 
+      activitiesNeedingPgcr.map(f => ({ name: f.name, instanceId: f.instanceId, type: typeof f.instanceId })).slice(0, 5));
+    
+    if (instanceIds.length === 0) return pgcrAvailable;
 
     try {
       // First, try to get all PGCRs from cache in batch
       const cachedPgcrMap = await this.pgcrCacheService.getBatch(instanceIds);
+      const actuallyFound = Array.from(cachedPgcrMap.values()).filter(pgcr => pgcr !== undefined).length;
+      console.log(`[PGCR] Cache lookup: requested ${instanceIds.length} PGCRs, map size: ${cachedPgcrMap.size}, actually found: ${actuallyFound}`);
+      
+      // Debug: Check what keys are in the map vs what we're looking for
+      const mapKeys = Array.from(cachedPgcrMap.keys());
+      const missingFromMap = instanceIds.filter(id => !cachedPgcrMap.has(id));
+      if (missingFromMap.length > 0) {
+        console.warn(`[PGCR] InstanceIds not found in cachedPgcrMap:`, missingFromMap.slice(0, 5));
+        console.warn(`[PGCR] Sample map keys:`, mapKeys.slice(0, 5));
+        console.warn(`[PGCR] Sample instanceIds we're looking for:`, instanceIds.slice(0, 5));
+      }
+      
+      if (instanceIds.length > 0 && actuallyFound === 0) {
+        console.warn(`[PGCR] WARNING: No PGCRs found in cache! Sample instanceIds being looked up:`, instanceIds.slice(0, 5));
+        // Try direct lookup to see if PGCRs exist with different format
+        for (const testId of instanceIds.slice(0, 3)) {
+          const directLookup = await this.pgcrCacheService.get(testId);
+          console.log(`[PGCR] Direct lookup for ${testId}:`, directLookup ? 'FOUND' : 'NOT FOUND');
+        }
+      }
       
       // Process cached PGCRs
       for (const first of activitiesNeedingPgcr) {
         if (!first.instanceId) continue;
         
-        const pgcr = cachedPgcrMap.get(first.instanceId);
+        // Ensure instanceId is a string for consistent lookup (matches how we stored it)
+        const instanceIdStr = String(first.instanceId);
+        const pgcr = cachedPgcrMap.get(instanceIdStr);
         if (pgcr) {
           this.processPGCRData(first, pgcr, game, membershipId);
+          pgcrAvailable.add(instanceIdStr);
+          console.log(`[PGCR] Found cached PGCR for ${first.name} (${instanceIdStr})`);
+        } else {
+          console.log(`[PGCR] No cached PGCR for ${first.name} (${instanceIdStr}) - will fetch from API`);
         }
       }
       
       // Check which PGCRs are missing from cache
       const missingIds = await this.pgcrCacheService.getMissingPGCRs(instanceIds);
+      console.log(`[PGCR] Missing from cache: ${missingIds.length} PGCRs`, missingIds.slice(0, 5));
       
       if (missingIds.length > 0) {
         // Fetch missing PGCRs from API in batch
         const missingPgcrData = await this.fetchMissingPGCRs(missingIds, game);
+        console.log(`[PGCR] Fetched ${missingPgcrData.size} of ${missingIds.length} missing PGCRs from API`);
         
         // Process the newly fetched PGCRs
         for (const first of activitiesNeedingPgcr) {
-          if (!first.instanceId || !missingPgcrData.has(first.instanceId)) continue;
+          if (!first.instanceId) continue;
           
-          const pgcr = missingPgcrData.get(first.instanceId);
+          // Ensure instanceId is a string for consistent lookup
+          const instanceIdStr = String(first.instanceId);
+          if (!missingPgcrData.has(instanceIdStr)) continue;
+          
+          const pgcr = missingPgcrData.get(instanceIdStr);
           if (pgcr) {
             this.processPGCRData(first, pgcr, game, membershipId);
+            pgcrAvailable.add(instanceIdStr);
+            console.log(`[PGCR] Processed fetched PGCR for ${first.name} (${instanceIdStr})`);
           }
         }
+      }
+      
+      console.log(`[PGCR] Total PGCRs available after batch processing: ${pgcrAvailable.size} of ${activitiesNeedingPgcr.length} needed`);
+      
+      // Debug: Show which activities have PGCRs vs which don't
+      const withPgcr = activitiesNeedingPgcr.filter(f => pgcrAvailable.has(String(f.instanceId || '')));
+      const withoutPgcr = activitiesNeedingPgcr.filter(f => !pgcrAvailable.has(String(f.instanceId || '')));
+      if (withoutPgcr.length > 0) {
+        console.warn(`[PGCR] ${withoutPgcr.length} activities missing PGCRs:`, 
+          withoutPgcr.slice(0, 5).map(f => ({ name: f.name, instanceId: f.instanceId, type: f.type })));
+      }
+      if (withPgcr.length > 0) {
+        console.log(`[PGCR] ${withPgcr.length} activities have PGCRs:`, 
+          withPgcr.slice(0, 5).map(f => ({ name: f.name, instanceId: f.instanceId })));
       }
     } catch (error) {
       console.warn('[PGCR] Batch processing failed, falling back to individual processing:', error);
       // Fallback to individual processing if batch fails
-      await this.fallbackToIndividualPGCRProcessing(activitiesNeedingPgcr, game, membershipId);
+      const individualPgcrAvailable = await this.fallbackToIndividualPGCRProcessing(activitiesNeedingPgcr, game, membershipId);
+      individualPgcrAvailable.forEach(id => pgcrAvailable.add(id));
     }
+    
+    return pgcrAvailable;
   }
 
   /**
    * Fetches missing PGCRs from the Bungie API in batch.
+   * Uses individual fetches with Promise.allSettled to handle partial failures gracefully.
    */
   private async fetchMissingPGCRs(instanceIds: string[], game: 'D1' | 'D2'): Promise<Map<string, any>> {
-    try {
-      const response = game === 'D2' 
-        ? await firstValueFrom(this.bungieService.getD2PGCRBatch(instanceIds))
-        : await firstValueFrom(this.bungieService.getD1PGCRBatch(instanceIds));
-      
-      const result = new Map<string, any>();
-      for (let i = 0; i < instanceIds.length && i < response.length; i++) {
-        if (response[i]) {
-          result.set(instanceIds[i], response[i]);
+    const result = new Map<string, any>();
+    const pgcrData: Array<{ id: string; data: any; requestedMemberId?: string }> = [];
+    
+    // Fetch PGCRs individually with concurrency limit to handle errors gracefully
+    // Add delay between chunks to avoid rate limits
+    const concurrencyLimit = 3;
+    const chunks = this.chunkArray(instanceIds, concurrencyLimit);
+    
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const promises = chunk.map(async (instanceId) => {
+        try {
+          const pgcr = await firstValueFrom(this.bungieService.getPGCR(instanceId, game === 'D1'));
+          if (pgcr) {
+            result.set(instanceId, pgcr);
+            pgcrData.push({ id: instanceId, data: pgcr });
+            return { instanceId, success: true, pgcr };
+          }
+          return { instanceId, success: false, error: 'Empty PGCR response' };
+        } catch (error: any) {
+          // Log detailed error info for debugging
+          const errorStatus = error?.status || error?.error?.status;
+          const errorMessage = error?.message || error?.error?.message || 'Unknown error';
+          console.warn(`[PGCR] Failed to fetch PGCR ${instanceId}:`, {
+            status: errorStatus,
+            message: errorMessage,
+            error: error
+          });
+          return { instanceId, success: false, error: errorMessage, status: errorStatus };
         }
+      });
+      
+      await Promise.allSettled(promises);
+      
+      // Add delay between chunks to avoid rate limits (except for last chunk)
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between chunks
       }
-      
-      // Cache the newly fetched PGCRs
-      const pgcrData = instanceIds.map((id, index) => ({
-        id,
-        data: response[index],
-        requestedMemberId: undefined
-      })).filter(item => item.data);
-      
-      if (pgcrData.length > 0) {
-        await this.pgcrCacheService.setBatch(pgcrData);
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('[PGCR] Failed to fetch missing PGCRs:', error);
-      return new Map();
     }
+    
+    // Cache the successfully fetched PGCRs
+    if (pgcrData.length > 0) {
+      try {
+        await this.pgcrCacheService.setBatch(pgcrData);
+      } catch (cacheError) {
+        console.warn('[PGCR] Failed to cache PGCRs:', cacheError);
+      }
+    }
+    
+    console.log(`[PGCR] Fetched ${result.size} of ${instanceIds.length} PGCRs for ${game}`);
+    if (result.size < instanceIds.length) {
+      const missing = instanceIds.filter(id => !result.has(id));
+      console.warn(`[PGCR] Missing PGCRs (${missing.length} of ${instanceIds.length}):`, missing.slice(0, 10)); // Log first 10
+      console.warn(`[PGCR] Note: instanceId IS the PGCR identifier - if fetch failed, check error logs above for details`);
+    }
+    
+    return result;
   }
 
   /**
    * Processes PGCR data for a single activity.
+   * Uses progressive fallback strategy: PGCR entries -> PGCR players -> activity values
    */
   private processPGCRData(first: ActivityFirstCompletion, pgcr: any, game: 'D1' | 'D2', membershipId: string): void {
-    // For D2 dungeons, check solo and flawless status
-    if (game === 'D2' && first.type === 'dungeon') {
-      const uniquePlayers = new Set(pgcr.entries.map((e: any) => e.player.destinyUserInfo.membershipId));
-      (first as any).isSolo = uniquePlayers.size === 1;
-      
-      if ((first as any).isSolo) {
-        (first as any).isSoloFlawless = pgcr.entries.every((e: any) => e.values.deaths.basic.value === 0);
-      }
+    // Update completion date from PGCR period (most accurate timestamp)
+    // PGCR period is the authoritative source for when the activity completed
+    if (pgcr?.activityDetails?.period) {
+      first.completionDate = pgcr.activityDetails.period;
+      first.period = pgcr.activityDetails.period;
     }
     
-    // Attach class and membershipType for per-character view (membershipId match is sufficient)
-    const me = pgcr.entries.find((e: any) => e.player.destinyUserInfo.membershipId === membershipId);
-    if (me) {
-      (first as any).characterClass = me.player.characterClass;
-      (first as any).membershipType = me.player.destinyUserInfo.membershipType;
+    // Method 1: Use PGCR entries (most accurate) - Primary detection method
+    if (pgcr && pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
+      // Extract unique players from entries
+      const uniquePlayers = new Set(
+        pgcr.entries
+          .map((e: any) => e.player?.destinyUserInfo?.membershipId)
+          .filter(Boolean)
+      );
+      const playerCount = uniquePlayers.size;
+      
+      // For dungeons, check solo and flawless status
+      if (first.type === 'dungeon') {
+        (first as any).isSolo = playerCount === 1;
+        
+        if ((first as any).isSolo) {
+          // Check if all entries have 0 deaths for solo flawless
+          const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
+          const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
+          (first as any).isSoloFlawless = totalDeaths === 0;
+        }
+      }
+      
+      // For raids, check flawless status (all players with 0 deaths)
+      if (first.type === 'raid') {
+        const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
+        const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
+        (first as any).isFlawless = totalDeaths === 0;
+        (first as any).fireteamSize = playerCount;
+      }
+      
+      // Attach class and membershipType for per-character view (membershipId match is sufficient)
+      const me = pgcr.entries.find((e: any) => e.player?.destinyUserInfo?.membershipId === membershipId);
+      if (me) {
+        (first as any).characterClass = me.player?.characterClass;
+        (first as any).membershipType = me.player?.destinyUserInfo?.membershipType;
+      }
     }
+    // Method 2: Fallback to PGCR players array (alternative format)
+    else if (pgcr && pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
+      const uniquePlayers = new Set(
+        pgcr.players.map((p: any) => p.id).filter(Boolean)
+      );
+      const playerCount = uniquePlayers.size;
+      
+      // For dungeons, check solo and flawless status
+      if (first.type === 'dungeon') {
+        (first as any).isSolo = playerCount === 1;
+        
+        if ((first as any).isSolo) {
+          const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
+          (first as any).isSoloFlawless = totalDeaths === 0;
+        }
+      }
+      
+      // For raids, check flawless status
+      if (first.type === 'raid') {
+        const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
+        (first as any).isFlawless = totalDeaths === 0;
+        (first as any).fireteamSize = playerCount;
+      }
+      
+      // Try to find player info from players array
+      const me = pgcr.players.find((p: any) => p.id === membershipId);
+      if (me && pgcr.entries && Array.isArray(pgcr.entries)) {
+        const meEntry = pgcr.entries.find((e: any) => 
+          e.player?.destinyUserInfo?.membershipId === membershipId || 
+          e.characterId === me.charId
+        );
+        if (meEntry) {
+          (first as any).characterClass = meEntry.player?.characterClass;
+          (first as any).membershipType = meEntry.player?.destinyUserInfo?.membershipType;
+        }
+      }
+    }
+    // Method 3: Fallback to activity values (least reliable but always available)
+    // Note: This fallback is only used if PGCR structure is incomplete.
+    // If we have a PGCR object but it doesn't have entries/players, we can't determine solo status from it.
+    // In this case, we leave isSolo/isSoloFlawless as false (initialized values).
+    // The activity history values are only used in getDungeonSoloFirsts when we can't fetch the PGCR at all.
   }
 
   /**
    * Fallback method for individual PGCR processing if batch processing fails.
+   * Returns a set of instanceIds that successfully got PGCRs.
    */
   private async fallbackToIndividualPGCRProcessing(
     activitiesNeedingPgcr: ActivityFirstCompletion[], 
     game: 'D1' | 'D2', 
     membershipId: string
-  ): Promise<void> {
+  ): Promise<Set<string>> {
+    const pgcrAvailable = new Set<string>();
     const concurrencyLimit = 3; // Reduced from 5 to 3 to stay under rate limits
     const chunks = this.chunkArray(activitiesNeedingPgcr, concurrencyLimit);
     
     for (const chunk of chunks) {
       const promises = chunk.map(async (first) => {
         try {
-          const pgcr: any = game === 'D2' 
+          if (!first.instanceId) return;
+          
+          // Try cache first
+          let pgcr: any = game === 'D2' 
             ? await this.pgcrCacheService.getD2PGCR(first.instanceId)
             : await this.pgcrCacheService.getD1PGCR(first.instanceId);
+          
+          // If not in cache, fetch from API
+          if (!pgcr) {
+            try {
+              const fetched = await firstValueFrom(this.bungieService.getPGCR(first.instanceId, game === 'D1'));
+              if (fetched) {
+                // Cache it
+                if (game === 'D1') {
+                  await this.pgcrCacheService.cacheD1PGCR(first.instanceId, fetched);
+                } else {
+                  await this.pgcrCacheService.cacheD2PGCR(first.instanceId, fetched);
+                }
+                pgcr = fetched;
+              }
+            } catch (fetchError) {
+              console.warn(`[PGCR] Failed to fetch PGCR for ${first.instanceId}:`, fetchError);
+              return;
+            }
+          }
             
           if (pgcr) {
             this.processPGCRData(first, pgcr, game, membershipId);
+            pgcrAvailable.add(first.instanceId);
           }
         } catch (error) {
           console.warn(`[PGCR] Failed to process PGCR for ${first.name}:`, error);
         }
       });
       
-      await Promise.all(promises);
+      await Promise.allSettled(promises);
     }
+    
+    return pgcrAvailable;
   }
 
   /**
@@ -1325,6 +1750,82 @@ export class ActivityDbService extends Dexie {
    *
    * This method performs an in-memory scan—no extra API calls.
    */
+  /**
+   * Detects solo and solo flawless status from PGCR data using progressive fallback strategy.
+   * Returns { isSolo: boolean, isSoloFlawless: boolean } with fallback to activity values.
+   */
+  private async detectSoloFromPGCR(activity: StoredActivity, membershipId: string): Promise<{ isSolo: boolean; isSoloFlawless: boolean }> {
+    const instanceId = activity.activityDetails?.instanceId;
+    if (!instanceId) {
+      // Fallback to activity values if no instanceId
+      return {
+        isSolo: this.isSolo(activity),
+        isSoloFlawless: this.isSoloFlawless(activity)
+      };
+    }
+
+    try {
+      // Try to get PGCR from cache
+      const pgcr = await this.pgcrCacheService.getD2PGCR(instanceId);
+      
+      if (!pgcr) {
+        // Fallback to activity values if PGCR not available
+        return {
+          isSolo: this.isSolo(activity),
+          isSoloFlawless: this.isSoloFlawless(activity)
+        };
+      }
+
+      // Method 1: Use PGCR entries (most accurate) - Primary detection method
+      if (pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
+        const uniquePlayers = new Set(
+          pgcr.entries
+            .map((e: any) => e.player?.destinyUserInfo?.membershipId)
+            .filter(Boolean)
+        );
+        const isSolo = uniquePlayers.size === 1;
+        
+        if (isSolo) {
+          // Check if all entries have 0 deaths for solo flawless
+          const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
+          const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
+          return {
+            isSolo: true,
+            isSoloFlawless: totalDeaths === 0
+          };
+        }
+        
+        return { isSolo: false, isSoloFlawless: false };
+      }
+      
+      // Method 2: Fallback to PGCR players array (alternative format)
+      if (pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
+        const uniquePlayers = new Set(
+          pgcr.players.map((p: any) => p.id).filter(Boolean)
+        );
+        const isSolo = uniquePlayers.size === 1;
+        
+        if (isSolo) {
+          const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
+          return {
+            isSolo: true,
+            isSoloFlawless: totalDeaths === 0
+          };
+        }
+        
+        return { isSolo: false, isSoloFlawless: false };
+      }
+    } catch (error) {
+      console.warn(`[DungeonSoloFirsts] Failed to fetch PGCR for ${instanceId}, using fallback:`, error);
+    }
+
+    // Method 3: Fallback to activity values (least reliable but always available)
+    return {
+      isSolo: this.isSolo(activity),
+      isSoloFlawless: this.isSoloFlawless(activity)
+    };
+  }
+
   async getDungeonSoloFirsts(membershipId: string): Promise<DungeonSoloFirst[]> {
     await this.initPromise;
     // Gather all stored activities for this player (all characters) limited to Destiny 2.
@@ -1348,13 +1849,63 @@ export class ActivityDbService extends Dexie {
     // Ensure we only consider activities that belong to the requested account
     const ownerActivities = activities.filter(a => a.membershipId === membershipId);
 
-    for (const activity of ownerActivities) {
-      // We only care about completed dungeon runs.
-      if (!this.isCompletion(activity)) continue;
-
+    // Collect all dungeon activities that need PGCR processing
+    const dungeonActivities = ownerActivities.filter(activity => {
+      if (!this.isCompletion(activity)) return false;
       const { referenceId, mode } = activity.activityDetails;
-      if (!this.isDungeon(referenceId, mode)) continue;
+      if (!this.isDungeon(referenceId, mode)) return false;
+      const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
+      return !!family;
+    });
 
+    // Batch fetch PGCRs for all dungeon activities to improve performance
+    const instanceIds = dungeonActivities
+      .map(a => a.activityDetails?.instanceId)
+      .filter((id): id is string => !!id);
+    
+    let pgcrMap = new Map<string, any>();
+    if (instanceIds.length > 0) {
+      try {
+        // Try to get all PGCRs from cache in batch
+        const cachedPgcrMap = await this.pgcrCacheService.getBatch(instanceIds);
+        pgcrMap = cachedPgcrMap;
+        
+        // Check which PGCRs are missing from cache
+        const missingIds = await this.pgcrCacheService.getMissingPGCRs(instanceIds);
+        
+        if (missingIds.length > 0) {
+          // Fetch missing PGCRs from API in batch (with concurrency limit)
+          const concurrencyLimit = 3;
+          const chunks = this.chunkArray(missingIds, concurrencyLimit);
+          
+          for (const chunk of chunks) {
+            const promises = chunk.map(async (instanceId) => {
+              try {
+                const pgcr = await firstValueFrom(this.bungieService.getPGCR(instanceId, false));
+                await this.pgcrCacheService.cacheD2PGCR(instanceId, pgcr);
+                return { instanceId, pgcr };
+              } catch (error) {
+                console.warn(`[DungeonSoloFirsts] Failed to fetch PGCR ${instanceId}:`, error);
+                return null;
+              }
+            });
+            
+            const results = await Promise.allSettled(promises);
+            results.forEach((result) => {
+              if (result.status === 'fulfilled' && result.value) {
+                pgcrMap.set(result.value.instanceId, result.value.pgcr);
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('[DungeonSoloFirsts] Batch PGCR fetch failed, will use individual lookups:', error);
+      }
+    }
+
+    // Process each dungeon activity with PGCR data
+    for (const activity of dungeonActivities) {
+      const { referenceId, mode } = activity.activityDetails;
       const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
       if (!family) {
         console.warn(`[DungeonSoloFirsts] UNMAPPED dungeon hash found:`, {
@@ -1367,9 +1918,6 @@ export class ActivityDbService extends Dexie {
         continue; // Unknown / unmapped dungeon hash.
       }
 
-      // Process dungeon activity (debug info available if needed)
-
-
       // Use the full versioned name as the key for version-specific tracking
       const versionKey = family;
 
@@ -1379,20 +1927,34 @@ export class ActivityDbService extends Dexie {
         firstsMap.set(versionKey, entry);
       }
 
-      // Determine solo / flawless status.
-      const solo = this.isSolo(activity);
-      const flawless = this.isSoloFlawless(activity);
+      // Early exit optimisation: if we already have both firsts we can skip further processing for this version.
+      if (entry.firstSolo && entry.firstFlawless) {
+        continue;
+      }
+
+      // Determine solo / flawless status using PGCR data with fallback
+      const instanceId = activity.activityDetails?.instanceId;
+      let solo = false;
+      let flawless = false;
+
+      if (instanceId && pgcrMap.has(instanceId)) {
+        // Use cached/fetched PGCR data
+        const pgcr = pgcrMap.get(instanceId);
+        const result = await this.detectSoloFromPGCRWithData(activity, pgcr, membershipId);
+        solo = result.isSolo;
+        flawless = result.isSoloFlawless;
+      } else {
+        // Fallback to async PGCR lookup or activity values
+        const result = await this.detectSoloFromPGCR(activity, membershipId);
+        solo = result.isSolo;
+        flawless = result.isSoloFlawless;
+      }
 
       if (solo && !entry.firstSolo) {
         entry.firstSolo = activity;
       }
       if (flawless && !entry.firstFlawless) {
         entry.firstFlawless = activity;
-      }
-
-      // Early exit optimisation: if we already have both firsts we can skip further processing for this version.
-      if (entry.firstSolo && entry.firstFlawless) {
-        continue;
       }
     }
 
@@ -1413,6 +1975,58 @@ export class ActivityDbService extends Dexie {
     // const debugResults = result.filter(r => r.fullName.includes('Shattered Throne'));
     // console.log(`[DungeonSoloFirsts] Results: ${debugResults.length} entries`);
     return result;
+  }
+
+  /**
+   * Detects solo and solo flawless status from provided PGCR data.
+   * Used when PGCR data is already available (from batch fetch).
+   */
+  private detectSoloFromPGCRWithData(activity: StoredActivity, pgcr: any, membershipId: string): { isSolo: boolean; isSoloFlawless: boolean } {
+    // Method 1: Use PGCR entries (most accurate) - Primary detection method
+    if (pgcr && pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
+      const uniquePlayers = new Set(
+        pgcr.entries
+          .map((e: any) => e.player?.destinyUserInfo?.membershipId)
+          .filter(Boolean)
+      );
+      const isSolo = uniquePlayers.size === 1;
+      
+      if (isSolo) {
+        // Check if all entries have 0 deaths for solo flawless
+        const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
+        const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
+        return {
+          isSolo: true,
+          isSoloFlawless: totalDeaths === 0
+        };
+      }
+      
+      return { isSolo: false, isSoloFlawless: false };
+    }
+    
+    // Method 2: Fallback to PGCR players array (alternative format)
+    if (pgcr && pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
+      const uniquePlayers = new Set(
+        pgcr.players.map((p: any) => p.id).filter(Boolean)
+      );
+      const isSolo = uniquePlayers.size === 1;
+      
+      if (isSolo) {
+        const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
+        return {
+          isSolo: true,
+          isSoloFlawless: totalDeaths === 0
+        };
+      }
+      
+      return { isSolo: false, isSoloFlawless: false };
+    }
+
+    // Method 3: Fallback to activity values (least reliable but always available)
+    return {
+      isSolo: this.isSolo(activity),
+      isSoloFlawless: this.isSoloFlawless(activity)
+    };
   }
 
   /**

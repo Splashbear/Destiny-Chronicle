@@ -23,7 +23,9 @@ export class PGCRCacheService {
 
   /** Retrieve a pruned PGCR from IndexedDB. */
   public get(id: string): Promise<PrunedPgcr | undefined> {
-    return this.dbPromise.then(db => db.get('pgcr', id));
+    // Ensure id is a string for consistent lookup (matches how it's stored)
+    const idStr = String(id);
+    return this.dbPromise.then(db => db.get('pgcr', idStr));
   }
 
   /** Store a full Bungie PGCR (will be pruned before writing). */
@@ -58,7 +60,8 @@ export class PGCRCacheService {
   }
 
   async getD2PGCR(activityId: string): Promise<PrunedPgcr | undefined> {
-    return this.get(activityId);
+    // Ensure activityId is a string for consistent lookup
+    return this.get(String(activityId));
   }
 
   async cacheD2PGCR(activityId: string, pgcr: any): Promise<void> {
@@ -67,7 +70,8 @@ export class PGCRCacheService {
 
   // Destiny 1 variants forward to same store for now – future split possible
   async getD1PGCR(activityId: string): Promise<PrunedPgcr | undefined> {
-    return this.get(activityId);
+    // Ensure activityId is a string for consistent lookup
+    return this.get(String(activityId));
   }
 
   async cacheD1PGCR(activityId: string, pgcr: any): Promise<void> {
@@ -92,6 +96,9 @@ export class PGCRCacheService {
       try {
         const pgcr = await store.get(id);
         result.set(id, pgcr);
+        if (!pgcr) {
+          console.log(`[PGCR] Cache miss for instanceId: ${id} (type: ${typeof id})`);
+        }
       } catch (error) {
         console.warn(`[PGCR] Failed to get PGCR ${id}:`, error);
         result.set(id, undefined);
