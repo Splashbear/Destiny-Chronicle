@@ -201,7 +201,8 @@ export class DestinyManifestService {
       if (mode === 92 || mode === 93) return 'seasonal-event';
     }
     // Use the mapping to determine type
-    const ACTIVITY_FAMILY_MAP = ActivityDbService['ACTIVITY_FAMILY_MAP'];
+    // Access the static readonly property from ActivityDbService
+    const ACTIVITY_FAMILY_MAP = (ActivityDbService as any).ACTIVITY_FAMILY_MAP || {};
     const family = ACTIVITY_FAMILY_MAP[refIdStr];
     if (family) {
       // Try to infer from the mapped family name
@@ -256,6 +257,169 @@ export class DestinyManifestService {
     if (name.includes('dungeon')) return 'dungeon';
     if (name.includes('leviathan') || name.includes('raid')) return 'raid';
     return 'other';
+  }
+
+  /**
+   * Automatically detect new raids and dungeons from the manifest
+   * Returns activities that match raid/dungeon criteria but aren't in ACTIVITY_FAMILY_MAP
+   */
+  detectNewRaidsAndDungeons(): {
+    raids: Array<{ hash: string; name: string; typeHash: number; modeTypes: number[]; mode?: number }>;
+    dungeons: Array<{ hash: string; name: string; typeHash: number; modeTypes: number[]; mode?: number }>;
+    suggestions: Array<{ hash: string; suggestedName: string; type: 'raid' | 'dungeon' }>;
+  } {
+    const RAID_TYPE_HASH = 2043403989;
+    const DUNGEON_TYPE_HASH = 608898761;
+    const RAID_MODE = 4;
+    const DUNGEON_MODE = 82;
+
+    // Get all known hashes from ACTIVITY_FAMILY_MAP
+    const ACTIVITY_FAMILY_MAP = (ActivityDbService as any).ACTIVITY_FAMILY_MAP || {};
+    const knownHashes = new Set(Object.keys(ACTIVITY_FAMILY_MAP));
+
+    const detectedRaids: Array<{ hash: string; name: string; typeHash: number; modeTypes: number[]; mode?: number }> = [];
+    const detectedDungeons: Array<{ hash: string; name: string; typeHash: number; modeTypes: number[]; mode?: number }> = [];
+
+    // Scan all activities in the manifest
+    for (const [hash, def] of Object.entries(this.activityDefs)) {
+      if (!def || knownHashes.has(hash)) continue; // Skip if already known
+
+      const typeHash = def.activityTypeHash;
+      const modeTypes: number[] = def.activityModeTypes || [];
+      const name = def.displayProperties?.name || 'Unknown Activity';
+
+      // Skip if name suggests it's not a real activity (test, placeholder, etc.)
+      const nameLower = name.toLowerCase();
+      if (nameLower.includes('test') || nameLower.includes('placeholder') || nameLower === 'unknown activity') {
+        continue;
+      }
+
+      // Check if it's a raid
+      const isRaid = typeHash === RAID_TYPE_HASH || modeTypes.includes(RAID_MODE);
+      // Check if it's a dungeon
+      const isDungeon = typeHash === DUNGEON_TYPE_HASH || modeTypes.includes(DUNGEON_MODE);
+
+      if (isRaid) {
+        detectedRaids.push({ hash, name, typeHash, modeTypes });
+      } else if (isDungeon) {
+        detectedDungeons.push({ hash, name, typeHash, modeTypes });
+      }
+    }
+
+    // Generate suggestions for ACTIVITY_FAMILY_MAP entries
+    const suggestions: Array<{ hash: string; suggestedName: string; type: 'raid' | 'dungeon' }> = [];
+
+    // Group raids by base name and suggest variants
+    const raidGroups = new Map<string, Array<{ hash: string; name: string }>>();
+    for (const raid of detectedRaids) {
+      const baseName = this.extractBaseName(raid.name);
+      if (!raidGroups.has(baseName)) {
+        raidGroups.set(baseName, []);
+      }
+      raidGroups.get(baseName)!.push({ hash: raid.hash, name: raid.name });
+    }
+
+    for (const [baseName, variants] of raidGroups) {
+      for (const variant of variants) {
+        const variantName = this.extractVariantName(variant.name, baseName);
+        suggestions.push({
+          hash: variant.hash,
+          suggestedName: `${baseName}: ${variantName}`,
+          type: 'raid'
+        });
+      }
+    }
+
+    // Group dungeons by base name and suggest variants
+    const dungeonGroups = new Map<string, Array<{ hash: string; name: string }>>();
+    for (const dungeon of detectedDungeons) {
+      const baseName = this.extractBaseName(dungeon.name);
+      if (!dungeonGroups.has(baseName)) {
+        dungeonGroups.set(baseName, []);
+      }
+      dungeonGroups.get(baseName)!.push({ hash: dungeon.hash, name: dungeon.name });
+    }
+
+    for (const [baseName, variants] of dungeonGroups) {
+      for (const variant of variants) {
+        const variantName = this.extractVariantName(variant.name, baseName);
+        suggestions.push({
+          hash: variant.hash,
+          suggestedName: `${baseName}: ${variantName}`,
+          type: 'dungeon'
+        });
+      }
+    }
+
+    return { raids: detectedRaids, dungeons: detectedDungeons, suggestions };
+  }
+
+  /**
+   * Extract base name from activity name (removes variant suffixes)
+   */
+  private extractBaseName(activityName: string): string {
+    // Remove common variant suffixes
+    const variantSuffixes = [
+      ': Master', ': Standard', ': Normal', ': Prestige', ': Challenge',
+      ': Expert', ': Legend', ': Contest', ': Day One', ': World First',
+      ': Hard', ': Easy', ': Heroic', ': Grandmaster', ': Epic',
+      ': Explorer', ': Eternity', ': Ultimatum'
+    ];
+
+    let baseName = activityName;
+    for (const suffix of variantSuffixes) {
+      if (baseName.endsWith(suffix)) {
+        baseName = baseName.replace(suffix, '');
+        break;
+      }
+    }
+
+    // Handle parentheses (e.g., "The Desert Perpetual (Epic): Contest" -> "The Desert Perpetual")
+    const parenMatch = baseName.match(/^(.+?)\s*\([^)]+\)/);
+    if (parenMatch) {
+      baseName = parenMatch[1].trim();
+    }
+
+    return baseName.trim();
+  }
+
+  /**
+   * Extract variant name from activity name
+   */
+  private extractVariantName(activityName: string, baseName: string): string {
+    // Remove base name
+    let variant = activityName.replace(baseName, '').trim();
+
+    // Remove leading colon and space
+    if (variant.startsWith(': ')) {
+      variant = variant.substring(2);
+    }
+
+    // Handle parentheses (e.g., "(Epic): Contest" -> "Epic: Contest")
+    const parenMatch = variant.match(/^\(([^)]+)\)\s*:?\s*(.+)?$/);
+    if (parenMatch) {
+      const parenContent = parenMatch[1];
+      const afterParen = parenMatch[2] || '';
+      variant = `${parenContent}${afterParen ? ': ' + afterParen : ''}`.trim();
+    }
+
+    // Default to "Normal" or "Standard" if no variant found
+    if (!variant || variant === activityName) {
+      // Try to infer from common patterns
+      const nameLower = activityName.toLowerCase();
+      if (nameLower.includes('master')) return 'Master';
+      if (nameLower.includes('contest')) return 'Contest';
+      if (nameLower.includes('prestige')) return 'Prestige';
+      if (nameLower.includes('legend')) return 'Legend';
+      if (nameLower.includes('expert')) return 'Expert';
+      if (nameLower.includes('epic')) return 'Epic';
+      if (nameLower.includes('explorer')) return 'Explorer';
+      if (nameLower.includes('eternity')) return 'Eternity';
+      if (nameLower.includes('ultimatum')) return 'Ultimatum';
+      return 'Normal';
+    }
+
+    return variant;
   }
 
   isLoaded(): Observable<boolean> {

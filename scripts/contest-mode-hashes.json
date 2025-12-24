@@ -1,0 +1,36 @@
+{
+  "total": 3,
+  "raids": 2,
+  "dungeons": 1,
+  "activities": [
+    {
+      "hash": 1754635208,
+      "name": "Equilibrium: Contest",
+      "activityType": "Dungeon",
+      "modeTypes": [
+        82,
+        7
+      ],
+      "typeHash": 608898761
+    },
+    {
+      "hash": 2586252122,
+      "name": "The Desert Perpetual (Epic): Contest",
+      "activityType": "Raid",
+      "modeTypes": [],
+      "typeHash": 2043403989
+    },
+    {
+      "hash": 3896382790,
+      "name": "The Desert Perpetual: Contest",
+      "activityType": "Raid",
+      "modeTypes": [],
+      "typeHash": 2043403989
+    }
+  ],
+  "hashes": [
+    1754635208,
+    2586252122,
+    3896382790
+  ]
+}

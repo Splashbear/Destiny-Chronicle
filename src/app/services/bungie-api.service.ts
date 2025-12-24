@@ -365,12 +365,14 @@ export class BungieApiService {
       retry({
         count: 3,
         delay: (error, retryCount) => {
-          // Only retry on 500 errors or network errors
-          if (error.status !== 500 && error.status !== 0) {
+          // Retry on 500 errors, network errors (0), or rate limits (429)
+          const shouldRetry = error.status === 500 || error.status === 0 || error.status === 429;
+          if (!shouldRetry) {
             return throwError(() => error);
           }
-          // Exponential backoff: 1s, 2s, 4s
-          const delay = Math.pow(2, retryCount - 1) * 1000;
+          // For rate limits, use longer backoff; for other errors, exponential backoff
+          const baseDelay = error.status === 429 ? 2000 : 1000;
+          const delay = Math.pow(2, retryCount - 1) * baseDelay;
           return timer(delay);
         }
       }),
