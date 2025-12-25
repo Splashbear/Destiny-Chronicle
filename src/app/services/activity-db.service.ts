@@ -1950,6 +1950,46 @@ export class ActivityDbService extends Dexie {
         flawless = result.isSoloFlawless;
       }
 
+      // Enrich activity with characterClass from PGCR if available
+      let pgcr: any = null;
+      if (instanceId && pgcrMap.has(instanceId)) {
+        pgcr = pgcrMap.get(instanceId);
+      } else if (instanceId) {
+        // Try to get PGCR from cache or fetch it for characterClass enrichment
+        try {
+          pgcr = await this.pgcrCacheService.getD2PGCR(instanceId);
+          if (!pgcr) {
+            const fetched = await firstValueFrom(this.bungieService.getPGCR(instanceId, false));
+            if (fetched) {
+              await this.pgcrCacheService.cacheD2PGCR(instanceId, fetched);
+              pgcr = fetched;
+            }
+          }
+        } catch (error) {
+          // Non-fatal: if PGCR fetch fails, we simply skip class icon enrichment
+        }
+      }
+      
+      if (pgcr && !(activity as any).characterClass) {
+        // Extract characterClass from PGCR
+        const me = pgcr.entries?.find((e: any) => e.player?.destinyUserInfo?.membershipId === membershipId);
+        if (me?.player?.characterClass) {
+          (activity as any).characterClass = me.player.characterClass;
+        } else if (pgcr.players && Array.isArray(pgcr.players)) {
+          // Fallback: try players array
+          const mePlayer = pgcr.players.find((p: any) => p.id === membershipId);
+          if (mePlayer && pgcr.entries) {
+            const meEntry = pgcr.entries.find((e: any) => 
+              e.player?.destinyUserInfo?.membershipId === membershipId || 
+              e.characterId === mePlayer.charId
+            );
+            if (meEntry?.player?.characterClass) {
+              (activity as any).characterClass = meEntry.player.characterClass;
+            }
+          }
+        }
+      }
+
       if (solo && !entry.firstSolo) {
         entry.firstSolo = activity;
       }
