@@ -136,6 +136,7 @@ export class ActivityDbService extends Dexie {
     // Root of Nightmares - Multiple versions
     '2381413764': 'Root of Nightmares: Normal',
     '2918919505': 'Root of Nightmares: Master',
+    '2381413763': 'Root of Nightmares: Standard',
     // Vow of the Disciple - Multiple versions
     '1441982566': 'Vow of the Disciple: Standard',
     '4156879541': 'Vow of the Disciple: Legend',
@@ -789,14 +790,12 @@ export class ActivityDbService extends Dexie {
     for (const activity of activities) {
       const activityHash = String(activity.activityDetails.referenceId);
 
-      // Determine activity type
+      // Determine activity type - ensure manifest is checked properly
       let type = this.manifest.getActivityType(activityHash, activity.activityDetails.mode);
       const allowedTypes = ['raid', 'dungeon', 'strike', 'nightfall', 'crucible', 'gambit', 'other'];
       if (!allowedTypes.includes(type)) {
         type = 'other';
       }
-
-      // Activity type detection (debug info available if needed)
 
       // --- Game-specific filters ---
       if (game === 'D1') {
@@ -815,113 +814,62 @@ export class ActivityDbService extends Dexie {
         type = 'raid';
       } else {
         // D2: only raids & dungeons
-        // Check if this might be a contest mode raid or dungeon that wasn't identified
+        // Debug logging for new activities that might not be detected
         if (type !== 'raid' && type !== 'dungeon') {
-          // Check if the manifest name suggests this is a raid or dungeon (e.g., contains "Contest" or known names)
+          // Log potential new raids/dungeons that aren't being detected
           const manifestName = this.manifest.getActivityName(activityHash, false);
           if (manifestName && manifestName !== 'Unknown Activity') {
             const nameLower = manifestName.toLowerCase();
-            // Check if it's a contest mode activity
-            const isContestMode = nameLower.includes('contest') || nameLower.includes('day one');
-            
-            // Known raid base names (used to identify raids even if not in the map)
-            const knownRaidNames = [
-              'leviathan', 'last wish', 'garden of salvation', 'deep stone crypt',
-              'vault of glass', "king's fall", "crota's end", 'vow of the disciple',
-              'root of nightmares', "salvation's edge", 'scourge of the past',
-              'crown of sorrow', 'eater of worlds', 'spire of stars', 'pantheon',
-              'desert perpetual'
-            ];
-            
-            // Known dungeon base names
-            const knownDungeonNames = [
-              'shattered throne', 'pit of heresy', 'prophecy', 'grasp of avarice',
-              'duality', 'spire of the watcher', 'ghosts of the deep', "warlord's ruin",
-              "vesper's host", 'sundered doctrine', 'equilibrium'
-            ];
-            
-            const isKnownRaid = knownRaidNames.some(raidName => nameLower.includes(raidName));
-            const isKnownDungeon = knownDungeonNames.some(dungeonName => nameLower.includes(dungeonName));
-            
-            // Check if mode is raid mode (4) or dungeon mode (82)
-            const isRaidMode = activity.activityDetails.mode === 4;
-            const isDungeonMode = activity.activityDetails.mode === 82;
-            
-            // If it's contest mode with a known raid/dungeon name, or known name with matching mode, treat accordingly
-            if ((isContestMode && isKnownRaid) || (isKnownRaid && isRaidMode)) {
-              type = 'raid';
-              console.log(`[DEBUG][Firsts] Identified contest/unknown raid activity as raid:`, {
+            // Check if name suggests it's a raid/dungeon but wasn't detected
+            if ((nameLower.includes('raid') || nameLower.includes('desert perpetual') || 
+                 nameLower.includes('equilibrium') || nameLower.includes('dungeon')) && 
+                activity.values?.completed?.basic?.value === 1) {
+              console.warn('[DEBUG][Firsts] Potential raid/dungeon not detected:', {
                 activityHash,
-                manifestName,
+                name: manifestName,
+                detectedType: type,
                 mode: activity.activityDetails.mode,
                 period: activity.period
               });
-            } else if ((isContestMode && isKnownDungeon) || (isKnownDungeon && isDungeonMode)) {
-              type = 'dungeon';
-              console.log(`[DEBUG][Firsts] Identified contest/unknown dungeon activity as dungeon:`, {
-                activityHash,
-                manifestName,
-                mode: activity.activityDetails.mode,
-                period: activity.period
-              });
-            } else {
-              skippedByType++;
-              continue;
             }
-          } else {
-            skippedByType++;
-            continue;
           }
+          continue;
         }
       }
 
-      let family = game === 'D2'
-        ? ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash]
-        : ActivityDbService.D1_FAMILY_MAP[activityHash];
-      if (!family) {
-        // Fallback to manifest name when mapping is missing so dungeons/raids still render
-        const name = this.manifest.getActivityName(activityHash, game === 'D1');
-        if (!name || name === 'Unknown Activity') {
-          skippedByFamily++;
-          console.warn(`[Firsts] Skipping activity - no family mapping and no manifest name:`, {
-            activityHash,
-            type,
-            mode: activity.activityDetails.mode,
-            period: activity.period,
-            instanceId: activity.activityDetails.instanceId
-          });
-          continue;
-        }
-        family = name;
+      // Automatic grouping: Check hardcoded maps first (faster, ensures all released activities work),
+      // then fall back to manifest-based detection for new activities
+      let family: string;
+      if (game === 'D2') {
+        // First check hardcoded map (ensures all currently released activities are covered)
+        family = ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash];
         
-        // Log when we're using manifest name fallback for raids/dungeons (might need to add to map)
-        if (type === 'raid' || type === 'dungeon') {
-          console.log(`[Firsts] Using manifest name fallback for ${type}:`, {
-            activityHash,
-            manifestName: name,
-            mode: activity.activityDetails.mode,
-            period: activity.period,
-            instanceId: activity.activityDetails.instanceId,
-            note: 'Consider adding to ACTIVITY_FAMILY_MAP if this is a valid raid/dungeon'
-          });
+        // If not in hardcoded map, try automatic manifest-based grouping (for new activities)
+        if (!family) {
+          family = this.manifest.getActivityFamilyName(activityHash);
         }
         
-        // For contest mode activities, try to extract the base raid/dungeon name
-        // e.g., "Last Wish: Contest" -> "Last Wish: Normal" (or just "Last Wish")
-        // e.g., "Equilibrium: Contest" -> "Equilibrium: Contest" (keep as is since it's in the map)
-        if (family.includes(': Contest') || family.includes(': Day One')) {
-          // Extract base name and normalize to match family mapping format
-          const baseName = family.split(':')[0].trim();
-          // Try to find a matching family entry for this base name
-          const matchingFamily = Object.values(ActivityDbService.ACTIVITY_FAMILY_MAP)
-            .find(f => f.startsWith(baseName));
-          if (matchingFamily) {
-            // Use the base family name but keep the contest variant in the name
-            // This ensures contest mode activities are grouped with their base activity
-            const baseFamilyName = matchingFamily.split(':')[0];
-            family = baseFamilyName + ': Contest';
+        // If still no family, use manifest name and normalize it
+        if (!family || family === 'Unknown Activity') {
+          const name = this.manifest.getActivityName(activityHash, false);
+          if (!name || name === 'Unknown Activity') continue;
+          // Normalize the name to get base (remove variant suffixes)
+          const colonIndex = name.indexOf(': ');
+          family = colonIndex !== -1 ? name.substring(0, colonIndex).trim() : name.trim();
+        } else {
+          // Normalize the family name (remove variant suffixes if any)
+          const colonIndex = family.indexOf(': ');
+          if (colonIndex !== -1) {
+            family = family.substring(0, colonIndex).trim();
           }
-          // If no matching family found but it's in the map (like Equilibrium: Contest), keep it as is
+        }
+      } else {
+        // D1: Still use hardcoded map (D1 manifest doesn't have family definitions)
+        family = ActivityDbService.D1_FAMILY_MAP[activityHash];
+        if (!family) {
+          const name = this.manifest.getActivityName(activityHash, true);
+          if (!name || name === 'Unknown Activity') continue;
+          family = name;
         }
       }
       const completed = activity.values?.completed?.basic?.value ?? 0;
@@ -942,11 +890,23 @@ export class ActivityDbService extends Dexie {
       console.log(`[DEBUG][Firsts] Marked ${this.manifest.getActivityName(activityHash, game === 'D1')} (${type}) for PGCR processing, instanceId: ${activity.activityDetails.instanceId}`);
       }
 
-      // For D1 raids and D2 raids/dungeons, preserve variants by keying firsts by family + referenceId
-      // This ensures different difficulty variants (Normal, Master, etc.) are tracked separately
-      const firstsKey = ((game === 'D1' && type === 'raid') || (game === 'D2' && (type === 'raid' || type === 'dungeon')))
-        ? `${family}|${activityHash}`
-        : family;
+      // Generate key for tracking first completions
+      // For D1 raids, preserve variants by keying firsts by base family + referenceId
+      // For D2, track contest mode separately from normal completions
+      let firstsKey: string;
+      if (game === 'D1' && type === 'raid') {
+        firstsKey = `${family}|${activityHash}`;
+      } else if (game === 'D2') {
+        // Check if this is contest mode - track separately
+        const isContest = this.manifest.isContestMode(activityHash);
+        if (isContest) {
+          firstsKey = `${family}|Contest`;
+        } else {
+          firstsKey = family;
+        }
+      } else {
+        firstsKey = family;
+      }
 
       // Note: We use Activity History period for initial comparison, but for raids/dungeons,
       // we will fetch PGCR and use PGCR period (the authoritative timestamp) in processPGCRData.
@@ -1858,68 +1818,41 @@ export class ActivityDbService extends Dexie {
       return !!family;
     });
 
-    // Batch fetch PGCRs for all dungeon activities to improve performance
-    const instanceIds = dungeonActivities
-      .map(a => a.activityDetails?.instanceId)
-      .filter((id): id is string => !!id);
-    
-    let pgcrMap = new Map<string, any>();
-    if (instanceIds.length > 0) {
-      try {
-        // Try to get all PGCRs from cache in batch
-        const cachedPgcrMap = await this.pgcrCacheService.getBatch(instanceIds);
-        pgcrMap = cachedPgcrMap;
-        
-        // Check which PGCRs are missing from cache
-        const missingIds = await this.pgcrCacheService.getMissingPGCRs(instanceIds);
-        
-        if (missingIds.length > 0) {
-          // Fetch missing PGCRs from API in batch (with concurrency limit)
-          const concurrencyLimit = 3;
-          const chunks = this.chunkArray(missingIds, concurrencyLimit);
-          
-          for (const chunk of chunks) {
-            const promises = chunk.map(async (instanceId) => {
-              try {
-                const pgcr = await firstValueFrom(this.bungieService.getPGCR(instanceId, false));
-                await this.pgcrCacheService.cacheD2PGCR(instanceId, pgcr);
-                return { instanceId, pgcr };
-              } catch (error) {
-                console.warn(`[DungeonSoloFirsts] Failed to fetch PGCR ${instanceId}:`, error);
-                return null;
-              }
-            });
-            
-            const results = await Promise.allSettled(promises);
-            results.forEach((result) => {
-              if (result.status === 'fulfilled' && result.value) {
-                pgcrMap.set(result.value.instanceId, result.value.pgcr);
-              }
-            });
-          }
+      // Automatic detection: Check hardcoded map first (faster, ensures all released dungeons work),
+      // then fall back to manifest for new dungeons
+      let fullName: string;
+      
+      // First check hardcoded map (ensures all currently released dungeons are covered)
+      fullName = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
+      
+      // If not in hardcoded map, try manifest (for new dungeons)
+      let manifestName: string | undefined;
+      if (!fullName) {
+        manifestName = this.manifest.getActivityName(referenceId, false);
+        if (manifestName && manifestName !== 'Unknown Activity') {
+          fullName = manifestName;
         }
-      } catch (error) {
-        console.warn('[DungeonSoloFirsts] Batch PGCR fetch failed, will use individual lookups:', error);
       }
-    }
-
-    // Process each dungeon activity with PGCR data
-    for (const activity of dungeonActivities) {
-      const { referenceId, mode } = activity.activityDetails;
-      const family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
-      if (!family) {
+      
+      // If still no name, skip this activity (shouldn't happen for known dungeons)
+      if (!fullName) {
+        // Only warn if we truly can't identify it (manifest not loaded and not in map)
         console.warn(`[DungeonSoloFirsts] UNMAPPED dungeon hash found:`, {
           referenceId,
           mode,
           period: activity.period,
           playerCount: activity.values?.playerCount?.basic?.value,
-          completed: activity.values?.completed?.basic?.value
+          completed: activity.values?.completed?.basic?.value,
+          manifestName: manifestName || 'Unknown'
         });
         continue; // Unknown / unmapped dungeon hash.
       }
-
+      
       // Use the full versioned name as the key for version-specific tracking
-      const versionKey = family;
+      // e.g., "Equilibrium: Epic", "Equilibrium: Master", etc.
+      const versionKey = fullName;
+
+      // Process dungeon activity (debug info available if needed)
 
       let entry = firstsMap.get(versionKey);
       if (!entry) {
@@ -1948,46 +1881,6 @@ export class ActivityDbService extends Dexie {
         const result = await this.detectSoloFromPGCR(activity, membershipId);
         solo = result.isSolo;
         flawless = result.isSoloFlawless;
-      }
-
-      // Enrich activity with characterClass from PGCR if available
-      let pgcr: any = null;
-      if (instanceId && pgcrMap.has(instanceId)) {
-        pgcr = pgcrMap.get(instanceId);
-      } else if (instanceId) {
-        // Try to get PGCR from cache or fetch it for characterClass enrichment
-        try {
-          pgcr = await this.pgcrCacheService.getD2PGCR(instanceId);
-          if (!pgcr) {
-            const fetched = await firstValueFrom(this.bungieService.getPGCR(instanceId, false));
-            if (fetched) {
-              await this.pgcrCacheService.cacheD2PGCR(instanceId, fetched);
-              pgcr = fetched;
-            }
-          }
-        } catch (error) {
-          // Non-fatal: if PGCR fetch fails, we simply skip class icon enrichment
-        }
-      }
-      
-      if (pgcr && !(activity as any).characterClass) {
-        // Extract characterClass from PGCR
-        const me = pgcr.entries?.find((e: any) => e.player?.destinyUserInfo?.membershipId === membershipId);
-        if (me?.player?.characterClass) {
-          (activity as any).characterClass = me.player.characterClass;
-        } else if (pgcr.players && Array.isArray(pgcr.players)) {
-          // Fallback: try players array
-          const mePlayer = pgcr.players.find((p: any) => p.id === membershipId);
-          if (mePlayer && pgcr.entries) {
-            const meEntry = pgcr.entries.find((e: any) => 
-              e.player?.destinyUserInfo?.membershipId === membershipId || 
-              e.characterId === mePlayer.charId
-            );
-            if (meEntry?.player?.characterClass) {
-              (activity as any).characterClass = meEntry.player.characterClass;
-            }
-          }
-        }
       }
 
       if (solo && !entry.firstSolo) {

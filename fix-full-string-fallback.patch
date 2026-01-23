@@ -1,0 +1,145 @@
+ *** Begin Patch
+*** Update File: src/app/components/player-search/player-search.component.ts
+@@
+ import { BungieApiService, PlayerSearchResult } from '../../services/bungie-api.service';
+-import { firstValueFrom } from 'rxjs';
++import { firstValueFrom } from 'rxjs';
+@@
+   async addPlayer() {
+     console.log('addPlayer called with searchUsername:', this.searchUsername);
+     
+     if (!this.searchUsername) {
+       this.errorMessage = 'Please enter a username.';
+       return;
+     }
+ 
+     // Bulk add: allow comma/newline-separated usernames for BOTH add mode and initial (replace) search
+-    if (this.searchUsername.includes(',') || this.searchUsername.includes('\n')) {
+-      const names = this.parseUsernames(this.searchUsername);
+-      if (names.length > 1) {
+-        // If not in add mode, run a one-time clear just like a normal replace search
+-        if (!this.addMode) {
+-          console.log('[CLEAR] Bulk initial search  clearing all data for replace mode');
+-          await this.activityDb.clearAllActivities();
+-          const remainingCount = await this.activityDb.activities.count();
+-          if (remainingCount > 0) {
+-            console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
+-          } else {
+-            console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
+-          }
+-          this.clearAllPlayers();
+-          this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+-        }
+-
+-        // Accumulate results across all names so the modal shows everything at once
+-        this.d1SearchResults = [];
+-        this.d2SearchResults = [];
+-        this.crossSavePlayer = null;
+-        this.showPlatformPicker = false;
+-
+-        for (const name of names) {
+-          await this.addPlayerByName(name, { accumulate: true });
+-        }
+-
+-        // Deduplicate merged arrays
+-        const dedupe = (arr: PlayerSearchDisplay[]) => {
+-          const seen = new Set<string>();
+-          const out: PlayerSearchDisplay[] = [];
+-          for (const p of arr) {
+-            const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+-            if (!seen.has(key)) {
+-              seen.add(key);
+-              out.push(p);
+-            }
+-          }
+-          return out;
+-        };
+-        this.d1SearchResults = dedupe(this.d1SearchResults);
+-        this.d2SearchResults = dedupe(this.d2SearchResults);
+-        this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+-
+-        const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+-        if (total === 0) {
+-          this.errorMessage = 'No Destiny accounts found for the provided names.';
+-        } else if (total === 1) {
+-          const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
+-          await this.selectPlayer(player);
+-        } else {
+-          this.showPlatformPicker = true;
+-          this.focusFirstElementInModal('.modal.show');
+-        }
+-
+-        this.searchUsername = '';
+-        return;
+-      }
+-    }
++    if (this.searchUsername.includes(',') || this.searchUsername.includes('\n')) {
++      const raw = this.searchUsername.trim();
++
++      // First try full-string fallback: if Bungie returns matches for the entire raw input,
++      // treat it as a single username (covers unquoted names that contain commas).
++      if (await this.fullStringFallbackLooksLikeSingleUser(raw)) {
++        // Leave this.searchUsername as the single raw value and fall through to the single-name search flow
++        this.searchUsername = raw;
++      } else {
++        // No full-string match: fall back to splitting into multiple names (legacy behavior)
++        const names = this.parseUsernames(this.searchUsername);
++        if (names.length > 1) {
++          // If not in add mode, run a one-time clear just like a normal replace search
++          if (!this.addMode) {
++            console.log('[CLEAR] Bulk initial search  clearing all data for replace mode');
++            await this.activityDb.clearAllActivities();
++            const remainingCount = await this.activityDb.activities.count();
++            if (remainingCount > 0) {
++              console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
++            } else {
++              console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
++            }
++            this.clearAllPlayers();
++            this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
++          }
++
++          // Accumulate results across all names so the modal shows everything at once
++          this.d1SearchResults = [];
++          this.d2SearchResults = [];
++          this.crossSavePlayer = null;
++          this.showPlatformPicker = false;
++
++          for (const name of names) {
++            await this.addPlayerByName(name, { accumulate: true });
++          }
++
++          // Deduplicate merged arrays (existing logic)
++          const dedupe = (arr: PlayerSearchDisplay[]) => {
++            const seen = new Set<string>();
++            const out: PlayerSearchDisplay[] = [];
++            for (const p of arr) {
++              const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
++              if (!seen.has(key)) {
++                seen.add(key);
++                out.push(p);
++              }
++            }
++            return out;
++          };
++          this.d1SearchResults = dedupe(this.d1SearchResults);
++          this.d2SearchResults = dedupe(this.d2SearchResults);
++          this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
++
++          const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
++          if (total === 0) {
++            this.errorMessage = 'No Destiny accounts found for the provided names.';
++          } else if (total === 1) {
++            const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
++            await this.selectPlayer(player);
++          } else {
++            this.showPlatformPicker = true;
++            this.focusFirstElementInModal('.modal.show');
++          }
++
++          this.searchUsername = '';
++          return;
++        }
++      }
++    }
+*** End Patch
