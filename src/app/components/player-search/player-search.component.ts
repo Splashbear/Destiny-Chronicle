@@ -548,6 +548,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // -----------------------------------------------
   private firstFullSyncDone = false;   // new – becomes true once every selected account finished first crawl
   private syncedPlayers: Set<string> = new Set();
+  
+  // Missing properties
+  accountLoadingStatus: Map<string, LoadingStatus> = new Map();
+  accountLoadingStatuses: LoadingStatus[] = [];
+  showFavoritesModal: boolean = false;
+  showExportDialog: boolean = false;
+  showShareDropdown: boolean = false;
+  showLoadingModal: boolean = false;
+  isLoadingComplete: boolean = false;
+  activeFirstsGame: string = 'all';
 
   // Phase 4: UI Rendering Optimization - TrackBy Functions
   /**
@@ -1584,6 +1594,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
+  getFavoriteKey(account: { membershipId: string; game: 'D1' | 'D2'; membershipType: number }): string {
+    return `${account.membershipId}|${account.game}|${account.membershipType}`;
+  }
+
   async addFavorite(player: PlayerSearchDisplay) {
     const favorite: FavoriteAccount = {
       membershipId: player.membershipId,
@@ -1798,6 +1812,446 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.loading[key] = false;
       this.cdr.detectChanges();
     }
+  }
+
+  // Helper methods
+  getPlayerKey(player: PlayerSearchResult | PlayerSearchDisplay): string {
+    const game = (player as any).game || 'D2';
+    return `${game}|${player.membershipId}`;
+  }
+
+  isD1Player(player: PlayerSearchResult | PlayerSearchDisplay): boolean {
+    return (player as any).game === 'D1';
+  }
+
+  getPlatformName(membershipType: number): string {
+    const platformMap: { [key: number]: string } = {
+      1: 'Xbox',
+      2: 'PlayStation',
+      3: 'Steam',
+      254: 'Bungie'
+    };
+    return platformMap[membershipType] || 'Unknown';
+  }
+
+  getPlatformId(platform: string): number {
+    const platformMap: { [key: string]: number } = {
+      'Xbox': 1,
+      'PlayStation': 2,
+      'Steam': 3,
+      'Bungie': 254
+    };
+    return platformMap[platform] || 1;
+  }
+
+  getPlatformIconUrl(platformId: number): string {
+    const iconMap: { [key: number]: string } = {
+      1: 'assets/icons/platforms/xbox.png',
+      2: 'assets/icons/platforms/playstation.png',
+      3: 'assets/icons/platforms/steam.png',
+      254: 'assets/icons/platforms/bungie.png'
+    };
+    return iconMap[platformId] || 'assets/icons/platforms/xbox.png';
+  }
+
+  async processExactD2SearchResponse(response: any): Promise<void> {
+    if (!response || !response.Response || response.Response.length === 0) {
+      this.errorMessage = 'No Destiny 2 player found with that username.';
+      return;
+    }
+
+    const players: PlayerSearchDisplay[] = response.Response.map((user: any) => {
+      const memberships = user.destinyMemberships || [];
+      return memberships.map((m: any) => ({
+        displayName: `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`,
+        membershipId: m.membershipId,
+        membershipType: m.membershipType === 254 && m.crossSaveOverride ? m.crossSaveOverride : m.membershipType,
+        game: 'D2',
+        platform: this.getPlatformName(m.membershipType === 254 && m.crossSaveOverride ? m.crossSaveOverride : m.membershipType),
+        isCrossSavePrimary: m.isCrossSavePrimary,
+        crossSaveOverride: m.crossSaveOverride
+      } as PlayerSearchDisplay));
+    }).flat();
+
+    if (players.length === 0) {
+      this.errorMessage = 'No Destiny memberships found for that name.';
+      return;
+    }
+
+    // Deduplicate
+    const unique = players.filter((p, idx, arr) => {
+      const key = `${p.game}|${p.membershipId}`;
+      return arr.findIndex(x => `${x.game}|${x.membershipId}` === key) === idx;
+    });
+
+    this.crossSavePlayer = unique.find(p => p.isCrossSavePrimary) || null;
+
+    if (unique.length > 1 || this.crossSavePlayer) {
+      this.d2SearchResults = unique;
+      this.showPlatformPicker = true;
+    } else if (unique.length === 1) {
+      await this.selectPlayer(unique[0]);
+    }
+  }
+
+  interleavePlayersForConcurrency(d1Players: PlayerSearchDisplay[], d2Players: PlayerSearchDisplay[]): PlayerSearchDisplay[] {
+    const result: PlayerSearchDisplay[] = [];
+    const maxLength = Math.max(d1Players.length, d2Players.length);
+    for (let i = 0; i < maxLength; i++) {
+      if (i < d1Players.length) result.push(d1Players[i]);
+      if (i < d2Players.length) result.push(d2Players[i]);
+    }
+    return result;
+  }
+
+  updateUrlForPermalink(): void {
+    if (this.selectedPlayers.length === 0) return;
+    
+    const playerData = this.selectedPlayers.map(p => ({
+      displayName: p.displayName,
+      membershipId: p.membershipId,
+      membershipType: p.membershipType,
+      game: p.game,
+      platform: p.platform
+    }));
+
+    const encoded = encodeURIComponent(JSON.stringify(playerData));
+    const dateStr = this.selectedDate || `${this.selectedYear}-${this.selectedMonth.toString().padStart(2, '0')}-${this.selectedDay.toString().padStart(2, '0')}`;
+    
+    this.router.navigate(['/date', dateStr, 'players', encoded], { replaceUrl: true });
+  }
+
+  // Parse comma/newline-separated usernames
+  parseUsernames(input: string): string[] {
+    return input
+      .split(/[,\n]/)
+      .map(name => name.trim())
+      .filter(name => name.length > 0);
+  }
+
+  // Check if full string matches a single user (fallback for names with commas)
+  async fullStringFallbackLooksLikeSingleUser(raw: string): Promise<boolean> {
+    try {
+      // Try D2 search first (most common)
+      const d2Response = await firstValueFrom(this.bungieService.searchD2Player(raw)).catch(() => null);
+      if (d2Response && d2Response.Response && d2Response.Response.length > 0) {
+        return true;
+      }
+
+      // Try D1 searches for Xbox and PlayStation
+      const d1Xbox = await firstValueFrom(this.bungieService.searchD1Player(raw, 1)).catch(() => null);
+      if (d1Xbox && d1Xbox.length > 0) {
+        return true;
+      }
+
+      const d1Psn = await firstValueFrom(this.bungieService.searchD1Player(raw, 2)).catch(() => null);
+      if (d1Psn && d1Psn.length > 0) {
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.warn('[fullStringFallback] Error checking full string:', error);
+      return false;
+    }
+  }
+
+  // Add player by name (used for bulk operations)
+  async addPlayerByName(name: string, options?: { accumulate?: boolean }): Promise<void> {
+    const accumulate = options?.accumulate ?? false;
+
+    if (!accumulate) {
+      this.d1SearchResults = [];
+      this.d2SearchResults = [];
+      this.crossSavePlayer = null;
+    }
+
+    // Search D2
+    try {
+      if (name.includes('#')) {
+        const response = await firstValueFrom(this.bungieService.searchD2Player(name));
+        await this.processExactD2SearchResponse(response);
+      } else {
+        const prefixResp = await firstValueFrom(this.bungieService.searchUsersPrefix(name));
+        const results = prefixResp?.Response?.searchResults as any[] | undefined;
+        if (prefixResp && prefixResp.ErrorCode === 1 && results && results.length > 0) {
+          for (const user of results) {
+            const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
+            const memberships = user.destinyMemberships as any[];
+            for (const m of memberships) {
+              const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
+                ? m.crossSaveOverride
+                : m.membershipType;
+
+              const player: PlayerSearchDisplay = {
+                displayName: bungieName,
+                membershipId: m.membershipId,
+                membershipType: effectiveType,
+                game: 'D2',
+                platform: this.getPlatformName(effectiveType),
+                isCrossSavePrimary: m.isCrossSavePrimary,
+                crossSaveOverride: m.crossSaveOverride
+              } as PlayerSearchDisplay;
+
+              if (accumulate) {
+                this.d2SearchResults.push(player);
+              } else {
+                this.d2SearchResults = [player];
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[addPlayerByName] D2 search failed for "${name}":`, error);
+    }
+
+    // Search D1 (Xbox and PlayStation)
+    for (const membershipType of [1, 2]) {
+      try {
+        const results = await firstValueFrom(this.bungieService.searchD1Player(name, membershipType));
+        if (results && results.length > 0) {
+          const players = results.map(player => ({
+            ...player,
+            game: 'D1',
+            platform: this.getPlatformName(player.membershipType)
+          } as PlayerSearchDisplay));
+
+          if (accumulate) {
+            this.d1SearchResults.push(...players);
+          } else {
+            this.d1SearchResults = players;
+          }
+        }
+      } catch (error) {
+        console.warn(`[addPlayerByName] D1 search failed for "${name}" (platform ${membershipType}):`, error);
+      }
+    }
+  }
+
+  // Main addPlayer method with full-string fallback
+  async addPlayer() {
+    console.log('addPlayer called with searchUsername:', this.searchUsername);
+    
+    if (!this.searchUsername) {
+      this.errorMessage = 'Please enter a username.';
+      return;
+    }
+
+    // Bulk add: allow comma/newline-separated usernames for BOTH add mode and initial (replace) search
+    if (this.searchUsername.includes(',') || this.searchUsername.includes('\n')) {
+      const raw = this.searchUsername.trim();
+
+      // First try full-string fallback: if Bungie returns matches for the entire raw input,
+      // treat it as a single username (covers unquoted names that contain commas).
+      if (await this.fullStringFallbackLooksLikeSingleUser(raw)) {
+        // Leave this.searchUsername as the single raw value and fall through to the single-name search flow
+        this.searchUsername = raw;
+      } else {
+        // No full-string match: fall back to splitting into multiple names (legacy behavior)
+        const names = this.parseUsernames(this.searchUsername);
+        if (names.length > 1) {
+          // If not in add mode, run a one-time clear just like a normal replace search
+          if (!this.addMode) {
+            console.log('[CLEAR] Bulk initial search clearing all data for replace mode');
+            await this.activityDb.clearAllActivities();
+            const remainingCount = await this.activityDb.activities.count();
+            if (remainingCount > 0) {
+              console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
+            } else {
+              console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
+            }
+            this.clearAllPlayers();
+            this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+          }
+
+          // Accumulate results across all names so the modal shows everything at once
+          this.d1SearchResults = [];
+          this.d2SearchResults = [];
+          this.crossSavePlayer = null;
+          this.showPlatformPicker = false;
+
+          for (const name of names) {
+            await this.addPlayerByName(name, { accumulate: true });
+          }
+
+          // Deduplicate merged arrays (existing logic)
+          const dedupe = (arr: PlayerSearchDisplay[]) => {
+            const seen = new Set<string>();
+            const out: PlayerSearchDisplay[] = [];
+            for (const p of arr) {
+              const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                out.push(p);
+              }
+            }
+            return out;
+          };
+          this.d1SearchResults = dedupe(this.d1SearchResults);
+          this.d2SearchResults = dedupe(this.d2SearchResults);
+          this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+
+          const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+          if (total === 0) {
+            this.errorMessage = 'No Destiny accounts found for the provided names.';
+          } else if (total === 1) {
+            const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
+            await this.selectPlayer(player);
+          } else {
+            this.showPlatformPicker = true;
+            this.focusFirstElementInModal('.modal.show');
+          }
+
+          this.searchUsername = '';
+          return;
+        }
+      }
+    }
+
+    // Single username search (or full-string fallback matched)
+    this.errorMessage = '';
+    this.d1SearchResults = [];
+    this.d2SearchResults = [];
+    this.crossSavePlayer = null;
+    this.showPlatformPicker = false;
+
+    const searchTerm = this.searchUsername.trim();
+
+    // If not in add mode, clear existing data
+    if (!this.addMode && this.selectedPlayers.length > 0) {
+      console.log('[CLEAR] Single search clearing all data for replace mode');
+      await this.activityDb.clearAllActivities();
+      const remainingCount = await this.activityDb.activities.count();
+      if (remainingCount > 0) {
+        console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
+      } else {
+        console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
+      }
+      this.clearAllPlayers();
+      this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+    }
+
+    // Search both D1 and D2
+    await this.addPlayerByName(searchTerm, { accumulate: true });
+
+    // Deduplicate
+    const dedupe = (arr: PlayerSearchDisplay[]) => {
+      const seen = new Set<string>();
+      const out: PlayerSearchDisplay[] = [];
+      for (const p of arr) {
+        const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push(p);
+        }
+      }
+      return out;
+    };
+    this.d1SearchResults = dedupe(this.d1SearchResults);
+    this.d2SearchResults = dedupe(this.d2SearchResults);
+    this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+
+    const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+    if (total === 0) {
+      this.errorMessage = 'No Destiny accounts found with that username.';
+    } else if (total === 1) {
+      const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
+      await this.selectPlayer(player);
+    } else {
+      this.showPlatformPicker = true;
+      this.focusFirstElementInModal('.modal.show');
+    }
+
+    this.searchUsername = '';
+  }
+
+  // UI helper methods
+  onSearchInput(value: string): void {
+    this.searchUsername = value;
+    this.errorMessage = '';
+  }
+
+  toggleAddMode(): void {
+    this.addMode = !this.addMode;
+    this.cdr.detectChanges();
+  }
+
+  clearAllPlayers(): void {
+    this.selectedPlayers = [];
+    this.selectedCharacterIds = {};
+    this.characters = {};
+    this.activities = {};
+    this.loading = {};
+    this.error = {};
+    this.groupedActivitiesByAccount = [];
+    this.filteredActivitiesForDate = [];
+    this.accountStats = {
+      totalTime: 0,
+      totalActivityTime: 0,
+      totalActivityCount: 0,
+      totalSeals: 0,
+      perType: {}
+    };
+    this.guardianFirsts = [];
+    this.playerTitles = {};
+    this.firstFullSyncDone = false;
+    this.syncedPlayers.clear();
+    this.accountLoadingStatus.clear();
+    this.accountLoadingStatuses = [];
+    this.clearCache();
+    this.updateUrlForPermalink();
+    this.cdr.detectChanges();
+  }
+
+  removePlayer(index: number): void {
+    if (index >= 0 && index < this.selectedPlayers.length) {
+      const player = this.selectedPlayers[index];
+      delete this.selectedCharacterIds[player.membershipId];
+      delete this.characters[this.getPlayerKey(player)];
+      delete this.activities[this.getPlayerKey(player)];
+      this.selectedPlayers.splice(index, 1);
+      this.updateUrlForPermalink();
+      this.cdr.detectChanges();
+    }
+  }
+
+  selectAllPlayersInModal(): void {
+    // Select all players in the platform picker modal
+    // This would need to be implemented based on your modal structure
+    console.log('selectAllPlayersInModal called');
+  }
+
+  clearModalSelection(): void {
+    // Clear selection in modal
+    console.log('clearModalSelection called');
+  }
+
+  addSelectedToFavorites(): void {
+    // Add selected players to favorites
+    console.log('addSelectedToFavorites called');
+  }
+
+  getSelectedCount(): number {
+    // Return count of selected players in modal
+    return 0;
+  }
+
+  getTotalCount(): number {
+    // Return total count of players in modal
+    return this.d1SearchResults.length + this.d2SearchResults.length;
+  }
+
+  clearCache(): void {
+    this.activityCache.clear();
+    this.filteredActivitiesCache.clear();
+    this.activitiesCache.clear();
+  }
+
+  showSuccessMessage(message: string): void {
+    // Simple implementation - you might want to use a toast service
+    console.log(message);
+    this.errorMessage = '';
   }
 
   selectPlatformPlayer(player: PlayerSearchDisplay) {
