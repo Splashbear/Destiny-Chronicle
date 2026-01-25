@@ -591,15 +591,22 @@ export class BungieApiService {
     // Destiny 2 Search
     // ---------------------
     // Choose the correct endpoint depending on whether a Bungie Name code is present
+    // Try searchUsersPrefix first (as in 484354a), fall back to searchD2Player if it fails
     const d2$ = searchTerm.includes('#')
       ? this.searchD2Player(searchTerm).pipe(catchError((error) => {
           console.error('D2 search error:', error);
           return of(null);
         }))
-      : this.searchUsersPrefix(searchTerm).pipe(catchError((error) => {
-          console.error('D2 prefix search error:', error);
-          return of(null);
-        }));
+      : this.searchUsersPrefix(searchTerm).pipe(
+          catchError((error) => {
+            console.error('D2 prefix search error, falling back to SearchDestinyPlayer:', error);
+            // Fallback to SearchDestinyPlayer if searchUsersPrefix fails
+            return this.searchD2Player(searchTerm).pipe(catchError((fallbackError) => {
+              console.error('D2 fallback search error:', fallbackError);
+              return of(null);
+            }));
+          })
+        );
 
     // ---------------------
     // Destiny 1 Search
