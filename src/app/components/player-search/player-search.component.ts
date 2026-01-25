@@ -373,6 +373,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   error: { [key: string]: string } = {};
   selectedActivityType: ActivityTypeOption = ACTIVITY_TYPE_OPTIONS[0];
   searchUsername = '';
+  searchChips: string[] = [];
   // Removed selectedPlatform - no longer needed without game picker
   // Removed selectedGame - now searches both D1 and D2 automatically
   errorMessage = '';
@@ -3934,9 +3935,77 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   async addPlayer() {
     console.log('addPlayer called with searchUsername:', this.searchUsername);
     
-    if (!this.searchUsername) {
+    const pending = (this.searchUsername || '').trim();
+    if (!pending && this.searchChips.length === 0) {
       this.errorMessage = 'Please enter a username.';
       return;
+    }
+
+    if (this.searchChips.length > 0) {
+      const names = [...this.searchChips];
+      if (pending) {
+        names.push(pending);
+      }
+      const uniqueNames = Array.from(new Set(names.map(n => n.trim()).filter(Boolean)));
+      this.searchChips = [];
+      this.searchUsername = '';
+
+      if (uniqueNames.length > 1) {
+        if (!this.addMode) {
+          console.log('[CLEAR] Bulk initial search – clearing all data for replace mode');
+          await this.activityDb.clearAllActivities();
+          const remainingCount = await this.activityDb.activities.count();
+          if (remainingCount > 0) {
+            console.error(`[CLEAR] CRITICAL: ${remainingCount} activities still in database after clearing!`);
+          } else {
+            console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
+          }
+          this.clearAllPlayers();
+          this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+        }
+
+        this.d1SearchResults = [];
+        this.d2SearchResults = [];
+        this.crossSavePlayer = null;
+        this.showPlatformPicker = false;
+
+        for (const name of uniqueNames) {
+          await this.addPlayerByName(name, { accumulate: true });
+        }
+
+        const dedupe = (arr: PlayerSearchDisplay[]) => {
+          const seen = new Set<string>();
+          const out: PlayerSearchDisplay[] = [];
+          for (const p of arr) {
+            const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              out.push(p);
+            }
+          }
+          return out;
+        };
+        this.d1SearchResults = dedupe(this.d1SearchResults);
+        this.d2SearchResults = dedupe(this.d2SearchResults);
+        this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+
+        const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+        if (total === 0) {
+          this.errorMessage = 'No Destiny accounts found for the provided names.';
+        } else if (total === 1) {
+          const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
+          await this.selectPlayer(player);
+        } else {
+          this.showPlatformPicker = true;
+          this.focusFirstElementInModal('.modal.show');
+        }
+
+        return;
+      }
+
+      if (uniqueNames.length === 1) {
+        this.searchUsername = uniqueNames[0];
+      }
     }
 
     // Bulk add: allow comma/newline-separated usernames for BOTH add mode and initial (replace) search
@@ -4056,6 +4125,93 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.searchUsername = this.searchUsername.trim();
     
     console.log('Starting search for:', this.searchUsername);
+
+    // Check if input is a numeric membership ID (all digits, typically 17-19 digits)
+    const trimmedSearch = this.searchUsername.trim();
+    const isNumericId = /^\d{15,20}$/.test(trimmedSearch);
+    
+    if (isNumericId) {
+      // Use GetMembershipsById endpoint for membership ID lookup
+      console.log('[Search] Detected membership ID, using GetMembershipsById');
+      try {
+        const membershipResp = await firstValueFrom(
+          this.bungieService.getMembershipData(trimmedSearch)
+        );
+        
+        if (membershipResp && membershipResp.ErrorCode === 1 && membershipResp.Response) {
+          const destinyMemberships = membershipResp.Response.destinyMemberships || [];
+          const bungieNetUser = membershipResp.Response.bungieNetUser;
+          
+          if (destinyMemberships.length > 0) {
+            // Process all memberships from the response
+            this.d1SearchResults = [];
+            this.d2SearchResults = [];
+            
+            for (const membership of destinyMemberships) {
+              const effectiveType = (membership.membershipType === 254 && membership.crossSaveOverride && membership.crossSaveOverride > 0)
+                ? membership.crossSaveOverride
+                : membership.membershipType;
+              
+              // Determine if this is D1 or D2 based on membership type and cross-save
+              // D1 platforms are 1 (Xbox) and 2 (PlayStation) without cross-save
+              const isD1 = (membership.membershipType === 1 || membership.membershipType === 2) && 
+                          !membership.crossSaveOverride;
+              
+              const player: PlayerSearchDisplay = {
+                displayName: bungieNetUser?.displayName || membership.displayName || 'Unknown',
+                membershipId: membership.membershipId,
+                membershipType: effectiveType,
+                game: isD1 ? 'D1' : 'D2',
+                platform: this.getPlatformName(effectiveType),
+                isCrossSavePrimary: membership.isCrossSavePrimary || false,
+                crossSaveOverride: membership.crossSaveOverride || 0
+              };
+              
+              if (isD1) {
+                this.d1SearchResults.push(player);
+              } else {
+                this.d2SearchResults.push(player);
+              }
+            }
+            
+            // Identify cross-save primary
+            this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
+            
+            // Determine next action
+            const total = this.d1SearchResults.length + this.d2SearchResults.length;
+            if (total === 0) {
+              this.errorMessage = 'No Destiny accounts found for that membership ID.';
+            } else if (total === 1) {
+              const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
+              await this.selectPlayer(player);
+            } else {
+              this.showPlatformPicker = true;
+              this.focusFirstElementInModal('.modal.show');
+            }
+            
+            this.loading['search'] = false;
+            this.cdr.detectChanges();
+            return;
+          } else {
+            this.errorMessage = 'No Destiny accounts found for that membership ID.';
+            this.loading['search'] = false;
+            this.cdr.detectChanges();
+            return;
+          }
+        } else {
+          this.errorMessage = 'Invalid membership ID or account not found.';
+          this.loading['search'] = false;
+          this.cdr.detectChanges();
+          return;
+        }
+      } catch (error: any) {
+        console.error('[Search] Membership ID lookup error:', error);
+        this.errorMessage = error?.error?.Message || 'Error looking up membership ID.';
+        this.loading['search'] = false;
+        this.cdr.detectChanges();
+        return;
+      }
+    }
 
     try {
       const [d2Resp, d1Xbox, d1Psn] = await firstValueFrom(
@@ -6583,6 +6739,31 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } else if (this.addMode && this.selectedPlayers.length > 0 && value.trim()) {
       this.errorMessage = ''; // Clear any previous warnings
     }
+  }
+
+  handleSearchEnter(event: Event): void {
+    event.preventDefault();
+    this.addSearchChip();
+  }
+
+  addSearchChip(): void {
+    const value = (this.searchUsername || '').trim();
+    if (!value) {
+      return;
+    }
+    const exists = this.searchChips.some(c => c.toLowerCase() === value.toLowerCase());
+    if (!exists) {
+      this.searchChips = [...this.searchChips, value];
+    }
+    this.searchUsername = '';
+    this.errorMessage = '';
+  }
+
+  removeSearchChip(index: number): void {
+    if (index < 0 || index >= this.searchChips.length) return;
+    const next = [...this.searchChips];
+    next.splice(index, 1);
+    this.searchChips = next;
   }
 
   /** Handler for toggling the "Include linked accounts" checkbox */

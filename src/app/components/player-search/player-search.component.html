@@ -60,24 +60,36 @@
               </div>
             </div>
             <!-- Compact Search Form -->
-            <div class="flex flex-row gap-3 items-center">
-              <input type="text" 
-                     [(ngModel)]="searchUsername"
-                     (ngModelChange)="onSearchInput($event)"
-                     (keydown.enter)="addPlayer()"
-                     [class.border-red-500]="errorMessage"
-                     class="flex-1 px-4 py-2.5 text-sm bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
-                     placeholder="Enter your Destiny username..."
-                     aria-label="Destiny username"
-                     aria-describedby="search-help">
-              <button (click)="addPlayer()" 
-                      [disabled]="!searchUsername"
-                      class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      [attr.aria-label]="loading['search'] ? 'Searching for accounts' : 'Search for Destiny accounts'"
-                      [attr.aria-busy]="loading['search']">
-                {{ loading['search'] ? 'Searching...' : 'Search' }}
-              </button>
-              <div id="search-help" class="sr-only">Search for your Destiny account by username. Press Enter to search, ESC to close modals.</div>
+            <div class="flex flex-col gap-2">
+              <div *ngIf="searchChips.length > 0" class="flex flex-wrap gap-2">
+                <span *ngFor="let chip of searchChips; let i = index"
+                      class="inline-flex items-center gap-2 bg-slate-700/90 text-slate-200 text-xs px-2 py-1 rounded-full">
+                  {{ chip }}
+                  <button (click)="removeSearchChip(i)" class="text-slate-400 hover:text-white" aria-label="Remove name">✕</button>
+                </span>
+              </div>
+              <div class="flex flex-row gap-3 items-center">
+                <input type="text"
+                       [(ngModel)]="searchUsername"
+                       (ngModelChange)="onSearchInput($event)"
+                       (keydown.enter)="handleSearchEnter($any($event))"
+                       [class.border-red-500]="errorMessage"
+                       class="flex-1 px-4 py-2.5 text-sm bg-slate-700/95 text-white rounded-lg border border-slate-600 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition-colors"
+                       placeholder="Type a username and press Enter to add"
+                       aria-label="Destiny username"
+                       aria-describedby="search-help">
+                <button (click)="addPlayer()"
+                        [disabled]="!searchUsername && searchChips.length === 0"
+                        class="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        [attr.aria-label]="loading['search'] ? 'Searching for accounts' : 'Search for Destiny accounts'"
+                        [attr.aria-busy]="loading['search']">
+                  {{ loading['search'] ? 'Searching...' : 'Search' }}
+                </button>
+                <div id="search-help" class="sr-only">Enter adds a name chip. Use Search to run lookup.</div>
+              </div>
+              <div class="text-xs text-slate-400">
+                Enter adds a name. Use Search to run lookup. For bulk, add multiple names or use a comma list and click Search.
+              </div>
             </div>
             <!-- Add Mode Controls -->
             <div *ngIf="selectedPlayers.length > 0" class="mt-2">
