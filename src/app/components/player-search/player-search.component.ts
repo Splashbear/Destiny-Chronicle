@@ -1418,6 +1418,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             console.warn('[LoadFavorites] WastedTime skipped for', player.membershipId, err);
           })
         );
+
+        // Proactively load titles in parallel so Account Summary has
+        // accurate seal counts without requiring a Titles tab visit.
+        if (!this.isD1Player(player)) {
+          loadPromises.push(
+            this.loadTitlesForPlayer(player).catch((err: any) => {
+              console.warn('[LoadFavorites] Title load skipped for', player.membershipId, err);
+            })
+          );
+        }
       }
 
       await Promise.all(loadPromises);
@@ -1544,6 +1554,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             console.warn('[LoadURLPlayers] WastedTime skipped for', player.membershipId, err);
           })
         );
+
+        // Proactively load titles so Account Summary has seals from
+        // Bungie title data for permalink-loaded players.
+        if (!this.isD1Player(player)) {
+          loadPromises.push(
+            this.loadTitlesForPlayer(player).catch((err: any) => {
+              console.warn('[LoadURLPlayers] Title load skipped for', player.membershipId, err);
+            })
+          );
+        }
       }
 
       await Promise.all(loadPromises);
@@ -1919,6 +1939,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             console.warn('[LoadWastedTime] Skipped due to error for', pl.membershipId, err);
           })
         );
+
+        // Proactively load titles in parallel for all Destiny 2 accounts
+        // when we run the character-history/firsts loader.
+        if (!this.isD1Player(pl)) {
+          loadPromises.push(
+            this.loadTitlesForPlayer(pl).catch((err: any) => {
+              console.warn('[LoadTitles] Skipped due to error for', pl.membershipId, err);
+            })
+          );
+        }
       }
       await Promise.all(loadPromises);
       // After loading character history, trigger activity loading if we have a date selected
@@ -1992,6 +2022,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Wasted-on-Destiny can run in parallel and isn't bound to the
       // concurrency semaphore because it hits a different host.
       this.loadWastedTime(displayPlayer).catch(err => console.warn('[appendPlayer] WastedTime skipped', err));
+
+      // Proactively load titles in the background for Account Summary accuracy
+      // This ensures titles are available even if the Titles tab hasn't been clicked
+      if (!this.isD1Player(displayPlayer)) {
+        this.loadTitlesForPlayer(displayPlayer).catch((err: any) => 
+          console.warn('[appendPlayer] Background title load skipped', err)
+        );
+      }
 
       // Refresh per-day activity list & stats.
       if (this.selectedDate) {
@@ -3429,9 +3467,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       }
 
-      // Pull total playtime (seconds) from cached wastedTimes
+      // Pull total playtime (seconds) from Bungie character data only.
+      // We sum `minutesPlayedTotal` / `minutesPlayed` across all characters
+      // for all selected players – no WastedOnDestiny fallback.
       for (const pl of this.selectedPlayers) {
-        totalTime += this.wastedTimes[this.getPlayerKey(pl)] || 0;
+        const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
+        if (!chars || chars.length === 0) continue;
+        const minutes = chars.reduce((sum, c) => {
+          const min = Number(c.minutesPlayedTotal ?? c.minutesPlayed ?? 0);
+          return sum + (isNaN(min) ? 0 : min);
+        }, 0);
+        totalTime += minutes * 60; // convert to seconds
       }
 
       // Total activity time: if we have actual duration from stored activities use it, otherwise fall back to totalTime
@@ -3443,10 +3489,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Total activities — count directly from IndexedDB for accuracy
       const totalActivities = await this.activityDb.countActivitiesForMemberships(this.selectedPlayers.map(p => p.membershipId));
 
-      // Aggregate seals from WoD
+      // Aggregate total seals / titles from Bungie title data only.
+      // Count earned titles only – i.e. completed/unlocked titles – so
+      // Account Summary matches the Titles tab. No WastedOnDestiny fallback.
       let totalSeals = 0;
-      for (const pl of this.selectedPlayers) {
-        totalSeals += this.wastedSeals[this.getPlayerKey(pl)] || 0;
+      if (this.aggregatedTitles && this.aggregatedTitles.length > 0) {
+        totalSeals = this.unlockedTitlesDisplay.length;
       }
 
       // Build per-platform stats
@@ -3456,21 +3504,31 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         // Use game as part of the key so Destiny 1 and Destiny 2 accounts on the same platform don't overwrite each other
         // Also include membershipId so each account gets its own card in the summary
         const key = `${pl.game}-${platformName}-${pl.membershipId}`;
-        // Prefer WastedOnDestiny playtime (seconds).  If unavailable (e.g. Destiny 1
-        // accounts) fall back to the sum of `minutesPlayedTotal` (D2) or
-        // `minutesPlayed` (D1) reported on each character profile.
-        let time = this.wastedTimes[this.getPlayerKey(pl)] || 0;
-        if (time === 0) {
-          const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
-          if (chars && chars.length > 0) {
-            const minutes = chars.reduce((sum, c) => {
-              const min = Number(c.minutesPlayedTotal ?? c.minutesPlayed ?? 0);
-              return sum + (isNaN(min) ? 0 : min);
-            }, 0);
-            time = minutes * 60; // convert to seconds to keep units consistent
+        // Compute playtime from character profiles only (no WastedOnDestiny).
+        let time = 0;
+        const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
+        if (chars && chars.length > 0) {
+          const minutes = chars.reduce((sum, c) => {
+            const min = Number(c.minutesPlayedTotal ?? c.minutesPlayed ?? 0);
+            return sum + (isNaN(min) ? 0 : min);
+          }, 0);
+          time = minutes * 60; // convert to seconds to keep units consistent
+        }
+
+        // Compute per-platform seal count from Bungie titles.
+        let sealsForPlatform = 0;
+        if (this.aggregatedTitles && this.aggregatedTitles.length > 0) {
+          const displayName = pl.displayName;
+          const platform = pl.platform;
+          for (const t of this.aggregatedTitles as any[]) {
+            if (t.locked) continue; // only count earned titles
+            if (Array.isArray(t.holders) &&
+                t.holders.some((h: any) => h.displayName === displayName && h.platform === platform)) {
+              sealsForPlatform++;
+            }
           }
         }
-        const seals = this.wastedSeals[this.getPlayerKey(pl)] || 0;
+
         const acts = await this.activityDb.countActivitiesForMemberships([pl.membershipId]);
 
         if (!platformStatsMap[key]) {
@@ -3486,7 +3544,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const s = platformStatsMap[key];
         s.totalTime += time;
         s.totalActivities += acts;
-        s.totalSeals += seals;
+        s.totalSeals += sealsForPlatform;
 
         // Populate emblem info once per platform using the account with most playtime/activities
         if (!s.emblemBackground) {
@@ -6525,6 +6583,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.playerTitles as any
       );
       this.loadingTitlesOverall = false;
+      // Trigger Account Summary recalculation now that titles are loaded
+      this.statsDebounce$.next();
       this.cdr.detectChanges();
     }
   }
@@ -7612,7 +7672,149 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.playerTitles as any
       );
       this.loadingTitlesOverall = false;
+      // Trigger Account Summary recalculation now that titles are loaded
+      this.statsDebounce$.next();
       this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Loads titles for a single player in the background (non-blocking).
+   * Used to proactively populate titles for Account Summary accuracy.
+   */
+  private async loadTitlesForPlayer(player: PlayerSearchDisplay): Promise<void> {
+    if (this.isD1Player(player)) return; // D1 has no titles
+    
+    const pKey = this.getPlayerKey(player);
+    
+    // Skip if already loaded
+    if (this.playerTitles[pKey]) return;
+    
+    try {
+      if (!this.manifest.isLoadedSync) {
+        await this.manifest.isLoaded().toPromise();
+      }
+      
+      const presentationNodes = this.manifest.getPresentationNodes();
+      const titleParentHashes = [616318467, 1881970629]; // Current and Legacy Titles
+      let allTitleNodes: any[] = [];
+      for (const parentHash of titleParentHashes) {
+        const parentNode = presentationNodes[parentHash];
+        if (!parentNode?.children?.presentationNodes) continue;
+        allTitleNodes.push(...parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean));
+      }
+      
+      // Get player records
+      const response = await firstValueFrom(this.bungieService.getPlayerTitles(player.membershipType, player.membershipId));
+      const records = response.Response?.profileRecords?.data?.records || {};
+      const charRecords = response.Response?.characterRecords?.data as { [characterId: string]: { records?: { [key: string]: TitleRecord } } } || {};
+      
+      // Build title list (same logic as onTabChange)
+      const titleMap: { [key: string]: any } = {};
+      for (const node of allTitleNodes) {
+        if (!node?.completionRecordHash) continue;
+        
+        let record = records[node.completionRecordHash];
+        if (!record) {
+          for (const charId of Object.keys(charRecords)) {
+            const charRecordObj = charRecords[charId];
+            if (charRecordObj?.records && charRecordObj.records[node.completionRecordHash]) {
+              record = charRecordObj.records[node.completionRecordHash];
+              break;
+            }
+          }
+        }
+        
+        const recordDef = this.manifest.getTitleDefs()[node.completionRecordHash];
+        const special = SPECIAL_TITLES[node.completionRecordHash] || SPECIAL_TITLES[node.hash];
+        let displayName = special ? special.name : (recordDef?.titleInfo?.titlesByGender?.Male || node.displayProperties?.name || 'Unknown');
+        const normalizedName = this.normalizeTitleName(displayName);
+        const isCompleted = record ? ((record.state & 1) !== 0) : false;
+        
+        // Gilding logic
+        let isGilded = false;
+        let timesGilded = 0;
+        let gildedIcon: string | undefined;
+        const gildingTrackingHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
+        if (gildingTrackingHash && isCompleted) {
+          let gildingRecord = records[gildingTrackingHash];
+          if (!gildingRecord) {
+            for (const charId of Object.keys(charRecords)) {
+              const charRecordObj = charRecords[charId];
+              if (charRecordObj?.records && charRecordObj.records[gildingTrackingHash]) {
+                gildingRecord = charRecordObj.records[gildingTrackingHash];
+                break;
+              }
+            }
+          }
+          if (gildingRecord) {
+            timesGilded = gildingRecord.completedCount || 0;
+            isGilded = timesGilded > 0;
+            if (isGilded && this.GILDED_SEAL_IMAGE_MAP[normalizedName]) {
+              gildedIcon = this.GILDED_SEAL_IMAGE_MAP[normalizedName];
+            }
+          }
+        }
+        
+        // Progress calculation
+        let progressPercent: number | undefined;
+        if (!isCompleted && record && Array.isArray((record as any).objectives)) {
+          let total = 0;
+          let done = 0;
+          for (const obj of (record as any).objectives) {
+            if (obj?.visible === false) continue;
+            const target = obj.completionValue ?? 1;
+            total += target;
+            done += Math.min(obj.progress ?? 0, target);
+          }
+          if (total > 0) {
+            progressPercent = Math.round((done / total) * 100);
+          }
+        }
+        
+        const uniqueKey = `${displayName}#${node.completionRecordHash}`;
+        if (!titleMap[uniqueKey]) {
+          titleMap[uniqueKey] = {
+            hash: node.completionRecordHash,
+            name: displayName,
+            icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+            completed: isCompleted,
+            isGilded,
+            timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
+            gildedIcon: (isGilded && gildedIcon) ? gildedIcon : undefined,
+            locked: !isCompleted,
+            missingRecord: !record,
+            altIcon: (() => {
+              const frames = node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames;
+              if (frames && frames.length > 0) {
+                return `https://www.bungie.net${frames[frames.length - 1]}`;
+              }
+              return undefined;
+            })(),
+            legacy: (node.parentNodeHashes || []).includes(1881970629),
+            releaseRank: RELEASE_ORDER[normalizedName] || 0,
+            normalized: normalizedName,
+            progressPercent: progressPercent,
+          };
+        }
+      }
+      
+      const allTitles = Object.values(titleMap);
+      const completed = allTitles.filter((t: any) => t.completed).sort((a: any, b: any) => a.name.localeCompare(b.name));
+      const locked = allTitles.filter((t: any) => !t.completed).sort((a: any, b: any) => a.name.localeCompare(b.name));
+      this.playerTitles[pKey] = [...completed, ...locked];
+      
+      // Rebuild aggregatedTitles and trigger stats recalculation
+      this.aggregatedTitles = this.titleService.aggregateTitles(
+        this.selectedPlayers as any,
+        this.playerTitles as any
+      );
+      this.statsDebounce$.next();
+      
+    } catch (err) {
+      console.warn('[loadTitlesForPlayer] Failed to load titles for player', player.membershipId, err);
+      // Store empty list on failure so downstream code can safely iterate
+      this.playerTitles[pKey] = [];
     }
   }
 
