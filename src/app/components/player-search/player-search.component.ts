@@ -251,79 +251,211 @@ const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHas
   1733555826: { name: 'Flawless', gildingTrackingRecordHash: 2506618338 },   // Current
 };
 
-// Explicit release order mapping (higher = newer)
-const RELEASE_ORDER: { [normalized: string]: number } = {
+// Explicit release order mapping (higher = newer).
+// IMPORTANT: keys are normalized via normalizeTitleName(). We keep a readable
+// raw list and normalize it once so lookups match `normalizedName`.
+// Organized chronologically by release date from Google Sheet, with same-date titles alphabetized.
+const RELEASE_ORDER_RAW: { [name: string]: number } = {
+  // Rank 1: 9/4/2018 - Forsaken launch (alphabetical: chronicler, cursebreaker, dredgen, rivensbane, wayfarer)
+  'chronicler': 1,
   'cursebreaker': 1,
   'dredgen': 1,
-  'wayfarer': 1,
-  'mmxix mot': 4,
-  'chronicler': 1,
-  'undying': 6,
-  'blacksmith': 2,
-  'savior': 7,
-  'almighty': 8,
-  'enlightened': 5,
-  'reckoner': 3,
-  'shadow': 3,
-  'mmxx mot': 9,
-  'harbinger': 6,
-  'forerunner': 10,
-  'descendant': 12,
-  'warden': 11,
-  'splintered': 11,
-  'chosen': 13,
   'rivensbane': 1,
-  'splicer': 14,
-  'conqueror': 8,
-  'deadeye': 15,
-  'realmw alker': 15,
-  'fatebreaker': 16,
-  'mmxxi mot': 17,
-  'vidmaster': 17,
-  'risen': 18,
-  'gumshoe': 18,
-  'iron lord': 19,
-  'reaper': 19,
-  'flamekeeper': 20,
-  'ghost writer': 22,
-  'scallywag': 21,
-  'star baker': 22,
-  'mmxxii mot': 23,
-  'seraph': 23,
-  'virtual fighter': 24,
-  'glorious': 23,
-  'queensguard': 24,
-  'reveler': 20,
-  'champ': 25,
-  'discerptor': 19,
-  'aquanaut': 25,
-  'wanted': 23,
-  'haruspex': 26,
-  'disciple-slayer': 18,
-  'wishbearer': 27,
-  'mmxxiii mot': 28,
-  'dream warrior': 24,
-  'ghoul': 24,
-  'brave': 29,
-  'godslayer': 29,
-  'kingslayer': 21,
-  'swordbearer': 26,
-  'transcendent': 30,
-  'legend': 31,
-  'intrepid': 30,
-  'slayer baron': 33,
-  'wrathbearer': 27,
-  'iconoclast': 30,
-  'unleashed': 34,
-  'heretic': 35,
-  'delver': 35,
-  'mmxxiv mot': 32,
-  'eternal': 36,
-  'heavy metal': 36,
-  'the edge of fate': 37,
-  'sharpshooter': 37,
-  'praxic': 38,
+  'wayfarer': 1,
+  
+  // Rank 2: 12/7/2018 - Black Armory
+  'blacksmith': 2,
+  
+  // Rank 3: 3/5/2019 - Season of the Drifter
+  'reckoner': 3,
+  
+  // Rank 4: 6/4/2019 - Season of Opulence
+  'shadow': 4,
+  
+  // Rank 5: 7/9/2019 - Moments of Triumph 2019
+  'mmxix mot': 5,
+  'mmxix': 5, // Alternative format without "MoT"
+  
+  // Rank 6: 10/1/2019 - Shadowkeep launch
+  'undying': 6,
+  
+  // Rank 7: 10/5/2019 - Season of Opulence
+  'enlightened': 7,
+  
+  // Rank 8: 10/29/2019 - Season of the Undying
+  'harbinger': 8,
+  
+  // Rank 9: 12/10/2019 - Season of Dawn
+  'savior': 9,
+  
+  // Rank 10: 3/10/2020 - Season of the Worthy (alphabetical: almighty, conqueror)
+  'almighty': 10,
+  'conqueror': 10,
+  
+  // Rank 11: 6/9/2020 - Season of Arrivals
+  'forerunner': 11,
+  
+  // Rank 12: 7/7/2020 - Moments of Triumph 2020
+  'mmxx mot': 12,
+  'mmxx': 12, // Alternative format without "MoT"
+  
+  // Rank 13: 11/10/2020 - Beyond Light launch (alphabetical: splintered, warden)
+  'splintered': 13,
+  'warden': 13,
+  
+  // Rank 14: 11/21/2020 - Season of the Hunt
+  'descendant': 14,
+  
+  // Rank 15: 2/9/2021 - Season of the Chosen
+  'chosen': 15,
+  
+  // Rank 16: 5/11/2021 - Season of the Splicer
+  'splicer': 16,
+  
+  // Rank 17: 5/22/2021 - Season of the Splicer
+  'fatebreaker': 17,
+  
+  // Rank 18: 8/24/2021 - Season of the Lost (alphabetical: deadeye, realmwalker)
+  'deadeye': 18,
+  'realmwalker': 18,
+  
+  // Rank 19: 12/7/2021 - Moments of Triumph 2021 (alphabetical: mmxxi mot, vidmaster)
+  'mmxxi mot': 19,
+  'mmxxi': 19, // Alternative format without "MoT"
+  'vidmaster': 19,
+  
+  // Rank 20: 2/22/2022 - The Witch Queen launch (alphabetical: disciple-slayer, gumshoe, risen)
+  'disciple-slayer': 20,
+  'gumshoe': 20,
+  'risen': 20,
+  
+  // Rank 21: 5/24/2022 - Season of the Haunted (alphabetical: iron lord, reaper)
+  'iron lord': 21,
+  'reaper': 21,
+  
+  // Rank 22: 5/27/2022 - Season of the Haunted
+  'discerptor': 22,
+  
+  // Rank 23: 7/19/2022 - Season of the Haunted
+  'reveler': 23,
+  
+  // Rank 24: 7/20/2022 - Season of the Haunted
+  'flamekeeper': 24,
+  
+  // Rank 25: 8/23/2022 - Season of Plunder
+  'scallywag': 25,
+  
+  // Rank 26: 8/26/2022 - Season of Plunder
+  'kingslayer': 26,
+  
+  // Rank 27: 9/1/2023 - Season of the Witch
+  'swordbearer': 27,
+  
+  // Rank 28: 10/18/2022 - Season of the Seraph
+  'ghost writer': 28,
+  
+  // Rank 29: 12/6/2022 - Season of the Seraph (alphabetical: glorious, mmxxii mot, seraph)
+  'glorious': 29,
+  'mmxxii mot': 29,
+  'mmxxii': 29, // Alternative format without "MoT"
+  'seraph': 29,
+  
+  // Rank 30: 12/9/2022 - Season of the Seraph
+  'wanted': 30,
+  
+  // Rank 31: 12/13/2022 - Season of the Seraph
+  'star baker': 31,
+  
+  // Rank 32: 2/8/2023 - Lightfall launch (alphabetical: queensguard, virtual fighter)
+  'queensguard': 32,
+  'virtual fighter': 32,
+  
+  // Rank 33: 3/10/2023 - Season of Defiance
+  'dream warrior': 33,
+  
+  // Rank 34: 5/2/2023 - Season of the Deep
+  'champ': 34,
+  
+  // Rank 35: 5/23/2023 - Season of the Deep
+  'aquanaut': 35,
+  
+  // Rank 36: 5/26/2023 - Season of the Deep
+  'ghoul': 36,
+  
+  // Rank 37: 8/22/2023 - Season of the Witch
+  'haruspex': 37,
+  
+  // Rank 38: 11/28/2023 - Season of the Wish
+  'wishbearer': 38,
+  
+  // Rank 39: 12/1/2023 - Season of the Wish
+  'wrathbearer': 39,
+  
+  // Rank 40: 1/30/2024 - Moments of Triumph 2023
+  'mmxxiii mot': 40,
+  'mmxxiii': 40, // Alternative format without "MoT"
+  
+  // Rank 41: 4/9/2024 - The Final Shape launch
+  'brave': 41,
+  
+  // Rank 42: 4/30/2024 - The Final Shape
+  'godslayer': 42,
+  
+  // Rank 43: 6/4/2024 - The Final Shape (alphabetical: intrepid, transcendent)
+  'intrepid': 43,
+  'transcendent': 43,
+  
+  // Rank 44: 6/7/2024 - The Final Shape
+  'iconoclast': 44,
+  
+  // Rank 45: 9/9/2024 - The Final Shape
+  'legend': 45,
+  
+  // Rank 46: 10/8/2024 - Post-Final Shape
+  'slayer baron': 46,
+  
+  // Rank 47: 10/11/2024 - Post-Final Shape
+  'unleashed': 47,
+  
+  // Rank 48: 2/4/2025 - Post-Final Shape
+  'heretic': 48,
+  
+  // Rank 49: 2/7/2025 - Post-Final Shape
+  'delver': 49,
+  
+  // Rank 50: 3/4/2025 - Moments of Triumph 2024
+  'mmxxiv mot': 50,
+  'mmxxiv': 50, // Alternative format without "MoT"
+  
+  // Rank 51: 5/6/2025 - Post-Final Shape
+  'eternal': 51,
+  
+  // Rank 52: 5/9/2025 - Post-Final Shape
+  'heavy metal': 52,
+  
+  // Rank 53: 7/15/2025 - Post-Final Shape
+  'fated weapon': 53,
+  
+  // Rank 54: 7/19/2025 - Post-Final Shape
+  'atemporal': 54,
+  
+  // Rank 55: 7/29/2025 - Post-Final Shape
+  'sharpshooter': 55,
+  
+  // Rank 56: 11/11/2025 - Post-Final Shape
+  'avant garde': 56,
+  
+  // Rank 57: 12/2/2025 - Post-Final Shape (alphabetical: renegade, undertaker)
+  'renegade': 57,
+  'undertaker': 57,
+  
+  // Rank 58: 12/13/2025 - Most recent
+  'praxic': 58,
 };
+
+const RELEASE_ORDER: { [normalized: string]: number } = Object.fromEntries(
+  Object.entries(RELEASE_ORDER_RAW).map(([k, v]) => [normalizeTitleName(k), v])
+);
 
 // Aggregated statistics per platform (e.g., Xbox, PlayStation, Steam)
 interface PlatformStats {
