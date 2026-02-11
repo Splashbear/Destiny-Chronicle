@@ -401,7 +401,7 @@ export class ActivityBreakdownService {
         baseName = name || `Unknown (${referenceId})`;
         variantName = '';
       } else {
-        baseName = this.manifest.getActivityFamilyName(referenceId, false) || name || `Unknown (${referenceId})`;
+        baseName = this.manifest.getActivityFamilyName(referenceId) || name || `Unknown (${referenceId})`;
         const fullName = name || baseName;
         if (fullName === baseName) {
           variantName = '';
