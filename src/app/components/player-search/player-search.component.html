@@ -293,6 +293,13 @@
                        'text-slate-300 hover:text-white hover:bg-slate-700/50'">
                🎖️ Titles
             </button>
+            <button (click)="onTabChange('breakdown')"
+                     class="flex-1 px-4 py-3 text-sm font-medium rounded-md transition-all duration-200"
+                     [ngClass]="activeTab === 'breakdown' ? 
+                       'bg-emerald-600 text-white shadow-lg' : 
+                       'text-slate-300 hover:text-white hover:bg-slate-700/50'">
+               📋 Activity breakdown
+            </button>
            </nav>
         </div>
 
@@ -494,6 +501,58 @@
           <div *ngIf="!loadingActivities[selectedDate] && (!groupedActivitiesByAccount || groupedActivitiesByAccount.length === 0)" 
                class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center text-slate-300">
             No activities found for this date.
+          </div>
+        </div>
+
+        <!-- Activity breakdown tab: counts per specific activity (per raid, per playlist, etc.) -->
+        <div *ngIf="activeTab === 'breakdown'" class="space-y-6">
+          <div *ngIf="selectedPlayers.length === 0" class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center text-slate-300">
+            Search for and select at least one profile to see activity counts.
+          </div>
+          <div *ngIf="selectedPlayers.length > 0 && loadingActivityBreakdown" class="flex items-center justify-center gap-2 py-8 text-slate-400">
+            <svg class="animate-spin h-6 w-6 text-emerald-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <span>Loading activity breakdown…</span>
+          </div>
+          <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown && activityBreakdownGroups.length > 0" class="space-y-8">
+            <p class="text-slate-300 text-sm">
+              Counts are aggregated across all selected profiles and all characters. Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
+            </p>
+            <div *ngFor="let group of activityBreakdownGroups" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">
+              <h3 class="text-lg font-semibold text-white mb-4">{{ group.label }}</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                  <thead>
+                    <tr class="text-slate-400 border-b border-slate-600">
+                      <th class="py-2 pr-4 font-medium">Activity</th>
+                      <th class="py-2 pr-4 font-medium">Variant</th>
+                      <th class="py-2 pr-4 font-medium">Game</th>
+                      <th class="py-2 pr-4 font-medium text-right">Runs / Clears / Time</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let row of group.rows" class="border-b border-slate-700/50 hover:bg-slate-700/30">
+                      <td class="py-2 pr-4 text-slate-200">{{ row.baseName }}</td>
+                      <td class="py-2 pr-4 text-slate-300">
+                        <span *ngIf="row.variantName; else noVariant">{{ row.variantName }}</span>
+                        <ng-template #noVariant><span class="text-slate-500">—</span></ng-template>
+                      </td>
+                      <td class="py-2 pr-4 text-slate-400">{{ row.game }}</td>
+                      <td class="py-2 pl-4 pr-0 text-right font-mono text-emerald-300 whitespace-nowrap">
+                        Runs: {{ row.runs | number }}
+                        ({{ row.clears | number }} clears, {{ row.fails | number }} fails)
+                        – {{ formatSecondsToHoursMinutes(row.timeSeconds) }}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown && activityBreakdownRows !== null && activityBreakdownRows.length === 0" class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center text-slate-300">
+            No activities in database for selected profiles. Load activities for a date first so data is synced.
           </div>
         </div>
 

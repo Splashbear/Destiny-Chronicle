@@ -38,6 +38,7 @@ import { ExportOptionsDialogComponent } from '../export-options-dialog.component
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
+import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 // import { AnalyticsComponent } from '../analytics/analytics.component';
 
 interface ActivityEntry {
@@ -623,8 +624,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   favoriteAccounts: FavoriteAccount[] = [];
   apiAvailable: boolean = true;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' = 'activities';
   activeFirstsTab: string = 'all';
+  /** Activity breakdown: counts per specific activity (e.g. per raid, per playlist). */
+  activityBreakdownRows: ActivityCountRow[] | null = null;
+  loadingActivityBreakdown = false;
+  activityBreakdownGroups: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
   platformTabs: string[] = [];
   playerTitles: { [key: string]: any } = {};
   loadingTitles: { [key: string]: boolean } = {};
@@ -843,6 +848,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private exportService: ExportService,
     private shareService: ShareService,
     private firstActivityService: FirstActivityService,
+    private activityBreakdownService: ActivityBreakdownService,
     private router: Router,
     private route: ActivatedRoute,
     private location: Location
@@ -864,6 +870,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         exhaustMap(() => from(this.calculateAccountStats()))
       )
       .subscribe();
+  }
+
+  /**
+   * Formats a duration in seconds as Hh Mm (e.g. 7098h 08m).
+   */
+  formatSecondsToHoursMinutes(totalSeconds: number | undefined | null): string {
+    const seconds = totalSeconds ?? 0;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${hours}h ${pad(minutes)}m`;
   }
 
   private updatePlatformTabs() {
@@ -7531,11 +7548,35 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     await this.titleService.debugAllTitles();
     this.checkForSpecificTitles();
   }
-  async onTabChange(tab: 'activities' | 'firsts' | 'titles') {
+  async loadActivityBreakdown(): Promise<void> {
+    if (this.selectedPlayers.length === 0) return;
+    this.loadingActivityBreakdown = true;
+    this.activityBreakdownRows = null;
+    this.activityBreakdownGroups = [];
+    this.cdr.markForCheck();
+    try {
+      const membershipIds = this.selectedPlayers.map(p => p.membershipId);
+      const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
+      this.activityBreakdownRows = rows;
+      this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(rows);
+    } catch (err) {
+      console.error('[ActivityBreakdown] Failed to load', err);
+      this.activityBreakdownRows = [];
+      this.activityBreakdownGroups = [];
+    } finally {
+      this.loadingActivityBreakdown = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown') {
     this.activeTab = tab;
     if (tab === 'firsts' && this.selectedPlayers.length > 0) {
       // Update platform tabs when switching to firsts tab
       this.updatePlatformTabs();
+    }
+    if (tab === 'breakdown' && this.selectedPlayers.length > 0) {
+      await this.loadActivityBreakdown();
     }
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
       this.loadingTitlesOverall = true;
