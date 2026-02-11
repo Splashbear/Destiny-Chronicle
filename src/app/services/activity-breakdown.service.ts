@@ -395,14 +395,26 @@ export class ActivityBreakdownService {
       const isD1 = game === 'D1';
       const name = this.manifest.getActivityName(referenceId, isD1);
       const mode = agg.mode ?? 0;
-      const parts = this.manifest.getActivityBreakdownParts(referenceId, isD1);
-      const baseName = parts.baseName || name || `Unknown (${referenceId})`;
+      let baseName: string;
+      let variantName: string;
+      if (isD1) {
+        baseName = name || `Unknown (${referenceId})`;
+        variantName = '';
+      } else {
+        baseName = this.manifest.getActivityFamilyName(referenceId, false) || name || `Unknown (${referenceId})`;
+        const fullName = name || baseName;
+        if (fullName === baseName) {
+          variantName = '';
+        } else {
+          let v = fullName.replace(baseName, '').trim();
+          if (v.startsWith(':')) v = v.slice(1).trim();
+          variantName = v || '';
+        }
+      }
       const baseNameLower = baseName.toLowerCase().trim();
 
       // Exclude dungeon/raid encounter nodes so they don't appear as standalone activities
       if (EXCLUDE_FROM_BREAKDOWN.has(baseNameLower)) continue;
-
-      const variantName = parts.variantName || '';
       const runs = agg.runs;
       const clears = agg.clears;
       const fails = Math.max(0, runs - clears);
