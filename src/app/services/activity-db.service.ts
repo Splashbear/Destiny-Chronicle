@@ -1171,6 +1171,14 @@ export class ActivityDbService extends Dexie {
               break; // stop this mode on error to avoid infinite loop
             }
 
+            // Merge activity definitions from D1 API so names resolve (definitions=true and inlined names)
+            if (resp?.definitions) {
+              this.manifest.injectD1DefinitionsFromActivityHistoryResponse(resp.definitions);
+            }
+            if (resp?.activityDefinitionsFromNames && Object.keys(resp.activityDefinitionsFromNames).length > 0) {
+              this.manifest.injectD1DefinitionsFromActivityHistoryResponse(resp.activityDefinitionsFromNames);
+            }
+
             const pageActs = resp?.data?.activities || [];
             
             // For incremental sync, stop if we've reached activities older than our cutoff
@@ -1287,11 +1295,53 @@ export class ActivityDbService extends Dexie {
       if (newActivities.length > 0) {
         // Store new activities
         await this.storeActivities(newActivities, membershipId, membershipType, characterId, isD1 ? 'D1' : 'D2');
+        // Prefetch D1 PGCRs in background (throttled) so breakdown tab has duration without bursting the API
+        if (isD1) {
+          const instanceIds = newActivities
+            .map((a: any) => a?.activityDetails?.instanceId)
+            .filter((id: any) => id != null && id !== '')
+            .map((id: any) => String(id));
+          if (instanceIds.length > 0) {
+            this.prefetchD1PgcrsInBackground([...new Set(instanceIds)]);
+          }
+        }
       }
     } catch (error) {
       console.error('[DEBUG] Error in fetchAndStoreActivities:', error);
       throw error;
     }
+  }
+
+  /**
+   * Prefetch D1 PGCRs in the background with throttling to avoid Bungie rate limits.
+   * Called after storing new D1 activities so the breakdown tab can show times from cache.
+   */
+  private prefetchD1PgcrsInBackground(instanceIds: string[]): void {
+    if (instanceIds.length === 0) return;
+    const batchSize = 2;
+    const delayMs = 1200;
+    const chunks: string[][] = [];
+    for (let i = 0; i < instanceIds.length; i += batchSize) {
+      chunks.push(instanceIds.slice(i, i + batchSize));
+    }
+    (async () => {
+      for (const chunk of chunks) {
+        try {
+          const results = await firstValueFrom(this.bungieService.getD1PGCRBatch(chunk, batchSize));
+          const list = Array.isArray(results) ? results : [];
+          for (const raw of list) {
+            if (raw?.activityDetails?.instanceId != null) {
+              await this.pgcrCacheService.cacheD1PGCR(String(raw.activityDetails.instanceId), raw);
+            }
+          }
+        } catch (err) {
+          console.warn('[D1 PGCR prefetch] Batch failed:', err);
+        }
+        if (chunks.indexOf(chunk) < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+    })();
   }
 
   // Helper method to chunk array for concurrency control
@@ -1301,6 +1351,20 @@ export class ActivityDbService extends Dexie {
       chunks.push(array.slice(i, i + chunkSize));
     }
     return chunks;
+  }
+
+  /**
+   * Get activity duration in seconds. Supports D2 shape and D1 alternate keys
+   * so D1 time displays correctly in stats and breakdown.
+   */
+  private getActivityDurationSeconds(a: any): number {
+    const v = a?.values;
+    if (v?.timePlayedSeconds?.basic?.value != null) return Number(v.timePlayedSeconds.basic.value);
+    if (v?.secondsPlayed?.basic?.value != null) return Number(v.secondsPlayed.basic.value);
+    if (typeof v?.secondsPlayed === 'number') return v.secondsPlayed;
+    if (typeof a?.secondsPlayed === 'number') return a.secondsPlayed;
+    if (typeof a?.timePlayedSeconds === 'number') return a.timePlayedSeconds;
+    return 0;
   }
 
   // Helper to generate a composite key for a favorite account
@@ -2324,10 +2388,7 @@ export class ActivityDbService extends Dexie {
       .toArray();
 
     const totalActivities = acts.length;
-    const totalTime = acts.reduce((sum, a) => {
-      const seconds = (a as any)?.values?.timePlayedSeconds?.basic?.value ?? 0;
-      return sum + (typeof seconds === 'number' ? seconds : 0);
-    }, 0);
+    const totalTime = acts.reduce((sum, a) => sum + this.getActivityDurationSeconds(a), 0);
 
     // Unique families with at least one valid completion
     const completedFamilies = new Set<string>();

@@ -1,46 +1,49 @@
 // d1-manifest-to-json.js
-// Usage: node scripts/d1-manifest-to-json.js
+// Fetches the full D1 manifest from the Bungie API and writes activity/type/mode
+// definitions to src/assets/manifest/d1-activity-definitions.json (same format the app loads).
+// Usage: BUNGIE_API_KEY=your_key node scripts/d1-manifest-to-json.js
 const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const AdmZip = require('adm-zip');
 
-const API_KEY = 'e55082388d014a79b9f5da4be0063d1c';
-const MANIFEST_META_URL = 'https://www.bungie.net/d1/platform/Destiny/Manifest/';
+const API_KEY = process.env.BUNGIE_API_KEY || process.env.API_KEY;
+const MANIFEST_META_URL = 'https://www.bungie.net/d1/Platform/Destiny/Manifest/';
 const OUTPUT_PATH = path.join(__dirname, '../src/assets/manifest/d1-activity-definitions.json');
-const MANIFEST_ZIP_PATH = path.join(__dirname, '../d1-manifest.zip');
-const MANIFEST_SQLITE_PATH = path.join(__dirname, '../d1-manifest.content');
+const MANIFEST_ZIP_PATH = path.join(__dirname, 'd1-manifest.zip');
+const SCRIPTS_DIR = __dirname;
 
 async function downloadManifest() {
-  const metaRes = await axios.get(MANIFEST_META_URL, {
-    headers: { 'X-API-Key': API_KEY }
-  });
-  if (!metaRes.data.Response || !metaRes.data.Response.mobileWorldContentPaths || !metaRes.data.Response.mobileWorldContentPaths.en) {
-    console.error('Error: Unexpected manifest metadata response:', metaRes.data);
+  if (!API_KEY) {
+    console.error('Error: Set BUNGIE_API_KEY (or API_KEY) when running this script.');
     process.exit(1);
   }
-  const enPath = metaRes.data.Response.mobileWorldContentPaths.en;
+  const metaRes = await fetch(MANIFEST_META_URL, {
+    headers: { 'X-API-Key': API_KEY }
+  });
+  const metaData = await metaRes.json();
+  if (!metaData.Response?.mobileWorldContentPaths?.en) {
+    console.error('Error: Unexpected manifest metadata response:', metaData);
+    process.exit(1);
+  }
+  const enPath = metaData.Response.mobileWorldContentPaths.en;
   const manifestUrl = 'https://www.bungie.net' + enPath;
-  const manifestRes = await axios.get(manifestUrl, { responseType: 'arraybuffer' });
-  fs.writeFileSync(MANIFEST_ZIP_PATH, manifestRes.data);
+  const manifestRes = await fetch(manifestUrl);
+  const arrayBuffer = await manifestRes.arrayBuffer();
+  fs.writeFileSync(MANIFEST_ZIP_PATH, Buffer.from(arrayBuffer));
   const stats = fs.statSync(MANIFEST_ZIP_PATH);
-  console.log('Manifest ZIP saved to:', MANIFEST_ZIP_PATH, 'Size:', stats.size, 'bytes');
+  console.log('Manifest ZIP saved:', MANIFEST_ZIP_PATH, 'Size:', stats.size, 'bytes');
 
-  // Unzip the manifest
   const zip = new AdmZip(MANIFEST_ZIP_PATH);
   const zipEntries = zip.getEntries();
-  console.log('ZIP entries:');
-  zipEntries.forEach(e => console.log(' -', e.entryName, e.header.size, 'bytes'));
   const contentEntry = zipEntries.find(e => e.entryName.endsWith('.content'));
   if (!contentEntry) {
     console.error('Error: No .content file found in manifest ZIP');
     process.exit(1);
   }
-  zip.extractEntryTo(contentEntry, path.dirname(MANIFEST_SQLITE_PATH), false, true);
-  const extractedPath = path.join(path.dirname(MANIFEST_SQLITE_PATH), contentEntry.entryName);
-  const extractedStats = fs.statSync(extractedPath);
-  console.log('Extracted SQLite DB to:', extractedPath, 'Size:', extractedStats.size, 'bytes');
+  zip.extractEntryTo(contentEntry, SCRIPTS_DIR, false, true);
+  const extractedPath = path.join(SCRIPTS_DIR, contentEntry.entryName);
+  console.log('Extracted SQLite DB to:', extractedPath);
   return extractedPath;
 }
 
@@ -82,8 +85,9 @@ async function main() {
     }
     db.close();
     fs.writeFileSync(OUTPUT_PATH, JSON.stringify(manifest, null, 2));
-    fs.unlinkSync(sqlitePath);
-    console.log('Done! Output at:', OUTPUT_PATH);
+    if (fs.existsSync(sqlitePath)) fs.unlinkSync(sqlitePath);
+    if (fs.existsSync(MANIFEST_ZIP_PATH)) fs.unlinkSync(MANIFEST_ZIP_PATH);
+    console.log('Done! Full D1 manifest written to:', OUTPUT_PATH);
   } catch (err) {
     console.error('Error:', err);
     process.exit(1);

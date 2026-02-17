@@ -23,11 +23,17 @@ export interface PrunedPgcr {
  */
 export function prunePgcr(pgcr: any, requestedMemberId?: string): PrunedPgcr {
   const activity = pgcr?.activityDetails ?? {};
+  // D2 has activityDetails.durationSeconds; D1 often only has duration in entries[].values
+  const durationFromActivity = activity.durationSeconds;
+  const durationFromFirstEntry =
+    pgcr?.entries?.[0]?.values?.activityDurationSeconds?.basic?.value ??
+    pgcr?.entries?.[0]?.values?.timePlayedSeconds?.basic?.value;
+  const duration = durationFromActivity ?? durationFromFirstEntry ?? 0;
   return {
     id:        activity.instanceId?.toString() ?? '',
-    period:    activity.period ?? '',
+    period:    pgcr?.period ?? activity.period ?? '',
     mode:      activity.mode ?? 0,
-    duration:  activity.durationSeconds ?? 0,
+    duration:  typeof duration === 'number' ? duration : 0,
     mapHash:   activity.referenceId ?? 0,
     member:    requestedMemberId,
     teams:     Array.isArray(pgcr.teams)

@@ -39,7 +39,10 @@ import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
+import { SeasonService } from '../../services/season.service';
 // import { AnalyticsComponent } from '../analytics/analytics.component';
+
+const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
 
 interface ActivityEntry {
   game: string;
@@ -626,10 +629,45 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   dbReady: boolean = false;
   activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' = 'activities';
   activeFirstsTab: string = 'all';
+  /** Activity filter preset for Activities tab */
+  activityFilterPreset: 'all' | 'clears' | 'fails' | 'raids-dungeons' = 'all';
+  readonly activityFilterOptions: { id: 'all' | 'clears' | 'fails' | 'raids-dungeons'; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'clears', label: 'Clears only' },
+    { id: 'fails', label: 'Fails only' },
+    { id: 'raids-dungeons', label: 'Raids & Dungeons' },
+  ];
+  /** Whether to hide the "How to get started" banner (persisted in localStorage) */
+  hideGetStartedBanner = false;
   /** Activity breakdown: counts per specific activity (e.g. per raid, per playlist). */
   activityBreakdownRows: ActivityCountRow[] | null = null;
   loadingActivityBreakdown = false;
   activityBreakdownGroups: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
+  /** Selected activity card labels for filtering; empty = show all */
+  selectedBreakdownCardLabels = new Set<string>();
+
+  /** Total time in seconds across activity breakdown; when filtered, only selected groups */
+  get activityBreakdownTotalTimeSeconds(): number {
+    const groups = this.filteredActivityBreakdownGroups;
+    if (!groups?.length) return 0;
+    return groups.reduce((sum, g) => sum + g.rows.reduce((s, r) => s + (r.timeSeconds ?? 0), 0), 0);
+  }
+
+  /** Total time in seconds for the selected date (from filteredActivitiesForDate) */
+  get totalTimeForSelectedDate(): number {
+    if (!this.filteredActivitiesForDate || this.filteredActivitiesForDate.length === 0) return 0;
+    return this.filteredActivitiesForDate.reduce((sum, act) => sum + this.getActivityDurationSeconds(act), 0);
+  }
+
+  /** Formats the selected date for display (e.g. "April 23, 2024") */
+  formatSelectedDateLabel(): string {
+    const year = this.selectedYear ?? new Date().getFullYear();
+    const month = this.selectedMonth;
+    const day = this.selectedDay;
+    const date = new Date(year, month - 1, day);
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  }
   platformTabs: string[] = [];
   playerTitles: { [key: string]: any } = {};
   loadingTitles: { [key: string]: boolean } = {};
@@ -849,11 +887,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private shareService: ShareService,
     private firstActivityService: FirstActivityService,
     private activityBreakdownService: ActivityBreakdownService,
+    private seasonService: SeasonService,
     private router: Router,
     private route: ActivatedRoute,
     private location: Location
   ) {
     (window as any).activityDbService = this.activityDb;
+    this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
     this.updatePlatformTabs();
 
     // Debounce username input changes (300 ms). No API hit yet; prepares for future live suggestions.
@@ -1284,6 +1324,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return Math.round((this.getCompletedCount() / this.accountLoadingStatuses.length) * 100);
   }
 
+  /** Returns the profile currently being loaded (not complete) for display in the loading modal */
+  public getCurrentLoadingProfile(): { displayName: string; platform: string } | null {
+    const loading = this.accountLoadingStatuses.find(s => s.status !== 'complete' && s.status !== 'error');
+    return loading ? { displayName: loading.displayName, platform: loading.platform } : null;
+  }
+
   public continueInBackground(): void {
     // Deprecated: replaced by passive notice. Keep no-op for safety.
     this.showLoadingModal = true;
@@ -1353,16 +1399,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Automatically load and display favorite profiles on app startup
-   * Optimized for instant display with background updates
+   * Automatically load and display favorite profiles on app startup.
+   * Uses the full load path (same as "Load All Favorites" button) so the process
+   * actually runs with proper loading UI - no fake or misleading loading states.
    */
   async loadAndDisplayFavorites() {
     await this.loadFavorites();
     
     // If we have favorites and no currently selected players, load them automatically
     if (this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0) {
-      // Use optimized instant loading for favorites
-      await this.loadMultipleFavoritesInstant(this.favoriteAccounts);
+      await this.loadMultipleFavorites(this.favoriteAccounts);
     }
   }
   /**
@@ -1546,6 +1592,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     try {
+      // Pre-populate loading status for each account so user sees which profiles are loading
+      for (const player of playersToLoad) {
+        const accountKey = this.getPlayerKey(player);
+        const isD1 = this.isD1Player(player);
+        const game = isD1 ? 'D1' : 'D2';
+        const platform = this.getPlatformName(player.membershipType);
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          player.membershipType,
+          'fetching-profile',
+          `Loading ${game} profile for ${player.displayName}...`
+        );
+      }
+
       // Load all players in parallel with concurrency limit
       const loadPromises: Promise<void>[] = [];
       for (const player of playersToLoad) {
@@ -1557,6 +1620,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               await this.loadDungeonSoloFirsts(player);
             } catch (err) {
               console.warn('[LoadFavorites] Skipped due to error for', player.membershipId, err);
+              const accountKey = this.getPlayerKey(player);
+              const existingStatus = this.accountLoadingStatus.get(accountKey);
+              if (existingStatus) {
+                this.updateAccountLoadingStatus(
+                  accountKey,
+                  existingStatus.displayName,
+                  existingStatus.platform,
+                  existingStatus.game,
+                  existingStatus.membershipType,
+                  'error',
+                  `Failed to load ${existingStatus.game} data for ${existingStatus.displayName}`
+                );
+              }
             }
           })
         );
@@ -3074,20 +3150,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
   getActivityDurationSeconds(activity: ActivityHistory): number {
     const values = activity.values as any;
-    const seconds = values && values['timePlayedSeconds']?.basic?.value;
+    let seconds = values?.timePlayedSeconds?.basic?.value ?? values?.secondsPlayed?.basic?.value ?? values?.activityDurationSeconds?.basic?.value;
+    if (typeof values?.secondsPlayed === 'number') seconds = values.secondsPlayed;
+    if (typeof values?.timePlayedSeconds === 'number') seconds = values.timePlayedSeconds;
     
-    // More reasonable validation
-    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
-      // console.warn('[DEBUG] Invalid activity duration:', seconds, activity);
-      return 0;
-    }
-    
-    // Allow for longer activities (up to 24 hours)
-    if (seconds > 86400) {
-      console.warn('[DEBUG] Suspiciously long activity duration:', seconds, activity);
-      return 86400; // Cap at 24 hours
-    }
-    
+    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) return 0;
+    if (seconds > 86400) return 86400; // Cap at 24 hours
     return seconds;
   }
 
@@ -6897,6 +6965,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return 0;
   }
 
+  /** Short display name for platform tabs (mobile-friendly) */
+  getPlatformShortName(platform: string): string {
+    if (!platform) return '';
+    const p = platform.toLowerCase();
+    if (p.includes('xbox')) return 'Xbox';
+    if (p.includes('playstation') || p.includes('psn')) return 'PS';
+    if (p.includes('steam')) return 'Steam';
+    if (p.includes('blizzard') || p.includes('battlenet')) return 'BNet';
+    if (p.includes('stadia')) return 'Stadia';
+    if (p.includes('epic')) return 'Epic';
+    return platform;
+  }
+
   /** Map class name to icon asset path */
   getClassIconUrl(className?: string): string | undefined {
     if (!className) return undefined;
@@ -7298,6 +7379,100 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getAccountGroupsForGame(game: 'D1' | 'D2') {
     return this.groupedActivitiesByAccount.filter(g => g.game === game);
   }
+
+  /** Returns grouped activities filtered by activityFilterPreset for display in Activities tab */
+  getDisplayedAccountGroupsForGame(game: 'D1' | 'D2') {
+    const base = this.getAccountGroupsForGame(game);
+    if (this.activityFilterPreset === 'all') return base;
+    const preset = this.activityFilterPreset;
+    return base.map((g: any) => ({
+      ...g,
+      yearGroups: g.yearGroups
+        .map((yg: any) => ({
+          ...yg,
+          typeGroups: yg.typeGroups
+            .filter((tg: any) => {
+              if (preset === 'raids-dungeons') {
+                const t = (tg.type || '').toLowerCase();
+                return t === 'raid' || t === 'dungeon';
+              }
+              return true;
+            })
+            .map((tg: any) => {
+              if (preset === 'clears') {
+                const filtered = tg.activities.filter((a: any) => this.isActivityCompleted(a));
+                return filtered.length ? { ...tg, activities: filtered } : null;
+              }
+              if (preset === 'fails') {
+                const filtered = tg.activities.filter((a: any) => !this.isActivityCompleted(a));
+                return filtered.length ? { ...tg, activities: filtered } : null;
+              }
+              return tg;
+            })
+            .filter(Boolean),
+        }))
+        .filter((yg: any) => yg.typeGroups.length > 0),
+    })).filter((g: any) => g.yearGroups.length > 0);
+  }
+
+  private isActivityCompleted(activity: any): boolean {
+    const v = activity?.values?.completed?.basic?.value;
+    return v === 1 || v === true;
+  }
+
+  dismissGetStartedBanner(): void {
+    this.hideGetStartedBanner = true;
+    if (typeof localStorage !== 'undefined') localStorage.setItem(HIDE_GET_STARTED_KEY, 'true');
+  }
+
+  /** D2 season name for the selected date, or null if pre-D2 */
+  getSeasonForSelectedDate(): string | null {
+    return this.seasonService.getSeasonForDate(
+      this.selectedYear ?? new Date().getFullYear(),
+      this.selectedMonth,
+      this.selectedDay
+    );
+  }
+
+  /** Toggle selection of an activity breakdown card for filtering */
+  toggleBreakdownCardSelection(label: string): void {
+    if (this.selectedBreakdownCardLabels.has(label)) {
+      this.selectedBreakdownCardLabels.delete(label);
+    } else {
+      this.selectedBreakdownCardLabels.add(label);
+    }
+    this.selectedBreakdownCardLabels = new Set(this.selectedBreakdownCardLabels);
+    this.cdr.markForCheck();
+  }
+
+  /** Whether a breakdown card is selected */
+  isBreakdownCardSelected(label: string): boolean {
+    return this.selectedBreakdownCardLabels.has(label);
+  }
+
+  /** Filtered groups for display: when cards are selected, only those; otherwise all */
+  get filteredActivityBreakdownGroups(): { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] {
+    if (!this.activityBreakdownGroups?.length) return [];
+    if (this.selectedBreakdownCardLabels.size === 0) return this.activityBreakdownGroups;
+    return this.activityBreakdownGroups.filter(g => this.selectedBreakdownCardLabels.has(g.label));
+  }
+
+  /** Summary cards for Activity Breakdown: aggregated stats per category */
+  get activityBreakdownSummaryCards(): { label: string; runs: number; clears: number; timeSeconds: number; clearRate: number }[] {
+    if (!this.activityBreakdownGroups?.length) return [];
+    return this.activityBreakdownGroups.map(g => {
+      const runs = g.rows.reduce((s, r) => s + (r.runs ?? 0), 0);
+      const clears = g.rows.reduce((s, r) => s + (r.clears ?? 0), 0);
+      const timeSeconds = g.rows.reduce((s, r) => s + (r.timeSeconds ?? 0), 0);
+      return {
+        label: g.label,
+        runs,
+        clears,
+        timeSeconds,
+        clearRate: runs > 0 ? (clears / runs) * 100 : 0,
+      };
+    });
+  }
   /**
    * Groups activities by their version (Normal, Master, Explorer, etc.)
    */
@@ -7553,6 +7728,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.loadingActivityBreakdown = true;
     this.activityBreakdownRows = null;
     this.activityBreakdownGroups = [];
+    this.selectedBreakdownCardLabels = new Set();
     this.cdr.markForCheck();
     try {
       const membershipIds = this.selectedPlayers.map(p => p.membershipId);

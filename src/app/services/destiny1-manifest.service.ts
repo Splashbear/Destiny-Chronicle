@@ -31,6 +31,59 @@ export class Destiny1ManifestService {
     }
   }
 
+  /** Whether we have a definition for this activity (from static JSON or previously injected). */
+  hasActivityDefinition(referenceId: string | number): boolean {
+    if (!referenceId) return false;
+    const defs = this.manifest.DestinyActivityDefinition;
+    if (!defs || typeof defs !== 'object') return false;
+    const def = defs[String(referenceId)];
+    return !!def && (!!(def.activityName || def.displayProperties?.name) || !!def.activityTypeHash);
+  }
+
+  /**
+   * Inject a single activity definition from the D1 Manifest API (GetDestinySingleDefinition).
+   * Use when we need name/mode for a referenceId that isn't in the static manifest.
+   */
+  injectSingleActivityDefinition(referenceId: string | number, def: any): void {
+    if (!def || typeof def !== 'object') return;
+    if (!this.manifest.DestinyActivityDefinition) {
+      this.manifest.DestinyActivityDefinition = {};
+    }
+    const key = String(referenceId);
+    const name = def.activityName ?? def.displayProperties?.name;
+    this.manifest.DestinyActivityDefinition[key] = {
+      ...(this.manifest.DestinyActivityDefinition[key] || {}),
+      ...def,
+      ...(name ? { activityName: name } : {})
+    };
+  }
+
+  /**
+   * Merge activity definitions from the D1 Activity History API (when definitions=true).
+   * Call this when you receive a response that includes definitions so names resolve.
+   */
+  injectDefinitionsFromApi(definitions: any): void {
+    if (!definitions || typeof definitions !== 'object') return;
+    if (!this.manifest.DestinyActivityDefinition) {
+      this.manifest.DestinyActivityDefinition = {};
+    }
+    const target = this.manifest.DestinyActivityDefinition as Record<string, any>;
+    // D1 API may return definitions.activities, definitions.DestinyActivityDefinition, or hash-keyed at top level
+    const activities =
+      definitions.activities ?? definitions.DestinyActivityDefinition ?? definitions;
+    if (!activities || typeof activities !== 'object') return;
+    for (const [hash, def] of Object.entries(activities)) {
+      if (!def || typeof def !== 'object') continue;
+      const key = String(hash);
+      const name = (def as any).activityName ?? (def as any).displayProperties?.name;
+      if (name) {
+        target[key] = { ...(target[key] || {}), ...(def as object), activityName: name };
+      } else {
+        target[key] = { ...(target[key] || {}), ...(def as object) };
+      }
+    }
+  }
+
   getActivityName(referenceId: string | number): string {
     if (!this.manifest.DestinyActivityDefinition || !referenceId) return 'Unknown Activity';
     const def = this.manifest.DestinyActivityDefinition[String(referenceId)];

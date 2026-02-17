@@ -1,76 +1,67 @@
 # Destiny Chronicle Project Report
 
-## Latest Updates (May 2024)
+## Latest Updates (January 2026)
 
-### Core Improvements
-1. **Activity Fetching & Storage**
-   - Implemented robust pagination for activity fetching
-   - Added proper deduplication using instanceId and period
-   - Optimized database schema with flattened fields for better indexing
-   - Added compound indexes for efficient querying
+### Core Improvements (Current)
+1. **Titles & Seals**
+   - Titles sort by release date (newest first) or alphabetically
+   - Hash-based release order for Moments of Triumph (MMX*) titles so they display in correct chronological order
+   - Account summary total seals and total time from Bungie data only; titles loaded in background so summary updates without visiting Titles tab
 
-2. **Timezone Handling**
-   - Implemented consistent timezone-aware date filtering
-   - Added utility service for timezone conversions
-   - Ensured all date comparisons use local time for better UX
+2. **Export**
+   - Multi-sheet export: Export Info, Activities, Guardian Firsts, Titles & Seals, Account Summary
+   - Guardian Firsts and Activities export logic corrected; summary aligns with UI
 
-3. **UI/UX Enhancements**
-   - Added loading indicators for all async operations
-   - Implemented progress bar for activity fetching
-   - Added clear database functionality
-   - Fixed icon sizing and layout issues
-   - Improved error handling and user feedback
+3. **Player Search**
+   - Chip-style input for multiple usernames (Enter adds chip; button runs search)
+   - Membership ID lookup supported
+   - Full-string-then-split search for names with commas (e.g. "crayola, crayon colored")
 
-4. **Code Quality**
-   - Removed noisy debug logs
-   - Added TypeScript type safety improvements
-   - Centralized activity filtering logic
-   - Improved error handling and recovery
+4. **Activity Fetching & Storage**
+   - Robust pagination and deduplication (instanceId, period)
+   - Optimized IndexedDB schema with compound indexes
 
-5. **API Integration & Deployment**
-   - Successfully deployed to GitHub Pages at https://splashbear.github.io
-   - Fixed Origin Header configuration for Bungie API
-   - Implemented environment-specific API key handling
-   - Added proper CORS and security headers
-   - Resolved deployment-specific API authentication issues
+5. **Timezone Handling**
+   - Timezone-aware date filtering; activities grouped by local date
 
 6. **Account Statistics**
-   - Added comprehensive account summary section
-   - Implemented total time played calculation
-   - Added activity type breakdowns
-   - Included per-character statistics
-   - Added loading indicators for stats calculation
+   - Account summary: total time played, total activity count, total seals, per-type breakdown
+   - Stats from Bungie character and title data; loading indicators during calculation
+
+7. **API Integration & Deployment**
+   - Bungie API integration with environment-specific keys; deployment (e.g. Netlify / GitHub Actions) and SPA routing configured
 
 ### Current Features
 1. **Player Management**
-   - Search and add Destiny 1 & 2 players
+   - Search by Bungie Name, membership ID, or chip-style multiple names
    - Support for multiple platforms (Xbox, PlayStation, Steam, Cross Save)
-   - Character selection and management
+   - Character selection and management; favorites
 
 2. **Activity Tracking**
-   - Fetch and display activity history
-   - Group activities by year and type
-   - Filter activities by date
-   - Display detailed activity information
+   - Fetch and display activity history by date
+   - Group activities by year and type (Raid, Dungeon, Strike, PvP, Gambit, etc.)
+   - PGCR linking; activity images and metadata
 
-3. **Statistics**
-   - Total time played
-   - Activity counts by type
-   - Time spent in different activities
-   - Per-character breakdowns
+3. **Guardian Firsts**
+   - First Ever activity; first completion per raid/dungeon (including variants)
+   - Solo and solo flawless dungeon firsts; PGCR links
 
-4. **Data Management**
-   - Local storage with IndexedDB
-   - Efficient caching and deduplication
-   - Clear database functionality
-   - Robust error handling
+4. **Titles & Seals**
+   - D2 title tracking; sort by release (newest first) or alphabetical
+   - Legacy and gilded support; total seals in account summary
+
+5. **Statistics & Export**
+   - Account summary: total time, total activities, total seals, per-type breakdown
+   - Export to Excel/CSV (activities, firsts, titles, summary)
+
+6. **Data Management**
+   - IndexedDB for local caching; clear database; robust error handling
 
 ### Technical Implementation
 1. **Frontend**
-   - Angular 17 with standalone components
+   - Angular 19 with standalone components
    - Tailwind CSS for styling
-   - Responsive design
-   - Loading indicators and progress bars
+   - Responsive design; loading indicators and progress bars
 
 2. **Data Layer**
    - IndexedDB for local storage
@@ -86,51 +77,25 @@
 
 ### Next Steps
 1. **Features**
-   - Add activity streak tracking
-   - Implement advanced filtering options
-   - Add activity type drill-down
-   - Enhance statistics visualization
+   - Activity streak tracking; advanced filtering; activity type drill-down
+   - Optional integration of D1/D2 Raids and D2 Dungeons reference data into Guardian Firsts view
 
 2. **Technical**
-   - Add unit tests
-   - Implement end-to-end testing
-   - Add performance monitoring
-   - Optimize bundle size
-   - Investigate and fix inconsistent player search behavior
-     - Some Bungie Names work while others don't
-     - Need to understand why certain searches return empty results
-     - Consider alternative search methods or fallback options
-   - Fix activity bleedover issue
-     - Ensure proper clearing of previous user's activity data
-     - Implement proper state management between user searches
-     - Add validation to prevent displaying wrong user's activities
+   - Unit and e2e tests; performance monitoring; bundle size optimization
 
 3. **UI/UX**
-   - Add dark/light theme support
-   - Implement responsive design improvements
-   - Add more interactive visualizations
-   - Enhance error message clarity
+   - Dark/light theme; responsive/mobile refinements; clearer error messages
 
 ### Known Issues
 1. **Performance**
-   - Large activity sets may take time to load
-   - Initial database population can be slow
+   - Large activity sets (e.g. 20k+) can take time to load; initial DB population can be slow.
+   - Browsers may throttle inactive tabs; keep app tab active during full load.
 
 2. **UI**
-   - Some loading states could be more informative
-   - Mobile layout needs refinement
+   - Some loading states could be more informative; mobile layout may need refinement.
 
-3. **Player Search**
-   - Inconsistent behavior with Bungie Name searches
-   - Some valid Bungie Names return empty results
-   - Need to investigate API response patterns
-   - Consider adding fallback search methods
-
-4. **Data Management**
-   - Activity bleedover between user searches
-   - Previous user's activity history may be displayed for new searches
-   - Need to implement proper data clearing between searches
-   - Add validation to ensure displayed activities match current user
+3. **Analytics / Achievements**
+   - Analytics (platform achievements) tab is currently disabled in the UI; refactor exists in code but is not shown.
 
 ### Success Metrics
 1. **User Experience**
@@ -163,4 +128,4 @@
 
 ---
 
-*Last Updated: May 2024* 
+*Last Updated: January 2026* 

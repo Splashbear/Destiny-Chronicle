@@ -5,31 +5,26 @@ Destiny Chronicle is a web application that allows users to track and view their
 
 ## Key Features
 1. **Player Search & Management**
-   - Search for players across D1 and D2
-   - Support for multiple platforms (Xbox, PlayStation)
-   - Cross-save account support
-   - Favorite accounts system
-   - Multiple account comparison
+   - Search by Bungie Name, membership ID, or chip-style multiple usernames
+   - Support for multiple platforms (Xbox, PlayStation, Steam, Cross Save)
+   - Cross-save account support; favorite accounts; multiple account comparison
 
 2. **Activity Tracking**
-   - Daily activity history
-   - Activity grouping by type (Raid, Strike, Nightfall, Crucible, etc.)
-   - Activity images and icons
-   - PGCR (Post Game Carnage Report) linking
-   - Time tracking and statistics
+   - Daily activity history; filter by date (timezone-aware)
+   - Activity grouping by type (Raid, Dungeon, Strike, Nightfall, Crucible, Gambit, etc.)
+   - Activity images and icons; PGCR linking; time tracking and statistics
 
 3. **Guardian Firsts**
-   - First completion tracking for raids and dungeons
-   - Completion dates and times
-   - Activity screenshots
-   - PGCR linking for first completions
+   - First Ever activity; first completion per raid/dungeon (all variants)
+   - Solo and solo flawless dungeon firsts; completion dates and PGCR links
 
 4. **Titles & Seals**
-   - D2 title tracking
-   - Title progress and completion status
-   - Legacy title support
-   - Gilded seal tracking
-   - Title descriptions and images
+   - D2 title tracking; sort by release (newest first) or alphabetical
+   - Legacy and gilded seal tracking; total seals in account summary (Bungie-only)
+
+5. **Account Summary & Export**
+   - Total time played, total activities, total seals, per-type breakdown (from Bungie data)
+   - Export to Excel/CSV: Export Info, Activities, Guardian Firsts, Titles & Seals, Account Summary
 
 ## Technical Architecture
 

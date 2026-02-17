@@ -7,6 +7,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { DestinyManifestService } from './services/destiny-manifest.service';
 import { ShareService } from './services/share.service';
 import { SharedStateService } from './services/shared-state.service';
+import { ThemeService } from './services/theme.service';
 
 @Component({
   selector: 'app-root',
@@ -19,6 +20,7 @@ export class AppComponent {
   title = 'Destiny Chronicle';
 
   constructor(
+    public theme: ThemeService,
     private manifestService: DestinyManifestService,
     private shareService: ShareService,
     private sharedState: SharedStateService

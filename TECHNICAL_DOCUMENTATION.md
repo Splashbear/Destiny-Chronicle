@@ -2,7 +2,7 @@
 
 ## Overview
 
-Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 1 and Destiny 2 players. Built with Angular 17 and TypeScript, it provides detailed activity history tracking, performance analytics, character progression monitoring, and organized data presentation across both games.
+Destiny Chronicle is a comprehensive activity tracking and analysis application for Destiny 1 and Destiny 2 players. Built with Angular 19 and TypeScript, it provides detailed activity history tracking, Guardian Firsts (first raid/dungeon completions, solo/solo flawless), Titles & Seals, and organized data presentation across both games.
 
 ## What This Site Does (In Simple Terms)
 
@@ -98,20 +98,21 @@ This creates a comprehensive gaming diary that helps you relive your Destiny jou
 ## Architecture
 
 ### Technology Stack
-- **Frontend**: Angular 17 with TypeScript
+- **Frontend**: Angular 19 with TypeScript
 - **State Management**: RxJS Observables and BehaviorSubjects
 - **Database**: IndexedDB (Dexie.js) for client-side caching
-- **Styling**: TailwindCSS for responsive design
-- **Build System**: Angular CLI with Webpack
+- **Styling**: Tailwind CSS (TailwindCSS) for responsive design
+- **Build System**: Angular CLI (application builder)
 - **Routing**: Angular Router with dynamic route parameters
 
-### Core Components
-- **PlayerSearchComponent**: Main application interface with comprehensive functionality
-- **ActivityDbService**: IndexedDB operations and Bungie API integration
-- **FirstActivityService**: Guardian Firsts computation and caching
+### Core Components / Services
+- **PlayerSearchComponent**: Main application interface (search, activities, Guardian Firsts, Titles, export)
+- **ActivityDbService**: IndexedDB operations, first-completion logic, Bungie API integration
+- **TitleService**: Title fetching, aggregation, release-order (name + hash-based) for sorting
 - **TimezoneService**: Date formatting and timezone handling
 - **BungieApiService**: API communication and rate limiting
 - **PGCRCacheService**: Post Game Carnage Report caching and management
+- **ExportService**: Multi-sheet Excel/CSV export (activities, firsts, titles, summary)
 
 ## Data Models
 

@@ -27,6 +27,18 @@ export class ActivityGroupingService {
 
   constructor(private manifest: DestinyManifestService) {}
 
+  /** Get activity duration in seconds; supports D2 and D1 alternate keys. */
+  private getActivityDurationSeconds(activity: ActivityHistory): number {
+    const a = activity as any;
+    const v = a?.values;
+    if (v?.timePlayedSeconds?.basic?.value != null) return Number(v.timePlayedSeconds.basic.value);
+    if (v?.secondsPlayed?.basic?.value != null) return Number(v.secondsPlayed.basic.value);
+    if (typeof v?.secondsPlayed === 'number') return v.secondsPlayed;
+    if (typeof a?.secondsPlayed === 'number') return a.secondsPlayed;
+    if (typeof a?.timePlayedSeconds === 'number') return a.timePlayedSeconds;
+    return 0;
+  }
+
   /**
    * Group activities by date and type with caching
    */
@@ -73,7 +85,7 @@ export class ActivityGroupingService {
       const typeGroups = this.groupByType(dateActivities);
       const totalActivities = dateActivities.length;
       const totalPlaytime = dateActivities.reduce((sum, activity) => {
-        return sum + (activity.values?.timePlayedSeconds?.basic?.value || 0);
+        return sum + this.getActivityDurationSeconds(activity);
       }, 0);
 
       result.push({
@@ -108,7 +120,7 @@ export class ActivityGroupingService {
     
     for (const [type, typeActivities] of typeGroups) {
       const totalPlaytime = typeActivities.reduce((sum, activity) => {
-        return sum + (activity.values?.timePlayedSeconds?.basic?.value || 0);
+        return sum + this.getActivityDurationSeconds(activity);
       }, 0);
 
       const totalScore = typeActivities.reduce((sum, activity) => {
@@ -199,7 +211,7 @@ export class ActivityGroupingService {
   } {
     const totalActivities = activities.length;
     const totalPlaytime = activities.reduce((sum, activity) => {
-      return sum + (activity.values?.timePlayedSeconds?.basic?.value || 0);
+      return sum + this.getActivityDurationSeconds(activity);
     }, 0);
 
     // Find most played activity type

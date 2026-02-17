@@ -1,8 +1,10 @@
 # Platform Achievements Refactor Summary
 
+> **Current UI status (Jan 2026):** The Analytics/Achievements tab is **disabled** in the app. The refactor below exists in code (e.g. `AchievementsService`, `AnalyticsComponent`) but is not shown in the navigation. Re-enabling would require uncommenting `AnalyticsComponent` in the player-search imports and adding the tab back to the template.
+
 ## 🎯 **What Was Changed**
 
-The Achievements tab has been completely refactored to display **platform-specific achievements** (Steam, Xbox, PlayStation) instead of in-game Destiny 2 triumphs. This aligns with the goal of showing console/platform achievements like those found on Steam Community.
+The Achievements tab was refactored to display **platform-specific achievements** (Steam, Xbox, PlayStation) instead of in-game Destiny 2 triumphs. This aligns with the goal of showing console/platform achievements like those found on Steam Community.
 
 ## 🔄 **Key Changes Made**
 

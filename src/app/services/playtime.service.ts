@@ -5,6 +5,18 @@ import { ActivityDbService } from './activity-db.service';
 import { firstValueFrom } from 'rxjs';
 import { ActivityHistory } from '../models/activity-history.model';
 
+/** Get activity duration in seconds; supports D2 and D1 alternate keys. */
+function getActivityDurationSeconds(a: any): number {
+  const v = a?.values;
+  if (v?.timePlayedSeconds?.basic?.value != null) return Number(v.timePlayedSeconds.basic.value);
+  if (v?.secondsPlayed?.basic?.value != null) return Number(v.secondsPlayed.basic.value);
+  if (v?.activityDurationSeconds?.basic?.value != null) return Number(v.activityDurationSeconds.basic.value);
+  if (typeof v?.secondsPlayed === 'number') return v.secondsPlayed;
+  if (typeof a?.secondsPlayed === 'number') return a.secondsPlayed;
+  if (typeof a?.timePlayedSeconds === 'number') return a.timePlayedSeconds;
+  return 0;
+}
+
 export interface PlaytimeResult {
   seconds: number;
   seals: number; // Destiny 2 only; 0 for D1
@@ -77,11 +89,8 @@ export class PlaytimeService {
         })
         .toArray();
       for (const act of allActs) {
-        let dur: number | undefined = (act as any)?.values?.timePlayedSeconds?.basic?.value;
-        if (dur === undefined) {
-          dur = (act as any)?.values?.activityDurationSeconds?.basic?.value;
-        }
-        if (typeof dur === 'number' && dur > 0) seconds += dur;
+        const dur = getActivityDurationSeconds(act as any);
+        if (dur > 0) seconds += dur;
       }
     }
 

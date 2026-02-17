@@ -85,14 +85,32 @@ export class DestinyManifestService {
     return definition;
   }
 
-  getActivityName(referenceId: string | number, isD1: boolean = false): string {
-    if (!this.manifestLoaded.value) {
-      return 'Loading...';
+  /**
+   * Merge D1 activity definitions from an Activity History response (when definitions=true).
+   * Call after fetching D1 activities so names resolve from the API.
+   */
+  injectD1DefinitionsFromActivityHistoryResponse(definitions: any): void {
+    if (definitions) {
+      this.d1Manifest.injectDefinitionsFromApi(definitions);
     }
+  }
+
+  /** Known D1 raid (and key activity) names when definition is missing from manifest/API. */
+  private static D1_KNOWN_NAMES: Record<string, string> = {
+    '3801607287': "Vault of Glass", '708693006': "Vault of Glass", '2659248071': "Vault of Glass", '2659248068': "Vault of Glass", '2659248069': "Vault of Glass", '856898338': "Vault of Glass", '4038697181': "Vault of Glass",
+    '898834093': "Crota's End", '112157962': "Crota's End", '3879860662': "Crota's End", '1836893116': "Crota's End", '1836893119': "Crota's End", '2324706853': "Crota's End", '4000873610': "Crota's End",
+    '1733556769': "King's Fall", '3534581229': "King's Fall", '1016659723': "King's Fall", '3978884648': "King's Fall",
+    '2578867903': "Wrath of the Machine", '4007500989': "Wrath of the Machine", '1099433614': "Wrath of the Machine", '1342567280': "Wrath of the Machine", '260765522': "Wrath of the Machine", '1387993552': "Wrath of the Machine", '430160982': "Wrath of the Machine", '3356249023': "Wrath of the Machine"
+  };
+
+  getActivityName(referenceId: string | number, isD1: boolean = false): string {
     if (!referenceId) return 'Unknown Activity';
     if (isD1) {
-      return this.d1Manifest.getActivityName(referenceId);
+      const name = this.d1Manifest.getActivityName(referenceId);
+      if (name && name !== 'Unknown Activity') return name;
+      return DestinyManifestService.D1_KNOWN_NAMES[String(referenceId)] || name || 'Unknown Activity';
     }
+    if (!this.manifestLoaded.value) return 'Loading...';
     const def = this.activityDefs[String(referenceId)];
     return def?.displayProperties?.name || 'Unknown Activity';
   }
@@ -136,7 +154,72 @@ export class DestinyManifestService {
     }
   }
 
-  getActivityType(referenceId: string | number, mode?: number): string {
+  /**
+   * Returns normalized pieces for breakdown views:
+   * - baseName: family/base activity name (e.g. \"Lake of Shadows\")
+   * - variantName: difficulty or variant label (e.g. \"Nightfall\", \"Nightfall Grandmaster\", \"Smuggle\")
+   * When isD1 is true, uses D1 manifest/name so D1 activities display correctly.
+   */
+  getActivityBreakdownParts(referenceId: string | number, isD1?: boolean): { baseName: string; variantName: string } {
+    if (isD1) {
+      const baseName = this.getActivityName(referenceId, true) || 'Unknown Activity';
+      return { baseName, variantName: '' };
+    }
+    const baseName = this.getActivityFamilyName(referenceId, false) || 'Unknown Activity';
+
+    if (!this.manifestLoaded.value) {
+      return { baseName, variantName: '' };
+    }
+
+    const def = this.activityDefs[String(referenceId)];
+    const fullName: string = def?.displayProperties?.name || baseName;
+
+    // If the full name already equals the base name, there is no explicit variant label.
+    if (!fullName || fullName === baseName) {
+      return { baseName, variantName: '' };
+    }
+
+    // Helper: remove common prefixes like \"Invasion:\" before parsing.
+    const stripCommonPrefixes = (name: string): string => {
+      return name.replace(/^Invasion:\s*/i, '').trim();
+    };
+
+    let working = stripCommonPrefixes(fullName);
+
+    // Try to extract variant by removing the base name from the working string.
+    let variantCandidate = working.replace(baseName, '').trim();
+    if (variantCandidate.startsWith(':')) {
+      variantCandidate = variantCandidate.slice(1).trim();
+    }
+
+    // If we didn't get anything useful, fall back to colon-based splitting.
+    if (!variantCandidate) {
+      const parts = working.split(':').map(p => p.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        // Prefer the part that is not equal to the base name.
+        const alt = parts.find(p => p !== baseName);
+        if (alt) {
+          variantCandidate = alt;
+        }
+      }
+    }
+
+    return {
+      baseName,
+      variantName: variantCandidate || ''
+    };
+  }
+
+  getActivityType(referenceId: string | number, mode?: number, isD1?: boolean): string {
+    // D1: use D1 manifest type when available so we get correct categorization from D1 definitions
+    if (isD1) {
+      const d1Type = this.d1Manifest.getActivityType(referenceId);
+      if (d1Type && d1Type !== 'unknown') {
+        const normalized = this.normalizeD1ActivityType(d1Type);
+        if (normalized) return normalized;
+      }
+    }
+
     // Special case: Shattered Throne has wrong mode but is definitely a dungeon
     const refIdStr = String(referenceId);
     if (refIdStr === '2032534090' || refIdStr === '1347078175') {
@@ -274,6 +357,18 @@ export class DestinyManifestService {
     if (name.includes('dungeon')) return 'dungeon';
     if (name.includes('leviathan') || name.includes('raid')) return 'raid';
     return 'other';
+  }
+
+  /** Map D1 manifest type (identifier or activityTypeName) to our breakdown type slug. */
+  private normalizeD1ActivityType(d1Type: string): string {
+    const lower = d1Type.toLowerCase();
+    if (lower.includes('raid')) return 'raid';
+    if (lower.includes('strike') || lower.includes('nightfall')) return lower.includes('nightfall') ? 'nightfall' : 'strike';
+    if (lower.includes('story')) return 'story';
+    if (lower.includes('patrol')) return 'patrol';
+    if (lower.includes('pvp') || lower.includes('crucible') || lower.includes('elimination') || lower.includes('rumble') || lower.includes('supremacy') || lower.includes('inferno')) return 'crucible';
+    if (lower.includes('public') || lower.includes('event')) return 'public-event';
+    return ''; // unknown D1 type -> caller falls back to mode-based logic
   }
 
   /**
@@ -752,15 +847,18 @@ export class DestinyManifestService {
 
   /**
    * Gets the activity family name (base name) for grouping.
-   * This is the primary method for automatic grouping.
+   * When isD1 is true, uses D1 name so D1 activities group correctly.
    */
-  getActivityFamilyName(referenceId: string | number): string {
+  getActivityFamilyName(referenceId: string | number, isD1?: boolean): string {
+    if (isD1) {
+      const name = this.getActivityName(referenceId, true);
+      return this.normalizeBaseName(name || 'Unknown Activity');
+    }
     // First try manifest-based grouping
     const baseName = this.getBaseActivityNameFromManifest(referenceId);
     if (baseName && baseName !== 'Unknown Activity') {
       return baseName;
     }
-    
     // Fallback to simple name normalization
     const name = this.getActivityName(referenceId, false);
     return this.normalizeBaseName(name);

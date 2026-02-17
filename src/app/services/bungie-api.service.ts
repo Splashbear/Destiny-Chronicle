@@ -222,7 +222,8 @@ export class BungieApiService {
     const params: any = {
       count,
       page,
-      mode // always include mode
+      mode, // always include mode
+      definitions: 'true' // Request activity definitions so we get names from D1 API
     };
 
     const url = `${this.D1_BASE_URL}/Destiny/Stats/ActivityHistory/${membershipType}/${membershipId}/${characterId}/`;
@@ -237,21 +238,62 @@ export class BungieApiService {
           throw new Error(`Bungie API Error: ${response.ErrorStatus} - ${response.Message}`);
         }
 
-        // Transform the response to match expected structure and add game flag
-        const activities = response.Response.data.activities || [];
-        const respHasMore = (response as any)?.Response?.hasMore;
-        const totalResults = response.Response.data.totalResults || 0;
+        const raw = response.Response;
+        const activities = raw?.data?.activities || [];
+        const respHasMore = raw?.hasMore;
+        const totalResults = raw?.data?.totalResults || 0;
+        // D1 API may return definitions at top level or under data
+        const definitions = raw?.definitions ?? raw?.data?.definitions ?? null;
+
+        // Build per-activity definitions from inlined names (when API returns activityName on each item)
+        const activityDefinitionsFromNames: Record<string, { activityName: string }> = {};
+
+        // Normalize each activity: activityDetails + values.timePlayedSeconds + collect names
+        const normalized = activities.map((activity: any) => {
+          const referenceId = activity.activityDetails?.referenceId ?? activity.activityHash ?? activity.referenceId;
+          const instanceId = activity.activityDetails?.instanceId ?? activity.instanceId ?? activity.activityId;
+          const activityMode = activity.activityDetails?.mode ?? activity.mode ?? mode;
+
+          // D1 may use timePlayedSeconds like D2, or secondsPlayed, activityDurationSeconds, or top-level - normalize to D2 shape
+          const durationSeconds =
+            activity.values?.timePlayedSeconds?.basic?.value ??
+            activity.values?.secondsPlayed?.basic?.value ??
+            activity.values?.activityDurationSeconds?.basic?.value ??
+            (typeof activity.values?.secondsPlayed === 'number' ? activity.values.secondsPlayed : null) ??
+            (typeof activity.values?.activityDurationSeconds === 'number' ? activity.values.activityDurationSeconds : null) ??
+            (typeof activity.secondsPlayed === 'number' ? activity.secondsPlayed : null) ??
+            (typeof activity.timePlayedSeconds === 'number' ? activity.timePlayedSeconds : null);
+          const values = {
+            ...(activity.values || {}),
+            ...(durationSeconds != null && typeof durationSeconds === 'number'
+              ? { timePlayedSeconds: { basic: { value: durationSeconds } } }
+              : {})
+          };
+
+          if (activity.activityName && referenceId != null) {
+            activityDefinitionsFromNames[String(referenceId)] = { activityName: activity.activityName };
+          }
+
+          return {
+            ...activity,
+            game: 'D1',
+            mode: activityMode,
+            values,
+            activityDetails: {
+              ...(activity.activityDetails || {}),
+              referenceId: referenceId != null ? String(referenceId) : undefined,
+              instanceId: instanceId != null ? String(instanceId) : undefined,
+              mode: activityMode
+            }
+          };
+        });
+
         return {
-          data: {
-            activities: activities.map((activity: any) => ({
-              ...activity,
-              game: 'D1',  // Add game flag for D1 activities
-              mode: mode   // Add mode to each activity
-            }))
-          },
+          data: { activities: normalized },
           totalResults,
-          // Prefer Bungie's hasMore when available; fallback to page-size heuristic
-          hasMore: typeof respHasMore === 'boolean' ? respHasMore : (activities.length === count)
+          hasMore: typeof respHasMore === 'boolean' ? respHasMore : (activities.length === count),
+          definitions,
+          activityDefinitionsFromNames: Object.keys(activityDefinitionsFromNames).length > 0 ? activityDefinitionsFromNames : null
         };
       }),
       catchError(error => {
@@ -428,6 +470,41 @@ export class BungieApiService {
         console.error('Error fetching activity count:', error);
         return of(0);
       })
+    );
+  }
+
+  /**
+   * D1 Manifest: returns metadata (version, table paths). GET /Destiny/Manifest/
+   */
+  getD1Manifest(): Observable<any> {
+    const url = `${this.D1_BASE_URL}/Destiny/Manifest/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      map((response: BungieResponse<any>) => {
+        if (response.ErrorCode !== 1) {
+          throw new Error(`Bungie D1 Manifest Error: ${response.ErrorStatus} - ${response.Message}`);
+        }
+        return response.Response;
+      }),
+      catchError(this.handleError)
+    );
+  }
+
+  /**
+   * D1 Manifest: returns a single definition. GET /Destiny/Manifest/{type}/{id}/
+   * Use type e.g. "DestinyActivityDefinition" and id = activity hash (referenceId).
+   */
+  getD1SingleDefinition(type: string, id: string): Observable<any> {
+    const url = `${this.D1_BASE_URL}/Destiny/Manifest/${encodeURIComponent(type)}/${encodeURIComponent(id)}/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      map((response: BungieResponse<any>) => {
+        if (response.ErrorCode !== 1) {
+          throw new Error(`Bungie D1 Definition Error: ${response.ErrorStatus} - ${response.Message}`);
+        }
+        return response.Response;
+      }),
+      catchError(this.handleError)
     );
   }
 

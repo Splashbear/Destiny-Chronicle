@@ -1,9 +1,19 @@
 # Project Status Report
 
-## Iteration: Account Stats Calculation and Summary UI (May 2025)
+## Current State (January 2026)
 
 ### Overview
-This iteration introduces a new feature to calculate and display total account statistics for Destiny players, including total time played, total activity time, total activity count, and per-type activity breakdown (Raid, Dungeon, Strike, PvP, Gambit, Other). It also adds a visual loading indicator for the stats calculation process.
+Destiny Chronicle is an activity history and tracking app for Destiny 1 and Destiny 2. Users search by Bungie Name or membership ID, view daily activity history, Guardian Firsts (first raid/dungeon completions and solo/solo flawless), and Titles & Seals. Account summary shows total time and total seals from Bungie data. Export to Excel/CSV is available for offline archiving.
+
+### Recent Iteration: Titles Ordering & Export (Jan 2026)
+- **Titles release order**: Titles sort by release date (newest first) using a chronological release-order map aligned with a canonical list. Same-date titles are ordered alphabetically.
+- **Hash-based title ordering**: Moments of Triumph (MMX*) titles use completion-record hash → release rank mapping so they sort correctly regardless of API name format.
+- **Export**: Multi-sheet export includes Export Info, Activities, Guardian Firsts, Titles & Seals, and Account Summary. Guardian Firsts and Activities export logic fixed; title count in summary matches Titles tab (Bungie-only, no third-party).
+
+### Previous Iteration: Account Stats Calculation and Summary UI (May 2025)
+
+### Overview (Account Stats)
+That iteration introduced calculation and display of total account statistics: total time played, total activity time, total activity count, and per-type breakdown (Raid, Dungeon, Strike, PvP, Gambit, Other), with a loading indicator during calculation.
 
 ### Steps Implemented
 1. **Data Aggregation**
@@ -38,11 +48,17 @@ This iteration introduces a new feature to calculate and display total account s
 - Optionally, add streak calculations and display.
 - Allow filtering or drill-down by activity type.
 - Add error handling for API failures during stats calculation.
+- Integrate D1/D2 Raids and D2 Dungeons reference data (e.g. from spreadsheet) into Guardian Firsts view if desired.
 
-### Recent Major Changes
-- **Real-Time Loading Status Modal:** Implemented a comprehensive loading status modal that provides users with real-time visibility into account loading and processing phases. Features include progress tracking, visual status indicators, platform/game icons, and auto-hide functionality. This eliminates user confusion about whether accounts are truly complete or still loading.
-- **Date Filtering and Timezone Handling:** Improved the date filtering logic to ensure activities are displayed correctly based on the user's local timezone. This ensures that activities are accurately grouped by date, regardless of the user's location.
-- **Guardian Firsts Feature:** Implemented a new feature to track and display the first completion of each unique raid or dungeon. This feature now correctly identifies the true first completion, regardless of difficulty, and filters out any duplicate entries.
-- **UI Enhancements:** Moved the Guardian Firsts section to a right-side column, making the daily activities cards the main focus in the center. This layout change improves the overall user experience by providing a clearer view of daily activities.
+### Recent Major Changes (Summary)
+- **Titles ordering:** Chronological release-order map (name + hash-based for MMX*); "Newest First" and "Alphabetical" sort options.
+- **Account summary:** Total time and total seals derived from Bungie character and title data; titles loaded in background so summary updates without visiting Titles tab.
+- **Export:** Export Info sheet, expanded columns for Activities/Guardian Firsts/Titles, Account Summary aligned with UI; Guardian Firsts export fixed to use correct API shape.
+- **Player search:** Chip-style input for multiple usernames; membership ID lookup; full-string-then-split search for names with commas.
+- **Real-Time Loading Status Modal:** Progress tracking, platform/game icons, auto-hide.
+- **Date Filtering and Timezone Handling:** Activities grouped by date using local timezone.
+- **Guardian Firsts:** First completion per raid/dungeon (and variants), solo/solo flawless where applicable; PGCR linking.
+- **Analytics/Achievements tab:** Currently disabled in UI (platform achievements refactor exists in code but is not shown).
 
---- 
+---
+*Last updated: January 2026* 

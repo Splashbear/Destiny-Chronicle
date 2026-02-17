@@ -10,6 +10,7 @@
     "serve:ssr:destiny-chronicle": "node dist/destiny-chronicle/server/server.mjs",
     "tailwind:build": "npx tailwindcss -i ./src/styles.css -o ./src/tailwind-output.css --minify",
     "download-icons": "node scripts/download-icons.js",
+    "update-d1-manifest": "node scripts/d1-manifest-to-json.js",
     "clean": "rimraf dist .angular node_modules/.cache"
   },
   "private": true,
