@@ -26,6 +26,20 @@ export interface ActivityCountRow {
  * DestinyActivityModeType enum from Bungie API (bungie-api-ts/destiny2/interfaces).
  * Maps mode number to display name for breakdown section headers.
  */
+/** Mode 93: Renegade Activities */
+const MODE_93 = 93;
+const MODE_33 = 33;
+
+/** D1-specific display overrides for Reserved modes. Used when game is D1. */
+const D1_MODE_DISPLAY_OVERRIDES: Record<number, string> = {
+  9: 'Vehicle PVP',
+  21: 'Prison of Elders',
+  22: 'Prison of Elders',
+  27: 'D1 Crucible',
+  29: 'Sparrow Racing League',
+  30: 'Prison of Elders'
+};
+
 const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
   0: 'None',
   2: 'Story',
@@ -111,7 +125,9 @@ const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
   89: 'ZoneControl',
   90: 'IronBannerRift',
   91: 'IronBannerZoneControl',
-  92: 'Relic'
+  92: 'Relic',
+  [MODE_93]: 'Renegade Activities',
+  [MODE_33]: 'Gambit'  // Emerald Coast / Gambit variant
 };
 
 /** Display order for activity modes in the breakdown view. Lower = earlier. Unknown modes use 999. */
@@ -123,13 +139,14 @@ const MODE_ORDER: Record<number, number> = {
   2: 4,   // Story
   87: 5,  // LostSector
   92: 6, 85: 6, 83: 6, 77: 6, 78: 6, 86: 6,  // Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive
-  63: 7, 75: 7, 76: 7, 67: 7,  // Gambit
+  63: 7, 75: 7, 76: 7, 67: 7, 33: 7, 0: 7,  // Gambit (incl. mode 0 None/Emerald Coast, mode 33)
+  93: 71,   // Renegade Activities (own category, between Gambit and PvP)
   5: 8, 10: 8, 12: 8, 19: 8, 84: 8, 37: 8, 38: 8, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP modes
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
   69: 8, 70: 8, 71: 8, 72: 8, 73: 8, 74: 8,  // Competitive/Quickplay
+  9: 12, 21: 13, 22: 13, 27: 14, 29: 15, 30: 13,  // D1: Vehicle PVP, Prison of Elders (21,22,30), D1 Crucible, SRL
   79: 9, 80: 9, 81: 9, 58: 9, 64: 9, 66: 9,  // NightmareHunt, Elimination, Momentum, HeroicAdventure, AllPvECompetitive, BlackArmoryRun
   6: 10, 7: 10, 40: 10,  // Patrol, AllPvE, Social
-  0: 11,  // None
   // Reserved and other: 999
 };
 const MODE_ORDER_DEFAULT = 999;
@@ -249,7 +266,7 @@ const EXCLUDE_FROM_BREAKDOWN = new Set<string>([
  * Battlegrounds → Story Strikes → Exotic Story Missions → Seasonal Arena.
  * See docs/activity-breakdown-curated-lists.md for full lists.
  */
-type SectionOverrideKey = 'battlegrounds' | 'story-strikes' | 'exotic-story-missions' | 'seasonal-arena';
+type SectionOverrideKey = 'battlegrounds' | 'story-strikes' | 'exotic-story-missions' | 'seasonal-arena' | 'prison-of-elders' | 'gambit' | 'nightfall' | 'pvp';
 
 const BATTLEGROUNDS_MODES = new Set([2, 3, 18, 46, 47, 86]);
 const STORY_STRIKES_MODES = new Set([2]);
@@ -259,7 +276,8 @@ const STORY_STRIKES_BASE_NAMES = new Set([
   'haunted forest', 'the haunted forest', 'firewalled verdant forest', 'firewalled haunted forest'
 ]);
 const EXOTIC_STORY_MODES = new Set([2]);
-const SEASONAL_ARENA_MODES = new Set([2, 16, 86]);
+/** Modes that belong to Seasonal Arenas: Menagerie, VexOffensive, Sundial, Dares, Offensive + name-based */
+const SEASONAL_ARENA_MODES = new Set([2, 16, 77, 78, 83, 85, 86]);
 
 const SEASONAL_ARENA_BASE_NAMES = new Set([
   'the coil', 'contest of elders', 'guardian games', 'deep dives', 'enigma protocol',
@@ -280,15 +298,32 @@ const SECTION_OVERRIDE_ORDER: Record<SectionOverrideKey, number> = {
   battlegrounds: 35,         // After Strike (3), before Story (4)
   'story-strikes': 41,       // After Story (4)
   'exotic-story-missions': 42,
-  'seasonal-arena': 6        // With rotators (Dares, Menagerie, Offensive, etc.)
+  'seasonal-arena': 6,       // With rotators (Dares, Menagerie, Offensive, etc.)
+  'prison-of-elders': 36,    // D1 Prison of Elders (modes 21, 22, 30)
+  gambit: 7,                 // Gambit, Gambit Prime, Reckoning, None/Emerald Coast, mode 33
+  nightfall: 2,              // All Nightfall variants (16, 17, 46, 47)
+  pvp: 8                     // All PvP modes
 };
 
 const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
   battlegrounds: 'Battlegrounds',
   'story-strikes': 'Story Strikes',
   'exotic-story-missions': 'Exotic Story Missions',
-  'seasonal-arena': 'Seasonal Arena'
+  'seasonal-arena': 'Seasonal Arenas',
+  'prison-of-elders': 'Prison of Elders',
+  gambit: 'Gambit',
+  nightfall: 'Nightfall',
+  pvp: 'PvP'
 };
+
+const PRISON_OF_ELDERS_MODES = new Set([21, 22, 30]);
+const GAMBIT_MODES = new Set([0, 33, 63, 75, 76]);  // None/Emerald Coast, mode 33, Gambit, Gambit Prime, Reckoning
+const NIGHTFALL_MODES = new Set([16, 17, 46, 47]);
+const PVP_MODES = new Set([
+  5, 10, 12, 19, 25, 31, 32, 37, 38, 39, 41, 42, 43, 44, 45, 48, 49, 50,
+  51, 52, 53, 54, 55, 56, 57, 59, 60, 61, 62, 65, 68, 69, 70, 71, 72, 73, 74,
+  80, 81, 84, 88, 89, 90, 91
+]);
 
 /** Seasonal Arena sort order by release; unknown sort last. */
 const SEASONAL_ARENA_ORDER: Record<string, number> = (() => {
@@ -536,7 +571,12 @@ export class ActivityBreakdownService {
   private getSectionOverride(row: ActivityCountRow): SectionOverrideKey | null {
     const base = (row.baseName || '').toLowerCase().trim();
     const mode = row.mode ?? 0;
+    const game = row.game || 'D2';
 
+    if (game === 'D1' && PRISON_OF_ELDERS_MODES.has(mode)) return 'prison-of-elders';
+    if (GAMBIT_MODES.has(mode)) return 'gambit';
+    if (NIGHTFALL_MODES.has(mode)) return 'nightfall';
+    if (PVP_MODES.has(mode)) return 'pvp';
     if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
 
     if (STORY_STRIKES_MODES.has(mode)) {
@@ -550,7 +590,7 @@ export class ActivityBreakdownService {
       if (base.includes('avalon') || base.includes('node.ovrd')) return 'exotic-story-missions';
     }
 
-    if (SEASONAL_ARENA_MODES.has(mode) && SEASONAL_ARENA_BASE_NAMES.has(base)) return 'seasonal-arena';
+    if (SEASONAL_ARENA_MODES.has(mode) && (SEASONAL_ARENA_BASE_NAMES.has(base) || [77, 78, 83, 85, 86].includes(mode))) return 'seasonal-arena';
 
     return null;
   }
@@ -592,11 +632,10 @@ export class ActivityBreakdownService {
     const result: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
     for (const [sectionKey, byGame] of entries) {
       const isOverride = sectionKey in SECTION_OVERRIDE_LABELS;
-      const labelBase = isOverride ? SECTION_OVERRIDE_LABELS[sectionKey as SectionOverrideKey] : this.modeToLabel(parseInt(sectionKey.replace('mode-', ''), 10) || 0);
-      const mode = sectionKey.startsWith('mode-') ? parseInt(sectionKey.slice(5), 10) : undefined;
-
+      const mode = sectionKey.startsWith('mode-') ? parseInt(sectionKey.replace('mode-', ''), 10) : undefined;
       const games = [...byGame.keys()].sort((a, b) => (a === 'D1' ? 0 : 1) - (b === 'D1' ? 0 : 1));
       for (const game of games) {
+        const labelBase = isOverride ? SECTION_OVERRIDE_LABELS[sectionKey as SectionOverrideKey] : this.modeToLabel(mode ?? 0, game);
         const groupRows = byGame.get(game)!;
         result.push({
           type: sectionKey,
@@ -611,6 +650,13 @@ export class ActivityBreakdownService {
 
   /** Sort rows within a section. Delegates to sortRowsForMode for mode sections; uses section-specific sort for overrides. */
   private sortRowsForSection(sectionKey: string, mode: number | undefined, list: ActivityCountRow[], game?: 'D1' | 'D2'): ActivityCountRow[] {
+    if (sectionKey === 'prison-of-elders' || sectionKey === 'gambit' || sectionKey === 'nightfall' || sectionKey === 'pvp') {
+      return list.sort((a, b) => {
+        const baseCmp = (a.baseName || '').localeCompare(b.baseName || '');
+        if (baseCmp !== 0) return baseCmp;
+        return (a.variantName || '').localeCompare(b.variantName || '');
+      });
+    }
     if (sectionKey === 'seasonal-arena') {
       return list.sort((a, b) => {
         const ka = SEASONAL_ARENA_ORDER[(a.baseName || '').toLowerCase().trim()] ?? SEASONAL_ARENA_UNKNOWN;
@@ -692,7 +738,8 @@ export class ActivityBreakdownService {
     });
   }
 
-  private modeToLabel(mode: number): string {
+  private modeToLabel(mode: number, game?: 'D1' | 'D2'): string {
+    if (game === 'D1' && D1_MODE_DISPLAY_OVERRIDES[mode]) return D1_MODE_DISPLAY_OVERRIDES[mode];
     const name = DESTINY_ACTIVITY_MODE_NAMES[mode];
     if (name) return name;
     return `Mode ${mode}`;

@@ -422,16 +422,6 @@
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && (groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0)"
                class="space-y-6 w-full min-w-0">
-            <!-- Filter presets -->
-            <div class="flex flex-wrap gap-2 items-center">
-              <span class="text-sm text-slate-400 mr-2">Filter:</span>
-              <button *ngFor="let opt of activityFilterOptions"
-                      (click)="activityFilterPreset = opt.id"
-                      class="px-3 py-1.5 text-sm rounded-lg transition-colors"
-                      [ngClass]="activityFilterPreset === opt.id ? 'bg-blue-600 text-white' : 'bg-slate-700/80 text-slate-300 hover:bg-slate-600'">
-                {{ opt.label }}
-              </button>
-            </div>
             <!-- Total time for selected date -->
             <div class="bg-slate-800/95 rounded-lg p-4 flex flex-wrap items-center justify-between gap-2">
               <span class="text-slate-300">Total time for {{ formatSelectedDateLabel() }}
@@ -586,9 +576,74 @@
             <p class="text-slate-300 text-sm">
               Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date). Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
             </p>
+            
+            <!-- Charts Section (collapsible) -->
+            <div *ngIf="activityBreakdownSummaryCards.length > 0" class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-6">
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-2">
+                  <h3 class="text-lg font-semibold text-white">Activity Distribution</h3>
+                  <button (click)="breakdownChartCollapsed = !breakdownChartCollapsed"
+                          class="flex items-center gap-1 px-2 py-1 text-sm text-slate-300 hover:text-white bg-slate-700/80 hover:bg-slate-600 rounded transition-colors"
+                          [attr.aria-expanded]="!breakdownChartCollapsed">
+                    <span>{{ breakdownChartCollapsed ? 'Show' : 'Hide' }} Chart</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                         [class.rotate-180]="!breakdownChartCollapsed">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div *ngIf="!breakdownChartCollapsed" class="space-y-4">
+                <div class="flex flex-wrap items-center gap-3">
+                  <label class="text-slate-400 text-sm">Chart by:</label>
+                  <select [(ngModel)]="breakdownChartCategory" 
+                          (ngModelChange)="setBreakdownChartCategory($event)"
+                          class="bg-slate-700 text-slate-200 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 focus:border-emerald-500">
+                    <option *ngFor="let opt of breakdownChartCategoryOptions" [value]="opt.value">{{ opt.label }}</option>
+                  </select>
+                  <select *ngIf="breakdownChartCategory !== 'all'" 
+                          [(ngModel)]="breakdownChartGame" 
+                          (ngModelChange)="setBreakdownChartGame($event)"
+                          class="bg-slate-700 text-slate-200 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 focus:border-emerald-500">
+                    <option *ngFor="let g of breakdownChartGameOptions" [value]="g.value">{{ g.label }}</option>
+                  </select>
+                  <div class="flex gap-2">
+                    <button (click)="setBreakdownChartType('pie')" 
+                            class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+                            [ngClass]="breakdownChartType === 'pie' ? 'bg-emerald-600 text-white' : 'bg-slate-700/80 text-slate-300 hover:bg-slate-600'">
+                      Pie
+                    </button>
+                    <button (click)="setBreakdownChartType('bar')" 
+                            class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+                            [ngClass]="breakdownChartType === 'bar' ? 'bg-emerald-600 text-white' : 'bg-slate-700/80 text-slate-300 hover:bg-slate-600'">
+                      Bar
+                    </button>
+                  </div>
+                </div>
+                <div class="h-64 sm:h-80">
+                  <canvas baseChart
+                          [data]="breakdownChartData"
+                          [options]="breakdownChartType === 'pie' ? breakdownChartOptions : breakdownBarChartOptions"
+                          [type]="breakdownChartType">
+                  </canvas>
+                </div>
+              </div>
+            </div>
+
             <!-- Summary cards: click to filter; selected cards show only their activity in the table below -->
-            <p class="text-slate-400 text-sm">Click a card to filter the table below. Click again to deselect. When none are selected, all activities are shown.</p>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
+            <div class="mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-slate-400 text-sm">Click a card to filter the table below. Click again to deselect. When none are selected, all activities are shown.</p>
+                <button (click)="breakdownTilesCollapsed = !breakdownTilesCollapsed"
+                        class="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-300 hover:text-white bg-slate-700/80 hover:bg-slate-600 rounded-lg transition-colors">
+                  <span>{{ breakdownTilesCollapsed ? 'Show' : 'Hide' }} Tiles</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                       [class.rotate-180]="!breakdownTilesCollapsed">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+              <div *ngIf="!breakdownTilesCollapsed" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
               <div *ngFor="let card of activityBreakdownSummaryCards" 
                    role="button"
                    tabindex="0"
@@ -603,6 +658,7 @@
                 <div class="font-medium text-slate-200 text-sm truncate" [title]="card.label">{{ card.label }}</div>
                 <div class="text-emerald-300 font-mono text-lg">{{ formatSecondsToHoursMinutes(card.timeSeconds) }}</div>
                 <div class="text-xs text-slate-400">{{ card.runs | number }} runs, {{ card.clears | number }} clears ({{ card.clearRate | number:'1.0-0' }}%)</div>
+              </div>
               </div>
             </div>
             <div *ngFor="let group of filteredActivityBreakdownGroups" class="bg-slate-800/95 rounded-lg shadow-lg overflow-hidden p-4">

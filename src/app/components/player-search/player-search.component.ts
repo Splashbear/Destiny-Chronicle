@@ -41,6 +41,11 @@ import { AccountStatsComponent } from '../account-stats/account-stats.component'
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
 // import { AnalyticsComponent } from '../analytics/analytics.component';
+// Chart.js imports
+import { ChartConfiguration, ChartData, ChartType, registerables } from 'chart.js';
+import { BaseChartDirective } from 'ng2-charts';
+import { Chart } from 'chart.js';
+Chart.register(...registerables);
 
 const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
 
@@ -485,7 +490,8 @@ interface PlatformStats {
     AccountStatsComponent,
     // AnalyticsComponent, // temporarily disabled
     ExportOptionsDialogComponent,
-    DatePickerComponent
+    DatePickerComponent,
+    BaseChartDirective
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
@@ -645,6 +651,226 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   activityBreakdownGroups: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
   /** Selected activity card labels for filtering; empty = show all */
   selectedBreakdownCardLabels = new Set<string>();
+  /** Whether the tile selection area is collapsed */
+  breakdownTilesCollapsed = false;
+  /** Whether the chart section is collapsed */
+  breakdownChartCollapsed = false;
+  /** Chart category: 'all' = by activity type, or category name (e.g. 'Raid', 'Dungeon') for drill-down by activity name */
+  breakdownChartCategory = 'all';
+  /** Chart game filter: 'all' = D1+D2, 'D1' or 'D2' to limit */
+  breakdownChartGame = 'all';
+
+  // Chart configuration for Activity Breakdown
+  breakdownChartType: ChartType = 'pie';
+  breakdownChartOptions: ChartConfiguration['options'] = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'right',
+        labels: {
+          color: '#e2e8f0',
+          font: { size: 12 },
+          padding: 15
+        }
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((a: any, b: any) => a + b, 0);
+            const percentage = ((value / total) * 100).toFixed(1);
+            return `${label}: ${this.formatSecondsToHoursMinutes(value)} (${percentage}%)`;
+          }
+        }
+      }
+    }
+  };
+
+  breakdownBarChartOptions: ChartConfiguration['options'] = {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y',
+    plugins: {
+      legend: {
+        display: false
+      },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            return `${this.formatSecondsToHoursMinutes(context.parsed.x)}`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: '#e2e8f0',
+          callback: (value) => {
+            return this.formatSecondsToHoursMinutes(value as number);
+          }
+        },
+        grid: { color: '#334155' }
+      },
+      y: {
+        ticks: { color: '#e2e8f0' },
+        grid: { color: '#334155' }
+      }
+    }
+  };
+
+  /** Display names for chart category dropdown (combines service groupings: Gambit, Nightfall, PvP, Seasonal Arenas, etc.) */
+  private readonly categoryDisplayNames: Record<string, string> = {
+    'Story': 'Story missions',
+    'Raid': 'Raids',
+    'Dungeon': 'Dungeons',
+    'Strike': 'Strikes',
+    'Patrol': 'Patrol',
+    'Nightfall': 'Nightfall',
+    'Gambit': 'Gambit',
+    'PvP': 'PvP',
+    'Seasonal Arena': 'Seasonal Arenas',
+    'Seasonal Arenas': 'Seasonal Arenas',
+    'Prison of Elders': 'Prison of Elders',
+    'Renegade Activities': 'Renegade Activities',
+    'Vehicle PVP': 'Vehicle PVP',
+    'D1 Crucible': 'D1 Crucible',
+    'Sparrow Racing League': 'Sparrow Racing League',
+    'Battlegrounds': 'Battlegrounds',
+    'Story Strikes': 'Story Strikes',
+    'Exotic Story Missions': 'Exotic Story Missions',
+    'LostSector': 'Lost Sectors',
+    'Relic': 'Relic'
+  };
+
+  /** Category options: All, or each unique category (Raid, Dungeon, Strike, etc.) */
+  get breakdownChartCategoryOptions(): { value: string; label: string }[] {
+    const base = [{ value: 'all', label: 'All activity types' }];
+    const groups = this.filteredActivityBreakdownGroups;
+    if (!groups?.length) return base;
+    const seen = new Set<string>();
+    for (const g of groups) {
+      const cat = g.label.split(/\s*[–-]\s*/)[0]?.trim() || g.label;
+      if (cat && !seen.has(cat)) {
+        seen.add(cat);
+        const displayLabel = this.categoryDisplayNames[cat] ?? (cat.endsWith('s') ? cat : cat + 's');
+        base.push({ value: cat, label: displayLabel });
+      }
+    }
+    return base;
+  }
+
+  /** Game filter options */
+  readonly breakdownChartGameOptions: { value: 'all' | 'D1' | 'D2'; label: string }[] = [
+    { value: 'all', label: 'All (D1 + D2)' },
+    { value: 'D1', label: 'Destiny 1' },
+    { value: 'D2', label: 'Destiny 2' }
+  ];
+
+  /** Chart data: aggregated by type when "All" and no tiles selected; otherwise drill-down to individual activities */
+  get breakdownChartData(): ChartData<'pie' | 'bar'> {
+    const groups = this.filteredActivityBreakdownGroups;
+    const hasTileSelection = this.selectedBreakdownCardLabels.size > 0;
+
+    // When tiles are selected, always show drill-down (individual activities) even if chart dropdown is "All"
+    if (hasTileSelection && groups.length > 0) {
+      const allRows: ActivityCountRow[] = [];
+      for (const g of groups) allRows.push(...g.rows);
+      if (!allRows.length) return { labels: [], datasets: [] };
+      const items = allRows.map(r => ({
+        label: r.variantName ? `${r.baseName} (${r.variantName})` : r.baseName,
+        timeSeconds: r.timeSeconds
+      }));
+      return this.buildChartDataFromItems(items);
+    }
+
+    // When "All" and no tiles selected: show summary (each group as a slice)
+    if (this.breakdownChartCategory === 'all') {
+      const cards = this.filteredActivityBreakdownSummaryCards;
+      if (!cards.length) return { labels: [], datasets: [] };
+      return this.buildChartDataFromCards(cards);
+    }
+
+    // When specific category selected in dropdown: drill-down to individual activities in that category
+    const matchingGroups = this.filteredActivityBreakdownGroups.filter(g => {
+      const cat = g.label.split(/\s*[–-]\s*/)[0]?.trim();
+      if (cat !== this.breakdownChartCategory) return false;
+      if (this.breakdownChartGame === 'all') return true;
+      return g.game === this.breakdownChartGame;
+    });
+
+    const allRows: ActivityCountRow[] = [];
+    for (const g of matchingGroups) allRows.push(...g.rows);
+
+    if (!allRows.length) return { labels: [], datasets: [] };
+
+    const items = allRows.map(r => ({
+      label: r.variantName ? `${r.baseName} (${r.variantName})` : r.baseName,
+      timeSeconds: r.timeSeconds
+    }));
+    return this.buildChartDataFromItems(items);
+  }
+
+  private buildChartDataFromCards(cards: { label: string; timeSeconds: number }[]): ChartData<'pie' | 'bar'> {
+    const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#a855f7', '#eab308', '#22c55e', '#0ea5e9'];
+    if (this.breakdownChartType === 'pie') {
+      return {
+        labels: cards.map(c => c.label),
+        datasets: [{ data: cards.map(c => c.timeSeconds), backgroundColor: colors }]
+      };
+    }
+    const sorted = [...cards].sort((a, b) => b.timeSeconds - a.timeSeconds).slice(0, 15);
+    return {
+      labels: sorted.map(c => c.label),
+      datasets: [{ label: 'Time Spent', data: sorted.map(c => c.timeSeconds), backgroundColor: '#10b981' }]
+    };
+  }
+
+  private buildChartDataFromItems(items: { label: string; timeSeconds: number }[]): ChartData<'pie' | 'bar'> {
+    const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#a855f7', '#eab308', '#22c55e', '#0ea5e9'];
+    const sorted = [...items].sort((a, b) => b.timeSeconds - a.timeSeconds);
+    if (this.breakdownChartType === 'pie') {
+      return {
+        labels: sorted.map(i => i.label),
+        datasets: [{ data: sorted.map(i => i.timeSeconds), backgroundColor: colors }]
+      };
+    }
+    const top = sorted.slice(0, 15);
+    return {
+      labels: top.map(i => i.label),
+      datasets: [{ label: 'Time Spent', data: top.map(i => i.timeSeconds), backgroundColor: '#10b981' }]
+    };
+  }
+
+  get filteredActivityBreakdownSummaryCards() {
+    if (this.selectedBreakdownCardLabels.size === 0) {
+      return this.activityBreakdownSummaryCards;
+    }
+    return this.activityBreakdownSummaryCards.filter(card => 
+      this.selectedBreakdownCardLabels.has(card.label)
+    );
+  }
+
+  /** Toggle chart type and trigger change detection */
+  setBreakdownChartType(type: 'pie' | 'bar') {
+    this.breakdownChartType = type;
+    this.cdr.markForCheck();
+  }
+
+  /** Set chart category and trigger change detection */
+  setBreakdownChartCategory(value: string) {
+    this.breakdownChartCategory = value;
+    this.cdr.markForCheck();
+  }
+
+  /** Set chart game filter and trigger change detection */
+  setBreakdownChartGame(value: 'all' | 'D1' | 'D2') {
+    this.breakdownChartGame = value;
+    this.cdr.markForCheck();
+  }
 
   /** Total time in seconds across activity breakdown; when filtered, only selected groups */
   get activityBreakdownTotalTimeSeconds(): number {
