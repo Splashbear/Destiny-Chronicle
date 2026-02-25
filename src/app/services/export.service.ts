@@ -436,4 +436,57 @@ export class ExportService {
     const filename = `destiny-chronicle-export-${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(wb, filename);
   }
+
+  /**
+   * Export Activity Breakdown (summary cards + detailed tables) to Excel.
+   * Compatible with Excel and Google Sheets.
+   */
+  async exportActivityBreakdownToExcel(payload: {
+    summaryCards: { label: string; runs: number; clears: number; timeSeconds: number; clearRate: number }[];
+    groups: { label: string; rows: { baseName: string; variantName: string; game: string; runs: number; clears: number; fails: number; timeSeconds: number }[] }[];
+    formatTime: (seconds: number) => string;
+  }): Promise<void> {
+    const { summaryCards, groups, formatTime } = payload;
+    const sheets: { [name: string]: any[] } = {};
+
+    // Summary sheet: one row per activity type
+    sheets['Breakdown Summary'] = summaryCards.map(c => ({
+      'Activity Type': c.label,
+      'Total Time (h:m)': formatTime(c.timeSeconds),
+      'Time (seconds)': c.timeSeconds,
+      'Runs': c.runs,
+      'Clears': c.clears,
+      'Clear %': c.clearRate.toFixed(1) + '%',
+    }));
+
+    // Detail sheet: all rows from all groups, with group label
+    const detailRows: any[] = [];
+    for (const g of groups) {
+      for (const row of g.rows) {
+        detailRows.push({
+          'Group': g.label,
+          'Activity': row.baseName,
+          'Variant': row.variantName || '',
+          'Game': row.game,
+          'Runs': row.runs,
+          'Clears': row.clears,
+          'Fails': row.fails,
+          'Time (h:m)': formatTime(row.timeSeconds),
+          'Time (seconds)': row.timeSeconds,
+        });
+      }
+    }
+    sheets['Breakdown Detail'] = detailRows;
+
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    for (const [sheetName, data] of Object.entries(sheets)) {
+      if (data.length > 0) {
+        const ws = XLSX.utils.json_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+    }
+    const filename = `destiny-chronicle-breakdown-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  }
 } 

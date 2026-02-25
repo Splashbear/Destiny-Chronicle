@@ -18,6 +18,8 @@
   }
 
   /* Light mode overrides - Comprehensive Destiny-themed light theme */
+  /* data-theme attribute fallback so theme sticks when toggled via JS */
+  html[data-theme="light"],
   html.light,
   body.light-theme,
   body[style*="--force-light-theme: true"] {
@@ -25,6 +27,7 @@
   }
 
   /* CSS Custom Properties for Light Theme */
+  html[data-theme="light"],
   html.light,
   body.light-theme {
     --destiny-bg-primary: #f8fafc;
@@ -41,6 +44,7 @@
   }
 
   /* Light theme body and base styles */
+  html[data-theme="light"] body,
   html.light body,
   body.light-theme {
     background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
@@ -48,6 +52,7 @@
   }
   
   /* Light theme background overrides */
+  html[data-theme="light"] .bg-slate-900,
   html.light .bg-slate-900,
   body.light-theme .bg-slate-900 {
     background-color: #f8fafc !important;
@@ -74,6 +79,7 @@
   }
 
   /* Critical light theme overrides for main page elements */
+  html[data-theme="light"] .destiny-bg-gradient-dark,
   html.light .destiny-bg-gradient-dark,
   body.light-theme .destiny-bg-gradient-dark {
     background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
@@ -889,4 +895,84 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+/* =============================================================================
+   LIGHT THEME - Outside @layer so it overrides Tailwind utilities (which are
+   in @layer utilities and would otherwise win over @layer base).
+   Applied when html has .light or [data-theme="light"] or body has .light-theme.
+   ============================================================================= */
+html[data-theme="light"] body,
+html.light body,
+body.light-theme {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .destiny-bg-gradient-dark,
+html.light .destiny-bg-gradient-dark,
+body.light-theme .destiny-bg-gradient-dark {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+}
+
+html[data-theme="light"] .glass-effect,
+html.light .glass-effect,
+body.light-theme .glass-effect {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(10px) !important;
+  border-color: rgba(203, 213, 225, 0.4) !important;
+}
+
+html[data-theme="light"] .bg-slate-900,
+html.light .bg-slate-900,
+body.light-theme .bg-slate-900 {
+  background-color: #f8fafc !important;
+}
+
+html[data-theme="light"] .bg-slate-800,
+html.light .bg-slate-800,
+body.light-theme .bg-slate-800 {
+  background-color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] .bg-slate-700,
+html.light .bg-slate-700,
+body.light-theme .bg-slate-700 {
+  background-color: #cbd5e1 !important;
+}
+
+html[data-theme="light"] .bg-slate-800\/95,
+html.light .bg-slate-800\/95,
+body.light-theme .bg-slate-800\/95 {
+  background-color: rgba(226, 232, 240, 0.95) !important;
+}
+
+html[data-theme="light"] .bg-slate-800\/50,
+html.light .bg-slate-800\/50,
+body.light-theme .bg-slate-800\/50 {
+  background-color: rgba(226, 232, 240, 0.5) !important;
+}
+
+html[data-theme="light"] .text-white,
+html.light .text-white,
+body.light-theme .text-white {
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .text-slate-300,
+html.light .text-slate-300,
+body.light-theme .text-slate-300 {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .text-slate-400,
+html.light .text-slate-400,
+body.light-theme .text-slate-400 {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] .text-destiny-text-secondary,
+html.light .text-destiny-text-secondary,
+body.light-theme .text-destiny-text-secondary {
+  color: #475569 !important;
 }

@@ -534,6 +534,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   groupedActivitiesByAccount: any[] = [];
   private processedActivities: any[] = [];
   loadingProgress: LoadingProgress | null = null;
+  /** Running total of activity reports fetched per account (accountKey -> count). Updated as API returns pages; "Done!" when account fetch completes. */
+  private activityCountByAccount = new Map<string, number>();
   private readonly BATCH_SIZE = 50;
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000;
@@ -1468,6 +1470,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.isLoadingComplete = false;
     }
     
+    // When first account enters fetch phase, init phase progress so modal shows "fetch" step immediately
+    if (status === 'fetching-activities' && !this.loadingProgress) {
+      this.updateLoadingProgress('fetch', 0, 100, message);
+    }
+    
     // Check if all accounts are complete
     const allComplete = this.accountLoadingStatuses.every(s => s.status === 'complete');
     if (allComplete && this.accountLoadingStatuses.length > 0) {
@@ -1815,6 +1822,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // Set loading state
     this.loadingActivities[this.selectedDate] = true;
+    this.updateLoadingProgress('fetch', 0, 1, 'Loading activities for selected date…');
     this.cdr.detectChanges();
 
     try {
@@ -1949,6 +1957,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // Set loading state
     this.loadingActivities[this.selectedDate] = true;
+    this.updateLoadingProgress('fetch', 0, 1, 'Loading activities for selected date…');
     this.cdr.detectChanges();
 
     try {
@@ -2349,9 +2358,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     // Set loading state for the selected date
     this.loadingActivities[this.selectedDate] = true;
+    this.updateLoadingProgress('fetch', 0, 1, 'Loading activities for selected date…');
     this.cdr.detectChanges();
 
     try {
+      // Pre-populate loading status for every selected account (D1 and D2) so the progress
+      // modal and "X reports for ... found" appear immediately, including for a single account.
+      for (const pl of this.selectedPlayers) {
+        const accountKey = this.getPlayerKey(pl);
+        const isD1 = this.isD1Player(pl);
+        const game = isD1 ? 'D1' : 'D2';
+        const platform = this.getPlatformName(pl.membershipType);
+        this.updateAccountLoadingStatus(
+          accountKey,
+          pl.displayName,
+          platform,
+          game,
+          pl.membershipType,
+          'fetching-profile',
+          `Loading ${game} profile for ${pl.displayName}...`
+        );
+      }
+
       // Reset running counter for progress UI
       this.overallActivitiesProcessed = 0;
 
@@ -2404,6 +2432,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       await Promise.all(loadPromises);
       // After loading character history, trigger activity loading if we have a date selected
       if (this.selectedDate) {
+        if (environment.debug) {
+          console.log('[Load] Character history sync done, loading activities for date', this.selectedDate);
+        }
         await this.loadAllFilteredActivities(true);
       }
       this.statsDebounce$.next();
@@ -2454,16 +2485,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.updatePlatformTabs();
     this.cdr.detectChanges();
     
-    // Clear loading statuses for all accounts when appending a new player
-    this.accountLoadingStatus.clear();
-    this.accountLoadingStatuses = [];
-
+    // When appending a new player, keep existing loading statuses and any
+    // activities already displayed for the current date so the UI doesn't
+    // flicker back to an empty state. New data will be merged in as it
+    // arrives and the per-date view will be refreshed incrementally.
     try {
-      // Clear date-scoped aggregates to avoid mixing prior users' rows
-      this.filteredActivitiesForDate = [];
-      this.filteredActivities$.next([]);
-      this.groupedActivitiesByAccount = [];
-
       await this.runWithPlayerSyncLimit(async () => {
         await this.loadCharacterHistory(displayPlayer);
         await this.loadGuardianFirsts(displayPlayer);
@@ -2637,6 +2663,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           `Fetching ${game} activities for ${player.displayName}...`
         );
         
+        // Running total: init so we can show "X reports for ... found" as API returns pages
+        this.activityCountByAccount.set(accountKey, 0);
+        
         // Load D1 activities concurrently for all characters
         const characterLoadPromises = this.characters[this.getPlayerKey(player)].map(async (char) => {
           const charId = getCharacterId(char);
@@ -2651,6 +2680,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         
         // Wait for all D1 character activities to load concurrently
         await Promise.all(characterLoadPromises.filter(Boolean));
+        
+        // All reports for this account fetched; show "Done!"
+        this.reportActivityCountDelta(accountKey, player.displayName, platform, game, player.membershipType, 0, true);
       } else {
         // D2: characterId is top-level
         const profile = await firstValueFrom(this.bungieService.getProfile(player.membershipType, player.membershipId));
@@ -2688,6 +2720,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           `Fetching ${game} activities for ${player.displayName}...`
         );
         
+        this.activityCountByAccount.set(accountKey, 0);
+        
         // Load D2 activities concurrently for all characters
         const characterLoadPromises = characters.map(async (char) => {
           const charId = getCharacterId(char);
@@ -2702,6 +2736,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         
         // Wait for all D2 character activities to load concurrently
         await Promise.all(characterLoadPromises.filter(Boolean));
+        
+        this.reportActivityCountDelta(accountKey, player.displayName, platform, game, player.membershipType, 0, true);
       }
       
       // Update status: organizing data
@@ -3108,21 +3144,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const loadingKey = `${character.membershipId}-${character.characterId}`;
     this.loadingActivities[loadingKey] = true;
     
+    const accountKey = this.getPlayerKey(character);
+    const existingStatus = accountKey ? this.accountLoadingStatus.get(accountKey) : undefined;
+    
     // Update account loading status for this character
-    if (character.game) {
-      const accountKey = `${character.membershipId}-${character.game}`;
-      const existingStatus = this.accountLoadingStatus.get(accountKey);
-      if (existingStatus) {
-        this.updateAccountLoadingStatus(
-          accountKey,
-          existingStatus.displayName,
-          existingStatus.platform,
-          character.game,
-          character.membershipType,
-          'fetching-activities',
-          `Fetching ${character.game} activities for ${existingStatus.displayName}...`
-        );
-      }
+    if (character.game && existingStatus) {
+      this.updateAccountLoadingStatus(
+        accountKey,
+        existingStatus.displayName,
+        existingStatus.platform,
+        character.game,
+        character.membershipType,
+        'fetching-activities',
+        `Fetching ${character.game} activities for ${existingStatus.displayName}...`
+      );
     }
     
     try {
@@ -3169,17 +3204,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
           modeActivities.push(...storedActivities);
 
-          // Count every activity we fetched toward the progress display, even if it was already cached
-          this.overallActivitiesProcessed += storedActivities.length;
+          // Running total: report as reports are found so user sees progress
+          if (accountKey && existingStatus) {
+            this.reportActivityCountDelta(
+              accountKey,
+              existingStatus.displayName,
+              existingStatus.platform,
+              character.game as 'D1' | 'D2',
+              character.membershipType,
+              storedActivities.length,
+              false
+            );
+          }
 
-          // Emit progress before heavy processing so user sees immediate feedback
-          const percent = ((page + 1) / (page + 2)) * 100;
-          this.updateLoadingProgress(
-            'fetch',
-            percent,
-            100,
-            `Fetching activities (${percent.toFixed(0)}%)…`
-          );
+          // Legacy overall count for any other UI
+          this.overallActivitiesProcessed += storedActivities.length;
           
           hasMore = activities.length === 250; // Assume 250 is page size
           page++;
@@ -3207,8 +3246,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             this.activitiesCache.delete(character.membershipId);
 
             // If any of the newly stored activities fall on the date currently being viewed,
-            // clear the per-date filtered cache so subsequent refreshes (or the one we trigger
-            // below) include the new rows.
+            // clear the per-date filtered cache and trigger a refresh so the user sees them.
+            // Applies to both D1 and D2: loadActivityHistoryForCharacter runs per character
+            // (D1 or D2), and this path triggers the same full-date refresh for either game.
+            // Do NOT mark accounts complete here — full sync (more pages, Guardian Firsts, etc.) may still be running.
             if (this.selectedDate && uniqueNewActivities.some(act => this.isActivityOnSelectedDate(act))) {
               const cacheKey = `filtered-${this.selectedDate}-${this.selectedActivityType.label}`;
               const entry = this.filteredActivitiesCache.get(cacheKey);
@@ -3216,7 +3257,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 entry.dirty = true;
               }
               // Fire-and-forget background refresh — guarded by currentLoadToken inside the call.
-              this.loadAllFilteredActivities(true);
+              this.loadAllFilteredActivities(true, false);
             }
           }
 
@@ -3227,7 +3268,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             if (foundToday) {
               this.initialDisplayShown = true;
               // Fire-and-forget – we don't await to avoid stalling further page fetches.
-              this.loadAllFilteredActivities(true);
+              this.loadAllFilteredActivities(true, false);
         }
       }
 
@@ -3253,7 +3294,80 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     this.cdr.detectChanges();
   }
-  private async processAndGroupActivities(): Promise<void> {
+
+  /**
+   * Update running total of activity reports for an account as the API returns pages.
+   * Call with isDone: true only when all characters for that account have finished fetching.
+   */
+  private reportActivityCountDelta(
+    accountKey: string,
+    displayName: string,
+    platform: string,
+    game: 'D1' | 'D2',
+    membershipType: number,
+    delta: number,
+    isDone: boolean
+  ): void {
+    const prev = this.activityCountByAccount.get(accountKey) ?? 0;
+    const count = prev + delta;
+    this.activityCountByAccount.set(accountKey, count);
+    const msg = count === 0 && !isDone
+      ? `Fetching ${game} activities for ${displayName}...`
+      : `${count} report${count === 1 ? '' : 's'} for ${displayName} ${platform} found${isDone ? '. Done!' : ''}`;
+    this.updateAccountLoadingStatus(
+      accountKey,
+      displayName,
+      platform,
+      game,
+      membershipType,
+      'fetching-activities',
+      msg
+    );
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Build a user-visible message: "X reports for username platform found. Done!" (or per-player list).
+   */
+  private buildReportCountMessage(activities: ActivityHistory[]): string {
+    const players = (this.selectedPlayers || []).filter(Boolean);
+    if (players.length === 0) {
+      const n = activities.length;
+      return n === 0 ? 'No reports found. Done!' : `${n} report${n === 1 ? '' : 's'} found. Done!`;
+    }
+    const countByMember = new Map<string, number>();
+    for (const a of activities) {
+      const mid = (a as any).membershipId as string | undefined;
+      if (mid) {
+        countByMember.set(mid, (countByMember.get(mid) ?? 0) + 1);
+      }
+    }
+    const parts: string[] = [];
+    for (const player of players) {
+      const count = countByMember.get(player.membershipId) ?? 0;
+      const platform = this.getPlatformName(player.membershipType);
+      const name = player.displayName || 'Unknown';
+      parts.push(`${count} report${count === 1 ? '' : 's'} for ${name} ${platform}`);
+    }
+    return parts.join('. ') + '. Done!';
+  }
+
+  /** One line for "Total number of reports for X is N": e.g. "splashbear PlayStation" or "splashbear PlayStation, otheruser Xbox". */
+  private getReportSummaryLine(activities: ActivityHistory[]): string {
+    const players = (this.selectedPlayers || []).filter(Boolean);
+    if (players.length === 0) return 'selected profiles';
+    const countByMember = new Map<string, number>();
+    for (const a of activities) {
+      const mid = (a as any).membershipId as string | undefined;
+      if (mid) countByMember.set(mid, (countByMember.get(mid) ?? 0) + 1);
+    }
+    const parts = players
+      .filter(p => (countByMember.get(p.membershipId) ?? 0) > 0)
+      .map(p => `${p.displayName || 'Unknown'} ${this.getPlatformName(p.membershipType)}`);
+    return parts.length > 0 ? parts.join(', ') : 'selected profiles';
+  }
+
+  private async processAndGroupActivities(progressMessage?: string): Promise<void> {
     const totalToProcess = this.filteredActivitiesForDate.length;
     if (totalToProcess === 0) {
       // If we have no activities for the current refresh **but** the UI
@@ -3269,7 +3383,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
     // Initialise process-phase progress bar
-    this.updateLoadingProgress('process', 0, totalToProcess, 'Processing activities…');
+    const processLabel = progressMessage ?? 'Processing activities…';
+    this.updateLoadingProgress('process', 0, totalToProcess, processLabel);
     let processedCount = 0;
     // Group by account+game combination first, then by year
     // Internal working structure uses Maps for easy grouping
@@ -3339,11 +3454,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Increment progress periodically to keep UI responsive
       processedCount++;
       if (processedCount % 200 === 0) {
+        const pct = ((processedCount / totalToProcess) * 100).toFixed(0);
         this.updateLoadingProgress(
           'process',
           processedCount,
           totalToProcess,
-          `Processing activities (${((processedCount / totalToProcess) * 100).toFixed(0)}%)…`
+          progressMessage ? `${progressMessage} (${pct}%)` : `Processing activities (${pct}%)…`
         );
         // Trigger partial change detection so the UI can start filling
         this.cdr.detectChanges();
@@ -3351,7 +3467,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     // Final update: processing complete
-    this.updateLoadingProgress('process', totalToProcess, totalToProcess, 'Processing complete');
+    this.updateLoadingProgress('process', totalToProcess, totalToProcess, progressMessage ?? 'Processing complete');
 
     // Sort activities within each group by time (descending)
     for (const yearMap of gameGroups.values()) {
@@ -3403,35 +3519,80 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Resume processing when user returns to tab
    */
 
-  public async loadAllFilteredActivities(forceRefresh: boolean = false) {
+  /**
+   * Load and display filtered activities for the selected date.
+   * @param forceRefresh - Bypass cache when fetching from DB.
+   * @param markAccountsComplete - If true, set account status to 'complete' when done (use false when
+   *   called from incremental refresh during sync so the progress modal stays until the full sync finishes).
+   */
+  public async loadAllFilteredActivities(forceRefresh: boolean = false, markAccountsComplete: boolean = true) {
     const loadToken = ++this.currentLoadToken;
+    const playerNames = (this.selectedPlayers || []).map(p => p.displayName).join(', ');
+    if (environment.debug) {
+      console.log('[Load] Start', { forceRefresh, players: playerNames });
+    }
 
-    // Update status for all accounts to show activities are being displayed
-    this.selectedPlayers.forEach(player => {
-      const accountKey = this.getPlayerKey(player);
-      const isD1 = this.isD1Player(player);
-      const game = isD1 ? 'D1' : 'D2';
-      const platform = this.getPlatformName(player.membershipType);
-      
-      this.updateAccountLoadingStatus(
-        accountKey,
-        player.displayName,
-        platform,
-        game,
-        player.membershipType,
-        'displaying-activities',
-        `Displaying ${game} activities for ${player.displayName}...`
-      );
-    });
+    // Update status for all accounts to show activities are being displayed (skip when incremental refresh)
+    if (markAccountsComplete) {
+      this.selectedPlayers.forEach(player => {
+        const accountKey = this.getPlayerKey(player);
+        const isD1 = this.isD1Player(player);
+        const game = isD1 ? 'D1' : 'D2';
+        const platform = this.getPlatformName(player.membershipType);
+        
+        this.updateAccountLoadingStatus(
+          accountKey,
+          player.displayName,
+          platform,
+          game,
+          player.membershipType,
+          'displaying-activities',
+          `Displaying ${game} activities for ${player.displayName}...`
+        );
+      });
+    }
 
-    // Kick off render-phase progress bar (will update inside slice loop)
-    this.updateLoadingProgress('render', 0, 1, 'Preparing display…');
+    // Kick off fetch-phase progress (phases: fetch → pgcr → process → render)
+    this.updateLoadingProgress('fetch', 0, 1, 'Loading activities for selected date…');
 
     try {
       const activities = await this.getAllFilteredActivitiesForDate(forceRefresh);
+      if (environment.debug) {
+        console.log('[Load] Fetch done', { activityCount: activities?.length ?? 0 });
+      }
+      if (loadToken !== this.currentLoadToken) {
+        this.loadingProgress = null;
+        this.cdr.detectChanges();
+        return;
+      }
+
+      // Build user-visible report count message: "X reports for username platform found. Done!"
+      const reportCountMessage = this.buildReportCountMessage(activities);
+      this.updateLoadingProgress('fetch', 1, 1, reportCountMessage);
+      await new Promise(r => setTimeout(r, 800)); // Brief pause so user can read "found. Done!"
+      if (loadToken !== this.currentLoadToken) {
+        this.loadingProgress = null;
+        this.cdr.detectChanges();
+        return;
+      }
+
+      const totalReports = activities.length;
+      const reportSummary = this.getReportSummaryLine(activities);
+      const organizeMessage = totalReports === 0
+        ? 'No reports for selected date. Organizing and displaying….'
+        : `Total number of reports for ${reportSummary} is ${totalReports}. Organizing and displaying….`;
+      this.updateLoadingProgress('pgcr', 0, 1, organizeMessage);
       // Ensure class icons can render by enriching activities with character class from PGCRs
       await this.enrichActivitiesWithCharacterClass(activities);
-      if (loadToken !== this.currentLoadToken) return; // Abort if a newer load started
+      if (environment.debug) {
+        console.log('[Load] PGCR enrich done');
+      }
+      if (loadToken !== this.currentLoadToken) {
+        this.loadingProgress = null;
+        this.cdr.detectChanges();
+        return;
+      }
+      this.updateLoadingProgress('process', 0, 1, organizeMessage);
 
       // Show partial results immediately if we have some activities
       if (activities.length > 0) {
@@ -3446,7 +3607,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
 
       // PROCESS phase handled separately—ensure groups are ready before rendering slices
-      this.processAndGroupActivities();
+      if (environment.debug) {
+        console.log('[Load] Process start');
+      }
+      this.processAndGroupActivities(organizeMessage);
+      if (environment.debug) {
+        console.log('[Load] Process done');
+      }
 
       // Start background processing for heavy operations
       this.startBackgroundProcessing(activities, this.manifest);
@@ -3454,54 +3621,77 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // ---------- RENDER PHASE ----------
       const sliceSize = 250;
       const totalSlices = Math.max(1, Math.ceil(this.filteredActivitiesForDate.length / sliceSize));
+      if (environment.debug) {
+        console.log('[Load] Render start', { totalSlices });
+      }
       for (let i = 0; i < totalSlices; i++) {
         if (loadToken !== this.currentLoadToken) return; // Abort if newer load started
 
         // Nothing special: activities already grouped; we just trigger change detection so list updates
         this.updateActivityDisplay();
 
-        // Progress update
+        // Progress update: keep "Organizing and displaying" with percentage
         this.updateLoadingProgress(
           'render',
           i + 1,
           totalSlices,
-          `Rendering activities (${Math.round(((i + 1) / totalSlices) * 100)}%)…`
+          totalReports === 0
+            ? `Organizing and displaying… (${Math.round(((i + 1) / totalSlices) * 100)}%)`
+            : `Total ${totalReports} reports. Organizing and displaying… (${Math.round(((i + 1) / totalSlices) * 100)}%)`
         );
 
         // Give the UI a chance to paint between large batches
         await new Promise(requestAnimationFrame);
       }
 
-      // Fade out overlay after a short delay so user sees 100% state
+      // Show "Done!" before fading out
       if (loadToken === this.currentLoadToken) {
+        const doneMessage = totalReports === 0
+          ? 'No reports for selected date. Organizing and displaying…. Done!'
+          : `Total number of reports for ${reportSummary} is ${totalReports}. Organizing and displaying…. Done!`;
+        this.updateLoadingProgress('render', totalSlices, totalSlices, doneMessage);
+        this.cdr.detectChanges();
+        if (environment.debug) {
+          console.log('[Load] Complete');
+        }
         setTimeout(() => {
           this.loadingProgress = null;
           this.cdr.detectChanges();
-        }, 300);
+        }, 1200);
       }
     } catch (error) {
-      // handle error
+      if (environment.debug) {
+        console.warn('[Load] Error', error);
+      }
+      if (loadToken === this.currentLoadToken) {
+        this.loadingProgress = null;
+        this.cdr.detectChanges();
+      }
     } finally {
       if (loadToken === this.currentLoadToken) {
         this.loadingActivities[this.selectedDate] = false;
         
-        // Mark all accounts as complete after rendering is finished
-        this.selectedPlayers.forEach(player => {
-          const accountKey = this.getPlayerKey(player);
-          const isD1 = this.isD1Player(player);
-          const game = isD1 ? 'D1' : 'D2';
-          const platform = this.getPlatformName(player.membershipType);
-          
-          this.updateAccountLoadingStatus(
-            accountKey,
-            player.displayName,
-            platform,
-            game,
-            player.membershipType,
-            'complete',
-            `${game} data loaded and displayed successfully for ${player.displayName}`
-          );
-        });
+        // Mark all accounts as complete only when this is the final load (after full sync).
+        // When called from incremental refresh during activity fetch, do not mark complete
+        // so the progress modal stays until all API calls (all reports, Guardian Firsts, etc.) finish.
+        if (markAccountsComplete) {
+          this.selectedPlayers.forEach(player => {
+            const accountKey = this.getPlayerKey(player);
+            const isD1 = this.isD1Player(player);
+            const game = isD1 ? 'D1' : 'D2';
+            const platform = this.getPlatformName(player.membershipType);
+            
+            this.updateAccountLoadingStatus(
+              accountKey,
+              player.displayName,
+              platform,
+              game,
+              player.membershipType,
+              'complete',
+              `${game} data loaded and displayed successfully for ${player.displayName}`
+            );
+          });
+        }
         
         this.cdr.detectChanges();
       }
@@ -3518,6 +3708,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Process per selected player so we know which membership/game context to match in PGCR
       const players = (this.selectedPlayers || []).filter(Boolean);
+      let totalBatches = 0;
+      for (const player of players) {
+        const actsForPlayer = activities.filter(a => !a.characterClass && (a as any).membershipId === player.membershipId);
+        if (actsForPlayer.length > 0) {
+          totalBatches += Math.ceil(actsForPlayer.length / this.PGCR_BATCH_SIZE);
+        }
+      }
+      if (totalBatches === 0) return;
+
+      this.updateLoadingProgress('pgcr', 0, totalBatches, 'Loading post-game reports (PGCRs)…');
+      let currentBatch = 0;
+
       for (const player of players) {
         const actsForPlayer = activities.filter(a => !a.characterClass && (a as any).membershipId === player.membershipId);
         if (actsForPlayer.length === 0) continue;
@@ -3530,7 +3732,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         };
 
         for (let idx = 0; idx < actsForPlayer.length; idx += this.PGCR_BATCH_SIZE) {
+          if (environment.debug) {
+            console.log('[Load] PGCR batch', {
+              displayName: (player as any).displayName,
+              platform: this.getPlatformName(player.membershipType),
+              batch: currentBatch + 1,
+              of: totalBatches,
+              startIdx: idx
+            });
+          }
           const validated = await this.validatePGCRBatch(actsForPlayer, character, idx);
+          currentBatch += 1;
+          this.updateLoadingProgress(
+            'pgcr',
+            currentBatch,
+            totalBatches,
+            `Loading post-game reports (PGCRs)… ${currentBatch} of ${totalBatches}`
+          );
           if (!validated || validated.length === 0) continue;
 
           // Merge characterClass back into the activities array by instanceId
@@ -4154,6 +4372,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } else {
       // Set loading state for new users
     this.loadingActivities[this.selectedDate] = true;
+    this.updateLoadingProgress('fetch', 0, 1, 'Loading activities for selected date…');
     this.cdr.detectChanges();
     }
 
@@ -4200,6 +4419,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       } else {
         // No cached activities for this date, show loading state
         this.loadingActivities[this.selectedDate] = true;
+        this.updateLoadingProgress('fetch', 0, 1, 'Loading activities for selected date…');
         this.cdr.detectChanges();
       }
       
@@ -5571,6 +5791,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async loadGuardianFirsts(player: PlayerSearchDisplay): Promise<void> {
     this.loadingGuardianFirsts = true;
+    const accountKey = this.getPlayerKey(player);
+    const isD1 = this.isD1Player(player);
+    const game = isD1 ? 'D1' : 'D2';
+    const platform = this.getPlatformName(player.membershipType);
+    this.updateAccountLoadingStatus(
+      accountKey,
+      player.displayName,
+      platform,
+      game,
+      player.membershipType,
+      'organizing-pgcrs',
+      `Loading Guardian Firsts for ${player.displayName}…`
+    );
+    this.cdr.detectChanges();
     try {
       const charIds = (this.characters[this.getPlayerKey(player)] || [])
         .map(getCharacterId)
@@ -6615,6 +6849,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Loads first solo / solo-flawless completions for all dungeons for the given player. */
   private async loadDungeonSoloFirsts(player: PlayerSearchDisplay): Promise<void> {
     this.loadingDungeonSoloFirsts[player.membershipId] = true;
+    if (!this.isD1Player(player)) {
+      const accountKey = this.getPlayerKey(player);
+      const platform = this.getPlatformName(player.membershipType);
+      this.updateAccountLoadingStatus(
+        accountKey,
+        player.displayName,
+        platform,
+        'D2',
+        player.membershipType,
+        'organizing-pgcrs',
+        `Loading Dungeon Solo Firsts for ${player.displayName}…`
+      );
+      this.cdr.detectChanges();
+    }
     try {
       const data = await this.activityDb.getDungeonSoloFirsts(player.membershipId);
       this.dungeonSoloFirsts[player.membershipId] = data;
@@ -7651,13 +7899,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (typeof localStorage !== 'undefined') localStorage.setItem(HIDE_GET_STARTED_KEY, 'true');
   }
 
-  /** D2 season name for the selected date, or null if pre-D2 */
-  getSeasonForSelectedDate(): string | null {
-    return this.seasonService.getSeasonForDate(
-      this.selectedYear ?? new Date().getFullYear(),
-      this.selectedMonth,
-      this.selectedDay
-    );
+  /** Season/expansion name for a given game and year (mid-year). Used to label year boxes in the activity list. */
+  getSeasonForYear(game: 'D1' | 'D2', year: number | string): string | null {
+    const y = typeof year === 'string' ? parseInt(year, 10) : year;
+    if (Number.isNaN(y)) return null;
+    return this.seasonService.getSeasonForYear(game, y);
   }
 
   /** Toggle selection of an activity breakdown card for filtering */
@@ -7789,6 +8035,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // ------------------------------------------------------------------
   // Export helpers
   // ------------------------------------------------------------------
+  async exportBreakdownToExcel(): Promise<void> {
+    if (!this.activityBreakdownGroups?.length || !this.activityBreakdownSummaryCards?.length) {
+      console.warn('[Export] No breakdown data to export');
+      return;
+    }
+    try {
+      await this.exportService.exportActivityBreakdownToExcel({
+        summaryCards: this.filteredActivityBreakdownSummaryCards,
+        groups: this.filteredActivityBreakdownGroups.map(g => ({
+          label: g.label,
+          rows: g.rows.map(r => ({
+            baseName: r.baseName,
+            variantName: r.variantName || '',
+            game: r.game,
+            runs: r.runs,
+            clears: r.clears,
+            fails: r.fails,
+            timeSeconds: r.timeSeconds
+          }))
+        })),
+        formatTime: (s: number) => this.formatSecondsToHoursMinutes(s)
+      });
+    } catch (err) {
+      console.error('Failed to export activity breakdown:', err);
+      alert('Failed to export. Please try again.');
+    }
+  }
+
   async exportActivities(): Promise<void> {
     if (!this.selectedDate) {
       console.warn('[Export] No date selected');
@@ -8750,6 +9024,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   public accountLoadingStatuses: LoadingStatus[] = [];
   public showLoadingModal = false;
   public isLoadingComplete = false;
+
+  /** Expose for template: show progress while D1 PGCR prefetch runs in the background. */
+  get pgcrPrefetchProgress$() {
+    return this.activityDb.pgcrPrefetchProgress$;
+  }
 
   private getD1RaidVariantName(referenceId: string, manifestName: string): string {
     // Map D1 raid referenceIds to their variant types based on our D1_FAMILY_MAP analysis

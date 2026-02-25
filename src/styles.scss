@@ -367,3 +367,148 @@ img, video, canvas, svg {
   text-decoration-thickness: 2px;
   transform: translateY(-1px);
 }
+
+/* =============================================================================
+   LIGHT THEME - Overrides when html has .light / [data-theme="light"] or body has .light-theme.
+   Must come last so they override Tailwind and base styles.
+   ============================================================================= */
+html[data-theme="light"] body,
+html.light body,
+body.light-theme {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .destiny-bg-gradient-dark,
+html.light .destiny-bg-gradient-dark,
+body.light-theme .destiny-bg-gradient-dark {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+}
+
+html[data-theme="light"] .glass-effect,
+html.light .glass-effect,
+body.light-theme .glass-effect {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  border-color: rgba(203, 213, 225, 0.4) !important;
+}
+
+html[data-theme="light"] .bg-slate-900,
+html.light .bg-slate-900,
+body.light-theme .bg-slate-900 {
+  background-color: #f8fafc !important;
+}
+
+html[data-theme="light"] .bg-slate-800,
+html.light .bg-slate-800,
+body.light-theme .bg-slate-800 {
+  background-color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] .bg-slate-700,
+html.light .bg-slate-700,
+body.light-theme .bg-slate-700 {
+  background-color: #cbd5e1 !important;
+}
+
+html[data-theme="light"] .bg-slate-800\/95,
+html.light .bg-slate-800\/95,
+body.light-theme .bg-slate-800\/95 {
+  background-color: rgba(226, 232, 240, 0.95) !important;
+}
+
+html[data-theme="light"] .bg-slate-800\/50,
+html.light .bg-slate-800\/50,
+body.light-theme .bg-slate-800\/50 {
+  background-color: rgba(226, 232, 240, 0.5) !important;
+}
+
+html[data-theme="light"] .text-white,
+html.light .text-white,
+body.light-theme .text-white {
+  color: #1e293b !important;
+}
+
+html[data-theme="light"] .text-slate-300,
+html.light .text-slate-300,
+body.light-theme .text-slate-300 {
+  color: #475569 !important;
+}
+
+/* Secondary/muted text - dark enough for readable contrast on light backgrounds */
+html[data-theme="light"] .text-slate-400,
+html.light .text-slate-400,
+body.light-theme .text-slate-400 {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .text-slate-500,
+html.light .text-slate-500,
+body.light-theme .text-slate-500 {
+  color: #334155 !important;
+}
+
+html[data-theme="light"] .text-slate-600,
+html.light .text-slate-600,
+body.light-theme .text-slate-600 {
+  color: #1e293b !important;
+}
+
+/* Lighter slate text (still readable on light bg) */
+html[data-theme="light"] .text-slate-200,
+html.light .text-slate-200,
+body.light-theme .text-slate-200 {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .text-slate-100,
+html.light .text-slate-100,
+body.light-theme .text-slate-100 {
+  color: #334155 !important;
+}
+
+/* Input placeholder - must be visible in light theme */
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder,
+html.light input::placeholder,
+html.light textarea::placeholder,
+body.light-theme input::placeholder,
+body.light-theme textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+html[data-theme="light"] .text-destiny-text-secondary,
+html.light .text-destiny-text-secondary,
+body.light-theme .text-destiny-text-secondary {
+  color: #475569 !important;
+}
+
+/* Inputs, selects, textareas - visible border and background in light theme */
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea,
+html.light input,
+html.light select,
+html.light textarea,
+body.light-theme input,
+body.light-theme select,
+body.light-theme textarea {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #1e293b !important;
+}
+
+/* Light theme borders for cards and dividers */
+html[data-theme="light"] .border-slate-600,
+html.light .border-slate-600,
+body.light-theme .border-slate-600 {
+  border-color: #94a3b8 !important;
+}
+
+html[data-theme="light"] .border-slate-700,
+html.light .border-slate-700,
+body.light-theme .border-slate-700 {
+  border-color: #cbd5e1 !important;
+}

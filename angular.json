@@ -39,7 +39,7 @@
               "src/styles.scss"
             ],
             "scripts": [],
-            "allowedCommonJsDependencies": ["lz-string", "file-saver"],
+            "allowedCommonJsDependencies": ["lz-string", "file-saver", "html2canvas"],
             "baseHref": "/Destiny-Chronicle/",
             "deployUrl": "/Destiny-Chronicle/"
           },
@@ -48,7 +48,7 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1.5mb",
+                  "maximumWarning": "1.8mb",
                   "maximumError": "2.5mb"
                 },
                 {

@@ -7,7 +7,7 @@ import { BungieApiService } from './bungie-api.service';
 import { firstValueFrom } from 'rxjs';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of } from 'rxjs';
+import { Observable, of, BehaviorSubject } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
@@ -84,6 +84,10 @@ export class ActivityDbService extends Dexie {
   
   private lastCleanup = Date.now();
   private cleanupTimer?: any;
+
+  /** Exposed so the UI can show progress while D1 PGCR prefetch runs in the background. */
+  public readonly pgcrPrefetchProgress$ = new BehaviorSubject<{ inProgress: boolean; current: number; total: number }>({ inProgress: false, current: 0, total: 0 });
+  private pgcrPrefetchRunCount = 0;
 
   // Canonical mapping for all D2 and D1 raids/dungeons (2024, expand as needed)
   private static readonly ACTIVITY_FAMILY_MAP: Record<string, string> = {
@@ -1324,22 +1328,32 @@ export class ActivityDbService extends Dexie {
     for (let i = 0; i < instanceIds.length; i += batchSize) {
       chunks.push(instanceIds.slice(i, i + batchSize));
     }
+    const total = chunks.length;
+    this.pgcrPrefetchRunCount++;
+    this.pgcrPrefetchProgress$.next({ inProgress: true, current: 0, total });
     (async () => {
-      for (const chunk of chunks) {
-        try {
-          const results = await firstValueFrom(this.bungieService.getD1PGCRBatch(chunk, batchSize));
-          const list = Array.isArray(results) ? results : [];
-          for (const raw of list) {
-            if (raw?.activityDetails?.instanceId != null) {
-              await this.pgcrCacheService.cacheD1PGCR(String(raw.activityDetails.instanceId), raw);
+      try {
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          try {
+            const results = await firstValueFrom(this.bungieService.getD1PGCRBatch(chunk, batchSize));
+            const list = Array.isArray(results) ? results : [];
+            for (const raw of list) {
+              if (raw?.activityDetails?.instanceId != null) {
+                await this.pgcrCacheService.cacheD1PGCR(String(raw.activityDetails.instanceId), raw);
+              }
             }
+          } catch (err) {
+            console.warn('[D1 PGCR prefetch] Batch failed:', err);
           }
-        } catch (err) {
-          console.warn('[D1 PGCR prefetch] Batch failed:', err);
+          this.pgcrPrefetchProgress$.next({ inProgress: true, current: i + 1, total });
+          if (i < chunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
         }
-        if (chunks.indexOf(chunk) < chunks.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
+      } finally {
+        this.pgcrPrefetchRunCount = Math.max(0, this.pgcrPrefetchRunCount - 1);
+        this.pgcrPrefetchProgress$.next(this.pgcrPrefetchRunCount > 0 ? { inProgress: true, current: total, total } : { inProgress: false, current: total, total });
       }
     })();
   }

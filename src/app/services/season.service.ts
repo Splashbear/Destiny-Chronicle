@@ -1,7 +1,24 @@
 import { Injectable } from '@angular/core';
 
-/** D2 season/episode start dates. For a given date, returns the active season name. */
-const SEASON_STARTS: { start: Date; name: string }[] = [
+/**
+ * Destiny 1 expansion/era start dates (post-release content).
+ * Source: https://en.wikipedia.org/wiki/Destiny_post-release_content
+ * D1 launched Sept 9, 2014; last content Rise of Iron (Sept 20, 2016).
+ */
+const D1_STARTS: { start: Date; name: string }[] = [
+  { start: new Date(2014, 8, 9), name: 'Destiny' },
+  { start: new Date(2014, 11, 9), name: 'The Dark Below' },
+  { start: new Date(2015, 4, 19), name: 'House of Wolves' },
+  { start: new Date(2015, 8, 15), name: 'The Taken King' },
+  { start: new Date(2016, 8, 20), name: 'Rise of Iron' },
+].sort((a, b) => b.start.getTime() - a.start.getTime());
+
+/**
+ * Destiny 2 season/episode start dates.
+ * Sources: Bungie Help (Years of Destiny), gamertweak, community wikis.
+ * Season that was active on a given date (not "current" season).
+ */
+const D2_STARTS: { start: Date; name: string }[] = [
   { start: new Date(2017, 8, 6), name: 'Red War' },
   { start: new Date(2017, 11, 5), name: 'Curse of Osiris' },
   { start: new Date(2018, 4, 8), name: 'Warmind' },
@@ -28,22 +45,35 @@ const SEASON_STARTS: { start: Date; name: string }[] = [
   { start: new Date(2024, 5, 11), name: 'Episode: Echoes' },
   { start: new Date(2024, 9, 8), name: 'Episode: Revenant' },
   { start: new Date(2025, 1, 10), name: 'Episode: Heresy' },
-].sort((a, b) => b.start.getTime() - a.start.getTime()); // descending so we find latest <= date
+  { start: new Date(2025, 6, 15), name: 'The Edge of Fate' },
+].sort((a, b) => b.start.getTime() - a.start.getTime());
 
 @Injectable({ providedIn: 'root' })
 export class SeasonService {
   /**
-   * Returns the Destiny 2 season/episode name for the given date.
-   * D1 has no seasons in the same sense; returns null for pre-D2 dates.
+   * Returns the Destiny 1 or Destiny 2 season/expansion name for the given date.
+   * Uses the season that was active on that date (latest start date on or before the given date).
    */
-  getSeasonForDate(year: number, month: number, day: number): string | null {
+  getSeasonForDate(game: 'D1' | 'D2', year: number, month: number, day: number): string | null {
     const d = new Date(year, month - 1, day);
     const ts = d.getTime();
-    // D2 launched Sept 6, 2017
-    if (ts < new Date(2017, 8, 6).getTime()) return null;
-    for (const s of SEASON_STARTS) {
+    const list = game === 'D1' ? D1_STARTS : D2_STARTS;
+    if (game === 'D1') {
+      if (ts < D1_STARTS[D1_STARTS.length - 1].start.getTime()) return null;
+    } else {
+      if (ts < new Date(2017, 8, 6).getTime()) return null;
+    }
+    for (const s of list) {
       if (ts >= s.start.getTime()) return s.name;
     }
     return null;
+  }
+
+  /**
+   * Returns the season/expansion name active at mid-year (July 1) for the given game and year.
+   * Used to label year boxes in the activity list (e.g. "2021 (Season of the Splicer)").
+   */
+  getSeasonForYear(game: 'D1' | 'D2', year: number): string | null {
+    return this.getSeasonForDate(game, year, 7, 1);
   }
 }
