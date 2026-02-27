@@ -1,5 +1,17 @@
 <div class="min-h-screen bg-slate-900">
 
+  <!-- Banner when user returns to tab after it was hidden during loading -->
+  <div *ngIf="showBackgroundLoadingTip" class="w-full px-4 sm:px-6 lg:px-8 pt-4">
+    <div class="bg-amber-900/40 border border-amber-600/50 rounded-lg p-3 flex items-center justify-between gap-3">
+      <p class="text-sm text-amber-200 flex-1">
+        Loading may have been slower while this tab was in the background. Keep this tab visible for fastest loading.
+      </p>
+      <button (click)="dismissBackgroundLoadingTip()" class="text-amber-300 hover:text-white p-1 rounded transition-colors shrink-0" aria-label="Dismiss">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  </div>
+
   <div class="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
     <div class="flex flex-col gap-8">
       <!-- Top Row: Account and Date Pickers (Horizontal) -->
@@ -229,6 +241,7 @@
             <div class="text-center text-xs text-slate-400">
               Fetching Post Game Carnage Reports (PGCRs) for each character. This may take a moment – please keep this tab open.
             </div>
+            <p class="text-center text-xs text-blue-300/90 mt-1">Tip: Keep this tab visible for fastest loading.</p>
           </div>
         </div>
         <!-- Date Picker -->
@@ -384,6 +397,7 @@
               </svg>
               <span>{{ loadingProgress.message }}</span>
             </div>
+            <p class="text-xs text-blue-300/90">Tip: Keep this tab visible for fastest loading.</p>
             <div *ngIf="loadingProgress.total > 0" class="text-xs text-slate-500 w-full max-w-xs">
               <div class="flex justify-between mb-0.5">
                 <span class="capitalize">{{ loadingProgress.phase === 'pgcr' ? 'PGCR' : loadingProgress.phase }}</span>
@@ -600,11 +614,37 @@
             </svg>
             <span>Loading activity breakdown…</span>
           </div>
+          <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown" class="space-y-6">
+            <!-- All vs Per-account tabs (same pattern as Guardian Firsts) -->
+            <div class="flex flex-wrap gap-2 mb-4" *ngIf="breakdownPlatformTabs.length >= 1">
+              <button (click)="setActiveBreakdownTab('all')" class="d2-tab" [ngClass]="{'d2-tab-active-blue': activeBreakdownTab==='all'}" title="All Accounts">
+                <span class="hidden sm:inline">All Accounts</span><span class="sm:hidden">All</span>
+              </button>
+              <button *ngFor="let plat of breakdownPlatformTabs" (click)="setActiveBreakdownTab(plat)" class="d2-tab flex items-center gap-1" [ngClass]="{'d2-tab-active-blue': activeBreakdownTab===plat}" [title]="plat">
+                <img [src]="getPlatformIconUrl(getPlatformId(plat))" class="w-4 h-4 flex-shrink-0" alt="platform" />
+                <span>{{ getPlatformShortName(plat) }}</span>
+              </button>
+            </div>
+            <!-- Aggregated view: All Accounts (like Firsts "All Platforms") -->
+            <div *ngIf="activeBreakdownTab === 'all'" class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-4">
+              <h3 class="text-lg font-semibold text-white mb-1">{{ selectedPlayers[0].displayName }}'s Activity Breakdown (All Accounts)</h3>
+              <p class="text-slate-400 text-sm">All-time totals across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }}. Switch to a platform tab to see one account only.</p>
+            </div>
+            <!-- Per-account view: single platform header (like Firsts per-platform) -->
+            <div *ngIf="activeBreakdownTab !== 'all'" class="flex items-center gap-2 mb-4">
+              <img [src]="getPlatformIconUrl(getPlatformId(activeBreakdownTab))" class="w-6 h-6" alt="platform icon" />
+              <h3 class="text-xl font-bold text-white">{{ activeBreakdownTab }} – Activity Breakdown</h3>
+            </div>
+          </div>
           <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown && activityBreakdownGroups.length > 0" class="space-y-8">
-            <!-- Total time header: at-a-glance how you've spent your time -->
+            <!-- Total time card: wording depends on All vs per-account -->
             <div class="bg-emerald-900/30 border border-emerald-600/50 rounded-lg p-4">
               <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <h3 class="text-lg font-semibold text-white">Total Time {{ selectedBreakdownCardLabels.size > 0 ? '(Filtered)' : 'Across All Accounts' }}</h3>
+                <h3 class="text-lg font-semibold text-white">
+                  <ng-container *ngIf="selectedBreakdownCardLabels.size > 0">Total Time (Filtered)</ng-container>
+                  <ng-container *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab === 'all'">Total Time Across All Accounts</ng-container>
+                  <ng-container *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab !== 'all'">Total Time for This Account</ng-container>
+                </h3>
                 <button (click)="exportBreakdownToExcel()"
                         [disabled]="!activityBreakdownGroups.length"
                         class="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-600 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-2">
@@ -614,12 +654,15 @@
               </div>
               <p class="text-slate-300 text-sm mb-3">
                 <span *ngIf="selectedBreakdownCardLabels.size > 0">Showing selected activity types only.</span>
-                <span *ngIf="selectedBreakdownCardLabels.size === 0">All-time aggregate across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
+                <span *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab === 'all'">All-time aggregate across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
+                <span *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab !== 'all'">All-time activity for this account (all characters) – not limited to the selected date.</span>
               </p>
               <div class="text-2xl font-bold text-emerald-300 font-mono">{{ formatSecondsToHoursMinutes(activityBreakdownTotalTimeSeconds) }}</div>
             </div>
             <p class="text-slate-300 text-sm">
-              Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date). Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
+              <ng-container *ngIf="activeBreakdownTab === 'all'">Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date).</ng-container>
+              <ng-container *ngIf="activeBreakdownTab !== 'all'">Counts and time for this account across all characters (all time, not just the selected date).</ng-container>
+              Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
             </p>
             
             <!-- Charts Section (collapsible) -->
@@ -646,8 +689,7 @@
                           class="bg-slate-700 text-slate-200 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 focus:border-emerald-500">
                     <option *ngFor="let opt of breakdownChartCategoryOptions" [value]="opt.value">{{ opt.label }}</option>
                   </select>
-                  <select *ngIf="breakdownChartCategory !== 'all'" 
-                          [(ngModel)]="breakdownChartGame" 
+                  <select [(ngModel)]="breakdownChartGame" 
                           (ngModelChange)="setBreakdownChartGame($event)"
                           class="bg-slate-700 text-slate-200 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 focus:border-emerald-500">
                     <option *ngFor="let g of breakdownChartGameOptions" [value]="g.value">{{ g.label }}</option>
@@ -665,7 +707,7 @@
                     </button>
                   </div>
                 </div>
-                <div class="h-64 sm:h-80">
+                <div class="h-64 sm:h-80 min-h-[320px]">
                   <canvas baseChart
                           [data]="breakdownChartData"
                           [options]="breakdownChartType === 'pie' ? breakdownChartOptions : breakdownBarChartOptions"
@@ -736,7 +778,8 @@
             </div>
           </div>
           <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown && activityBreakdownRows !== null && activityBreakdownRows.length === 0" class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center text-slate-300">
-            No activities in database for selected profiles. Load activities for a date first so data is synced.
+            <ng-container *ngIf="activeBreakdownTab === 'all'">No activities in database for selected profiles. Load activities for a date first so data is synced.</ng-container>
+            <ng-container *ngIf="activeBreakdownTab !== 'all'">No activities in database for this account. Load activities for a date first so data is synced.</ng-container>
           </div>
         </div>
 

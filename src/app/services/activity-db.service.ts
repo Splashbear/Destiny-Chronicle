@@ -1322,8 +1322,12 @@ export class ActivityDbService extends Dexie {
    */
   private prefetchD1PgcrsInBackground(instanceIds: string[]): void {
     if (instanceIds.length === 0) return;
-    const batchSize = 2;
-    const delayMs = 1200;
+    // Tune these with Bungie rate limits in mind. Community consensus is ~250
+    // requests / 10s per IP. getD1PGCRBatch fetches a small batch of PGCRs in
+    // a single HTTP request, so we can afford to be reasonably aggressive here
+    // without starving the rest of the app.
+    const batchSize = 10;   // up to 10 PGCRs per HTTP call
+    const delayMs = 500;    // ~20 PGCRs/sec in background
     const chunks: string[][] = [];
     for (let i = 0; i < instanceIds.length; i += batchSize) {
       chunks.push(instanceIds.slice(i, i + batchSize));
@@ -2304,6 +2308,21 @@ export class ActivityDbService extends Dexie {
     await this.initPromise;
     if (!membershipIds?.length) return 0;
     return this.activities.where('membershipId').anyOf(membershipIds).count();
+  }
+
+  /**
+   * Returns how many activities we have stored for a specific membershipId and game.
+   * Used by Account Summary so Destiny 1 and Destiny 2 profiles on the same platform
+   * don't share the same activity count.
+   */
+  async countActivitiesForMembershipAndGame(membershipId: string, game: 'D1' | 'D2'): Promise<number> {
+    await this.initPromise;
+    if (!membershipId) return 0;
+    return this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => a.game === game)
+      .count();
   }
 
   /**

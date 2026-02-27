@@ -248,6 +248,18 @@ function getCharacterId(char: any): string | undefined {
   return char.characterId || char.characterBase?.characterId;
 }
 
+// Helper: minutes played per character, handling D1 vs D2 profile shapes.
+function getCharacterMinutesPlayed(char: any, game: 'D1' | 'D2'): number {
+  if (!char) return 0;
+  if (game === 'D1') {
+    const base = char.characterBase || char;
+    const raw = Number(base?.minutesPlayedTotal ?? base?.minutesPlayed ?? 0);
+    return isNaN(raw) ? 0 : raw;
+  }
+  const raw = Number(char.minutesPlayedTotal ?? char.minutesPlayed ?? 0);
+  return isNaN(raw) ? 0 : raw;
+}
+
 // Special handling for legacy and current Conqueror/Flawless titles
 const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHash?: number } } = {
   1376640684: { name: 'Conqueror (Season of the Worthy)' },
@@ -534,6 +546,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   groupedActivitiesByAccount: any[] = [];
   private processedActivities: any[] = [];
   loadingProgress: LoadingProgress | null = null;
+  /** True when user returns to tab after it was hidden during loading; show explanatory message. */
+  showBackgroundLoadingTip = false;
+  /** Page Visibility: we were loading when the tab went hidden (so we can show tip on return). */
+  private wasLoadingWhileTabHidden = false;
+  private visibilityChangeHandler = () => this.onVisibilityChange();
   /** Running total of activity reports fetched per account (accountKey -> count). Updated as API returns pages; "Done!" when account fetch completes. */
   private activityCountByAccount = new Map<string, number>();
   private readonly BATCH_SIZE = 50;
@@ -657,6 +674,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   breakdownTilesCollapsed = false;
   /** Whether the chart section is collapsed */
   breakdownChartCollapsed = false;
+  /** 'all' = aggregated across all accounts; otherwise platform name (e.g. 'Xbox') for per-account view */
+  activeBreakdownTab = 'all';
   /** Chart category: 'all' = by activity type, or category name (e.g. 'Raid', 'Dungeon') for drill-down by activity name */
   breakdownChartCategory = 'all';
   /** Chart game filter: 'all' = D1+D2, 'D1' or 'D2' to limit */
@@ -664,17 +683,27 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   // Chart configuration for Activity Breakdown
   breakdownChartType: ChartType = 'pie';
+  /** Cached chart data to avoid recomputing on every change-detection tick. */
+  private breakdownChartDataState: ChartData<'pie' | 'bar'> = { labels: [], datasets: [] };
   breakdownChartOptions: ChartConfiguration['options'] = {
     responsive: true,
     maintainAspectRatio: false,
+    layout: {
+      padding: { top: 8, right: 8, bottom: 8, left: 8 }
+    },
     plugins: {
       legend: {
         display: true,
-        position: 'right',
+        position: 'bottom',
+        align: 'start',
         labels: {
           color: '#e2e8f0',
           font: { size: 12 },
-          padding: 15
+          padding: 10,
+          boxWidth: 14,
+          usePointStyle: true,
+          pointStyle: 'circle',
+          textAlign: 'left'
         }
       },
       tooltip: {
@@ -755,7 +784,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (!groups?.length) return base;
     const seen = new Set<string>();
     for (const g of groups) {
-      const cat = g.label.split(/\s*[–-]\s*/)[0]?.trim() || g.label;
+      const cat = this.getBreakdownCategoryFromLabel(g.label) || g.label;
       if (cat && !seen.has(cat)) {
         seen.add(cat);
         const displayLabel = this.categoryDisplayNames[cat] ?? (cat.endsWith('s') ? cat : cat + 's');
@@ -772,8 +801,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     { value: 'D2', label: 'Destiny 2' }
   ];
 
-  /** Chart data: aggregated by type when "All" and no tiles selected; otherwise drill-down to individual activities */
+  /** Chart data input for the template – returns cached value. */
   get breakdownChartData(): ChartData<'pie' | 'bar'> {
+    return this.breakdownChartDataState;
+  }
+
+  /** Normalize group label to category (e.g. "Raid – D1" → "Raid") for chart filtering. Handles en-dash, hyphen, and spacing. */
+  private getBreakdownCategoryFromLabel(label: string): string {
+    if (!label) return '';
+    const parts = label.split(/\s*[–-]\s*/);
+    return (parts[0] ?? label).trim();
+  }
+
+  /** Recompute chart data based on current breakdown groups, filters, and chart type. */
+  private recomputeBreakdownChartData(): void {
     const groups = this.filteredActivityBreakdownGroups;
     const hasTileSelection = this.selectedBreakdownCardLabels.size > 0;
 
@@ -781,24 +822,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (hasTileSelection && groups.length > 0) {
       const allRows: ActivityCountRow[] = [];
       for (const g of groups) allRows.push(...g.rows);
-      if (!allRows.length) return { labels: [], datasets: [] };
+      if (!allRows.length) {
+        this.breakdownChartDataState = { labels: [], datasets: [] };
+        return;
+      }
       const items = allRows.map(r => ({
         label: r.variantName ? `${r.baseName} (${r.variantName})` : r.baseName,
         timeSeconds: r.timeSeconds
       }));
-      return this.buildChartDataFromItems(items);
+      this.breakdownChartDataState = this.buildChartDataFromItems(items);
+      return;
     }
 
-    // When "All" and no tiles selected: show summary (each group as a slice)
+    // When "All" and no tiles selected: show summary (each group as a slice), respecting game filter
     if (this.breakdownChartCategory === 'all') {
-      const cards = this.filteredActivityBreakdownSummaryCards;
-      if (!cards.length) return { labels: [], datasets: [] };
-      return this.buildChartDataFromCards(cards);
+      let cards = this.filteredActivityBreakdownSummaryCards;
+      if (this.breakdownChartGame !== 'all') {
+        const gameSuffix = ' – ' + this.breakdownChartGame;
+        const gameSuffixAlt = ' - ' + this.breakdownChartGame;
+        cards = cards.filter(c => c.label.endsWith(gameSuffix) || c.label.endsWith(gameSuffixAlt));
+      }
+      this.breakdownChartDataState = cards.length ? this.buildChartDataFromCards(cards) : { labels: [], datasets: [] };
+      return;
     }
 
     // When specific category selected in dropdown: drill-down to individual activities in that category
     const matchingGroups = this.filteredActivityBreakdownGroups.filter(g => {
-      const cat = g.label.split(/\s*[–-]\s*/)[0]?.trim();
+      const cat = this.getBreakdownCategoryFromLabel(g.label);
       if (cat !== this.breakdownChartCategory) return false;
       if (this.breakdownChartGame === 'all') return true;
       return g.game === this.breakdownChartGame;
@@ -807,13 +857,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const allRows: ActivityCountRow[] = [];
     for (const g of matchingGroups) allRows.push(...g.rows);
 
-    if (!allRows.length) return { labels: [], datasets: [] };
+    if (!allRows.length) {
+      this.breakdownChartDataState = { labels: [], datasets: [] };
+      return;
+    }
 
     const items = allRows.map(r => ({
       label: r.variantName ? `${r.baseName} (${r.variantName})` : r.baseName,
       timeSeconds: r.timeSeconds
     }));
-    return this.buildChartDataFromItems(items);
+    this.breakdownChartDataState = this.buildChartDataFromItems(items);
   }
 
   private buildChartDataFromCards(cards: { label: string; timeSeconds: number }[]): ChartData<'pie' | 'bar'> {
@@ -824,7 +877,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         datasets: [{ data: cards.map(c => c.timeSeconds), backgroundColor: colors }]
       };
     }
-    const sorted = [...cards].sort((a, b) => b.timeSeconds - a.timeSeconds).slice(0, 15);
+    const sorted = [...cards].sort((a, b) => b.timeSeconds - a.timeSeconds).slice(0, 30);
     return {
       labels: sorted.map(c => c.label),
       datasets: [{ label: 'Time Spent', data: sorted.map(c => c.timeSeconds), backgroundColor: '#10b981' }]
@@ -840,7 +893,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         datasets: [{ data: sorted.map(i => i.timeSeconds), backgroundColor: colors }]
       };
     }
-    const top = sorted.slice(0, 15);
+    const top = sorted.slice(0, 30);
     return {
       labels: top.map(i => i.label),
       datasets: [{ label: 'Time Spent', data: top.map(i => i.timeSeconds), backgroundColor: '#10b981' }]
@@ -859,26 +912,104 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Toggle chart type and trigger change detection */
   setBreakdownChartType(type: 'pie' | 'bar') {
     this.breakdownChartType = type;
+    this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
 
   /** Set chart category and trigger change detection */
   setBreakdownChartCategory(value: string) {
     this.breakdownChartCategory = value;
+    this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
 
   /** Set chart game filter and trigger change detection */
   setBreakdownChartGame(value: 'all' | 'D1' | 'D2') {
     this.breakdownChartGame = value;
+    this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
 
-  /** Total time in seconds across activity breakdown; when filtered, only selected groups */
+  /**
+   * Total time in seconds for the Activity Breakdown header.
+   *
+   * - When tiles are selected, this is the sum of the selected cards (so the
+   *   number matches exactly what the user filtered to).
+   * - When no tiles are selected, this is the sum of all cards – i.e. the
+   *   total time for the activities we are showing in the Breakdown grid.
+   */
   get activityBreakdownTotalTimeSeconds(): number {
-    const groups = this.filteredActivityBreakdownGroups;
-    if (!groups?.length) return 0;
-    return groups.reduce((sum, g) => sum + g.rows.reduce((s, r) => s + (r.timeSeconds ?? 0), 0), 0);
+    // Filtered view: sum of selected cards only
+    if (this.selectedBreakdownCardLabels.size > 0) {
+      const cards = this.activityBreakdownSummaryCards.filter(c =>
+        this.selectedBreakdownCardLabels.has(c.label)
+      );
+      if (!cards?.length) return 0;
+      return cards.reduce((sum, c) => sum + (c.timeSeconds ?? 0), 0);
+    }
+
+    // Unfiltered view: sum across all cards
+    const cards = this.activityBreakdownSummaryCards;
+    if (!cards?.length) return 0;
+    return cards.reduce((sum, c) => sum + (c.timeSeconds ?? 0), 0);
+  }
+
+  /** Total playtime in seconds for the current Breakdown view, from profile data. */
+  private getBreakdownProfileTotalTimeSeconds(): number {
+    // Prefer per-platform stats when available
+    if (this.perPlatformStats && this.perPlatformStats.length) {
+      if (this.activeBreakdownTab === 'all') {
+        return this.perPlatformStats.reduce(
+          (sum, s) => sum + (s.totalTime ?? 0),
+          0
+        );
+      }
+      return this.perPlatformStats
+        .filter(s => s.platform === this.activeBreakdownTab)
+        .reduce((sum, s) => sum + (s.totalTime ?? 0), 0);
+    }
+
+    // Fallback: use overall accountStats when perPlatformStats is not yet populated
+    return this.accountStats?.totalTime ?? 0;
+  }
+
+  /** Debug helper: log where Breakdown total time is coming from. */
+  private logBreakdownDebug(context: string): void {
+    try {
+      const headerSeconds = this.activityBreakdownTotalTimeSeconds;
+      const headerFormatted = this.formatSecondsToHoursMinutes(headerSeconds);
+
+      const cardTotalSeconds = this.activityBreakdownSummaryCards.reduce(
+        (sum, c) => sum + (c.timeSeconds ?? 0),
+        0
+      );
+      const cardTotalFormatted = this.formatSecondsToHoursMinutes(cardTotalSeconds);
+
+      const profileSeconds = this.getBreakdownProfileTotalTimeSeconds();
+      const profileFormatted = this.formatSecondsToHoursMinutes(profileSeconds);
+
+      const perPlatformDebug = (this.perPlatformStats || []).map(s => ({
+        platform: s.platform,
+        game: s.game,
+        hours: (s.totalTime ?? 0) / 3600
+      }));
+
+      // eslint-disable-next-line no-console
+      console.log('[BreakdownDebug]', {
+        context,
+        activeBreakdownTab: this.activeBreakdownTab,
+        headerSeconds,
+        headerFormatted,
+        cardTotalSeconds,
+        cardTotalFormatted,
+        profileSeconds,
+        profileFormatted,
+        accountStatsTotalSeconds: this.accountStats?.totalTime ?? 0,
+        perPlatform: perPlatformDebug
+      });
+    } catch (err) {
+      console.warn('[BreakdownDebug] Failed to log breakdown debug info', err);
+    }
   }
 
   /** Total time in seconds for the selected date (from filteredActivitiesForDate) */
@@ -1273,12 +1404,46 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     this.dbReady = true;
     this.cdr.detectChanges();
+
+    // Page Visibility: show tip if user returns after switching away during loading
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+    }
   }
 
   ngOnDestroy() {
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+    }
     // Clean up any subscriptions or timers
     this.statsDebounce$.complete();
     this.filteredActivities$.complete();
+  }
+
+  /** Page Visibility API: track when user leaves during loading so we can show a tip on return. */
+  private onVisibilityChange(): void {
+    if (typeof document === 'undefined') return;
+    if (document.hidden) {
+      if (this.showLoadingModal || this.loadingProgress) {
+        this.wasLoadingWhileTabHidden = true;
+      }
+    } else {
+      if (this.wasLoadingWhileTabHidden) {
+        this.wasLoadingWhileTabHidden = false;
+        this.showBackgroundLoadingTip = true;
+        this.cdr.markForCheck();
+        // Auto-dismiss after 10 seconds
+        setTimeout(() => {
+          this.showBackgroundLoadingTip = false;
+          this.cdr.markForCheck();
+        }, 10000);
+      }
+    }
+  }
+
+  dismissBackgroundLoadingTip(): void {
+    this.showBackgroundLoadingTip = false;
+    this.cdr.markForCheck();
   }
 
   /**
@@ -4129,14 +4294,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
 
       // Pull total playtime (seconds) from Bungie character data only.
-      // We sum `minutesPlayedTotal` / `minutesPlayed` across all characters
+      // We sum `minutesPlayedTotal` / `minutesPlayed` (or D1 equivalents) across all characters
       // for all selected players – no WastedOnDestiny fallback.
       for (const pl of this.selectedPlayers) {
         const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
         if (!chars || chars.length === 0) continue;
         const minutes = chars.reduce((sum, c) => {
-          const min = Number(c.minutesPlayedTotal ?? c.minutesPlayed ?? 0);
-          return sum + (isNaN(min) ? 0 : min);
+          return sum + getCharacterMinutesPlayed(c, pl.game as 'D1' | 'D2');
         }, 0);
         totalTime += minutes * 60; // convert to seconds
       }
@@ -4147,8 +4311,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         totalActivityTime = totalTime;
       }
 
-      // Total activities — count directly from IndexedDB for accuracy
-      const totalActivities = await this.activityDb.countActivitiesForMemberships(this.selectedPlayers.map(p => p.membershipId));
+      // Total activities — count directly from IndexedDB for accuracy, per account/game
+      let totalActivities = 0;
+      for (const pl of this.selectedPlayers) {
+        totalActivities += await this.activityDb.countActivitiesForMembershipAndGame(
+          pl.membershipId,
+          pl.game as 'D1' | 'D2'
+        );
+      }
 
       // Aggregate total seals / titles from Bungie title data only.
       // Count earned titles only – i.e. completed/unlocked titles – so
@@ -4170,8 +4340,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
         if (chars && chars.length > 0) {
           const minutes = chars.reduce((sum, c) => {
-            const min = Number(c.minutesPlayedTotal ?? c.minutesPlayed ?? 0);
-            return sum + (isNaN(min) ? 0 : min);
+            return sum + getCharacterMinutesPlayed(c, pl.game as 'D1' | 'D2');
           }, 0);
           time = minutes * 60; // convert to seconds to keep units consistent
         }
@@ -4190,7 +4359,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           }
         }
 
-        const acts = await this.activityDb.countActivitiesForMemberships([pl.membershipId]);
+        const acts = await this.activityDb.countActivitiesForMembershipAndGame(
+          pl.membershipId,
+          pl.game as 'D1' | 'D2'
+        );
 
         if (!platformStatsMap[key]) {
           platformStatsMap[key] = {
@@ -7914,6 +8086,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.selectedBreakdownCardLabels.add(label);
     }
     this.selectedBreakdownCardLabels = new Set(this.selectedBreakdownCardLabels);
+    this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
 
@@ -7927,6 +8100,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (!this.activityBreakdownGroups?.length) return [];
     if (this.selectedBreakdownCardLabels.size === 0) return this.activityBreakdownGroups;
     return this.activityBreakdownGroups.filter(g => this.selectedBreakdownCardLabels.has(g.label));
+  }
+
+  /** Unique platform names across selected players for Breakdown tab (All vs per-account). */
+  get breakdownPlatformTabs(): string[] {
+    if (!this.selectedPlayers?.length) return [];
+    const platforms = this.selectedPlayers.map(p => this.getPlatformName(p.membershipType));
+    return Array.from(new Set(platforms));
+  }
+
+  /** Membership IDs to load for the current Breakdown view: all accounts when "All", else only the selected platform. */
+  getBreakdownMembershipIds(): string[] {
+    if (!this.selectedPlayers?.length) return [];
+    if (this.activeBreakdownTab === 'all') {
+      return this.selectedPlayers.map(p => p.membershipId);
+    }
+    return this.selectedPlayers
+      .filter(p => this.getPlatformName(p.membershipType) === this.activeBreakdownTab)
+      .map(p => p.membershipId);
+  }
+
+  /** Switch Breakdown view to All or a specific platform; reloads data. */
+  async setActiveBreakdownTab(tab: string): Promise<void> {
+    if (this.activeBreakdownTab === tab) return;
+    this.activeBreakdownTab = tab;
+    this.cdr.markForCheck();
+    if (this.selectedPlayers.length > 0) {
+      await this.loadActivityBreakdown();
+    }
   }
 
   /** Summary cards for Activity Breakdown: aggregated stats per category */
@@ -8231,10 +8432,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.selectedBreakdownCardLabels = new Set();
     this.cdr.markForCheck();
     try {
-      const membershipIds = this.selectedPlayers.map(p => p.membershipId);
+      const membershipIds = this.getBreakdownMembershipIds();
+      if (membershipIds.length === 0) return;
       const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
       this.activityBreakdownRows = rows;
       this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(rows);
+      this.recomputeBreakdownChartData();
+      this.logBreakdownDebug('loadActivityBreakdown');
     } catch (err) {
       console.error('[ActivityBreakdown] Failed to load', err);
       this.activityBreakdownRows = [];
@@ -8252,6 +8456,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.updatePlatformTabs();
     }
     if (tab === 'breakdown' && this.selectedPlayers.length > 0) {
+      // Ensure active breakdown tab is valid; reset to All if current selection not in list
+      const platforms = this.breakdownPlatformTabs;
+      if (this.activeBreakdownTab !== 'all' && !platforms.includes(this.activeBreakdownTab)) {
+        this.activeBreakdownTab = 'all';
+      }
       await this.loadActivityBreakdown();
     }
     if (tab === 'titles' && this.selectedPlayers.length > 0) {
