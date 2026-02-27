@@ -38,6 +38,7 @@ import { ExportOptionsDialogComponent } from '../export-options-dialog.component
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
+import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
 // import { AnalyticsComponent } from '../analytics/analytics.component';
@@ -480,6 +481,7 @@ const RELEASE_ORDER: { [normalized: string]: number } = Object.fromEntries(
 
 // Aggregated statistics per platform (e.g., Xbox, PlayStation, Steam)
 interface PlatformStats {
+  accountKey: string;   // unique key for filtering: game-platform-membershipId
   platform: string;
   totalTime: number;
   totalActivities: number;
@@ -500,6 +502,7 @@ interface PlatformStats {
     CommonModule,
     FormsModule,
     AccountStatsComponent,
+    AccountCardGridComponent,
     // AnalyticsComponent, // temporarily disabled
     ExportOptionsDialogComponent,
     DatePickerComponent,
@@ -676,6 +679,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   breakdownChartCollapsed = false;
   /** 'all' = aggregated across all accounts; otherwise platform name (e.g. 'Xbox') for per-account view */
   activeBreakdownTab = 'all';
+  /** True when user has selected one or more account cards on the Breakdown tab. */
+  get hasBreakdownAccountFilter(): boolean {
+    return this.selectedAccountKeysForBreakdown.size > 0;
+  }
+  /** Whether the Breakdown game dropdown should be shown (hidden when selection is single-game only). */
+  get showBreakdownGameDropdown(): boolean {
+    const games = this.getBreakdownSelectedGames();
+    // No selection or multi-game selection → keep dropdown visible
+    if (games.length === 0 || games.length > 1) return true;
+    // Exactly one game across selected accounts → dropdown is redundant
+    return false;
+  }
   /** Chart category: 'all' = by activity type, or category name (e.g. 'Raid', 'Dungeon') for drill-down by activity name */
   breakdownChartCategory = 'all';
   /** Chart game filter: 'all' = D1+D2, 'D1' or 'D2' to limit */
@@ -958,14 +973,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private getBreakdownProfileTotalTimeSeconds(): number {
     // Prefer per-platform stats when available
     if (this.perPlatformStats && this.perPlatformStats.length) {
-      if (this.activeBreakdownTab === 'all') {
+      if (!this.hasBreakdownAccountFilter) {
         return this.perPlatformStats.reduce(
           (sum, s) => sum + (s.totalTime ?? 0),
           0
         );
       }
       return this.perPlatformStats
-        .filter(s => s.platform === this.activeBreakdownTab)
+        .filter(s => this.selectedAccountKeysForBreakdown.has(s.accountKey))
         .reduce((sum, s) => sum + (s.totalTime ?? 0), 0);
     }
 
@@ -997,7 +1012,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // eslint-disable-next-line no-console
       console.log('[BreakdownDebug]', {
         context,
-        activeBreakdownTab: this.activeBreakdownTab,
+        activeBreakdownTab: this.hasBreakdownAccountFilter ? 'filtered' : 'all',
         headerSeconds,
         headerFormatted,
         cardTotalSeconds,
@@ -1012,10 +1027,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Total time in seconds for the selected date (from filteredActivitiesForDate) */
+  /** Total time in seconds for the selected date (from filteredActivitiesForDate). When account cards are selected, only sums time for those accounts. */
   get totalTimeForSelectedDate(): number {
     if (!this.filteredActivitiesForDate || this.filteredActivitiesForDate.length === 0) return 0;
-    return this.filteredActivitiesForDate.reduce((sum, act) => sum + this.getActivityDurationSeconds(act), 0);
+    const list = this.selectedAccountKeysForActivities.size > 0
+      ? this.filteredActivitiesForDate.filter((act: any) => this.selectedAccountKeysForActivities.has(this.getActivityAccountKey(act)))
+      : this.filteredActivitiesForDate;
+    return list.reduce((sum, act) => sum + this.getActivityDurationSeconds(act), 0);
   }
 
   /** Formats the selected date for display (e.g. "April 23, 2024") */
@@ -1034,6 +1052,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   aggregatedTitles: any[] = [];
   /** Per-platform aggregated stats (time, activities, seals) for account summary cards. */
   perPlatformStats: PlatformStats[] = [];
+  /** When non-empty, Activities tab shows only activities for these account keys (game-platform-membershipId). Toggle via Per-Platform cards. */
+  selectedAccountKeysForActivities: Set<string> = new Set();
+  /** When non-empty, Activity Breakdown shows only these accounts. Toggle via account cards on Breakdown tab. */
+  selectedAccountKeysForBreakdown: Set<string> = new Set();
+  /** When non-empty, Guardian Firsts shows only these accounts. Toggle via account cards on Firsts tab. */
+  selectedAccountKeysForFirsts: Set<string> = new Set();
   activityTypeIcons: { [key: string]: SafeHtml } = {};
   public GILDED_SEAL_IMAGE_MAP = GILDED_SEAL_IMAGE_MAP;
   public normalizeTitleName = normalizeTitleName;
@@ -4366,6 +4390,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
         if (!platformStatsMap[key]) {
           platformStatsMap[key] = {
+            accountKey: key,
             platform: platformName,
             game: pl.game as 'D1' | 'D2',
             totalTime: 0,
@@ -5489,6 +5514,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.filteredActivitiesForDate = [];
     this.filteredActivities$.next([]);
     this.groupedActivitiesByAccount = [];
+    this.selectedAccountKeysForActivities = new Set();
+    this.selectedAccountKeysForBreakdown = new Set();
+    this.selectedAccountKeysForFirsts = new Set();
     // Recalculate account stats when a player is removed
     this.calculateAccountStats();
     this.cdr.detectChanges();
@@ -8026,11 +8054,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.groupedActivitiesByAccount.filter(g => g.game === game);
   }
 
-  /** Returns grouped activities filtered by activityFilterPreset for display in Activities tab */
+  /** Returns grouped activities filtered by activityFilterPreset for display in Activities tab. When account cards are selected, only those accounts' activities are shown. */
   getDisplayedAccountGroupsForGame(game: 'D1' | 'D2') {
     const base = this.getAccountGroupsForGame(game);
-    if (this.activityFilterPreset === 'all') return base;
     const preset = this.activityFilterPreset;
+    const accountFilter = this.selectedAccountKeysForActivities.size > 0;
     return base.map((g: any) => ({
       ...g,
       yearGroups: g.yearGroups
@@ -8045,15 +8073,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               return true;
             })
             .map((tg: any) => {
+              let activities = tg.activities;
+              if (accountFilter) {
+                activities = activities.filter((a: any) => this.selectedAccountKeysForActivities.has(this.getActivityAccountKey(a)));
+              }
               if (preset === 'clears') {
-                const filtered = tg.activities.filter((a: any) => this.isActivityCompleted(a));
-                return filtered.length ? { ...tg, activities: filtered } : null;
+                activities = activities.filter((a: any) => this.isActivityCompleted(a));
               }
               if (preset === 'fails') {
-                const filtered = tg.activities.filter((a: any) => !this.isActivityCompleted(a));
-                return filtered.length ? { ...tg, activities: filtered } : null;
+                activities = activities.filter((a: any) => !this.isActivityCompleted(a));
               }
-              return tg;
+              return activities.length ? { ...tg, activities } : null;
             })
             .filter(Boolean),
         }))
@@ -8090,6 +8120,38 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  /** Toggle account summary card selection for filtering Activities tab by account. */
+  onAccountSummaryCardToggle(accountKey: string): void {
+    if (this.selectedAccountKeysForActivities.has(accountKey)) {
+      this.selectedAccountKeysForActivities.delete(accountKey);
+    } else {
+      this.selectedAccountKeysForActivities.add(accountKey);
+    }
+    this.selectedAccountKeysForActivities = new Set(this.selectedAccountKeysForActivities);
+    this.cdr.markForCheck();
+  }
+
+  /** Unique key for an activity (game-platform-membershipId) to match per-platform cards. */
+  getActivityAccountKey(activity: { game?: string; membershipId?: string; membershipType?: number }): string {
+    const game = activity.game || 'D2';
+    const platform = this.getPlatformName(activity.membershipType ?? 0);
+    const mid = activity.membershipId ?? '';
+    return `${game}-${platform}-${mid}`;
+  }
+
+  /** Unique key for a player (game-platform-membershipId) to match per-platform account cards. */
+  getAccountKeyForPlayer(pl: { game?: string; membershipId?: string; membershipType?: number }): string {
+    const game = pl.game || 'D2';
+    const platform = this.getPlatformName(pl.membershipType ?? 0);
+    const mid = pl.membershipId ?? '';
+    return `${game}-${platform}-${mid}`;
+  }
+
+  /** Whether the Activities tab is filtering by selected account cards (at least one card selected). */
+  get hasAccountFilterForActivities(): boolean {
+    return this.selectedAccountKeysForActivities.size > 0;
+  }
+
   /** Whether a breakdown card is selected */
   isBreakdownCardSelected(label: string): boolean {
     return this.selectedBreakdownCardLabels.has(label);
@@ -8109,25 +8171,77 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return Array.from(new Set(platforms));
   }
 
-  /** Membership IDs to load for the current Breakdown view: all accounts when "All", else only the selected platform. */
+  /** Membership IDs to load for the current Breakdown view: when account cards are selected, only those; otherwise all. */
   getBreakdownMembershipIds(): string[] {
     if (!this.selectedPlayers?.length) return [];
-    if (this.activeBreakdownTab === 'all') {
-      return this.selectedPlayers.map(p => p.membershipId);
+    if (this.selectedAccountKeysForBreakdown.size > 0) {
+      return Array.from(
+        new Set(
+          this.selectedPlayers
+            .filter(p => this.selectedAccountKeysForBreakdown.has(this.getAccountKeyForPlayer(p)))
+            .map(p => p.membershipId)
+        )
+      );
     }
-    return this.selectedPlayers
-      .filter(p => this.getPlatformName(p.membershipType) === this.activeBreakdownTab)
-      .map(p => p.membershipId);
+    return Array.from(new Set(this.selectedPlayers.map(p => p.membershipId)));
   }
 
-  /** Switch Breakdown view to All or a specific platform; reloads data. */
-  async setActiveBreakdownTab(tab: string): Promise<void> {
-    if (this.activeBreakdownTab === tab) return;
-    this.activeBreakdownTab = tab;
+  /** Toggle account card selection for Breakdown tab; reloads breakdown data. */
+  async onBreakdownAccountCardToggle(accountKey: string): Promise<void> {
+    if (this.selectedAccountKeysForBreakdown.has(accountKey)) {
+      this.selectedAccountKeysForBreakdown.delete(accountKey);
+    } else {
+      this.selectedAccountKeysForBreakdown.add(accountKey);
+    }
+    this.selectedAccountKeysForBreakdown = new Set(this.selectedAccountKeysForBreakdown);
+
+    // When selection is single-game, lock chart game filter to that game; otherwise show all.
+    const selectedGames = this.getBreakdownSelectedGames();
+    if (selectedGames.length === 1) {
+      this.breakdownChartGame = selectedGames[0];
+    } else if (selectedGames.length === 0) {
+      this.breakdownChartGame = 'all';
+    } else {
+      // Mixed selection across D1 and D2
+      this.breakdownChartGame = 'all';
+    }
+
     this.cdr.markForCheck();
     if (this.selectedPlayers.length > 0) {
       await this.loadActivityBreakdown();
     }
+  }
+
+  /** Toggle account card selection for Guardian Firsts tab. */
+  onFirstsAccountCardToggle(accountKey: string): void {
+    if (this.selectedAccountKeysForFirsts.has(accountKey)) {
+      this.selectedAccountKeysForFirsts.delete(accountKey);
+    } else {
+      this.selectedAccountKeysForFirsts.add(accountKey);
+    }
+    this.selectedAccountKeysForFirsts = new Set(this.selectedAccountKeysForFirsts);
+    this.cdr.markForCheck();
+  }
+
+  /** Players to show in Guardian Firsts view: all when no cards selected, else only selected accounts. */
+  getFirstsFilteredPlayers(): PlayerSearchDisplay[] {
+    if (!this.selectedPlayers?.length) return [];
+    if (this.selectedAccountKeysForFirsts.size === 0) return this.selectedPlayers;
+    return this.selectedPlayers.filter(p => this.selectedAccountKeysForFirsts.has(this.getAccountKeyForPlayer(p)));
+  }
+
+  /** Games represented by the currently selected Breakdown account cards. Empty = both games allowed. */
+  private getBreakdownSelectedGames(): ('D1' | 'D2')[] {
+    if (!this.perPlatformStats?.length || this.selectedAccountKeysForBreakdown.size === 0) {
+      return [];
+    }
+    const set = new Set<'D1' | 'D2'>();
+    for (const s of this.perPlatformStats) {
+      if (this.selectedAccountKeysForBreakdown.has(s.accountKey)) {
+        set.add(s.game);
+      }
+    }
+    return Array.from(set);
   }
 
   /** Summary cards for Activity Breakdown: aggregated stats per category */
@@ -8435,8 +8549,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const membershipIds = this.getBreakdownMembershipIds();
       if (membershipIds.length === 0) return;
       const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
-      this.activityBreakdownRows = rows;
-      this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(rows);
+
+      // When specific account cards are selected, restrict Breakdown to the games (D1/D2)
+      // represented by those accounts so a D1-only selection does not include D2 time.
+      let effectiveRows = rows;
+      const selectedGames = this.getBreakdownSelectedGames();
+      if (selectedGames.length > 0) {
+        const allowed = new Set(selectedGames);
+        effectiveRows = rows.filter(r => !r.game || allowed.has(r.game));
+      }
+
+      this.activityBreakdownRows = effectiveRows;
+      this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(effectiveRows);
       this.recomputeBreakdownChartData();
       this.logBreakdownDebug('loadActivityBreakdown');
     } catch (err) {
@@ -8456,11 +8580,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.updatePlatformTabs();
     }
     if (tab === 'breakdown' && this.selectedPlayers.length > 0) {
-      // Ensure active breakdown tab is valid; reset to All if current selection not in list
-      const platforms = this.breakdownPlatformTabs;
-      if (this.activeBreakdownTab !== 'all' && !platforms.includes(this.activeBreakdownTab)) {
-        this.activeBreakdownTab = 'all';
-      }
       await this.loadActivityBreakdown();
     }
     if (tab === 'titles' && this.selectedPlayers.length > 0) {

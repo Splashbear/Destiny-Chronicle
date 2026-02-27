@@ -322,40 +322,48 @@
          <div class="flex-1 min-w-0">
         <!-- Tab Navigation -->
          <div class="mb-8">
-           <nav class="grid grid-cols-2 md:flex md:flex-row md:flex-wrap gap-2 md:gap-1 bg-slate-800/50 p-2 md:p-1 rounded-lg">
-            <button (click)="onTabChange('activities')" 
-                     class="px-3 py-2.5 md:py-3 text-sm font-medium rounded-md transition-all duration-200 text-center"
-                     [ngClass]="activeTab === 'activities' ? 
-                       'bg-blue-600 text-white shadow-lg' : 
-                       'text-slate-300 hover:text-white hover:bg-slate-700/50'"
-                     title="Activities">
-               📊 Activities
-            </button>
-            <button (click)="onTabChange('firsts')"
-                     class="px-3 py-2.5 md:py-3 text-sm font-medium rounded-md transition-all duration-200 text-center"
-                     [ngClass]="activeTab === 'firsts' ? 
-                       'bg-purple-600 text-white shadow-lg' : 
-                       'text-slate-300 hover:text-white hover:bg-slate-700/50'"
-                     title="Guardian Firsts">
-               🏆 Guardian Firsts
-            </button>
+         <nav class="grid grid-cols-2 md:flex md:flex-row md:flex-wrap gap-2 md:gap-1 bg-slate-800/50 p-2 md:p-1 rounded-lg" role="tablist" aria-label="Activity views">
+           <button
+             type="button"
+             (click)="onTabChange('activities')" 
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'activities' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'activities'"
+             title="Activities">
+             📊 Activities
+           </button>
+           <button
+             type="button"
+             (click)="onTabChange('firsts')"
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'firsts' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'firsts'"
+             title="Guardian Firsts">
+             🏆 Guardian Firsts
+           </button>
            <!-- Analytics tab temporarily hidden -->
-            <button (click)="onTabChange('titles')"
-                     class="px-3 py-2.5 md:py-3 text-sm font-medium rounded-md transition-all duration-200 text-center"
-                     [ngClass]="activeTab === 'titles' ? 
-                       'bg-yellow-600 text-white shadow-lg' : 
-                       'text-slate-300 hover:text-white hover:bg-slate-700/50'"
-                     title="Titles">
-               🎖️ Titles
-            </button>
-            <button (click)="onTabChange('breakdown')"
-                     class="px-3 py-2.5 md:py-3 text-sm font-medium rounded-md transition-all duration-200 text-center"
-                     [ngClass]="activeTab === 'breakdown' ? 
-                       'bg-emerald-600 text-white shadow-lg' : 
-                       'text-slate-300 hover:text-white hover:bg-slate-700/50'"
-                     title="Activity Breakdown">
-               📋 Activity Breakdown
-            </button>
+           <button
+             type="button"
+             (click)="onTabChange('titles')"
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'titles' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'titles'"
+             title="Titles">
+             🎖️ Titles
+           </button>
+           <button
+             type="button"
+             (click)="onTabChange('breakdown')"
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'breakdown' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'breakdown'"
+             title="Activity Breakdown">
+             📋 Activity Breakdown
+           </button>
            </nav>
         </div>
 
@@ -383,6 +391,8 @@
             *ngIf="selectedPlayers.length > 0"
             [stats]="accountStats" 
             [perPlatformStats]="perPlatformStats"
+            [selectedAccountKeys]="selectedAccountKeysForActivities"
+            (accountKeyToggle)="onAccountSummaryCardToggle($event)"
             [onExportActivities]="exportActivities.bind(this)"
             [onOpenExportOptionsDialog]="openExportOptionsDialog.bind(this)"
             [onShareDailyView]="shareDailyView.bind(this)">
@@ -475,7 +485,7 @@
                class="space-y-6 w-full min-w-0">
             <!-- Total time on the selected date for all activities -->
             <div class="bg-slate-800/95 rounded-lg p-4 flex flex-wrap items-center justify-between gap-2">
-              <span class="text-slate-300">Total time on the selected date for all activities ({{ formatSelectedDateLabel() }})</span>
+              <span class="text-slate-300">Total time on the selected date for all activities ({{ formatSelectedDateLabel() }})<span *ngIf="hasAccountFilterForActivities" class="block text-xs text-yellow-400/90 mt-1">Showing selected accounts only</span></span>
               <span class="text-xl font-bold text-blue-300 font-mono">{{ formatSecondsToHoursMinutes(totalTimeForSelectedDate) }}</span>
             </div>
             <!-- Destiny 2 Panel -->
@@ -615,25 +625,20 @@
             <span>Loading activity breakdown…</span>
           </div>
           <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown" class="space-y-6">
-            <!-- All vs Per-account tabs (same pattern as Guardian Firsts) -->
-            <div class="flex flex-wrap gap-2 mb-4" *ngIf="breakdownPlatformTabs.length >= 1">
-              <button (click)="setActiveBreakdownTab('all')" class="d2-tab" [ngClass]="{'d2-tab-active-blue': activeBreakdownTab==='all'}" title="All Accounts">
-                <span class="hidden sm:inline">All Accounts</span><span class="sm:hidden">All</span>
-              </button>
-              <button *ngFor="let plat of breakdownPlatformTabs" (click)="setActiveBreakdownTab(plat)" class="d2-tab flex items-center gap-1" [ngClass]="{'d2-tab-active-blue': activeBreakdownTab===plat}" [title]="plat">
-                <img [src]="getPlatformIconUrl(getPlatformId(plat))" class="w-4 h-4 flex-shrink-0" alt="platform" />
-                <span>{{ getPlatformShortName(plat) }}</span>
-              </button>
-            </div>
-            <!-- Aggregated view: All Accounts (like Firsts "All Platforms") -->
-            <div *ngIf="activeBreakdownTab === 'all'" class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-4">
+            <!-- Account cards: click to filter Breakdown to selected accounts -->
+            <app-account-card-grid
+              [perPlatformStats]="perPlatformStats"
+              [selectedAccountKeys]="selectedAccountKeysForBreakdown"
+              [hint]="'Click a card to show only that account in the breakdown below. Click again to include it again. No selection = all accounts.'"
+              (accountKeyToggle)="onBreakdownAccountCardToggle($event)">
+            </app-account-card-grid>
+            <!-- Header text: All vs selected accounts -->
+            <div *ngIf="!hasBreakdownAccountFilter" class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-4">
               <h3 class="text-lg font-semibold text-white mb-1">{{ selectedPlayers[0].displayName }}'s Activity Breakdown (All Accounts)</h3>
-              <p class="text-slate-400 text-sm">All-time totals across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }}. Switch to a platform tab to see one account only.</p>
+              <p class="text-slate-400 text-sm">All-time totals across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }}. Click an account card above to filter to one account.</p>
             </div>
-            <!-- Per-account view: single platform header (like Firsts per-platform) -->
-            <div *ngIf="activeBreakdownTab !== 'all'" class="flex items-center gap-2 mb-4">
-              <img [src]="getPlatformIconUrl(getPlatformId(activeBreakdownTab))" class="w-6 h-6" alt="platform icon" />
-              <h3 class="text-xl font-bold text-white">{{ activeBreakdownTab }} – Activity Breakdown</h3>
+            <div *ngIf="hasBreakdownAccountFilter" class="flex items-center gap-2 mb-4">
+              <h3 class="text-xl font-bold text-white">Activity Breakdown ({{ selectedAccountKeysForBreakdown.size }} selected)</h3>
             </div>
           </div>
           <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown && activityBreakdownGroups.length > 0" class="space-y-8">
@@ -642,8 +647,8 @@
               <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                 <h3 class="text-lg font-semibold text-white">
                   <ng-container *ngIf="selectedBreakdownCardLabels.size > 0">Total Time (Filtered)</ng-container>
-                  <ng-container *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab === 'all'">Total Time Across All Accounts</ng-container>
-                  <ng-container *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab !== 'all'">Total Time for This Account</ng-container>
+                  <ng-container *ngIf="selectedBreakdownCardLabels.size === 0 && !hasBreakdownAccountFilter">Total Time Across All Accounts</ng-container>
+                  <ng-container *ngIf="selectedBreakdownCardLabels.size === 0 && hasBreakdownAccountFilter">Total Time (Selected Accounts)</ng-container>
                 </h3>
                 <button (click)="exportBreakdownToExcel()"
                         [disabled]="!activityBreakdownGroups.length"
@@ -654,14 +659,14 @@
               </div>
               <p class="text-slate-300 text-sm mb-3">
                 <span *ngIf="selectedBreakdownCardLabels.size > 0">Showing selected activity types only.</span>
-                <span *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab === 'all'">All-time aggregate across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
-                <span *ngIf="selectedBreakdownCardLabels.size === 0 && activeBreakdownTab !== 'all'">All-time activity for this account (all characters) – not limited to the selected date.</span>
+                <span *ngIf="selectedBreakdownCardLabels.size === 0 && !hasBreakdownAccountFilter">All-time aggregate across {{ selectedPlayers.length }} {{ selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
+                <span *ngIf="selectedBreakdownCardLabels.size === 0 && hasBreakdownAccountFilter">All-time activity for selected account(s) – not limited to the selected date.</span>
               </p>
               <div class="text-2xl font-bold text-emerald-300 font-mono">{{ formatSecondsToHoursMinutes(activityBreakdownTotalTimeSeconds) }}</div>
             </div>
             <p class="text-slate-300 text-sm">
-              <ng-container *ngIf="activeBreakdownTab === 'all'">Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date).</ng-container>
-              <ng-container *ngIf="activeBreakdownTab !== 'all'">Counts and time for this account across all characters (all time, not just the selected date).</ng-container>
+              <ng-container *ngIf="!hasBreakdownAccountFilter">Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date).</ng-container>
+              <ng-container *ngIf="hasBreakdownAccountFilter">Counts and time for selected account(s) across all characters (all time, not just the selected date).</ng-container>
               Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
             </p>
             
@@ -689,7 +694,8 @@
                           class="bg-slate-700 text-slate-200 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 focus:border-emerald-500">
                     <option *ngFor="let opt of breakdownChartCategoryOptions" [value]="opt.value">{{ opt.label }}</option>
                   </select>
-                  <select [(ngModel)]="breakdownChartGame" 
+                  <select *ngIf="showBreakdownGameDropdown"
+                          [(ngModel)]="breakdownChartGame" 
                           (ngModelChange)="setBreakdownChartGame($event)"
                           class="bg-slate-700 text-slate-200 border border-slate-600 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 focus:border-emerald-500">
                     <option *ngFor="let g of breakdownChartGameOptions" [value]="g.value">{{ g.label }}</option>
@@ -778,8 +784,8 @@
             </div>
           </div>
           <div *ngIf="selectedPlayers.length > 0 && !loadingActivityBreakdown && activityBreakdownRows !== null && activityBreakdownRows.length === 0" class="bg-slate-800/95 rounded-lg shadow-lg p-6 text-center text-slate-300">
-            <ng-container *ngIf="activeBreakdownTab === 'all'">No activities in database for selected profiles. Load activities for a date first so data is synced.</ng-container>
-            <ng-container *ngIf="activeBreakdownTab !== 'all'">No activities in database for this account. Load activities for a date first so data is synced.</ng-container>
+            <ng-container *ngIf="!hasBreakdownAccountFilter">No activities in database for selected profiles. Load activities for a date first so data is synced.</ng-container>
+            <ng-container *ngIf="hasBreakdownAccountFilter">No activities in database for selected account(s). Load activities for a date first so data is synced.</ng-container>
           </div>
         </div>
 
@@ -794,23 +800,20 @@
               <span class="hidden sm:inline">{{ g === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</span><span class="sm:hidden">{{ g }}</span>
             </button>
           </div>
-          <!-- Platform Tabs -->
-          <div class="flex flex-wrap gap-2 mb-4" *ngIf="platformTabs.length > 1">
-            <button (click)="activeFirstsTab='all'" class="d2-tab" [ngClass]="{'d2-tab-active-blue': activeFirstsTab==='all'}" title="All Platforms">
-              <span class="hidden sm:inline">All Platforms</span><span class="sm:hidden">All</span>
-            </button>
-            <button *ngFor="let plat of platformTabs" (click)="activeFirstsTab=plat" class="d2-tab flex items-center gap-1" [ngClass]="{'d2-tab-active-blue': activeFirstsTab===plat}" [title]="plat">
-              <img [src]="getPlatformIconUrl(getPlatformId(plat))" class="w-4 h-4 flex-shrink-0" alt="platform" />
-              <span>{{ getPlatformShortName(plat) }}</span>
-            </button>
+          <!-- Account cards: click to filter Firsts to selected accounts -->
+          <app-account-card-grid
+            *ngIf="perPlatformStats.length > 0"
+            [perPlatformStats]="perPlatformStats"
+            [selectedAccountKeys]="selectedAccountKeysForFirsts"
+            [hint]="'Click a card to show only that account below. Click again to include it again. No selection = all accounts.'"
+            (accountKeyToggle)="onFirstsAccountCardToggle($event)">
+          </app-account-card-grid>
+          <!-- Header when filtering by cards -->
+          <div *ngIf="selectedAccountKeysForFirsts.size > 0" class="flex items-center gap-2 mb-6">
+            <h3 class="text-xl font-bold text-white">Guardian Firsts ({{ selectedAccountKeysForFirsts.size }} selected)</h3>
           </div>
-          <!-- Platform Header (only in per-platform view) -->
-          <div *ngIf="activeFirstsTab !== 'all'" class="flex items-center gap-2 mb-6">
-            <img [src]="getPlatformIconUrl(getPlatformId(activeFirstsTab))" class="w-6 h-6" alt="platform icon" />
-            <h3 class="text-xl font-bold text-white">{{ activeFirstsTab }} – Guardian Firsts</h3>
-          </div>
-          <!-- Aggregated Firsts across all linked accounts -->
-          <div *ngIf="activeFirstsTab==='all'" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+          <!-- Aggregated Firsts across all linked accounts (when no cards selected) -->
+          <div *ngIf="selectedAccountKeysForFirsts.size === 0" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
             <h3 class="text-lg font-semibold text-white mb-4">{{ selectedPlayers[0].displayName }}'s Guardian Firsts (All Platforms)</h3>
             <!-- Destiny 2 Sections -->
             <ng-container *ngIf="activeFirstsGame==='D2'">
@@ -1072,9 +1075,8 @@
             <div *ngIf="getAllD1RaidVariants().length === 0" class="text-center text-slate-400 py-2">No D1 raids found.</div>
             </ng-container>
           </div>
-          <ng-container *ngIf="activeFirstsTab !== 'all'">
-            <ng-container *ngFor="let player of selectedPlayers">
-              <ng-container *ngIf="activeFirstsTab===player.platform && ((activeFirstsGame==='D1' && isD1Player(player)) || (activeFirstsGame==='D2' && !isD1Player(player)))">
+          <ng-container *ngIf="selectedAccountKeysForFirsts.size > 0">
+            <ng-container *ngFor="let player of getFirstsFilteredPlayers()">
                 <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
                   <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
@@ -1285,7 +1287,6 @@
                 </div>
               </ng-container>
             </ng-container>
-          </ng-container>
         </div>
 
           <!-- Titles Tab -->

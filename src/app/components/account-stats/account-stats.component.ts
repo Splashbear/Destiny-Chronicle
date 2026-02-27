@@ -1,5 +1,6 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 
 interface PerTypeStat {
   count: number;
@@ -7,6 +8,7 @@ interface PerTypeStat {
 }
 
 interface PlatformStats {
+  accountKey: string;   // unique key for filtering: game-platform-membershipId
   platform: string;
   totalTime: number;
   totalActivities: number;
@@ -22,7 +24,7 @@ interface PlatformStats {
 @Component({
   selector: 'app-account-stats',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, AccountCardGridComponent],
   template: `
     <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4" *ngIf="stats">
       <!-- Header -->
@@ -58,27 +60,12 @@ interface PlatformStats {
       <!-- Per-Platform Breakdown -->
       <div *ngIf="perPlatformStats && perPlatformStats.length > 0" class="platform-breakdown mt-6">
         <h4 class="text-md font-semibold text-white mb-2">Per-Platform Breakdown</h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div *ngFor="let plat of perPlatformStats" class="emblem-card relative rounded-lg overflow-hidden shadow-lg h-24">
-            <img *ngIf="plat.emblemBackground" [src]="'https://www.bungie.net' + plat.emblemBackground" class="absolute inset-0 w-full h-full object-cover" alt="emblem bg" />
-            <div class="absolute inset-0 bg-black/60"></div>
-            <div class="absolute bottom-0 left-0 right-0 p-3 flex flex-col gap-0.5 z-10">
-              <div class="flex items-center justify-between">
-                <span class="text-slate-100 font-bold truncate">{{ plat.displayName || plat.platform }}</span>
-                <img *ngIf="plat.emblemIcon" [src]="'https://www.bungie.net' + plat.emblemIcon" class="w-6 h-6 rounded-full border border-slate-300" alt="emblem icon" />
-              </div>
-              <div class="flex items-center gap-2 text-slate-300 text-sm">
-                <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform icon" />
-                <img [src]="plat.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                <span>{{ plat.platform }}</span>
-                <span *ngIf="plat.className">· {{ plat.className }}</span>
-                <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
-              </div>
-              <div class="text-yellow-300 font-mono text-sm">{{ formatDuration(plat.totalTime) }}</div>
-              <div class="text-xs text-slate-400">{{ plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
-            </div>
-          </div>
-        </div>
+        <p class="text-xs text-slate-400 mb-2">Click a card to filter the Activities list below by that account. Click again to include it again.</p>
+        <app-account-card-grid
+          [perPlatformStats]="perPlatformStats"
+          [selectedAccountKeys]="selectedAccountKeys"
+          (accountKeyToggle)="accountKeyToggle.emit($event)">
+        </app-account-card-grid>
       </div>
     </div>
   `,
@@ -86,6 +73,8 @@ interface PlatformStats {
 export class AccountStatsComponent {
   @Input() stats: { totalTime: number; totalActivityCount: number; totalSeals?: number; perType: { [type: string]: PerTypeStat } } | null = null;
   @Input() perPlatformStats: PlatformStats[] = [];
+  @Input() selectedAccountKeys: Set<string> | null = null;
+  @Output() accountKeyToggle = new EventEmitter<string>();
   @Input() onExportActivities?: () => void;
   @Input() onOpenExportOptionsDialog?: () => void;
   @Input() onShareDailyView?: () => void;
