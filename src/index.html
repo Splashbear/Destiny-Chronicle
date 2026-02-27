@@ -22,22 +22,6 @@
   <link rel="apple-touch-icon" sizes="180x180" href="assets/images/apple-touch-icon.png">
   <link rel="manifest" href="manifest.json">
   <script type="text/javascript">
-    (function() {
-      try {
-        var stored = localStorage.getItem('destiny-chronicle-theme');
-        if (stored === 'light') {
-          document.documentElement.classList.add('light');
-          document.documentElement.setAttribute('data-theme', 'light');
-          if (document.body) document.body.classList.add('light-theme');
-        } else {
-          document.documentElement.classList.remove('light');
-          document.documentElement.setAttribute('data-theme', 'dark');
-          if (document.body) document.body.classList.remove('light-theme');
-        }
-      } catch (e) {}
-    })();
-  </script>
-  <script type="text/javascript">
     // Single Page Apps for GitHub Pages
     // MIT License
     // https://github.com/rafgraph/spa-github-pages

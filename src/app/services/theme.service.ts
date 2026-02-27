@@ -4,60 +4,31 @@ const STORAGE_KEY = 'destiny-chronicle-theme';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
-  private _isLight = false;
-
   get isLight(): boolean {
-    return this._isLight;
+    return false;
   }
 
   constructor() {
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'light') {
-        this._isLight = true;
-        this.apply(true);
-      } else if (stored === 'dark') {
-        this._isLight = false;
-        this.apply(false);
-      } else {
-        document.documentElement.setAttribute('data-theme', 'dark');
+      // Force dark mode: remove any light-theme classes/attributes that may exist
+      try {
+        document.documentElement.classList.remove('light');
+        document.documentElement.removeAttribute('data-theme');
+        if (document.body) {
+          document.body.classList.remove('light-theme');
+        }
+      } catch {
+        // no-op
       }
     }
   }
 
   toggle(): void {
-    this._isLight = !this._isLight;
-    localStorage.setItem(STORAGE_KEY, this._isLight ? 'light' : 'dark');
-    this.applyAsync();
+    // Dark mode only – no-op to keep API stable
   }
 
   setLight(value: boolean): void {
-    this._isLight = value;
-    localStorage.setItem(STORAGE_KEY, value ? 'light' : 'dark');
-    this.applyAsync();
-  }
-
-  /** Applies theme to html and body. Runs in next tick so DOM updates are not reverted by Angular. */
-  private applyAsync(): void {
-    if (typeof window === 'undefined') return;
-    const isLight = this._isLight;
-    window.setTimeout(() => this.apply(isLight), 0);
-  }
-
-  /** Applies theme to both html and body so all CSS selectors (html.light and body.light-theme) take effect. */
-  private apply(isLight?: boolean): void {
-    if (typeof document === 'undefined') return;
-    const useLight = isLight ?? this._isLight;
-    const el = document.documentElement;
-    const body = document.body;
-    if (useLight) {
-      el.classList.add('light');
-      el.setAttribute('data-theme', 'light');
-      body.classList.add('light-theme');
-    } else {
-      el.classList.remove('light');
-      el.setAttribute('data-theme', 'dark');
-      body.classList.remove('light-theme');
-    }
+    // Dark mode only – no-op to keep API stable
+    void value;
   }
 }

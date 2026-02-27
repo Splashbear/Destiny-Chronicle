@@ -369,20 +369,29 @@ img, video, canvas, svg {
 }
 
 /* =============================================================================
-   LIGHT THEME - Overrides when html has .light / [data-theme="light"] or body has .light-theme.
-   Must come last so they override Tailwind and base styles.
+   LIGHT THEME - Cool Slate / Dawn palette
+   - Soft blue-gray \"early morning\" look
+   - Applied when html has .light / [data-theme=\"light\"] or body has .light-theme.
+   - Must come last so it overrides Tailwind and base styles.
    ============================================================================= */
 html[data-theme="light"] body,
 html.light body,
 body.light-theme {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 40%, #e5e7eb 100%) !important;
   color: #1e293b !important;
 }
 
 html[data-theme="light"] .destiny-bg-gradient-dark,
 html.light .destiny-bg-gradient-dark,
 body.light-theme .destiny-bg-gradient-dark {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%) !important;
+  background: linear-gradient(135deg, #e5f1ff 0%, #dbeafe 40%, #bfdbfe 100%) !important;
+}
+
+/* Primary decorative gradient (used for some cards / headers) */
+html[data-theme="light"] .destiny-bg-gradient,
+html.light .destiny-bg-gradient,
+body.light-theme .destiny-bg-gradient {
+  background: linear-gradient(135deg, #e0f2fe 0%, #bfdbfe 45%, #a5b4fc 100%) !important;
 }
 
 html[data-theme="light"] .glass-effect,
@@ -397,25 +406,25 @@ body.light-theme .glass-effect {
 html[data-theme="light"] .bg-slate-900,
 html.light .bg-slate-900,
 body.light-theme .bg-slate-900 {
-  background-color: #f8fafc !important;
+  background-color: #f1f5f9 !important; /* slate-100 */
 }
 
 html[data-theme="light"] .bg-slate-800,
 html.light .bg-slate-800,
 body.light-theme .bg-slate-800 {
-  background-color: #e2e8f0 !important;
+  background-color: #e2e8f0 !important; /* slate-200 */
 }
 
 html[data-theme="light"] .bg-slate-700,
 html.light .bg-slate-700,
 body.light-theme .bg-slate-700 {
-  background-color: #cbd5e1 !important;
+  background-color: #cbd5e1 !important; /* slate-300 */
 }
 
 html[data-theme="light"] .bg-slate-800\/95,
 html.light .bg-slate-800\/95,
 body.light-theme .bg-slate-800\/95 {
-  background-color: rgba(226, 232, 240, 0.95) !important;
+  background-color: rgba(226, 232, 240, 0.95) !important; /* slate-200 */
 }
 
 html[data-theme="light"] .bg-slate-800\/50,
