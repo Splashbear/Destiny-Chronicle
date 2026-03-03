@@ -8,6 +8,7 @@ import { DestinyManifestService } from './services/destiny-manifest.service';
 import { ShareService } from './services/share.service';
 import { SharedStateService } from './services/shared-state.service';
 import { ThemeService } from './services/theme.service';
+import { SiteAnalyticsService } from './services/site-analytics.service';
 
 @Component({
   selector: 'app-root',
@@ -23,7 +24,8 @@ export class AppComponent {
     public theme: ThemeService,
     private manifestService: DestinyManifestService,
     private shareService: ShareService,
-    private sharedState: SharedStateService
+    private sharedState: SharedStateService,
+    _siteAnalytics: SiteAnalyticsService  // Injects to initialize GA4 + Cloudflare (production only)
   ) {
     // Expose manifest service globally for debugging
     (window as any).manifestService = this.manifestService;

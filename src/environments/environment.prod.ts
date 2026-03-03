@@ -10,5 +10,10 @@ export const environment = {
   baseHref: '/Destiny-Chronicle/',
   mockData: {
     enabled: false
+  },
+  // Analytics - see docs/analytics-setup.md for setup instructions
+  analytics: {
+    googleMeasurementId: 'G-C9CRM83JS2',
+    cloudflareToken: ''       // e.g. 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
   }
 }; 
