@@ -28,6 +28,8 @@ export interface ExportOptions {
   includeFirsts?: boolean;
   includeTitles?: boolean;
   includeSummary?: boolean;
+  /** Include Activity Breakdown sheets (summary + detail) when available in context. */
+  includeBreakdown?: boolean;
   allDates?: boolean;
   showIconsInline?: boolean; // New option for inline icons
 }
@@ -39,6 +41,9 @@ export interface ExportContext {
   characters: any;
   getPlayerKey: (player: any) => string;
   titleService: TitleService;
+  /** Optional Activity Breakdown data from the current view (used when includeBreakdown is true). */
+  breakdownSummary?: { label: string; runs: number; clears: number; timeSeconds: number; clearRate: number }[];
+  breakdownGroups?: { label: string; rows: { baseName: string; variantName: string; game: string; runs: number; clears: number; fails: number; timeSeconds: number }[] }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -152,12 +157,32 @@ export class ExportService {
   }
 
   /**
+   * Utility for formatting seconds as "Hh MMm" for human-readable sheets.
+   * Mirrors the helper used in PlayerSearchComponent.
+   */
+  private formatSecondsToHoursMinutes(totalSeconds: number | undefined | null): string {
+    const seconds = totalSeconds ?? 0;
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${hours}h ${pad(minutes)}m`;
+  }
+
+  /**
    * Multi-sheet export for activities, firsts, titles/seals, and account summary.
    * Sheets are Google Sheets compatible (no embedded images, icon URLs only).
    */
   async exportMultiSheet(options: ExportOptions, context: ExportContext): Promise<void> {
     // Use the passed-in context for all data gathering
-    const { selectedPlayers, activityDb, manifestService, characters, getPlayerKey } = context;
+    const {
+      selectedPlayers,
+      activityDb,
+      manifestService,
+      characters,
+      getPlayerKey,
+      breakdownSummary,
+      breakdownGroups,
+    } = context;
     // 1. Gather data for each requested sheet
     const sheets: { [name: string]: any[] } = {};
 
@@ -177,6 +202,7 @@ export class ExportService {
     meta.push({ Key: 'IncludeFirsts', Value: !!options.includeFirsts });
     meta.push({ Key: 'IncludeTitles', Value: !!options.includeTitles });
     meta.push({ Key: 'IncludeSummary', Value: !!options.includeSummary });
+    meta.push({ Key: 'IncludeBreakdown', Value: !!options.includeBreakdown });
 
     // List the players included in this export with stable identifiers
     meta.push({ Section: 'Players', Note: 'Each row below describes a selected account' });
@@ -413,6 +439,36 @@ export class ExportService {
         });
       }
       sheets['Account Summary'] = summary;
+    }
+
+    // Activity Breakdown (optional) – requires both option flag and context data
+    if (options.includeBreakdown && breakdownSummary && breakdownSummary.length && breakdownGroups && breakdownGroups.length) {
+      sheets['Breakdown Summary'] = breakdownSummary.map(c => ({
+        'Activity Type': c.label,
+        'Total Time (h:m)': this.formatSecondsToHoursMinutes(c.timeSeconds),
+        'Time (seconds)': c.timeSeconds,
+        'Runs': c.runs,
+        'Clears': c.clears,
+        'Clear %': c.clearRate.toFixed(1) + '%',
+      }));
+
+      const detailRows: any[] = [];
+      for (const g of breakdownGroups) {
+        for (const row of g.rows) {
+          detailRows.push({
+            'Group': g.label,
+            'Activity': row.baseName,
+            'Variant': row.variantName || '',
+            'Game': row.game,
+            'Runs': row.runs,
+            'Clears': row.clears,
+            'Fails': row.fails,
+            'Time (h:m)': this.formatSecondsToHoursMinutes(row.timeSeconds),
+            'Time (seconds)': row.timeSeconds,
+          });
+        }
+      }
+      sheets['Breakdown Detail'] = detailRows;
     }
 
     // 2. Generate the workbook

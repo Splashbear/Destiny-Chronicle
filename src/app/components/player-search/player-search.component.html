@@ -829,15 +829,13 @@
                   <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                   <div class="absolute bottom-0 left-0 right-0 p-3">
                     <h6 class="text-white font-medium truncate">{{ getActivityName(firstD2, false) }}</h6>
-                    <div class="text-sm text-slate-300">
+                    <div class="text-sm text-slate-300 flex items-center gap-2">
                       <a (click)="openExternalPGCR(firstD2, false)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
                         {{ formatDateTime(firstD2.period) }}
                       </a>
+                      <img [src]="getPlatformIconUrlForFirst($any(firstD2))" class="w-4 h-4" alt="platform" />
+                      <img *ngIf="firstD2.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
                     </div>
-                  </div>
-                  <div class="absolute top-1 right-1 flex items-center gap-1">
-                    <img [src]="getPlatformIconUrlForFirst($any(firstD2))" class="w-5 h-5" alt="platform" />
-                    <img *ngIf="firstD2.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-5 h-5 " [title]="cls" alt="class" />
                   </div>
                 </div>
               </div>
@@ -848,23 +846,19 @@
 
             <!-- Pantheon Raids -->
             <h4 class="text-md font-semibold text-purple-300 mb-2 mt-8">Pantheon Raids</h4>
-            <div *ngIf="getGroupedPantheonRaids().length > 0" class="space-y-6 mb-4">
-                            <div *ngFor="let group of getGroupedPantheonRaids()" class="rounded-lg overflow-hidden">
-                <!-- Pantheon card with full-width background image -->
-                <div class="relative h-48 sm:h-40">
-                  <ng-container *ngIf="getFirstCompletionImage(group.versions[0]) as img">
-                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                    <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                  </ng-container>
-                  
-                  <!-- Overlay content: each row = activity name + date + icons -->
-                  <div class="absolute inset-0 p-3 flex flex-col">
-                    <h5 class="text-xl sm:text-2xl font-bold text-white drop-shadow shrink-0 mb-2">{{ group.baseName }}</h5>
-                    <div class="rounded-lg px-2 py-1.5 sm:px-3 sm:py-2 bg-black/35">
-                      <div class="flex flex-col gap-0.5">
-                        <div *ngFor="let first of group.versions" class="flex items-center gap-2 whitespace-nowrap">
-                          <span class="text-white text-xs shrink-0">{{ getActivityVersion(first.name) }}</span>
-                          <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 text-xs hover:text-yellow-300 cursor-pointer underline shrink-0" [title]="formatDateTime(first.completionDate)">
+            <div *ngIf="getGroupedPantheonRaids().length > 0" class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 mb-4">
+              <div *ngFor="let group of getGroupedPantheonRaids()" class="rounded-lg overflow-hidden bg-slate-900/60">
+                <ng-container *ngIf="getFirstCompletionImage(group.versions[0]) as img">
+                  <div
+                    class="bg-cover bg-center"
+                    [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                    <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                      <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ group.baseName }}</h5>
+                      <div class="space-y-1">
+                        <div *ngFor="let first of group.versions" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                          <span class="text-white shrink-0">{{ getActivityVersion(first.name) }}</span>
+                          <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 hover:text-yellow-300 cursor-pointer underline shrink-0" [title]="formatDateTime(first.completionDate)">
                             {{ formatDateTime(first.completionDate) }}
                           </a>
                           <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-3 h-3 flex-shrink-0" alt="platform" />
@@ -873,39 +867,35 @@
                       </div>
                     </div>
                   </div>
-                </div>
+                </ng-container>
               </div>
             </div>
             <div *ngIf="getGroupedPantheonRaids().length === 0" class="text-center text-slate-400 py-2">No Pantheon raid firsts found.</div>
 
             <!-- D2 Raids -->
             <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D2 Raids</h4>
-            <div *ngIf="getAllD2RaidVariants().length > 0" class="space-y-6 mb-4">
-              <div *ngFor="let raid of getAllD2RaidVariants()" class="rounded-lg overflow-hidden">
-                <!-- Raid card with full-width background image -->
-                <div class="relative h-48 sm:h-40">
-                  <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
-                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                    <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                  </ng-container>
-                  
-                  <!-- Title (top-left) with a compact list of modes + PGCR links under it -->
-                  <div class="absolute top-3 left-4">
-                    <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ raid.baseName }}</h5>
-                    <div class="rounded-lg p-2 bg-black/35">
-                      <div class="space-y-1">
-                        <div *ngFor="let variant of raid.variants" class="flex items-center gap-2 whitespace-normal">
-                          <span class="text-white text-xs">{{ variant.version }}</span>
-                          <ng-container>
-                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">
-                              {{ formatDateTime(variant.first!.completionDate) }}
-                            </a>
-                            <span *ngIf="!variant.hasClear" class="text-slate-400 text-xs">No clears found</span>
-                          </ng-container>
-                          <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
-                          <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
-                        </div>
-                      </div>
+            <div *ngIf="getAllD2RaidVariants().length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+              <div *ngFor="let raid of getAllD2RaidVariants()"
+                   class="rounded-lg overflow-hidden bg-cover bg-center min-h-[7rem]"
+                   [ngStyle]="typeof getFirstCompletionImageForRaid(raid) === 'string'
+                     ? {'background-image': 'url(' + getFirstCompletionImageForRaid(raid) + ')'}
+                     : null">
+                <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as raidImg">
+                  <span *ngIf="raidImg && typeof raidImg !== 'string'" class="activity-image block" [innerHTML]="raidImg"></span>
+                </ng-container>
+                <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                  <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ raid.baseName }}</h5>
+                  <div class="space-y-1">
+                    <div *ngFor="let variant of raid.variants" class="flex flex-wrap items-center gap-2 whitespace-normal text-xs">
+                      <span class="text-white">{{ variant.version }}</span>
+                      <ng-container>
+                        <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">
+                          {{ formatDateTime(variant.first!.completionDate) }}
+                        </a>
+                        <span *ngIf="!variant.hasClear" class="text-slate-400">No clears found</span>
+                      </ng-container>
+                      <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
+                      <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
                     </div>
                   </div>
                 </div>
@@ -918,46 +908,51 @@
             
             <!-- Rite of the Nine Dungeons -->
             <h5 class="text-sm font-semibold text-cyan-300 mb-2 mt-6">Rite of the Nine Dungeons</h5>
-            <div *ngIf="getRiteOfTheNineDungeons().length > 0" class="space-y-6 mb-4">
-              <div *ngFor="let riteOfTheNine of getRiteOfTheNineDungeons()" class="rounded-lg overflow-hidden">
-                <!-- Rite of the Nine card: same height as other cards, compact layout -->
-                <div class="relative h-48 sm:h-40">
-                  <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as img">
-                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="absolute inset-0 w-full h-full object-cover" alt="" />
-                    <span *ngIf="img && typeof img !== 'string'" class="activity-image absolute inset-0 w-full h-full block" [innerHTML]="img"></span>
-                  </ng-container>
-                  <div class="absolute inset-0 top-2 left-3 right-3 bottom-2 overflow-y-auto overflow-x-hidden">
-                    <h5 class="text-lg sm:text-xl font-bold text-white drop-shadow mb-1 shrink-0">{{ riteOfTheNine.baseName }}</h5>
-                    <div class="rounded-lg p-1.5 sm:p-2 bg-black/35">
-                      <div class="space-y-1">
-                        <!-- Single column on mobile to prevent cutoff; multi-column on larger screens -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
-                          <ng-container *ngFor="let dungeonGroup of getRiteOfTheNineDungeonGroups(riteOfTheNine.variants)">
-                            <div class="min-w-0">
-                              <div class="text-white text-xs sm:text-sm font-semibold mb-0.5 truncate">{{ dungeonGroup.dungeonName }}</div>
-                              <div class="space-y-0.5">
-                                <div *ngFor="let variant of dungeonGroup.variants" class="flex flex-wrap items-center gap-1 text-[11px] sm:text-xs">
-                                  <span class="text-white shrink-0">{{ variant.version }}</span>
-                                  <ng-container>
-                                    <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-yellow-300 underline shrink-0 truncate max-w-[120px] sm:max-w-none" [title]="formatDateTime(variant.first!.completionDate)">
-                                      {{ formatDate(variant.first!.completionDate) }}
+            <div *ngIf="getRiteOfTheNineDungeons().length > 0" class="space-y-4 mb-4">
+              <div *ngFor="let riteOfTheNine of getRiteOfTheNineDungeons()"
+                   class="rounded-lg overflow-hidden bg-cover bg-center min-h-[7rem]"
+                   [ngStyle]="typeof getFirstCompletionImageForRaid(riteOfTheNine) === 'string'
+                     ? {'background-image': 'url(' + getFirstCompletionImageForRaid(riteOfTheNine) + ')'}
+                     : null">
+                <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as riteImg">
+                  <span *ngIf="riteImg && typeof riteImg !== 'string'" class="activity-image block" [innerHTML]="riteImg"></span>
+                </ng-container>
+                <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                  <h5 class="text-lg sm:text-xl font-bold text-white mb-1 shrink-0">{{ riteOfTheNine.baseName }}</h5>
+                  <div class="space-y-1">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                      <ng-container *ngFor="let dungeonGroup of getRiteOfTheNineDungeonGroups(riteOfTheNine.variants)">
+                        <div class="min-w-0">
+                          <div class="text-white text-xs sm:text-sm font-semibold mb-0.5 truncate">{{ dungeonGroup.dungeonName }}</div>
+                          <div class="space-y-0.5">
+                            <div *ngFor="let variant of dungeonGroup.variants" class="text-[11px] sm:text-xs space-y-0.5">
+                              <div class="text-white font-semibold">{{ variant.version }}</div>
+                              <div class="flex flex-wrap items-center gap-1">
+                                <ng-container>
+                                  <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer shrink-0 transition-colors" [title]="formatDateTime(variant.first!.completionDate)">
+                                    {{ formatDateTime(variant.first!.completionDate) }}
+                                  </a>
+                                  <span *ngIf="!variant.hasClear" class="text-slate-400 shrink-0">Not done</span>
+                                </ng-container>
+                                <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
+                                <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                <ng-container *ngIf="variant.first as vf">
+                                  <ng-container *ngIf="getSoloFirstForFirst(vf) as sf">
+                                    <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-200 underline text-[11px] cursor-pointer transition-colors">
+                                      Solo – {{ formatDateTime(sf.firstSolo.period) }}
                                     </a>
-                                    <span *ngIf="!variant.hasClear" class="text-slate-400 shrink-0">Not done</span>
+                                    <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                    <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-emerald-300 underline text-[11px] cursor-pointer transition-colors">
+                                      Solo Flawless – {{ formatDateTime(sf.firstFlawless.period) }}
+                                    </a>
+                                    <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
                                   </ng-container>
-                                  <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3 flex-shrink-0" alt="platform" />
-                                  <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 flex-shrink-0" [title]="cls" alt="class" />
-                                  <ng-container *ngIf="variant.first as vf">
-                                    <ng-container *ngIf="getSoloFirstForFirst(vf) as sf">
-                                      <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-300 underline shrink-0">Solo</a>
-                                      <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-green-300 underline shrink-0">Solo Flw</a>
-                                    </ng-container>
-                                  </ng-container>
-                                </div>
+                                </ng-container>
                               </div>
                             </div>
-                          </ng-container>
+                          </div>
                         </div>
-                      </div>
+                      </ng-container>
                     </div>
                   </div>
                 </div>
@@ -965,45 +960,40 @@
             </div>
             <div *ngIf="getRiteOfTheNineDungeons().length === 0" class="text-center text-slate-400 py-2 mb-4">No Rite of the Nine dungeon firsts found.</div>
             
-            <div *ngIf="getAllD2DungeonVariants().length > 0" class="space-y-6">
-              <div *ngFor="let dungeon of getAllD2DungeonVariants()" class="rounded-lg overflow-hidden">
-                <!-- Dungeon card with full-width background image -->
-                <div class="relative h-48 sm:h-40">
-                  <ng-container *ngIf="getFirstCompletionImageForRaid(dungeon) as img">
-                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                    <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                  </ng-container>
-                  
-                  <!-- Title (top-left) with compact list of modes + PGCR + solo links per row -->
-                  <div class="absolute top-3 left-4">
-                    <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ dungeon.baseName }}</h5>
-                    <div class="rounded-lg p-2 bg-black/35">
+            <div *ngIf="getAllD2DungeonVariants().length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              <div *ngFor="let dungeon of getAllD2DungeonVariants()" class="rounded-lg overflow-hidden bg-slate-900/60">
+                <ng-container *ngIf="getFirstCompletionImageForRaid(dungeon) as img">
+                  <div
+                    class="bg-cover bg-center min-h-[7rem]"
+                    [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                    <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                      <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ dungeon.baseName }}</h5>
                       <div class="space-y-1">
-                        <div *ngFor="let variant of dungeon.variants" class="flex items-center gap-2 whitespace-normal">
-                          <span class="text-white text-xs">{{ variant.version }}</span>
+                        <div *ngFor="let variant of dungeon.variants" class="flex flex-wrap items-center gap-2 whitespace-normal text-xs">
+                          <span class="text-white">{{ variant.version }}</span>
                           <ng-container>
-                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">
+                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">
                               {{ formatDateTime(variant.first!.completionDate) }}
                             </a>
-                            <span *ngIf="!variant.hasClear" class="text-slate-400 text-xs">No clears found</span>
+                            <span *ngIf="!variant.hasClear" class="text-slate-400">No clears found</span>
                           </ng-container>
                           <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
                           <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
-                          <!-- Inline solo/solo flawless links to the right -->
                           <ng-container *ngIf="variant.first as vf">
                             <ng-container *ngIf="getSoloFirstForFirst(vf) as sf">
                               <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-300 underline text-[11px]">Solo – {{ formatDate(sf.firstSolo.period) }}</a>
                               <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
                               <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-green-300 underline text-[11px]">Solo Flawless – {{ formatDate(sf.firstFlawless.period) }}</a>
                               <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                            </ng-container>
                           </ng-container>
-                      </ng-container>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  </div>
-                </div>
+                </ng-container>
               </div>
-            </div>
             </div>
             <div *ngIf="getAllD2DungeonVariants().length === 0" class="text-center text-slate-400 py-2">No D2 dungeons found.</div>
             </ng-container>
@@ -1022,15 +1012,13 @@
                   <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                   <div class="absolute bottom-0 left-0 right-0 p-3">
                     <h6 class="text-white font-medium truncate">{{ getActivityName(firstD1, true) }}</h6>
-                    <div class="text-sm text-slate-300">
+                    <div class="text-sm text-slate-300 flex items-center gap-2">
                       <a (click)="openExternalPGCR(firstD1, true)" class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
                         {{ formatDateTime(firstD1.period) }}
                       </a>
+                      <img [src]="getPlatformIconUrlForFirst($any(firstD1))" class="w-4 h-4" alt="platform" />
+                      <img *ngIf="firstD1.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
                     </div>
-                  </div>
-                  <div class="absolute top-1 right-1 flex items-center gap-1">
-                    <img [src]="getPlatformIconUrlForFirst($any(firstD1))" class="w-5 h-5" alt="platform" />
-                    <img *ngIf="firstD1.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-5 h-5 " [title]="cls" alt="class" />
                   </div>
                 </div>
               </div>
@@ -1041,43 +1029,41 @@
 
                         <!-- D1 Raids -->
             <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">D1 Raids</h4>
-            <div *ngIf="getAllD1RaidVariants().length > 0" class="space-y-6 mb-4">
-              <div *ngFor="let raid of getAllD1RaidVariants()" class="rounded-lg overflow-hidden">
-                <!-- Raid card with full-width background image -->
-                <div class="relative h-48 sm:h-40">
-                  <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
-                    <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                    <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                  </ng-container>
-                  
-                  <!-- Title (top-left) with a compact list of modes + PGCR links under it -->
-                  <div class="absolute top-3 left-4">
-                    <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ raid.baseName }}</h5>
-                    <div class="rounded-lg p-2 bg-black/35">
+            <div *ngIf="getAllD1RaidVariants().length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+              <div *ngFor="let raid of getAllD1RaidVariants()" class="rounded-lg overflow-hidden bg-slate-900/60">
+                <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
+                  <div
+                    class="bg-cover bg-center min-h-[7rem]"
+                    [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                    <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                    <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                      <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ raid.baseName }}</h5>
                       <div class="space-y-1">
-                        <div *ngFor="let variant of raid.variants" class="flex items-center gap-3 whitespace-nowrap">
-                          <span class="text-white text-xs">{{ variant.version }}</span>
+                        <div *ngFor="let variant of raid.variants" class="flex items-center gap-2 whitespace-nowrap text-xs">
+                          <span class="text-white">{{ variant.version }}</span>
                           <ng-container>
-                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">
+                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">
                               {{ formatDateTime(variant.first!.completionDate) }}
                             </a>
-                            <span *ngIf="!variant.hasClear" class="text-slate-400 text-xs">No clears found</span>
+                            <span *ngIf="!variant.hasClear" class="text-slate-400">No clears found</span>
                           </ng-container>
                           <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
                           <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  </div>
-                </div>
+                </ng-container>
               </div>
-            </div>
             </div>
             <div *ngIf="getAllD1RaidVariants().length === 0" class="text-center text-slate-400 py-2">No D1 raids found.</div>
             </ng-container>
           </div>
           <ng-container *ngIf="selectedAccountKeysForFirsts.size > 0">
-            <ng-container *ngFor="let player of getFirstsFilteredPlayers()">
-                <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+            <ng-container *ngIf="getFirstsPrimaryAndSecondary() as layout">
+              <!-- Primary player: full-width card -->
+              <ng-container *ngIf="layout.primary as player">
+                <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-8">
                   <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
                     <span>{{ player.displayName }}'s Guardian Firsts ({{ player.platform }})</span>
@@ -1094,16 +1080,14 @@
                         <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                         <div class="absolute bottom-0 left-0 right-0 p-3">
                           <h6 class="text-white font-medium truncate">{{ getActivityName(first, isD1Player(player)) }}</h6>
-                          <div class="text-sm text-slate-300">
+                          <div class="text-sm text-slate-300 flex items-center gap-2">
                             <a (click)="openExternalPGCR(first, isD1Player(player))"
                                class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
                               {{ formatDateTime(first.period) }}
                             </a>
+                            <img [src]="getPlatformIconUrl(player.membershipType)" class="w-4 h-4" alt="platform" />
+                            <img *ngIf="first.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
                           </div>
-                        </div>
-                        <div class="absolute top-1 right-1 flex items-center gap-1">
-                          <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
-                          <img *ngIf="first.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-5 h-5 " [title]="cls" alt="class" />
                         </div>
                       </div>
                     </ng-container>
@@ -1114,28 +1098,29 @@
                   <!-- D1 Firsts -->
                   <ng-container *ngIf="isD1Player(player)">
                     <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
-                    <div *ngIf="getPlayerRaids(player,'D1').length > 0" class="space-y-6 mb-4">
-                      <div *ngFor="let raid of getPlayerD1RaidVariants(player)" class="rounded-lg overflow-hidden">
-                        <div class="relative h-48 sm:h-40">
-                          <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
-                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                            <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                          </ng-container>
-                          <div class="absolute top-3 left-4">
-                            <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ raid.baseName }}</h5>
-                            <div class="rounded-lg p-2 bg-black/35">
+                    <div *ngIf="getPlayerRaids(player,'D1').length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+                      <div *ngFor="let raid of getPlayerD1RaidVariants(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                        <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
+                          <div
+                            class="bg-cover bg-center"
+                            [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                            <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                              <h5 class="text-sm sm:text-base font-bold text-white mb-1">{{ raid.baseName }}</h5>
                               <div class="space-y-1">
-                                <div *ngFor="let v of raid.variants" class="flex items-center gap-3 whitespace-nowrap">
-                                  <span class="text-white text-xs">{{ v.version }}</span>
-                                  <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">{{ formatDateTime(v.first!.completionDate) }}</a>
-                                  <span *ngIf="!v.hasClear" class="text-slate-400 text-xs">No clears found</span>
+                                <div *ngFor="let v of raid.variants" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                  <span class="text-white">{{ v.version }}</span>
+                                  <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">
+                                    {{ formatDateTime(v.first!.completionDate) }}
+                                  </a>
+                                  <span *ngIf="!v.hasClear" class="text-slate-400">No clears found</span>
                                   <img *ngIf="v.hasClear" [src]="getPlatformIconUrlForFirst($any(v.first))" class="w-3 h-3" alt="platform" />
                                   <img *ngIf="v.hasClear && v.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                </div>
+                              </div>
                             </div>
                           </div>
-                            </div>
-                          </div>
-                        </div>
+                        </ng-container>
                       </div>
                     </div>
                     <div *ngIf="getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
@@ -1145,29 +1130,28 @@
                   <!-- D2 Firsts -->
                   <ng-container *ngIf="!isD1Player(player)">
                     <!-- Pantheon Raids -->
-                    <h4 class="text-md font-semibold text-purple-300 mb-2">Pantheon Raids</h4>
-                    <div *ngIf="getPlayerPantheonRaids(player).length > 0" class="space-y-6 mb-4">
-                      <div *ngFor="let group of getGroupedPantheonRaidsForPlayer(player)" class="rounded-lg overflow-hidden">
-                        <div class="relative h-48 sm:h-40">
-                          <ng-container *ngIf="getFirstCompletionImage(group.versions[0]) as img">
-                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                            <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                          </ng-container>
-                          <div class="absolute top-3 left-4">
-                            <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ group.baseName }}</h5>
-                            <div class="rounded-lg p-2 bg-black/35">
+                    <h4 class="text-md font-semibold text-purple-300 mb-2 mt-4">Pantheon Raids</h4>
+                    <div *ngIf="getPlayerPantheonRaids(player).length > 0" class="space-y-3 mb-4">
+                      <div *ngFor="let group of getGroupedPantheonRaidsForPlayer(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                        <ng-container *ngIf="getFirstCompletionImage(group.versions[0]) as img">
+                          <div
+                            class="bg-cover bg-center"
+                            [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                            <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                              <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ group.baseName }}</h5>
                               <div class="space-y-1">
-                                <div *ngFor="let first of group.versions" class="flex items-center gap-3 whitespace-nowrap">
-                                  <span class="text-white text-xs">{{ getActivityVersion(first.name) }}</span>
-                                  <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">{{ formatDateTime(first.completionDate) }}</a>
+                                <div *ngFor="let first of group.versions" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                  <span class="text-white">{{ getActivityVersion(first.name) }}</span>
+                                  <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">{{ formatDateTime(first.completionDate) }}</a>
                                   <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-3 h-3" alt="platform" />
                                   <img *ngIf="first.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          </div>
-                        </div>
+                        </ng-container>
                       </div>
-                    </div>
                     </div>
                     <div *ngIf="getPlayerPantheonRaids(player).length === 0" class="text-center text-slate-400 py-2">
                       No Pantheon raid firsts found.
@@ -1175,28 +1159,29 @@
 
                     <!-- D2 Raids -->
                     <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">D2 Raids</h4>
-                    <div *ngIf="getPlayerRegularRaids(player,'D2').length > 0" class="space-y-6 mb-4">
-                      <div *ngFor="let raid of getPlayerD2RaidVariants(player)" class="rounded-lg overflow-hidden">
-                        <div class="relative h-48 sm:h-40">
-                          <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
-                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                            <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                          </ng-container>
-                          <div class="absolute top-3 left-4">
-                            <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ raid.baseName }}</h5>
-                            <div class="rounded-lg p-2 bg-black/35">
+                    <div *ngIf="getPlayerRegularRaids(player,'D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+                      <div *ngFor="let raid of getPlayerD2RaidVariants(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                        <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
+                          <div
+                            class="bg-cover bg-center"
+                            [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                            <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                              <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ raid.baseName }}</h5>
                               <div class="space-y-1">
-                                <div *ngFor="let v of raid.variants" class="flex items-center gap-3 whitespace-nowrap">
-                                  <span class="text-white text-xs">{{ v.version }}</span>
-                                  <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">{{ formatDateTime(v.first!.completionDate) }}</a>
-                                  <span *ngIf="!v.hasClear" class="text-slate-400 text-xs">No clears found</span>
+                                <div *ngFor="let v of raid.variants" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                  <span class="text-white">{{ v.version }}</span>
+                                  <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">
+                                    {{ formatDateTime(v.first!.completionDate) }}
+                                  </a>
+                                  <span *ngIf="!v.hasClear" class="text-slate-400">No clears found</span>
                                   <img *ngIf="v.hasClear" [src]="getPlatformIconUrlForFirst($any(v.first))" class="w-3 h-3" alt="platform" />
                                   <img *ngIf="v.hasClear && v.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
                                 </div>
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </ng-container>
                       </div>
                     </div>
                     <div *ngIf="getPlayerRegularRaids(player,'D2').length === 0" class="text-center text-slate-400 py-2">
@@ -1206,36 +1191,45 @@
                     
                     <!-- Rite of the Nine Dungeons -->
                     <h5 class="text-sm font-semibold text-cyan-300 mb-2 mt-6">Rite of the Nine Dungeons</h5>
-                    <div *ngIf="getPlayerRiteOfTheNineVariants(player).length > 0" class="space-y-6 mb-4">
-                      <div *ngFor="let riteOfTheNine of getPlayerRiteOfTheNineVariants(player)" class="rounded-lg overflow-hidden">
-                        <div class="relative h-48 sm:h-40">
-                          <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as img">
-                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="absolute inset-0 w-full h-full object-cover" alt="" />
-                            <span *ngIf="img && typeof img !== 'string'" class="activity-image absolute inset-0 w-full h-full block" [innerHTML]="img"></span>
-                          </ng-container>
-                          <div class="absolute inset-0 top-2 left-3 right-3 bottom-2 overflow-y-auto overflow-x-hidden">
-                            <h5 class="text-lg sm:text-xl font-bold text-white drop-shadow mb-1 shrink-0">{{ riteOfTheNine.baseName }}</h5>
-                            <div class="rounded-lg p-1.5 sm:p-2 bg-black/35">
+                    <div *ngIf="getPlayerRiteOfTheNineVariants(player).length > 0" class="space-y-4 mb-4">
+                      <div *ngFor="let riteOfTheNine of getPlayerRiteOfTheNineVariants(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                        <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as img">
+                          <div
+                            class="bg-cover bg-center"
+                            [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                            <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                              <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ riteOfTheNine.baseName }}</h5>
                               <div class="space-y-1">
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                                   <ng-container *ngFor="let dungeonGroup of getRiteOfTheNineDungeonGroups(riteOfTheNine.variants)">
                                     <div class="min-w-0">
                                       <div class="text-white text-xs sm:text-sm font-semibold mb-0.5 truncate">{{ dungeonGroup.dungeonName }}</div>
                                       <div class="space-y-0.5">
-                                        <div *ngFor="let variant of dungeonGroup.variants" class="flex flex-wrap items-center gap-1 text-[11px] sm:text-xs">
+                                        <div *ngFor="let variant of dungeonGroup.variants" class="flex items-center gap-1 text-[11px] sm:text-xs flex-wrap">
                                           <span class="text-white shrink-0">{{ variant.version }}</span>
                                           <ng-container>
-                                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-yellow-300 underline shrink-0 truncate max-w-[120px] sm:max-w-none" [title]="formatDateTime(variant.first!.completionDate)">
-                                              {{ formatDate(variant.first!.completionDate) }}
+                                            <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer shrink-0 transition-colors">
+                                              {{ formatDateTime(variant.first!.completionDate) }}
                                             </a>
                                             <span *ngIf="!variant.hasClear" class="text-slate-400 shrink-0">Not done</span>
                                           </ng-container>
-                                          <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3 flex-shrink-0" alt="platform" />
-                                          <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 flex-shrink-0" [title]="cls" alt="class" />
+                                          <div class="flex items-center gap-1">
+                                            <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
+                                            <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                          </div>
                                           <ng-container *ngIf="variant.first as vf">
                                             <ng-container *ngIf="getSoloFirstForFirst(vf) as sf">
-                                              <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-300 underline shrink-0">Solo</a>
-                                              <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-green-300 underline shrink-0">Solo Flw</a>
+                                              <div class="flex flex-wrap items-center gap-1">
+                                                <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-200 underline text-[11px] cursor-pointer transition-colors">
+                                                  Solo – {{ formatDateTime(sf.firstSolo.period) }}
+                                                </a>
+                                                <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                                <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-emerald-300 underline text-[11px] cursor-pointer transition-colors">
+                                                  Solo Flawless – {{ formatDateTime(sf.firstFlawless.period) }}
+                                                </a>
+                                                <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                              </div>
                                             </ng-container>
                                           </ng-container>
                                         </div>
@@ -1246,26 +1240,27 @@
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </ng-container>
                       </div>
                     </div>
                     <div *ngIf="getPlayerRiteOfTheNineVariants(player).length === 0" class="text-center text-slate-400 py-2 mb-4">No Rite of the Nine dungeon firsts found.</div>
                     
-                    <div *ngIf="getPlayerDungeons(player,'D2').length > 0" class="space-y-6">
-                      <div *ngFor="let dungeon of getPlayerD2DungeonVariants(player)" class="rounded-lg overflow-hidden">
-                        <div class="relative h-48 sm:h-40">
-                          <ng-container *ngIf="getFirstCompletionImageForRaid(dungeon) as img">
-                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
-                            <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
-                          </ng-container>
-                          <div class="absolute top-3 left-4">
-                            <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ dungeon.baseName }}</h5>
-                            <div class="rounded-lg p-2 bg-black/35">
+                    <div *ngIf="getPlayerDungeons(player,'D2').length > 0" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                      <div *ngFor="let dungeon of getPlayerD2DungeonVariants(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                        <ng-container *ngIf="getFirstCompletionImageForRaid(dungeon) as img">
+                          <div
+                            class="bg-cover bg-center"
+                            [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                            <div class="bg-black/40 px-3 py-2 sm:px-4 sm:py-3">
+                              <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ dungeon.baseName }}</h5>
                               <div class="space-y-1">
-                                <div *ngFor="let v of dungeon.variants" class="flex items-center gap-3 whitespace-nowrap">
-                                  <span class="text-white text-xs">{{ v.version }}</span>
-                                  <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">{{ formatDateTime(v.first!.completionDate) }}</a>
-                                  <span *ngIf="!v.hasClear" class="text-slate-400 text-xs">No clears found</span>
+                                <div *ngFor="let v of dungeon.variants" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                  <span class="text-white">{{ v.version }}</span>
+                                  <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 hover:text-yellow-300 underline">
+                                    {{ formatDateTime(v.first!.completionDate) }}
+                                  </a>
+                                  <span *ngIf="!v.hasClear" class="text-slate-400">No clears found</span>
                                   <img *ngIf="v.hasClear" [src]="getPlatformIconUrlForFirst($any(v.first))" class="w-3 h-3" alt="platform" />
                                   <img *ngIf="v.hasClear && v.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
                                   <ng-container *ngIf="v.first as vf">
@@ -1274,19 +1269,239 @@
                                       <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
                                       <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-green-300 underline text-[11px]">Solo Flawless – {{ formatDate(sf.firstFlawless.period) }}</a>
                                       <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                                    </ng-container>
                                   </ng-container>
-                              </ng-container>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          </div>
-                          </div>
-                        </div>
+                        </ng-container>
                       </div>
                     </div>
                   </ng-container>
                 </div>
               </ng-container>
+
+              <!-- Secondary players: compact grid below -->
+              <div *ngIf="layout.secondary.length > 0" class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 grid-flow-row-dense gap-6 lg:gap-8">
+                <ng-container *ngFor="let player of layout.secondary">
+                  <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+                    <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
+                      <span>{{ player.displayName }}'s Guardian Firsts ({{ player.platform }})</span>
+                    </h3>
+                    <!-- First Ever Activity Card (moved to top) -->
+                    <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
+                      <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
+                      <ng-container *ngIf="getFirstEverForPlayer(player) as first">
+                        <div class="relative">
+                          <ng-container *ngIf="getActivityImage(first, isD1Player(player)) as img">
+                            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                            <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+                          </ng-container>
+                          <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                          <div class="absolute bottom-0 left-0 right-0 p-3">
+                            <h6 class="text-white font-medium truncate">{{ getActivityName(first, isD1Player(player)) }}</h6>
+                            <div class="text-sm text-slate-300 flex items-center gap-2">
+                              <a (click)="openExternalPGCR(first, isD1Player(player))"
+                                 class="text-yellow-400 font-mono text-base hover:text-yellow-300 cursor-pointer underline">
+                                {{ formatDateTime(first.period) }}
+                              </a>
+                              <img [src]="getPlatformIconUrl(player.membershipType)" class="w-4 h-4" alt="platform" />
+                              <img *ngIf="first.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
+                            </div>
+                          </div>
+                        </div>
+                      </ng-container>
+                      <ng-container *ngIf="!getFirstEverForPlayer(player)">
+                        <span class="block p-4">No activities found.</span>
+                      </ng-container>
+                    </div>
+                    <!-- D1 Firsts -->
+                    <ng-container *ngIf="isD1Player(player)">
+                      <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
+                      <div *ngIf="getPlayerRaids(player,'D1').length > 0" class="space-y-6 mb-4">
+                        <div *ngFor="let raid of getPlayerD1RaidVariants(player)" class="rounded-lg overflow-hidden">
+                          <div class="relative min-h-[7rem]">
+                            <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
+                              <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-full object-cover" />
+                              <span *ngIf="img && typeof img !== 'string'" class="activity-image w-full h-full block" [innerHTML]="img"></span>
+                            </ng-container>
+                            <div class="absolute top-3 left-4">
+                              <h5 class="text-2xl font-bold text-white drop-shadow mb-2">{{ raid.baseName }}</h5>
+                              <div class="rounded-lg p-2 bg-black/35">
+                                <div class="space-y-1">
+                                  <div *ngFor="let v of raid.variants" class="flex items-center gap-3 whitespace-nowrap">
+                                    <span class="text-white text-xs">{{ v.version }}</span>
+                                    <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 text-xs hover:text-yellow-300 underline">{{ formatDateTime(v.first!.completionDate) }}</a>
+                                    <span *ngIf="!v.hasClear" class="text-slate-400 text-xs">No clears found</span>
+                                    <img *ngIf="v.hasClear" [src]="getPlatformIconUrlForFirst($any(v.first))" class="w-3 h-3" alt="platform" />
+                                    <img *ngIf="v.hasClear && v.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div *ngIf="getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
+                        No raid firsts found for D1.
+                      </div>
+                    </ng-container>
+                    <!-- D2 Firsts -->
+                    <ng-container *ngIf="!isD1Player(player)">
+                      <!-- Pantheon Raids -->
+                      <h4 class="text-md font-semibold text-purple-300 mb-2 mt-4">Pantheon Raids</h4>
+                      <div *ngIf="getPlayerPantheonRaids(player).length > 0" class="space-y-4 mb-4">
+                        <div *ngFor="let group of getGroupedPantheonRaidsForPlayer(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                          <ng-container *ngIf="getFirstCompletionImage(group.versions[0]) as img">
+                            <div
+                              class="bg-cover bg-center"
+                              [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                              <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                              <div class="bg-black/70 px-3 py-2 sm:px-4 sm:py-3">
+                                <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ group.baseName }}</h5>
+                                <div class="space-y-1">
+                                  <div *ngFor="let first of group.versions" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                    <span class="text-white">{{ getActivityVersion(first.name) }}</span>
+                                    <a (click)="openExternalPGCRForFirst(first)" class="text-yellow-400 hover:text-yellow-300 underline">{{ formatDateTime(first.completionDate) }}</a>
+                                    <img [src]="getPlatformIconUrlForFirst($any(first))" class="w-3 h-3" alt="platform" />
+                                    <img *ngIf="first.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </ng-container>
+                        </div>
+                      </div>
+                      <div *ngIf="getPlayerPantheonRaids(player).length === 0" class="text-center text-slate-400 py-2">
+                        No Pantheon raid firsts found.
+                      </div>
+
+                      <!-- D2 Raids -->
+                      <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">D2 Raids</h4>
+                      <div *ngIf="getPlayerRegularRaids(player,'D2').length > 0" class="space-y-4 mb-4">
+                        <div *ngFor="let raid of getPlayerD2RaidVariants(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                          <ng-container *ngIf="getFirstCompletionImageForRaid(raid) as img">
+                            <div
+                              class="bg-cover bg-center"
+                              [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                              <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                              <div class="bg-black/70 px-3 py-2 sm:px-4 sm:py-3">
+                                <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ raid.baseName }}</h5>
+                                <div class="space-y-1">
+                                  <div *ngFor="let v of raid.variants" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                    <span class="text-white">{{ v.version }}</span>
+                                    <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors">
+                                      {{ formatDateTime(v.first!.completionDate) }}
+                                    </a>
+                                    <span *ngIf="!v.hasClear" class="text-slate-400">No clears found</span>
+                                    <img *ngIf="v.hasClear" [src]="getPlatformIconUrlForFirst($any(v.first))" class="w-3 h-3" alt="platform" />
+                                    <img *ngIf="v.hasClear && v.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </ng-container>
+                        </div>
+                      </div>
+                      <div *ngIf="getPlayerRegularRaids(player,'D2').length === 0" class="text-center text-slate-400 py-2">
+                        No raid firsts found for D2.
+                      </div>
+                      <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
+                      
+                      <!-- Rite of the Nine Dungeons -->
+                      <h5 class="text-sm font-semibold text-cyan-300 mb-2 mt-6">Rite of the Nine Dungeons</h5>
+                      <div *ngIf="getPlayerRiteOfTheNineVariants(player).length > 0" class="space-y-6 mb-4">
+                        <div *ngFor="let riteOfTheNine of getPlayerRiteOfTheNineVariants(player)" class="rounded-lg overflow-hidden">
+                          <div class="relative min-h-[7rem]">
+                            <ng-container *ngIf="getFirstCompletionImageForRaid(riteOfTheNine) as img">
+                              <img *ngIf="img && typeof img === 'string'" [src]="img" class="absolute inset-0 w-full h-full object-cover" alt="" />
+                              <span *ngIf="img && typeof img !== 'string'" class="activity-image absolute inset-0 w-full h-full block" [innerHTML]="img"></span>
+                            </ng-container>
+                            <div class="absolute inset-0 top-2 left-3 right-3 bottom-2 overflow-y-auto overflow-x-hidden">
+                              <h5 class="text-lg sm:text-xl font-bold text-white drop-shadow mb-1 shrink-0">{{ riteOfTheNine.baseName }}</h5>
+                              <div class="rounded-lg p-1.5 sm:p-2 bg-black/35">
+                                <div class="space-y-1">
+                                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+                                    <ng-container *ngFor="let dungeonGroup of getRiteOfTheNineDungeonGroups(riteOfTheNine.variants)">
+                                      <div class="min-w-0">
+                                        <div class="text-white text-xs sm:text-sm font-semibold mb-0.5 truncate">{{ dungeonGroup.dungeonName }}</div>
+                                        <div class="space-y-0.5">
+                                          <div *ngFor="let variant of dungeonGroup.variants" class="flex flex-wrap items-center gap-1 text-[11px] sm:text-xs">
+                                            <span class="text-white shrink-0">{{ variant.version }}</span>
+                                            <ng-container>
+                                              <a *ngIf="variant.hasClear" (click)="openExternalPGCRForFirst(variant.first!)" class="text-yellow-400 hover:text-yellow-300 underline shrink-0 truncate max-w-[120px] sm:max-w-none" [title]="formatDateTime(variant.first!.completionDate)">
+                                                {{ formatDateTime(variant.first!.completionDate) }}
+                                              </a>
+                                              <span *ngIf="!variant.hasClear" class="text-slate-400 shrink-0">Not done</span>
+                                            </ng-container>
+                                            <img *ngIf="variant.hasClear" [src]="getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3 flex-shrink-0" alt="platform" />
+                                            <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 flex-shrink-0" [title]="cls" alt="class" />
+                                            <ng-container *ngIf="variant.first as vf">
+                                              <ng-container *ngIf="getSoloFirstForFirst(vf) as sf">
+                              <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-200 underline text-[11px] shrink-0 cursor-pointer transition-colors">
+                                                  Solo – {{ formatDateTime(sf.firstSolo.period) }}
+                                                </a>
+                                                <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                              <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-emerald-300 underline text-[11px] shrink-0 cursor-pointer transition-colors">
+                                                  Solo Flawless – {{ formatDateTime(sf.firstFlawless.period) }}
+                                                </a>
+                                                <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                                              </ng-container>
+                                            </ng-container>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </ng-container>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div *ngIf="getPlayerRiteOfTheNineVariants(player).length === 0" class="text-center text-slate-400 py-2 mb-4">No Rite of the Nine dungeon firsts found.</div>
+                      
+                      <div *ngIf="getPlayerDungeons(player,'D2').length > 0" class="space-y-4">
+                        <div *ngFor="let dungeon of getPlayerD2DungeonVariants(player)" class="rounded-lg overflow-hidden bg-slate-900/60">
+                          <ng-container *ngIf="getFirstCompletionImageForRaid(dungeon) as img">
+                            <div
+                              class="bg-cover bg-center"
+                              [ngStyle]="img && typeof img === 'string' ? {'background-image': 'url(' + img + ')'} : null">
+                              <span *ngIf="img && typeof img !== 'string'" class="activity-image block" [innerHTML]="img"></span>
+                              <div class="bg-black/70 px-3 py-2 sm:px-4 sm:py-3">
+                                <h5 class="text-lg sm:text-xl font-bold text-white mb-1">{{ dungeon.baseName }}</h5>
+                                <div class="space-y-1">
+                                  <div *ngFor="let v of dungeon.variants" class="flex flex-wrap items-center gap-2 whitespace-nowrap text-xs">
+                                    <span class="text-white">{{ v.version }}</span>
+                                    <a *ngIf="v.hasClear" (click)="openExternalPGCRForFirst(v.first!)" class="text-yellow-400 hover:text-yellow-300 underline">
+                                      {{ formatDateTime(v.first!.completionDate) }}
+                                    </a>
+                                    <span *ngIf="!v.hasClear" class="text-slate-400">No clears found</span>
+                                    <img *ngIf="v.hasClear" [src]="getPlatformIconUrlForFirst($any(v.first))" class="w-3 h-3" alt="platform" />
+                                    <img *ngIf="v.hasClear && v.first?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+                                    <ng-container *ngIf="v.first as vf">
+                                      <ng-container *ngIf="getSoloFirstForFirst(vf) as sf">
+                              <a *ngIf="sf.firstSolo" (click)="openExternalPGCRFromStored(sf.firstSolo)" class="text-blue-400 hover:text-blue-200 underline text-[11px] cursor-pointer transition-colors">Solo – {{ formatDate(sf.firstSolo.period) }}</a>
+                                        <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                              <a *ngIf="sf.firstFlawless" (click)="openExternalPGCRFromStored(sf.firstFlawless)" class="text-green-400 hover:text-emerald-300 underline text-[11px] cursor-pointer transition-colors">Solo Flawless – {{ formatDate(sf.firstFlawless.period) }}</a>
+                                        <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                                      </ng-container>
+                                    </ng-container>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </ng-container>
+                        </div>
+                      </div>
+                    </ng-container>
+                  </div>
+                </ng-container>
+              </div>
             </ng-container>
+          </ng-container>
         </div>
 
           <!-- Titles Tab -->
@@ -1419,7 +1634,6 @@
       </div>
     </div>
   </div>
-</div>
 
 <!-- Favorites Modal -->
 <div class="modal" [class.show]="showFavoritesModal" (click)="closeModalOnBackdrop($event)"

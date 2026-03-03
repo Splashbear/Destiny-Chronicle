@@ -20,7 +20,8 @@ import { FormsModule } from '@angular/forms';
             <label><input type="checkbox" [(ngModel)]="includeActivities" name="activities"> Activities</label><br>
             <label><input type="checkbox" [(ngModel)]="includeFirsts" name="firsts"> Guardian Firsts</label><br>
             <label><input type="checkbox" [(ngModel)]="includeTitles" name="titles"> Titles/Seals</label><br>
-            <label><input type="checkbox" [(ngModel)]="includeSummary" name="summary"> Account Summary</label>
+            <label><input type="checkbox" [(ngModel)]="includeSummary" name="summary"> Account Summary</label><br>
+            <label><input type="checkbox" [(ngModel)]="includeBreakdown" name="breakdown"> Activity Breakdown</label>
           </div>
           <div class="mb-4">
             <label><input type="checkbox" [(ngModel)]="showIconsInline" name="showIconsInline"> Show icons inline (Google Sheets only)</label>
@@ -59,6 +60,7 @@ export class ExportOptionsDialogComponent {
   includeFirsts = true;
   includeTitles = true;
   includeSummary = true;
+  includeBreakdown = true;
   showIconsInline = false;
 
   onClose() {
@@ -72,6 +74,7 @@ export class ExportOptionsDialogComponent {
       includeFirsts: this.includeFirsts,
       includeTitles: this.includeTitles,
       includeSummary: this.includeSummary,
+      includeBreakdown: this.includeBreakdown,
       showIconsInline: this.showIconsInline
     };
     if (!this.allDates && this.selectedDate) {

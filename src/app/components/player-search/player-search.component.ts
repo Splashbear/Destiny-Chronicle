@@ -6360,33 +6360,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
 
-    // Sort by earliest completion date, with Pantheon first
-    return result.sort((a, b) => {
-      // Pantheon always comes first
-      if (a.baseName.includes('Pantheon')) return -1;
-      if (b.baseName.includes('Pantheon')) return 1;
-      
-      // Get earliest completion date for each group
-      const getEarliestDate = (group: typeof a) => {
-        const dates = group.variants
-          .filter(v => v.first)
-          .map(v => new Date(v.first!.completionDate).getTime());
-        return dates.length > 0 ? Math.min(...dates) : Infinity;
-      };
-      
-      const aDate = getEarliestDate(a);
-      const bDate = getEarliestDate(b);
-      
-      // If both have completions, sort by date (earliest first)
-      if (aDate !== Infinity && bDate !== Infinity) {
-        return aDate - bDate;
-      }
-      // If only one has completions, it comes first
-      if (aDate !== Infinity) return -1;
-      if (bDate !== Infinity) return 1;
-      // If neither has completions, sort alphabetically
-      return a.baseName.localeCompare(b.baseName);
-    });
+    // Sort by release order (most recent first)
+    return this.sortGroupsByReleaseOrder(result, 'D2', 'raid');
   }
 
   /** Per-player: D2 raids with variants */
@@ -6609,33 +6584,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
 
-    // Sort by earliest completion date, with Rite of the Nine first
-    return result.sort((a, b) => {
-      // Rite of the Nine always comes first
-      if (a.baseName.includes('Rite of the Nine')) return -1;
-      if (b.baseName.includes('Rite of the Nine')) return 1;
-      
-      // Get earliest completion date for each group
-      const getEarliestDate = (group: typeof a) => {
-        const dates = group.variants
-          .filter(v => v.first)
-          .map(v => new Date(v.first!.completionDate).getTime());
-        return dates.length > 0 ? Math.min(...dates) : Infinity;
-      };
-      
-      const aDate = getEarliestDate(a);
-      const bDate = getEarliestDate(b);
-      
-      // If both have completions, sort by date (earliest first)
-      if (aDate !== Infinity && bDate !== Infinity) {
-        return aDate - bDate;
-      }
-      // If only one has completions, it comes first
-      if (aDate !== Infinity) return -1;
-      if (bDate !== Infinity) return 1;
-      // If neither has completions, sort alphabetically
-      return a.baseName.localeCompare(b.baseName);
-    });
+    // Sort by release order (most recent first)
+    return this.sortGroupsByReleaseOrder(result, 'D2', 'dungeon');
   }
 
   /** Per-player: D2 dungeons with variants */
@@ -6786,7 +6736,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
 
-    return result.sort((a, b) => a.baseName.localeCompare(b.baseName));
+    // Sort by release order (most recent first)
+    return this.sortGroupsByReleaseOrder(result, 'D1', 'raid');
   }
 
   /** Per-player: D1 raids with variants */
@@ -8230,6 +8181,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.selectedPlayers.filter(p => this.selectedAccountKeysForFirsts.has(this.getAccountKeyForPlayer(p)));
   }
 
+  /**
+   * Rough "weight" of how much Guardian Firsts content a player has.
+   * Used only for layout purposes to pick the primary (full-width) card.
+   */
+  getFirstsWeightForPlayer(player: PlayerSearchDisplay): number {
+    if (!player) return 0;
+    const list = this.guardianFirstsMap[player.membershipId] || [];
+    return list.length;
+  }
+
+  /**
+   * Split filtered players into a primary (most content) and secondary list.
+   * When there is only one player, they become the primary and secondary is empty.
+   */
+  getFirstsPrimaryAndSecondary(): { primary: PlayerSearchDisplay | null; secondary: PlayerSearchDisplay[] } {
+    const players = this.getFirstsFilteredPlayers();
+    if (!players.length) {
+      return { primary: null, secondary: [] };
+    }
+    const sorted = [...players].sort((a, b) => this.getFirstsWeightForPlayer(b) - this.getFirstsWeightForPlayer(a));
+    const [primary, ...secondary] = sorted;
+    return { primary, secondary };
+  }
+
   /** Games represented by the currently selected Breakdown account cards. Empty = both games allowed. */
   private getBreakdownSelectedGames(): ('D1' | 'D2')[] {
     if (!this.perPlatformStats?.length || this.selectedAccountKeysForBreakdown.size === 0) {
@@ -8445,7 +8420,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       manifestService: this.manifest,
       characters: this.characters,
       getPlayerKey: this.getPlayerKey.bind(this),
-      titleService: this.titleService
+      titleService: this.titleService,
+      breakdownSummary: this.activityBreakdownSummaryCards,
+      breakdownGroups: this.activityBreakdownGroups.map(g => ({
+        label: g.label,
+        rows: g.rows.map(r => ({
+          baseName: r.baseName,
+          variantName: r.variantName || '',
+          game: r.game,
+          runs: r.runs,
+          clears: r.clears,
+          fails: r.fails,
+          timeSeconds: r.timeSeconds
+        }))
+      })),
     });
   }
 
@@ -9204,6 +9192,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         })),
         activities: this.filteredActivitiesForDate,
         accountStats: this.accountStats,
+        activityBreakdown: {
+          summaryCards: this.activityBreakdownSummaryCards,
+          groups: this.activityBreakdownGroups,
+          filters: {
+            selectedAccountKeys: Array.from(this.selectedAccountKeysForBreakdown || []),
+            selectedCardLabels: Array.from(this.selectedBreakdownCardLabels || []),
+            chartGame: this.breakdownChartGame,
+            chartCategory: this.breakdownChartCategory,
+          }
+        },
         timestamp: new Date().toISOString()
       };
 
@@ -9249,6 +9247,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         includeFirsts: true,
         includeTitles: true,
         includeSummary: true,
+        includeBreakdown: true,
         showIconsInline: false
       };
 
@@ -9258,7 +9257,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         manifestService: this.manifest,
         characters: this.characters,
         getPlayerKey: this.getPlayerKey.bind(this),
-        titleService: this.titleService
+        titleService: this.titleService,
+        breakdownSummary: this.activityBreakdownSummaryCards,
+        breakdownGroups: this.activityBreakdownGroups.map(g => ({
+          label: g.label,
+          rows: g.rows.map(r => ({
+            baseName: r.baseName,
+            variantName: r.variantName || '',
+            game: r.game,
+            runs: r.runs,
+            clears: r.clears,
+            fails: r.fails,
+            timeSeconds: r.timeSeconds
+          }))
+        })),
       });
 
       console.log('[SHARE] Current date exported successfully');
@@ -9407,8 +9419,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       hasClear: boolean;
     }>;
   }> {
-    const raids = this.getPlayerRaids(player, 'D2');
-    return this.groupRaidsByBaseName(raids, 'D2');
+    // Exclude Pantheon from the regular D2 raid list; it has its own card
+    const raids = this.getPlayerRaids(player, 'D2').filter(raid =>
+      !raid.name.includes('Pantheon')
+    );
+    const groups = this.groupRaidsByBaseName(raids, 'D2');
+    return this.sortGroupsByReleaseOrder(groups, 'D2', 'raid');
   }
 
   getPlayerD2DungeonVariants(player: any): Array<{ 
@@ -9419,8 +9435,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       hasClear: boolean;
     }>;
   }> {
-    const dungeons = this.getPlayerDungeons(player, 'D2');
-    return this.groupRaidsByBaseName(dungeons, 'D2');
+    // Exclude Rite of the Nine variants; they have their own card
+    const dungeons = this.getPlayerDungeons(player, 'D2').filter(dungeon =>
+      !(
+        (dungeon.name.includes('Ghosts of the Deep') ||
+         dungeon.name.includes('Spire of the Watcher') ||
+         dungeon.name.includes('Prophecy')) &&
+        (dungeon.name.includes('Explorer') ||
+         dungeon.name.includes('Eternity') ||
+         dungeon.name.includes('Ultimatum'))
+      )
+    );
+    const groups = this.groupRaidsByBaseName(dungeons, 'D2');
+    return this.sortGroupsByReleaseOrder(groups, 'D2', 'dungeon');
   }
 
   getPlayerD1RaidVariants(player: any): Array<{ 
@@ -9432,7 +9459,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }>;
   }> {
     const raids = this.getPlayerRaids(player, 'D1');
-    return this.groupRaidsByBaseName(raids, 'D1');
+    const groups = this.groupRaidsByBaseName(raids, 'D1');
+    return this.sortGroupsByReleaseOrder(groups, 'D1', 'raid');
   }
 
   getPlayerPantheonVariants(player: any): Array<{ 
@@ -9540,6 +9568,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
        dungeon.name.includes('Ultimatum'))
     );
 
+    if (!dungeons.length) {
+      return [];
+    }
+
     const variants = dungeons.map(activity => ({
       version: this.getManifestVariantName(activity),
       first: activity,
@@ -9618,6 +9650,91 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     });
 
     return Array.from(groups.values()).sort((a, b) => a.baseName.localeCompare(b.baseName));
+  }
+
+  /** Desired release-order sequences for raids and dungeons, used for per-account ordering. */
+  private readonly D1_RAID_RELEASE_ORDER: string[] = [
+    'Vault of Glass',
+    'Crota\'s End',
+    'King\'s Fall',
+    'Wrath of the Machine'
+  ];
+
+  private readonly D2_RAID_RELEASE_ORDER: string[] = [
+    'Leviathan',
+    'Eater of Worlds',
+    'Spire of Stars',
+    'Last Wish',
+    'Scourge of the Past',
+    'Crown of Sorrow',
+    'Garden of Salvation',
+    'Deep Stone Crypt',
+    'Vault of Glass',
+    'Vow of the Disciple',
+    'King\'s Fall',
+    'Root of Nightmares',
+    'Crota\'s End',
+    'Salvation\'s Edge'
+  ];
+
+  private readonly D2_DUNGEON_RELEASE_ORDER: string[] = [
+    'Shattered Throne',
+    'Pit of Heresy',
+    'Prophecy',
+    'Grasp of Avarice',
+    'Duality',
+    'Spire of the Watcher',
+    'Ghosts of the Deep',
+    'Warlord\'s Ruin',
+    'Vesper\'s Host'
+  ];
+
+  /**
+   * Sorts grouped raids/dungeons into a specific release order for display.
+   * Unknown names fall to the end, sorted alphabetically.
+   */
+  private sortGroupsByReleaseOrder(
+    groups: Array<{ baseName: string; variants: any[] }>,
+    game: 'D1' | 'D2',
+    kind: 'raid' | 'dungeon'
+  ): Array<{ baseName: string; variants: any[] }> {
+    let order: string[] | null = null;
+    if (game === 'D1' && kind === 'raid') {
+      order = this.D1_RAID_RELEASE_ORDER;
+    } else if (game === 'D2' && kind === 'raid') {
+      order = this.D2_RAID_RELEASE_ORDER;
+    } else if (game === 'D2' && kind === 'dungeon') {
+      order = this.D2_DUNGEON_RELEASE_ORDER;
+    }
+
+    if (!order) {
+      return groups;
+    }
+
+    const index = new Map<string, number>();
+    order.forEach((name, i) => index.set(name, i));
+
+    return [...groups].sort((a, b) => {
+      const ia = index.has(a.baseName) ? index.get(a.baseName)! : -1;
+      const ib = index.has(b.baseName) ? index.get(b.baseName)! : -1;
+
+      const aKnown = ia !== -1;
+      const bKnown = ib !== -1;
+
+      // Known raids/dungeons (with explicit order) should come first,
+      // with MOST RECENT (highest index) at the top.
+      if (aKnown && bKnown) {
+        if (ia !== ib) return ib - ia; // newer (larger index) first
+        return a.baseName.localeCompare(b.baseName);
+      }
+
+      // If only one is known, put the known one first.
+      if (aKnown && !bKnown) return -1;
+      if (!aKnown && bKnown) return 1;
+
+      // If both are unknown, fall back to alphabetical.
+      return a.baseName.localeCompare(b.baseName);
+    });
   }
 
   private createRaidVariant(activity: ActivityFirstCompletion): { 
