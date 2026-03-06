@@ -241,7 +241,7 @@ const RAID_RELEASE_ORDER_D1 = ['vault of glass', "crota's end", "king's fall", '
 const RAID_RELEASE_ORDER_D2 = [
   'leviathan', "leviathan, eater of worlds", 'leviathan, spire of stars', 'last wish', 'scourge of the past',
   'crown of sorrow', 'garden of salvation', 'deep stone crypt', 'vault of glass', "king's fall",
-  'vow of the disciple', 'root of nightmares', "crota's end", "salvation's edge"
+  'vow of the disciple', 'root of nightmares', "crota's end", "salvation's edge", 'the desert perpetual'
 ];
 /** Dungeon release order (D2 only; same as Firsts view). */
 const DUNGEON_RELEASE_ORDER = [

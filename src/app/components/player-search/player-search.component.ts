@@ -41,7 +41,6 @@ import { AccountStatsComponent } from '../account-stats/account-stats.component'
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
-// import { AnalyticsComponent } from '../analytics/analytics.component';
 // Chart.js imports
 import { ChartConfiguration, ChartData, ChartType, registerables } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
@@ -503,7 +502,6 @@ interface PlatformStats {
     FormsModule,
     AccountStatsComponent,
     AccountCardGridComponent,
-    // AnalyticsComponent, // temporarily disabled
     ExportOptionsDialogComponent,
     DatePickerComponent,
     BaseChartDirective
@@ -6206,7 +6204,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return isPantheonByName || isPantheonByHash;
     });
     const sortedPantheonRaids = this.sortPantheonRaids(pantheonRaids);
-    return this.groupActivitiesByBaseName(sortedPantheonRaids);
+    const groups = this.groupActivitiesByBaseName(sortedPantheonRaids);
+    return this.sortPantheonGroupsByReleaseOrder(groups);
   }
 
   /** Wrapper to allow grouping from template */
@@ -6224,7 +6223,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
       return isPantheonByName || isPantheonByHash;
     });
-    return this.groupActivitiesByBaseName(list);
+    const sorted = this.sortPantheonRaids(list);
+    const groups = this.groupActivitiesByBaseName(sorted);
+    return this.sortPantheonGroupsByReleaseOrder(groups);
   }
 
   /**
@@ -6427,33 +6428,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
     
-    // Sort by earliest completion date, with Pantheon first
-    return result.sort((a, b) => {
-      // Pantheon always comes first
-      if (a.baseName.includes('Pantheon')) return -1;
-      if (b.baseName.includes('Pantheon')) return 1;
-      
-      // Get earliest completion date for each group
-      const getEarliestDate = (group: typeof a) => {
-        const dates = group.variants
-          .filter(v => v.first)
-          .map(v => new Date(v.first!.completionDate).getTime());
-        return dates.length > 0 ? Math.min(...dates) : Infinity;
-      };
-      
-      const aDate = getEarliestDate(a);
-      const bDate = getEarliestDate(b);
-      
-      // If both have completions, sort by date (earliest first)
-      if (aDate !== Infinity && bDate !== Infinity) {
-        return aDate - bDate;
-      }
-      // If only one has completions, it comes first
-      if (aDate !== Infinity) return -1;
-      if (bDate !== Infinity) return 1;
-      // If neither has completions, sort alphabetically
-      return a.baseName.localeCompare(b.baseName);
-    });
+    // Sort by release order (most recent first)
+    return this.sortGroupsByReleaseOrder(result, 'D2', 'raid');
   }
   /**
    * Gets the first completion image for a raid/dungeon group.
@@ -6643,33 +6619,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       result.push({ baseName, variants });
     }
     
-    // Sort by earliest completion date, with Rite of the Nine first
-    return result.sort((a, b) => {
-      // Rite of the Nine always comes first
-      if (a.baseName.includes('Rite of the Nine')) return -1;
-      if (b.baseName.includes('Rite of the Nine')) return 1;
-      
-      // Get earliest completion date for each group
-      const getEarliestDate = (group: typeof a) => {
-        const dates = group.variants
-          .filter(v => v.first)
-          .map(v => new Date(v.first!.completionDate).getTime());
-        return dates.length > 0 ? Math.min(...dates) : Infinity;
-      };
-      
-      const aDate = getEarliestDate(a);
-      const bDate = getEarliestDate(b);
-      
-      // If both have completions, sort by date (earliest first)
-      if (aDate !== Infinity && bDate !== Infinity) {
-        return aDate - bDate;
-      }
-      // If only one has completions, it comes first
-      if (aDate !== Infinity) return -1;
-      if (bDate !== Infinity) return 1;
-      // If neither has completions, sort alphabetically
-      return a.baseName.localeCompare(b.baseName);
-    });
+    // Sort by release order (most recent first)
+    return this.sortGroupsByReleaseOrder(result, 'D2', 'dungeon');
   }
   /**
    * Gets all D1 raids with all possible variants (completed or not)
@@ -6845,13 +6796,31 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   private sortPantheonRaids(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
+    // Order: oldest to newest (index 0 = oldest). Sort uses b - a for newest first.
     const pantheonOrder = [
       'The Pantheon: Atraks Sovereign',
-      'The Pantheon: Oryx Exalted', 
+      'The Pantheon: Oryx Exalted',
       'The Pantheon: Rhulk Indomitable',
       'The Pantheon: Nezarec Sublime'
     ];
-    return list.slice().sort((a, b) => pantheonOrder.indexOf(a.name) - pantheonOrder.indexOf(b.name));
+    return list.slice().sort((a, b) => pantheonOrder.indexOf(b.name) - pantheonOrder.indexOf(a.name));
+  }
+
+  /** Sorts Pantheon groups so newest (Nezarec) is first; groupActivitiesByBaseName sorts alphabetically so we override. */
+  private sortPantheonGroupsByReleaseOrder(groups: Array<{ baseName: string; versions: ActivityFirstCompletion[] }>): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const order = [
+      'The Pantheon: Nezarec Sublime',
+      'The Pantheon: Rhulk Indomitable',
+      'The Pantheon: Oryx Exalted',
+      'The Pantheon: Atraks Sovereign'
+    ];
+    const index = new Map<string, number>();
+    order.forEach((name, i) => index.set(name, i));
+    return [...groups].sort((a, b) => {
+      const ia = index.get(a.baseName) ?? 999;
+      const ib = index.get(b.baseName) ?? 999;
+      return ia - ib;
+    });
   }
 
   private sortDungeons(list: ActivityFirstCompletion[]): ActivityFirstCompletion[] {
@@ -6865,7 +6834,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       'Ghosts of the Deep',
       "Warlord's Ruin",
       "Vesper's Host",
-      "Sundered Doctrine"
+      'Sundered Doctrine',
+      'Equilibrium'
     ];
     
     return list.slice().sort((a, b) => {
@@ -9662,8 +9632,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   private readonly D2_RAID_RELEASE_ORDER: string[] = [
     'Leviathan',
-    'Eater of Worlds',
-    'Spire of Stars',
+    'Leviathan, Eater of Worlds',
+    'Leviathan, Spire of Stars',
     'Last Wish',
     'Scourge of the Past',
     'Crown of Sorrow',
@@ -9674,11 +9644,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     'King\'s Fall',
     'Root of Nightmares',
     'Crota\'s End',
-    'Salvation\'s Edge'
+    'Salvation\'s Edge',
+    'The Desert Perpetual'
   ];
 
   private readonly D2_DUNGEON_RELEASE_ORDER: string[] = [
-    'Shattered Throne',
+    'The Shattered Throne',
     'Pit of Heresy',
     'Prophecy',
     'Grasp of Avarice',
@@ -9686,7 +9657,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     'Spire of the Watcher',
     'Ghosts of the Deep',
     'Warlord\'s Ruin',
-    'Vesper\'s Host'
+    'Vesper\'s Host',
+    'Sundered Doctrine',
+    'Equilibrium'
   ];
 
   /**
