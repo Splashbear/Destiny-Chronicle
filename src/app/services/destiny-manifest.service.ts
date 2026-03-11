@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 import { Destiny1ManifestService } from './destiny1-manifest.service';
 import { ActivityDbService } from './activity-db.service';
@@ -62,8 +62,17 @@ export class DestinyManifestService {
       (window as any).presentationNodes = this.presentationNodes; // Expose for browser debugging
       this.manifestLoaded.next(true);
       console.log('[Manifest] Successfully loaded Destiny 2 manifest.');
-    } catch (error) {
-      console.error('[Manifest] Error loading D2 manifest:', error);
+    } catch (error: unknown) {
+      const msg = error instanceof HttpErrorResponse
+        ? `Bungie manifest unavailable (${error.status ?? 'network'}). Activity names may load once the API is reachable.`
+        : error instanceof Error
+          ? error.message
+          : 'Unknown error';
+      if (error instanceof HttpErrorResponse && error.status >= 500) {
+        console.warn('[Manifest]', msg);
+      } else {
+        console.error('[Manifest] Error loading D2 manifest:', msg);
+      }
       this.manifestLoaded.next(false);
     }
   }

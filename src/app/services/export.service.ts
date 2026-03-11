@@ -1,8 +1,6 @@
 import { Injectable } from '@angular/core';
 import { ActivityDbService } from './activity-db.service';
 import { ActivityHistory } from '../models/activity-history.model';
-import * as FileSaver from 'file-saver';
-import * as XLSX from 'xlsx';
 import { TitleService, TitleItem } from './title.service';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
 import { DestinyManifestService } from './destiny-manifest.service';
@@ -85,7 +83,12 @@ export class ExportService {
   /**
    * Generates an .xlsx workbook and triggers a browser download.
    */
-  downloadExcel(payload: ExportPayload) {
+  async downloadExcel(payload: ExportPayload) {
+    const [XLSX, FileSaver] = await Promise.all([
+      import('xlsx'),
+      import('file-saver')
+    ]);
+
     const wb = XLSX.utils.book_new();
 
     if (payload.activities?.length) {
@@ -102,7 +105,12 @@ export class ExportService {
     const fileName = `destiny-chronicle-export_${new Date()
       .toISOString()
       .replace(/[:.]/g, '-')}.xlsx`;
-    FileSaver.saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fileName);
+    FileSaver.saveAs(
+      new Blob([buf], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      }),
+      fileName
+    );
   }
 
   /**

@@ -41,11 +41,21 @@ import { AccountStatsComponent } from '../account-stats/account-stats.component'
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
-// Chart.js imports
-import { ChartConfiguration, ChartData, ChartType, registerables } from 'chart.js';
+// Chart.js imports – load only what we use (pie + bar)
+import {
+  Chart as ChartJS,
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+  type ChartConfiguration,
+  type ChartData,
+  type ChartType
+} from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
-import { Chart } from 'chart.js';
-Chart.register(...registerables);
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
 

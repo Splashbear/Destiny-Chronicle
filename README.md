@@ -1,11 +1,11 @@
 # Destiny Chronicle
 
 ## Overview
-Destiny Chronicle is a activity history application for Destiny 1 and Destiny 2 players. 
+Destiny Chronicle is a Destiny activity history application for Destiny 1 and Destiny 2 players. It acts as a Destiny 2 activity history tracker and PGCR journal, letting you revisit what you were doing on any given date across years of play.
 I have about .01% coding skill, the app was built using Cursor AI agents and took about 6 months. This a niche project for a specific desire of mine, but hopefully it's helpful for others. 
 
 ## Features
-- **Activity History Tracking**: Fetches and displays activities across Destiny 1 and Destiny 2 for a single chosen date. Meant to answer the question "I wonder what I was doing in Destiny on this date, back in X year".
+- **Activity History Tracking**: Fetches and displays activities across Destiny 1 and Destiny 2 for a single chosen date. Meant to answer the question "I wonder what I was doing in Destiny on this date, back in X year", and to serve as a Destiny 2 activity history tracker you can revisit any time.
 - **Guardian Firsts**: Celebrate your first steps as a Guardian with your First Ever activity. Reminisce about your first clear of each raid and dungeon, including your first solo or solo flawless dungeon clear.
 - **Titles & Seals**: Check the titles you've earned and which you've got your eyes on. Titles can be sorted by release date (newest first) or alphabetically.
 - **Export**: Export activities, Guardian Firsts, titles, and account summary to Excel/CSV for offline archiving.
