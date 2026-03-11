@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/app.component.scss"],
+  "sourcesContent": [":host {\n  display: block;\n  min-height: 100vh;\n  background-color: var(--destiny-blue);\n}\n\n.text-destiny-gold {\n  color: var(--destiny-gold);\n}\n\n.bg-slate-800\\/95 {\n  background-color: rgba(30, 41, 59, 0.95);\n}\n\n.border-slate-700 {\n  border-color: rgb(51, 65, 85);\n}\n\n.app-container {\n  min-height: 100vh;\n  background-color: #1a1b1e;\n  color: #ffffff;\n}\n\n.app-header {\n  background-color: #2a2b2e;\n  padding: 2rem;\n  text-align: center;\n  border-bottom: 1px solid #3a3b3e;\n\n  h1 {\n    margin: 0;\n    font-size: 2.5rem;\n    color: #ffffff;\n  }\n\n  .subtitle {\n    margin: 0.5rem 0 0;\n    color: #b3b8d1;\n    font-size: 1.2rem;\n  }\n}\n\n.app-content {\n  max-width: 1200px;\n  margin: 0 auto;\n  padding: 2rem;\n}\n"],
+  "mappings": "AAAA,MACE,QAAA,MACA,WAAA,MACA,iBAAA,IAAA,gBAGF,CAAA,kBACE,MAAA,IAAA,gBAGF,CAAA,iBACE,iBAAA,UAGF,CAAA,iBACE,aAAA,QAGF,CAAA,cACE,WAAA,MACA,iBAAA,QACA,MAAA,KAGF,CAAA,WACE,iBAAA,QAzBF,QA0BE,KACA,WAAA,OACA,cAAA,IAAA,MAAA,QAEA,CANF,WAME,GA9BF,OA+BI,EACA,UAAA,OACA,MAAA,KAGF,CAZF,WAYE,CAAA,SApCF,OAqCI,MAAA,EAAA,EACA,MAAA,QACA,UAAA,OAIJ,CAAA,YACE,UAAA,OA5CF,OA6CE,EAAA,KA7CF,QA8CE",
+  "names": []
+}

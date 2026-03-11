@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/browser-compatibility-warning/browser-compatibility-warning.component.ts"],
+  "sourcesContent": ["\n    .browser-warning {\n      border-radius: 0.375rem;\n    }\n  "],
+  "mappings": "AACI,CAAA,gBAAA,cACE",
+  "names": []
+}

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/loading-progress/loading-progress.component.ts"],
+  "sourcesContent": ["\n    .loading-progress {\n      position: fixed;\n      top: 50%;\n      left: 50%;\n      transform: translate(-50%, -50%);\n      background: rgba(0, 0, 0, 0.85);\n      color: #fff;\n      padding: 1.5rem 2rem;\n      border-radius: 0.75rem;\n      min-width: 260px;\n      text-align: center;\n      z-index: 1000;\n      box-shadow: 0 0 10px rgba(0,0,0,0.6);\n    }\n    .phase {\n      margin: 0 0 0.75rem;\n      font-size: 1.1rem;\n    }\n    .progress-bar {\n      height: 10px;\n      width: 100%;\n      background: #333;\n      border-radius: 5px;\n      overflow: hidden;\n      margin-bottom: 0.5rem;\n    }\n    .fill {\n      height: 100%;\n      background: #4CAF50;\n      transition: width 0.3s ease;\n    }\n    .percent {\n      font-size: 0.875rem;\n    }\n  "],
+  "mappings": "AACI,CAAA,iBACE,SAAA,MACA,IAAA,IACA,KAAA,IACA,UAAA,UAAA,IAAA,CAAA,MACA,WAAA,UACA,MAAA,KANF,QAOE,OAAA,KAPF,cAQE,OACA,UAAA,MACA,WAAA,OACA,QAAA,KACA,WAAA,EAAA,EAAA,KAAA,MAEF,CAAA,MAdA,OAeE,EAAA,EAAA,OACA,UAAA,OAEF,CAAA,aACE,OAAA,KACA,MAAA,KACA,WAAA,KArBF,cAsBE,IACA,SAAA,OACA,cAAA,MAEF,CAAA,KACE,OAAA,KACA,WAAA,QACA,WAAA,MAAA,IAAA,KAEF,CAAA,QACE,UAAA",
+  "names": []
+}

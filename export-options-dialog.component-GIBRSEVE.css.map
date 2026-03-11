@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/export-options-dialog.component.ts"],
+  "sourcesContent": ["\n    .export-modal-backdrop {\n      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;\n      background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;\n    }\n    .export-modal {\n      background: #1e293b; color: #fff; border-radius: 8px; padding: 2rem; min-width: 320px; box-shadow: 0 4px 32px #000a;\n    }\n    .d2-btn { padding: 0.5rem 1.2rem; border-radius: 4px; font-weight: bold; }\n    .ml-4 { margin-left: 1rem; }\n    .mb-4 { margin-bottom: 1rem; }\n    .gap-2 { gap: 0.5rem; }\n    .flex { display: flex; }\n    .justify-end { justify-content: flex-end; }\n  "],
+  "mappings": "AACI,CAAA,sBACE,SAAA,MAAiB,IAAA,EAAQ,KAAA,EAAS,MAAA,MAAc,OAAA,MAChD,WAAA,UAA6B,QAAA,KAAe,QAAA,KAAe,YAAA,OAAqB,gBAAA,OAElF,CAAA,aACE,WAAA,QAAqB,MAAA,KALvB,cAKoC,IALpC,QAKwD,KAAe,UAAA,MAAkB,WAAA,EAAA,IAAA,KAAA,MAEzF,CAAA,OAPA,QAOU,MAAA,OAPV,cAOkC,IAAoB,YAAA,IACtD,CAAA,KAAQ,YAAA,KACR,CAAA,KAAQ,cAAA,KACR,CAAA,MAAS,IAAA,MACT,CAAA,KAAQ,QAAA,KACR,CAAA,YAAe,gBAAA",
+  "names": []
+}
