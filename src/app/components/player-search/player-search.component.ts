@@ -8175,6 +8175,45 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return { primary, secondary };
   }
 
+  /**
+   * Comparison-friendly grouping for Guardian Firsts.
+   * When a small number of accounts are selected (≤ 3), we want to lay them out
+   * side-by-side by game (D2 first, then D1) and, within each game, by platform.
+   */
+  getFirstsComparisonGroups(): Array<{ game: 'D1' | 'D2'; players: PlayerSearchDisplay[] }> {
+    const players = this.getFirstsFilteredPlayers();
+    if (!players.length) return [];
+
+    const byGame = new Map<'D1' | 'D2', PlayerSearchDisplay[]>();
+    for (const p of players) {
+      const game: 'D1' | 'D2' = p.game || 'D2';
+      if (!byGame.has(game)) {
+        byGame.set(game, []);
+      }
+      byGame.get(game)!.push(p);
+    }
+
+    const gameOrder: Array<'D1' | 'D2'> = ['D2', 'D1'];
+    const result: Array<{ game: 'D1' | 'D2'; players: PlayerSearchDisplay[] }> = [];
+
+    for (const game of gameOrder) {
+      const groupPlayers = byGame.get(game);
+      if (!groupPlayers || groupPlayers.length === 0) continue;
+
+      const sortedPlayers = [...groupPlayers].sort((a, b) => {
+        const platformA = a.platform || this.getPlatformName(a.membershipType);
+        const platformB = b.platform || this.getPlatformName(b.membershipType);
+        const platformCompare = platformA.localeCompare(platformB);
+        if (platformCompare !== 0) return platformCompare;
+        return a.displayName.localeCompare(b.displayName);
+      });
+
+      result.push({ game, players: sortedPlayers });
+    }
+
+    return result;
+  }
+
   /** Games represented by the currently selected Breakdown account cards. Empty = both games allowed. */
   private getBreakdownSelectedGames(): ('D1' | 'D2')[] {
     if (!this.perPlatformStats?.length || this.selectedAccountKeysForBreakdown.size === 0) {

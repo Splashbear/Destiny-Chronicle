@@ -32,6 +32,40 @@ interface LRUCache<T> {
   data: Map<string, CacheEntry<T>>;
 }
 
+// Minimal PGCR shape used by PGCR processing logic. This allows future backends
+// (for example, a preprocessed PGCR database) to supply a compatible structure.
+interface PgcrLiteEntry {
+  player?: {
+    destinyUserInfo?: {
+      membershipId?: string;
+      membershipType?: number;
+    };
+    characterClass?: string;
+  };
+  characterId?: string;
+  values?: {
+    deaths?: {
+      basic?: {
+        value?: number;
+      };
+    };
+  };
+}
+
+interface PgcrLitePlayer {
+  id?: string;
+  deaths?: number;
+  charId?: string;
+}
+
+interface PgcrLite {
+  activityDetails?: {
+    period?: string;
+  };
+  entries?: PgcrLiteEntry[];
+  players?: PgcrLitePlayer[];
+}
+
 export interface StoredActivity extends ActivityHistory {
   membershipId: string;
   characterId: string;
@@ -1680,7 +1714,7 @@ export class ActivityDbService extends Dexie {
    * Processes PGCR data for a single activity.
    * Uses progressive fallback strategy: PGCR entries -> PGCR players -> activity values
    */
-  private processPGCRData(first: ActivityFirstCompletion, pgcr: any, game: 'D1' | 'D2', membershipId: string): void {
+  private processPGCRData(first: ActivityFirstCompletion, pgcr: PgcrLite | any, game: 'D1' | 'D2', membershipId: string): void {
     // Update completion date from PGCR period (most accurate timestamp)
     // PGCR period is the authoritative source for when the activity completed
     if (pgcr?.activityDetails?.period) {

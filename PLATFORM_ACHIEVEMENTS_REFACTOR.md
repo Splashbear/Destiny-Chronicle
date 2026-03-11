@@ -1,6 +1,6 @@
 # Platform Achievements Refactor Summary
 
-> **Current UI status (Jan 2026):** The Analytics/Achievements tab is **disabled** in the app. The refactor below exists in code (e.g. `AchievementsService`, `AnalyticsComponent`) but is not shown in the navigation. Re-enabling would require uncommenting `AnalyticsComponent` in the player-search imports and adding the tab back to the template.
+> **Current UI status (Jan 2026+):** The legacy Analytics/Achievements tab implementation (`AnalyticsComponent` and its supporting analytics models/service) has been **removed** from the codebase to reduce complexity. The platform achievements refactor described below still represents the intended UX and data model, but would need a fresh component/screen if we decide to reintroduce a dedicated Achievements tab in the future.
 
 ## 🎯 **What Was Changed**
 

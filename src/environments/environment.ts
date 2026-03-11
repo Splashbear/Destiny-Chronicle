@@ -8,5 +8,8 @@ export const environment = {
   analytics: {
     googleMeasurementId: '',
     cloudflareToken: ''
-  }
+  },
+  // Experimental external PGCR API integration (disabled by default in dev)
+  pgcrApiRoot: '',        // e.g. 'https://pgcr-api.example.com'
+  useExternalPgcr: false  // set true to enable calling external PGCR API
 }; 

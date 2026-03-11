@@ -95,7 +95,7 @@
    - Some loading states could be more informative; mobile layout may need refinement.
 
 3. **Analytics / Achievements**
-   - Analytics (platform achievements) tab is currently disabled in the UI; refactor exists in code but is not shown.
+   - Legacy in-app Analytics/Achievements tab implementation has been removed. Platform achievements remain documented as a future feature in `PLATFORM_ACHIEVEMENTS_REFACTOR.md` and can be reintroduced with a new UI when ready.
 
 ### Success Metrics
 1. **User Experience**

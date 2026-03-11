@@ -65,6 +65,14 @@ npm install
   npm run download-icons
   ```
 
+## 7. Analytics (Optional)
+
+- **Google Analytics (GA4) & Cloudflare Web Analytics:**  
+  The app has built-in support for production-only analytics using `SiteAnalyticsService`.  
+  To enable tracking in your own deployment:
+  - Configure `analytics.googleMeasurementId` and `analytics.cloudflareToken` in `src/environments/environment.prod.ts`
+  - Follow the detailed steps in `docs/analytics-setup.md`
+
 ## Troubleshooting
 
 - **Node.js Version:**  

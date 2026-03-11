@@ -113,6 +113,7 @@ This creates a comprehensive gaming diary that helps you relive your Destiny jou
 - **BungieApiService**: API communication and rate limiting
 - **PGCRCacheService**: Post Game Carnage Report caching and management
 - **ExportService**: Multi-sheet Excel/CSV export (activities, firsts, titles, summary)
+- **SiteAnalyticsService**: Production-only integration with Google Analytics (GA4) and Cloudflare Web Analytics
 
 ## Data Models
 
@@ -240,10 +241,12 @@ interface LoadingStatus {
 - **In-Memory Cache**: LRU cache system for activities and filtered results
 - **Cache Invalidation**: Automatic cleanup with TTL and manual clear via UI
 - **Memory Management**: Regular cache clearing to prevent memory bloat
+- **Server-Side Edge Cache**: Netlify function `netlify/functions/bungie-proxy.ts` provides short-lived caching in front of Bungie API responses
 
 #### API Endpoints
 - **D1**: `/Destiny/Stats/ActivityHistory/{membershipType}/{destinyMembershipId}/{characterId}/`
 - **D2**: `/Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/Activities/`
+  - These are typically called from the browser through the `bungie-proxy` Netlify function rather than directly from the frontend, which applies API key handling and response caching.
 
 #### Pagination Handling
 - **D1**: Relies on Bungie's `hasMore` flag with fallback to page size heuristic
