@@ -1975,8 +1975,8 @@
       <!-- Cross Save Option -->
       <div *ngIf="crossSavePlayer" class="bg-slate-700/60 rounded-lg p-3">
         <h3 class="text-lg font-semibold text-yellow-300 mb-2">Cross Save Account</h3>
-        <div class="flex items-center justify-between p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
-          <div class="flex items-center gap-3 flex-1">
+        <div class="flex items-center p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
+          <div class="flex items-center gap-3 flex-1 min-w-0">
             <input type="checkbox" 
                    [checked]="isPlayerSelected(crossSavePlayer)"
                    (change)="togglePlayerSelection(crossSavePlayer)"
@@ -1995,8 +1995,8 @@
         <h3 class="text-lg font-semibold text-blue-300 mb-2">Destiny 2 Accounts</h3>
         <div class="space-y-2">
           <div *ngFor="let player of d2SearchResults" 
-               class="flex items-center justify-between p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
-            <div class="flex items-center gap-3 flex-1">
+               class="flex items-center p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
+            <div class="flex items-center gap-3 flex-1 min-w-0">
               <input type="checkbox" 
                      [checked]="isPlayerSelected(player)"
                      (change)="togglePlayerSelection(player)"
@@ -2016,8 +2016,8 @@
         <h3 class="text-lg font-semibold text-slate-300 mb-2">Destiny 1 Accounts</h3>
         <div class="space-y-2">
           <div *ngFor="let player of d1SearchResults" 
-               class="flex items-center justify-between p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
-            <div class="flex items-center gap-3 flex-1">
+               class="flex items-center p-2 bg-slate-600/50 rounded hover:bg-slate-600/70 transition-colors">
+            <div class="flex items-center gap-3 flex-1 min-w-0">
               <input type="checkbox" 
                      [checked]="isPlayerSelected(player)"
                      (change)="togglePlayerSelection(player)"
