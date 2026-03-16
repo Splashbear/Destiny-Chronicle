@@ -542,6 +542,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   // Removed selectedPlatform - no longer needed without game picker
   // Removed selectedGame - now searches both D1 and D2 automatically
   errorMessage = '';
+  bungieUnavailable = false;
   platforms = [
     { label: 'Xbox', value: 'Xbox' },
     { label: 'PlayStation', value: 'PlayStation' },
@@ -2407,7 +2408,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       const prefixResp = await firstValueFrom(this.bungieService.searchUsersPrefix(searchTerm));
       const results = prefixResp?.Response?.searchResults as any[] | undefined;
-      if (!prefixResp || prefixResp.ErrorCode !== 1 || !results || results.length === 0) {
+      if (!prefixResp || prefixResp.ErrorCode !== 1) {
+        const status = prefixResp?.ErrorStatus || 'Unknown';
+        const message = prefixResp?.Message || 'No additional details.';
+        this.errorMessage = `Bungie API error while searching. Status: ${status}. ${message}`;
+        this.bungieUnavailable = true;
+        return;
+      }
+      if (!results || results.length === 0) {
         this.errorMessage = 'No Bungie account found with that name.';
         return;
       }

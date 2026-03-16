@@ -91,6 +91,13 @@ input, select {
   }
 }
 
+/* Override global input styles for small checkboxes in the account selection modal */
+.modal-account-checkbox {
+  width: auto;
+  padding: 0;
+  flex-shrink: 0;
+}
+
 button {
   padding: 0.75rem 1.5rem;
   background-color: var(--destiny-gold);
