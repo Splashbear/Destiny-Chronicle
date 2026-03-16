@@ -5050,6 +5050,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.d2SearchResults = [];
     this.crossSavePlayer = null;
     this.showPlatformPicker = false;
+    this.bungieUnavailable = false;
     this.loading['search'] = true;
     
     // Clear any previous search errors
