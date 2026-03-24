@@ -46,9 +46,11 @@ import { SeasonService } from '../../services/season.service';
 import {
   Chart as ChartJS,
   ArcElement,
+  BarController,
   BarElement,
   CategoryScale,
   LinearScale,
+  PieController,
   Tooltip,
   Legend,
   type ChartConfiguration,
@@ -56,7 +58,16 @@ import {
   type ChartType
 } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+ChartJS.register(
+  PieController,
+  BarController,
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend
+);
 
 const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
 
