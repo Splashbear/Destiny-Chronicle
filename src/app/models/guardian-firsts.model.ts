@@ -1,5 +1,5 @@
 export interface ActivityFirstCompletion {
-  type: 'raid' | 'dungeon' | 'strike' | 'nightfall' | 'crucible' | 'gambit' | 'other';
+  type: 'raid' | 'dungeon' | 'strike' | 'nightfall' | 'crucible' | 'gambit' | 'story' | 'other';
   name: string;
   game: 'D1' | 'D2';
   period: string;
@@ -19,6 +19,10 @@ export interface ActivityFirstCompletion {
   isFlawless?: boolean;
   /** Optional fireteam size from PGCR data */
   fireteamSize?: number;
+  /** Story milestone: stable release id from story-first-missions config */
+  storyReleaseId?: string;
+  /** Story milestone: expansion / season label */
+  storySubtitle?: string;
 }
 
 export interface GuardianFirsts {

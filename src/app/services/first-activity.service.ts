@@ -84,7 +84,7 @@ export class FirstActivityService {
 
       // Prefer the tutorial mission "A Guardian Rises" when present (D1 only)
       if (player.game === 'D1' && acts.length) {
-        const D1_TUTORIAL_HASHES = new Set<string>(['1846390409']);
+        const D1_TUTORIAL_HASHES = new Set<string>(['1846390409', '1856964953']);
         const tutorialActs = acts.filter(a => {
           const refStr = String((a as any)?.activityDetails?.referenceId ?? '');
           if (refStr && D1_TUTORIAL_HASHES.has(refStr)) return true;

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
+import { BungieApiService } from './bungie-api.service';
 
 @Injectable({
   providedIn: 'root'
@@ -16,19 +17,52 @@ export class Destiny1ManifestService {
     '2578867903': 'assets/d1_raid_images/wrathofthemachine.jpg',   // Wrath of the Machine
   };
 
-  constructor(private http: HttpClient) {
+  constructor(
+    private http: HttpClient,
+    private bungieApi: BungieApiService
+  ) {
     this.loadManifest();
   }
 
+  /**
+   * D1 content is frozen; bundled `d1-activity-definitions.json` is the authoritative activity set for the app.
+   * We still ping Bungie’s D1 manifest endpoint once so logs can confirm API reachability / version metadata.
+   * @see https://www.bungie.net/d1/Platform/Destiny/Manifest/
+   */
   async loadManifest() {
     try {
       this.manifest = await firstValueFrom(this.http.get<any>(this.D1_MANIFEST_JSON));
       this.manifestLoaded.next(true);
-      console.log('D1 manifest (comprehensive JSON) loaded successfully');
+      console.log('D1 activity definitions (bundled JSON) loaded successfully');
+      try {
+        const liveMeta = await firstValueFrom(this.bungieApi.getD1Manifest());
+        const v = liveMeta && typeof liveMeta === 'object' ? (liveMeta as any).version : undefined;
+        if (v != null) {
+          console.log('[D1] Bungie manifest metadata version (reference only):', v);
+        }
+      } catch (e) {
+        console.warn('[D1] Could not fetch live manifest metadata; continuing with bundled definitions only.', e);
+      }
     } catch (error) {
       console.error('Failed to load D1 manifest JSON:', error);
       this.manifestLoaded.next(false);
     }
+  }
+
+  /**
+   * D1 defs may be keyed by signed 32-bit strings from API/JSON while callers use unsigned hashes.
+   * Try every stable string form so story anchors and PGCR thumbnails resolve.
+   */
+  private referenceIdLookupKeys(referenceId: string | number): string[] {
+    if (referenceId === '' || referenceId == null) return [];
+    const s = String(referenceId).trim();
+    const n = Number(s);
+    if (!Number.isFinite(n)) return [s];
+    const unsigned = (n >>> 0).toString();
+    const signed = (n | 0).toString();
+    const keys = new Set<string>([s, unsigned]);
+    if (signed !== unsigned) keys.add(signed);
+    return Array.from(keys);
   }
 
   /** Whether we have a definition for this activity (from static JSON or previously injected). */
@@ -36,8 +70,10 @@ export class Destiny1ManifestService {
     if (!referenceId) return false;
     const defs = this.manifest.DestinyActivityDefinition;
     if (!defs || typeof defs !== 'object') return false;
-    const def = defs[String(referenceId)];
-    return !!def && (!!(def.activityName || def.displayProperties?.name) || !!def.activityTypeHash);
+    return this.referenceIdLookupKeys(referenceId).some((k) => {
+      const def = defs[k];
+      return !!def && (!!(def.activityName || def.displayProperties?.name) || !!def.activityTypeHash);
+    });
   }
 
   /**
@@ -85,18 +121,26 @@ export class Destiny1ManifestService {
   }
 
   getActivityName(referenceId: string | number): string {
-    if (!this.manifest.DestinyActivityDefinition || !referenceId) return 'Unknown Activity';
-    const def = this.manifest.DestinyActivityDefinition[String(referenceId)];
-    if (!def) {
-      console.warn('[Manifest][getActivityName] MISSING', { referenceId, isD1: true });
+    if (!this.manifest.DestinyActivityDefinition || referenceId == null || referenceId === '') {
       return 'Unknown Activity';
     }
-    return def.activityName || def.displayProperties?.name || 'Unknown Activity';
+    for (const key of this.referenceIdLookupKeys(referenceId)) {
+      const def = this.manifest.DestinyActivityDefinition[key];
+      if (def) {
+        return def.activityName || def.displayProperties?.name || 'Unknown Activity';
+      }
+    }
+    console.warn('[Manifest][getActivityName] MISSING', { referenceId, isD1: true });
+    return 'Unknown Activity';
   }
 
   getActivityType(referenceId: string | number): string {
     if (!this.manifest.DestinyActivityDefinition || !referenceId) return 'unknown';
-    const def = this.manifest.DestinyActivityDefinition[String(referenceId)];
+    let def: any;
+    for (const key of this.referenceIdLookupKeys(referenceId)) {
+      def = this.manifest.DestinyActivityDefinition[key];
+      if (def) break;
+    }
     if (!def) return 'unknown';
     const typeHash = def.activityTypeHash;
     if (typeHash && this.manifest.DestinyActivityTypeDefinition[typeHash]) {
@@ -107,7 +151,11 @@ export class Destiny1ManifestService {
 
   getActivityMode(referenceId: string | number): string {
     if (!this.manifest.DestinyActivityDefinition || !referenceId) return 'unknown';
-    const def = this.manifest.DestinyActivityDefinition[String(referenceId)];
+    let def: any;
+    for (const key of this.referenceIdLookupKeys(referenceId)) {
+      def = this.manifest.DestinyActivityDefinition[key];
+      if (def) break;
+    }
     if (!def) return 'unknown';
     const modeHashes = def.activityModeHashes || [];
     if (modeHashes.length && this.manifest.DestinyActivityModeDefinition[modeHashes[0]]) {
@@ -118,7 +166,11 @@ export class Destiny1ManifestService {
 
   getActivityIcon(referenceId: string | number): string {
     if (!this.manifest.DestinyActivityDefinition || !referenceId) return '';
-    const def = this.manifest.DestinyActivityDefinition[String(referenceId)];
+    let def: any;
+    for (const key of this.referenceIdLookupKeys(referenceId)) {
+      def = this.manifest.DestinyActivityDefinition[key];
+      if (def) break;
+    }
     if (!def) {
       console.warn('[Manifest][getActivityIcon] MISSING', { referenceId, isD1: true });
       return '';
@@ -135,7 +187,11 @@ export class Destiny1ManifestService {
 
   getActivityPgcrImage(referenceId: string | number): string {
     if (!this.manifest.DestinyActivityDefinition || !referenceId) return '';
-    const def = this.manifest.DestinyActivityDefinition[String(referenceId)];
+    let def: any;
+    for (const key of this.referenceIdLookupKeys(referenceId)) {
+      def = this.manifest.DestinyActivityDefinition[key];
+      if (def) break;
+    }
     if (def && def.pgcrImage) {
       if (def.pgcrImage.startsWith('/img') || def.pgcrImage.startsWith('/common')) {
         return 'https://www.bungie.net' + def.pgcrImage;
@@ -147,5 +203,27 @@ export class Destiny1ManifestService {
 
   isLoaded(): Observable<boolean> {
     return this.manifestLoaded.asObservable();
+  }
+
+  /**
+   * Every bundled activity hash whose display name equals `displayName` (case-insensitive).
+   * Used to widen D1 story anchor matching beyond hand-maintained referenceIds.
+   */
+  findActivityHashesByExactName(displayName: string): string[] {
+    const defs = this.manifest?.DestinyActivityDefinition;
+    if (!defs || typeof defs !== 'object') return [];
+    const want = displayName.trim().toLowerCase();
+    if (!want) return [];
+    const out: string[] = [];
+    for (const key of Object.keys(defs)) {
+      const def = defs[key] as { activityName?: string; displayProperties?: { name?: string } };
+      const n = def?.activityName ?? def?.displayProperties?.name;
+      if (n == null || String(n).trim() === '') continue;
+      if (String(n).trim().toLowerCase() !== want) continue;
+      const num = Number(key);
+      const unsigned = Number.isFinite(num) ? (num >>> 0).toString() : key.trim();
+      if (!out.includes(unsigned)) out.push(unsigned);
+    }
+    return out;
   }
 } 

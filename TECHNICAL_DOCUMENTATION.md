@@ -141,6 +141,8 @@ interface ActivityHistory {
 }
 ```
 
+**PGCR / instance semantics** (fireteam vs shared instances, when an instance ends, attempts vs clears): see [`docs/pgcr-and-instances.md`](docs/pgcr-and-instances.md).
+
 ### Guardian Firsts
 ```typescript
 interface ActivityFirstCompletion {

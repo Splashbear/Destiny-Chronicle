@@ -250,9 +250,18 @@ export class BungieApiService {
 
         // Normalize each activity: activityDetails + values.timePlayedSeconds + collect names
         const normalized = activities.map((activity: any) => {
-          const referenceId = activity.activityDetails?.referenceId ?? activity.activityHash ?? activity.referenceId;
+          // D1/D2 historical stats: Bungie exposes the activity def hash as `referenceId` and/or
+          // `directorActivityHash` (same manifest id). Some rows omit `referenceId` — use director hash.
+          const referenceId =
+            activity.activityDetails?.referenceId ??
+            activity.activityDetails?.directorActivityHash ??
+            activity.activityHash ??
+            activity.referenceId;
           const instanceId = activity.activityDetails?.instanceId ?? activity.instanceId ?? activity.activityId;
-          const activityMode = activity.activityDetails?.mode ?? activity.mode ?? mode;
+          // Never use the HTTP request `mode` (which history page we asked for). That stamped every row
+          // from a patrol fetch as mode 6, story fetch as 2, etc., even when the API omitted per-row mode —
+          // which emptied `storyModeSample` and misled debugging. Use only per-activity fields from Bungie.
+          const activityMode = activity.activityDetails?.mode ?? activity.mode;
 
           // D1 may use timePlayedSeconds like D2, or secondsPlayed, activityDurationSeconds, or top-level - normalize to D2 shape
           const durationSeconds =
@@ -263,11 +272,27 @@ export class BungieApiService {
             (typeof activity.values?.activityDurationSeconds === 'number' ? activity.values.activityDurationSeconds : null) ??
             (typeof activity.secondsPlayed === 'number' ? activity.secondsPlayed : null) ??
             (typeof activity.timePlayedSeconds === 'number' ? activity.timePlayedSeconds : null);
+
+          const comp = activity.values?.completed;
+          let completed01: 0 | 1 | undefined;
+          if (comp === true || comp === false) {
+            completed01 = comp ? 1 : 0;
+          } else if (typeof comp === 'number') {
+            completed01 = comp === 1 ? 1 : 0;
+          } else if (typeof comp === 'string') {
+            completed01 = comp === '1' ? 1 : 0;
+          } else if (comp && typeof comp === 'object') {
+            const v = (comp as any).basic?.value ?? (comp as any).value;
+            if (v === true || Number(v) === 1 || String(v) === '1') completed01 = 1;
+            else if (v !== undefined && v !== null) completed01 = 0;
+          }
+
           const values = {
             ...(activity.values || {}),
             ...(durationSeconds != null && typeof durationSeconds === 'number'
               ? { timePlayedSeconds: { basic: { value: durationSeconds } } }
-              : {})
+              : {}),
+            ...(completed01 !== undefined ? { completed: { basic: { value: completed01 } } } : {}),
           };
 
           if (activity.activityName && referenceId != null) {
@@ -277,13 +302,15 @@ export class BungieApiService {
           return {
             ...activity,
             game: 'D1',
-            mode: activityMode,
+            ...(activityMode !== undefined && activityMode !== null ? { mode: activityMode } : {}),
             values,
             activityDetails: {
               ...(activity.activityDetails || {}),
               referenceId: referenceId != null ? String(referenceId) : undefined,
               instanceId: instanceId != null ? String(instanceId) : undefined,
-              mode: activityMode
+              ...(activityMode !== undefined && activityMode !== null
+                ? { mode: activityMode }
+                : {})
             }
           };
         });

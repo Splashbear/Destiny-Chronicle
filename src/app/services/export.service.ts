@@ -52,6 +52,17 @@ export class ExportService {
     private manifest: DestinyManifestService
   ) {}
 
+  /** Keep export firsts dedupe aligned with Firsts tab behavior. */
+  private firstsDedupKey(f: ActivityFirstCompletion): string {
+    if (f.type === 'story' && f.storyReleaseId) {
+      return `${f.game}|story|${f.storyReleaseId}`;
+    }
+    if ((f.game === 'D1' && f.type === 'raid') || (f.game === 'D2' && (f.type === 'raid' || f.type === 'dungeon'))) {
+      return `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
+    }
+    return `${f.game}|${f.type}|${f.name}`;
+  }
+
   /**
    * Builds an object containing whichever slices were requested.
    */
@@ -339,46 +350,57 @@ export class ExportService {
       for (const player of selectedPlayers) {
         const charObjs = (characters && getPlayerKey) ? (characters[getPlayerKey(player)] || []) : [];
         const charIds = charObjs.map((c: any) => c.characterId).filter((id: any) => !!id);
+        const allCompletions: ActivityFirstCompletion[] = [];
         for (const charId of charIds) {
           // activityDb.getFirstCompletions returns an object with a firstCompletions array
           const result = await activityDb.getFirstCompletions(player.membershipId, charId, player.game);
           const completions: ActivityFirstCompletion[] = result?.firstCompletions || [];
+          allCompletions.push(...completions);
+        }
 
-          // Mirror the on-screen logic: choose the earliest completion per "family" (title/name)
-          const byFamily: { [family: string]: ActivityFirstCompletion } = {};
-          for (const completion of completions) {
-            if (completion.completed !== 1) continue; // only actual completions
-            const family = completion.name;
-            const existing = byFamily[family];
-            if (!existing || new Date(completion.completionDate) < new Date(existing.completionDate)) {
-              byFamily[family] = completion;
-            }
-          }
+        // Keep D1 story export aligned with the account-wide story pass used by the Firsts tab.
+        if (player.game === 'D1' && typeof activityDb.getStoryMilestoneFirstCompletionsForMembership === 'function') {
+          const membershipStory: ActivityFirstCompletion[] =
+            await activityDb.getStoryMilestoneFirstCompletionsForMembership(player.membershipId, 'D1');
+          allCompletions.push(...membershipStory);
+        }
 
-          for (const family of Object.keys(byFamily)) {
-            const first = byFamily[family];
-            if (!first) continue;
-            firsts.push({
-              Player: player.displayName,
-              MembershipId: first.membershipId,
-              MembershipType: first.membershipType ?? '',
-              Game: first.game,
-              Platform: player.platform,
-              CharacterId: first.characterId,
-              Family: family,
-              Name: manifestService.getActivityName(first.referenceId, first.game === 'D1'),
-              Type: manifestService.getActivityType(first.referenceId, first.mode),
-              Date: first.completionDate,
-              Hash: first.referenceId,
-              Mode: first.mode,
-              InstanceId: first.instanceId,
-              IsSolo: first.isSolo ?? false,
-              IsSoloFlawless: first.isSoloFlawless ?? false,
-              IsFlawless: first.isFlawless ?? false,
-              FireteamSize: first.fireteamSize ?? '',
-              PGCR: first.instanceId ? `https://www.bungie.net/en/PGCR/${first.instanceId}` : '',
-            });
+        // Mirror Firsts tab dedupe behavior: earliest completion per dedupe key.
+        const byFamily: { [family: string]: ActivityFirstCompletion } = {};
+        for (const completion of allCompletions) {
+          if (completion.completed !== 1) continue; // only actual completions
+          const family = this.firstsDedupKey(completion);
+          const existing = byFamily[family];
+          if (!existing || new Date(completion.completionDate) < new Date(existing.completionDate)) {
+            byFamily[family] = completion;
           }
+        }
+
+        for (const family of Object.keys(byFamily)) {
+          const first = byFamily[family];
+          if (!first) continue;
+          firsts.push({
+            Player: player.displayName,
+            MembershipId: first.membershipId,
+            MembershipType: first.membershipType ?? '',
+            Game: first.game,
+            Platform: player.platform,
+            CharacterId: first.characterId,
+            Family: family,
+            StoryReleaseId: first.storyReleaseId ?? '',
+            StorySubtitle: first.storySubtitle ?? '',
+            Name: manifestService.getActivityName(first.referenceId, first.game === 'D1'),
+            Type: first.type === 'story' ? 'story' : manifestService.getActivityType(first.referenceId, first.mode),
+            Date: first.completionDate,
+            Hash: first.referenceId,
+            Mode: first.mode,
+            InstanceId: first.instanceId,
+            IsSolo: first.isSolo ?? false,
+            IsSoloFlawless: first.isSoloFlawless ?? false,
+            IsFlawless: first.isFlawless ?? false,
+            FireteamSize: first.fireteamSize ?? '',
+            PGCR: first.instanceId ? `https://www.bungie.net/en/PGCR/${first.instanceId}` : '',
+          });
         }
       }
       sheets['Guardian Firsts'] = firsts;

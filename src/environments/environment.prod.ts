@@ -1,6 +1,7 @@
 export const environment = {
   production: true,
   debug: false,
+  traceGuardianFirsts: false,
   bungie: {
     API_KEY: 'e55082388d014a79b9f5da4be0063d1c',  // Bungie API key (production)
     API_ROOT: 'https://www.bungie.net/Platform'

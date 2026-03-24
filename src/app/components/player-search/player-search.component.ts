@@ -19,6 +19,7 @@ import { map, shareReplay, switchMap, catchError, distinctUntilChanged, exhaustM
 import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
+import { getStoryAnchorSortOrder } from '../../config/story-first-missions';
 import { DatePickerComponent } from '../date-picker/date-picker.component';
 // Removed new summary/list components to revert to previous display
 import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from '../../services/stats.service';
@@ -250,12 +251,30 @@ function normalizeTitleName(name: string): string {
 
 
 
+/**
+ * Bungie D1 Account Summary often returns `characters` as an object map (like D2), not an array.
+ * Normalizing avoids `.map is not a function` and ensures we iterate every character for sync/firsts.
+ */
+function normalizeD1ProfileCharacters(raw: unknown): any[] {
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.values(raw as object);
+  }
+  return [];
+}
+
 // Utility function to extract characterId for both D1 and D2 character objects
 // D1: character.characterBase.characterId
 // D2: character.characterId
-// Use this everywhere you need a characterId to avoid regressions and ensure accuracy.
+// Always return string — D1 ids are 64-bit; never rely on JSON number precision.
 function getCharacterId(char: any): string | undefined {
-  return char.characterId || char.characterBase?.characterId;
+  const raw = char?.characterId ?? char?.characterBase?.characterId;
+  if (raw === undefined || raw === null || raw === '') {
+    return undefined;
+  }
+  return String(raw);
 }
 
 // Helper: minutes played per character, handling D1 vs D2 profile shapes.
@@ -1157,8 +1176,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * TrackBy function for guardian firsts to optimize ngFor performance
    */
   trackByGuardianFirst: TrackByFunction<ActivityFirstCompletion> = (index: number, first: ActivityFirstCompletion): string => {
+    if (first.type === 'story' && first.storyReleaseId) {
+      return `story_${first.game}_${first.storyReleaseId}_${first.instanceId || first.referenceId || index}`;
+    }
     return `${first.type}_${first.game}_${first.instanceId || first.referenceId || index}`;
   };
+
+  trackByStoryMilestone: TrackByFunction<ActivityFirstCompletion> = (index: number, s: ActivityFirstCompletion): string =>
+    `${s.storyReleaseId || 'unknown'}_${s.referenceId}_${s.completionDate}_${index}`;
 
   // ------------------------------------------------------------------
   // Concurrency-limited queue for per-account sync (Pattern 2)
@@ -2687,6 +2712,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.updateUrlForPermalink();
 
     // Ensure UI reflects the newly added chip immediately.
+    if (this.activeTab === 'firsts') {
+      this.syncActiveFirstsGameWithPlayers();
+    }
     this.updatePlatformTabs();
     this.cdr.detectChanges();
     
@@ -2850,7 +2878,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           `Loading ${game} characters for ${player.displayName}...`
         );
         
-        this.characters[this.getPlayerKey(player)] = profile.Response.data?.characters || [];
+        this.characters[this.getPlayerKey(player)] = normalizeD1ProfileCharacters(
+          profile.Response.data?.characters
+        );
         // Set the first character as selected if we have characters
         if (this.characters[this.getPlayerKey(player)].length > 0) {
           // D1: characterBase.characterId
@@ -3084,7 +3114,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
 
         if (playerInPgcr) {
-          console.log(`[DEBUG] Successfully validated activity ${instanceId} for player ${character.membershipId}`);
+          if (environment.debug) {
+            console.log(`[DEBUG] Successfully validated activity ${instanceId} for player ${character.membershipId}`);
+          }
           validatedActivities.push({
             ...activity,
             validated: true,
@@ -3098,14 +3130,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             ))?.player?.characterClass) || activity.characterClass
           });
         } else {
-          console.warn(`[DEBUG] Player ${character.membershipId} not found in PGCR ${instanceId}`);
+          if (environment.debug) {
+            console.warn(`[DEBUG] Player ${character.membershipId} not found in PGCR ${instanceId}`);
+          }
         }
       } else {
         const error = result.status === 'rejected' ? result.reason : 'Unknown error';
-        console.warn(`[DEBUG] Failed to fetch PGCR ${instanceId}:`, error);
-        
+        if (environment.debug) {
+          console.warn(`[DEBUG] Failed to fetch PGCR ${instanceId}:`, error);
+        }
+
         // If it's a D1 activity and we got a 500 error, we might want to try the D2 endpoint
-        if (character.game === 'D1' && error.status === 500) {
+        if (environment.debug && character.game === 'D1' && error.status === 500) {
           console.log(`[DEBUG] Attempting to fetch D1 activity ${instanceId} using D2 endpoint`);
           // TODO: Implement fallback to D2 endpoint if needed
         }
@@ -3136,22 +3172,32 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           
           // Validate D1 response structure
           if (!response?.data?.activities) {
-            console.warn('[DEBUG] Invalid D1 activity response structure:', response);
+            if (environment.debug) {
+              console.warn('[DEBUG] Invalid D1 activity response structure:', response);
+            }
             return [];
           }
 
-          // Filter out activities missing required fields
+          // D1: same persistence rule as D2 — Bungie must supply activityDetails.instanceId.
           const validStructureActivities = response.data.activities.filter((activity: ActivityHistory) => {
-            const hasRequiredFields = Boolean(
-              activity.period && 
-              activity.activityDetails?.instanceId
-            );
-            
-            if (!hasRequiredFields) {
-              console.warn('[DEBUG] D1 activity missing required fields:', activity);
+            const inst = activity.activityDetails?.instanceId;
+            if (!activity.period || inst == null || String(inst).trim() === '' || String(inst).trim() === '0') {
+              if (environment.debug) {
+                console.warn('[DEBUG] D1 activity missing period or instanceId:', activity);
+              }
+              return false;
             }
-            
-            return hasRequiredFields;
+            const ref =
+              activity.activityDetails?.referenceId ??
+              (activity as any).referenceId ??
+              (activity as any).activityHash;
+            if (ref == null || String(ref).trim() === '') {
+              if (environment.debug) {
+                console.warn('[DEBUG] D1 activity missing referenceId:', activity);
+              }
+              return false;
+            }
+            return true;
           });
 
           // Get already validated activities from DB
@@ -3202,7 +3248,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           // For D2, we trust the API to return correct activities
           const validActivities = response.Response.activities.filter((activity: ActivityHistory) => {
             if (!activity.period || !activity.activityDetails?.instanceId) {
-              console.warn('[DEBUG] D2 activity missing required fields:', activity);
+              if (environment.debug) {
+                console.warn('[DEBUG] D2 activity missing required fields:', activity);
+              }
               return false;
             }
             return true;
@@ -3228,7 +3276,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           return validActivities;
         }
       } catch (error) {
-        console.error(`[DEBUG] Activity fetch error (attempt ${retries + 1}/${maxRetries}):`, error);
+        console.error(`Activity fetch error (attempt ${retries + 1}/${maxRetries}):`, error);
         retries++;
         if (retries === maxRetries) throw error;
         await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
@@ -3245,7 +3293,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     const newActivities = activities.filter(activity => {
       const isNew = !existingIds.has(activity.activityDetails?.instanceId);
-      if (isNew) {
+      if (isNew && environment.debug) {
         console.log('[DEBUG] New activity found:', {
           period: activity.period,
           mode: activity.activityDetails?.mode,
@@ -3266,28 +3314,35 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         instanceId: activity.activityDetails?.instanceId,
         mode: activity.activityDetails?.mode
       }));
-      
-      console.log('[DEBUG] Storing activities:', {
-        total: storedActivities.length,
-        raids: storedActivities.filter(a => a.activityDetails?.mode === (character.game === 'D1' ? 3 : 4)).length,
-        sample: storedActivities.slice(0, 3).map(a => ({
-          period: a.period,
-          mode: a.activityDetails?.mode,
-          referenceId: a.activityDetails?.referenceId,
-          instanceId: a.activityDetails?.instanceId,
-          completed: a.values?.completed?.basic?.value
-        }))
-      });
-      
+
+      if (environment.debug) {
+        console.log('[DEBUG] Storing activities:', {
+          total: storedActivities.length,
+          raids: storedActivities.filter(a => a.activityDetails?.mode === (character.game === 'D1' ? 3 : 4)).length,
+          sample: storedActivities.slice(0, 3).map(a => ({
+            period: a.period,
+            mode: a.activityDetails?.mode,
+            referenceId: a.activityDetails?.referenceId,
+            instanceId: a.activityDetails?.instanceId,
+            completed: a.values?.completed?.basic?.value
+          }))
+        });
+      }
+
       await this.activityDb.addActivities(storedActivities);
       // Update totals in background (no await to avoid slowing batch loop)
       this.statsDebounce$.next();
-      console.log(`[DEBUG] Stored ${storedActivities.length} new activities for character ${character.characterId} (${character.game})`);
+      if (environment.debug) {
+        console.log(`[DEBUG] Stored ${storedActivities.length} new activities for character ${character.characterId} (${character.game})`);
+      }
       this.cdr.detectChanges();
     }
   }
 
   private validateDateRanges(activities: ActivityHistory[], character: CharacterWithGame): void {
+    if (!environment.debug) {
+      return;
+    }
     if (activities.length === 0) {
       console.log(`[DEBUG] No activities to validate for character ${character.characterId}`);
       return;
@@ -3373,12 +3428,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       let newActivities: StoredActivity[] = [];
       
-      // Select mode list based on game to minimize unnecessary API calls.
-      // Destiny 1 requires individual mode pagination, Destiny 2 can use
-      // a single aggregated request (mode undefined) which Bungie returns
-      // with all activities.
+      // Select mode list based on game.
+      // Destiny 1 requires individual mode pagination; include Story (2) so
+      // campaign first missions are ingested for Guardian Firsts.
+      // Destiny 2 can use a single aggregated request (mode undefined).
       const modes: (number | undefined)[] = character.game === 'D1'
-        ? [6, 4]          // PvE and PvP cover all activity types
+        ? [2, 6, 4]       // Story, PvE, PvP
         : [undefined];     // D2: single request gets all modes
 
       // Process modes in parallel for faster loading
@@ -3479,7 +3534,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       this.processAndGroupActivities();
     } catch (error) {
-      console.error('[DEBUG] Error loading activity history for character:', error);
+      console.error('Error loading activity history for character:', error);
       this.error[loadingKey] = 'Failed to load activity history';
     } finally {
       this.loadingActivities[loadingKey] = false;
@@ -4144,21 +4199,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const mode = activity.activityDetails?.mode;
       const referenceId = String(activity.activityDetails?.referenceId);
       if (this.selectedActivityType.label === 'Raid' && game === 'D1') {
-        const isRaid = D1_RAID_HASHES.includes(referenceId);
-        if (isRaid) {
-          console.log('[DEBUG][Filter][D1Raid] Including activity:', {
-            period: activity.period,
-            referenceId,
-            completed: activity.values?.completed?.basic?.value
-          });
-        } else {
-          console.log('[DEBUG][Filter][D1Raid] Excluding activity:', {
-            period: activity.period,
-            referenceId,
-            completed: activity.values?.completed?.basic?.value
-          });
-        }
-        return isRaid;
+        return D1_RAID_HASHES.includes(referenceId);
       }
       if (!mode) return false;
       // Special case for Dungeons (D2 only) - use proper activity type detection
@@ -4238,8 +4279,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     let totalTime = 0;
     let totalActivityTime = 0;
     const perType: { [type: string]: { count: number, time: number } } = {};
-    const allFirstCompletions: ActivityFirstCompletion[] = [];
-
     try {
       // <--- INSERT HERE
       const D1_RAID_HASHES = [
@@ -4277,41 +4316,68 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // })));
       // <--- END INSERT
       
-      // console.log('[GuardianFirsts][DEBUG] Starting calculateAccountStats with players:', this.selectedPlayers);
-      
+      // Guardian Firsts: keep guardianFirstsMap + aggregateGuardianFirsts in sync with getFirstCompletions.
+      // The Firsts tab reads story/raid aggregates via aggregateGuardianFirsts (not guardianFirsts alone).
+      // Previously we only set guardianFirsts here, so story milestones never appeared after stats refresh.
+      const selectedKeys = new Set(this.selectedPlayers.map((p) => this.getPlayerKey(p)));
+      for (const k of Object.keys(this.guardianFirstsMap)) {
+        if (!selectedKeys.has(k)) {
+          delete this.guardianFirstsMap[k];
+        }
+      }
+
       for (const player of this.selectedPlayers) {
-        // Inline getAllCharacterIdsForPlayer logic
+        const statsGame = this.isD1Player(player) ? 'D1' : 'D2';
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-        // console.log(`[GuardianFirsts][DEBUG] Found ${charIds.length} characters for player ${player.displayName}:`, charIds);
-        
-        const completionsByFamily: { [family: string]: ActivityFirstCompletion } = {};
+        const allFirsts: ActivityFirstCompletion[] = [];
         for (const characterId of charIds) {
-          // console.log(`[GuardianFirsts][DEBUG] Processing character ${characterId} for player ${player.displayName}`);
-          const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
-          // console.log(`[GuardianFirsts][DEBUG] Found ${firsts.firstCompletions.length} first completions for character ${characterId}`);
-          for (const completion of firsts.firstCompletions) {
-            if (completion.completed !== 1) continue; // Only consider completions!
-            const family = completion.name;
-            if (!completionsByFamily[family] || new Date(completion.completionDate) < new Date(completionsByFamily[family].completionDate)) {
-              completionsByFamily[family] = {
-                ...completion
-              };
-              // console.log(`[GuardianFirsts][DEBUG] Updated earliest completion for ${family} to ${completion.completionDate}`);
+          const firsts = await this.activityDb.getFirstCompletions(
+            player.membershipId,
+            characterId,
+            statsGame
+          );
+          allFirsts.push(...firsts.firstCompletions);
+        }
+        const perName = new Map<string, ActivityFirstCompletion>();
+        for (const f of allFirsts) {
+          const c: unknown = f.completed;
+          if (!(c === 1 || c === true || Number(c) === 1)) continue;
+          const key = this.guardianFirstsDedupKey(f);
+          const existing = perName.get(key);
+          if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+            perName.set(key, f);
+          }
+        }
+        const sorted = Array.from(perName.values()).sort(
+          (a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime()
+        );
+        const pKeyStats = this.getPlayerKey(player);
+        this.guardianFirstsMap[pKeyStats] = sorted;
+      }
+
+      const aggregate: ActivityFirstCompletion[] = [];
+      for (const player of this.selectedPlayers) {
+        const list = this.guardianFirstsMap[this.getPlayerKey(player)] || [];
+        for (const f of list) {
+          const key = this.guardianFirstsDedupKey(f);
+          const existing = aggregate.find((x) => this.guardianFirstsDedupKey(x) === key);
+          if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+            if (existing) {
+              const idx = aggregate.indexOf(existing);
+              aggregate[idx] = f;
+            } else {
+              aggregate.push(f);
             }
           }
         }
-        // console.log(`[GuardianFirsts][DEBUG] Final completions for player ${player.displayName}:`, Object.values(completionsByFamily));
-        allFirstCompletions.push(...Object.values(completionsByFamily));
       }
+      this.aggregateGuardianFirsts = aggregate.sort(
+        (a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime()
+      );
+      this.guardianFirsts = this.aggregateGuardianFirsts;
 
-      // Sort and assign the guardian firsts once
-      this.guardianFirsts = allFirstCompletions.sort((a, b) => {
-        if (a.game !== b.game) return a.game === 'D1' ? -1 : 1;
-        return new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime();
-      });
-      
       // console.log('[GuardianFirsts][UI] Final guardianFirsts array:', this.guardianFirsts);
       // console.log('[GuardianFirsts][UI] Raids for D1:', this.getGuardianFirstRaidsForGame('D1'));
       // console.log('[GuardianFirsts][UI] Raids for D2:', this.getGuardianFirstRaidsForGame('D2'));
@@ -4516,24 +4582,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     });
 
     if (!player) {
-      console.error('[DEBUG] Could not find player for activity:', {
-        activityId: activity.activityDetails?.instanceId,
-        period: activity.period,
-        mode: activity.activityDetails?.mode,
-        referenceId: activity.activityDetails?.referenceId,
-        availablePlayers: this.selectedPlayers.map(p => ({
-          membershipId: p.membershipId,
-          displayName: p.displayName
-        }))
-      });
+      if (environment.debug) {
+        console.error('Could not find player for activity:', {
+          activityId: activity.activityDetails?.instanceId,
+          period: activity.period,
+          mode: activity.activityDetails?.mode,
+          referenceId: activity.activityDetails?.referenceId,
+          availablePlayers: this.selectedPlayers.map(p => ({
+            membershipId: p.membershipId,
+            displayName: p.displayName
+          }))
+        });
+      }
       throw new Error('Activity has no associated player');
     }
 
-    console.log('[DEBUG] Found player for activity:', {
-      playerName: player.displayName,
-      membershipId: player.membershipId,
-      activityId: activity.activityDetails?.instanceId
-    });
+    if (environment.debug) {
+      console.log('[DEBUG] Found player for activity:', {
+        playerName: player.displayName,
+        membershipId: player.membershipId,
+        activityId: activity.activityDetails?.instanceId
+      });
+    }
 
     return {
       game: this.isD1Player(player) ? 'D1' : 'D2',
@@ -5050,7 +5120,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.d2SearchResults = [];
     this.crossSavePlayer = null;
     this.showPlatformPicker = false;
-    this.bungieUnavailable = false;
     this.loading['search'] = true;
     
     // Clear any previous search errors
@@ -5537,6 +5606,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Recalculate account stats when a player is removed
     this.calculateAccountStats();
     this.cdr.detectChanges();
+    if (this.activeTab === 'firsts') {
+      this.syncActiveFirstsGameWithPlayers();
+    }
     this.updatePlatformTabs();
     
     // Update URL for permalink sharing
@@ -5566,7 +5638,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       return activities;
     } catch (error) {
-      console.error('[DEBUG] Error getting filtered activities:', error);
+      console.error('Error getting filtered activities:', error);
       return [];
     }
   }
@@ -5623,7 +5695,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Parse selectedDate (format: "YYYY-MM-DD")
     const dateParts = this.selectedDate.split('-');
     if (dateParts.length !== 3) {
-      console.warn('[DEBUG] Invalid selectedDate format:', this.selectedDate);
+      if (environment.debug) {
+        console.warn('Invalid selectedDate format:', this.selectedDate);
+      }
       return [];
     }
     const [year, month, day] = dateParts.map(Number);
@@ -6006,6 +6080,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.getPlatformIconUrl(pl?.membershipType ?? 0);
   }
 
+  /** Deduplication key for merging first completions across characters and accounts. */
+  private guardianFirstsDedupKey(f: ActivityFirstCompletion): string {
+    if (f.type === 'story' && f.storyReleaseId) {
+      return `${f.game}|story|${f.storyReleaseId}`;
+    }
+    if ((f.game === 'D1' && f.type === 'raid') || (f.game === 'D2' && (f.type === 'raid' || f.type === 'dungeon'))) {
+      return `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
+    }
+    return `${f.game}|${f.type}|${f.name}`;
+  }
+
   async loadGuardianFirsts(player: PlayerSearchDisplay): Promise<void> {
     this.loadingGuardianFirsts = true;
     const accountKey = this.getPlayerKey(player);
@@ -6026,56 +6111,82 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const charIds = (this.characters[this.getPlayerKey(player)] || [])
         .map(getCharacterId)
         .filter((id): id is string => !!id);
+      if (environment.traceGuardianFirsts) {
+        console.log('[Firsts·trace]', 'ui:loadGuardianFirsts_start', {
+          displayName: player.displayName,
+          game,
+          membershipIdTail: player.membershipId?.slice(-8),
+          characterCount: charIds.length,
+          characterIdsTail: charIds.map((id) => id.slice(-8)),
+        });
+      }
       const allFirsts: ActivityFirstCompletion[] = [];
       for (const characterId of charIds) {
-        const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, player.game);
+        const firsts = await this.activityDb.getFirstCompletions(player.membershipId, characterId, game);
+        if (environment.traceGuardianFirsts) {
+          const story = firsts.firstCompletions.filter((x) => x.type === 'story');
+          console.log('[Firsts·trace]', 'ui:after_character_getFirstCompletions', {
+            characterIdTail: characterId.slice(-8),
+            totalRows: firsts.firstCompletions.length,
+            storyCount: story.length,
+            storyReleases: story.map((s) => s.storyReleaseId),
+          });
+        }
         allFirsts.push(...firsts.firstCompletions);
+      }
+      if (game === 'D1' && player.membershipId) {
+        const membershipStoryFirsts = await this.activityDb.getStoryMilestoneFirstCompletionsForMembership(
+          player.membershipId,
+          'D1'
+        );
+        if (environment.traceGuardianFirsts) {
+          console.log('[Firsts·trace]', 'ui:membership_story_firsts_merge', {
+            membershipIdTail: player.membershipId.slice(-8),
+            storyCount: membershipStoryFirsts.length,
+            storyReleases: membershipStoryFirsts.map((s) => s.storyReleaseId),
+          });
+        }
+        allFirsts.push(...membershipStoryFirsts);
       }
       // Deduplicate within the account so we keep only the earliest completion for each (game,type,name)
       // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
       const perName = new Map<string, ActivityFirstCompletion>();
       for (const f of allFirsts) {
-        let key: string;
-        if ((f.game === 'D1' && f.type === 'raid') || (f.game === 'D2' && (f.type === 'raid' || f.type === 'dungeon'))) {
-          // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
-          key = `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
-        } else {
-          // For other activities, use the original logic
-          key = `${f.game}|${f.type}|${f.name}`;
-        }
+        const key = this.guardianFirstsDedupKey(f);
         const existing = perName.get(key);
         if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
           perName.set(key, f);
         }
       }
       const sorted = Array.from(perName.values()).sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
-      
+
       // Per-player deduplication completed
-      
+
       // store per-player list (keyed by game+membershipId)
       const pKey = this.getPlayerKey(player);
       this.guardianFirstsMap[pKey] = sorted;
+      if (environment.traceGuardianFirsts) {
+        const story = sorted.filter((f) => f.type === 'story');
+        console.log('[Firsts·trace]', 'ui:after_account_dedupe', {
+          playerKey: pKey,
+          totalFirsts: sorted.length,
+          storyCount: story.length,
+          storySummary: story.map((f) => ({
+            storyReleaseId: f.storyReleaseId,
+            name: f.name,
+            instanceId: f.instanceId,
+            period: f.completionDate,
+          })),
+        });
+      }
       // recompute aggregate list (dedup by name + game + type)
       // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
       const aggregate: ActivityFirstCompletion[] = [];
       const seen = new Set<string>();
       Object.values(this.guardianFirstsMap).forEach(list => {
         for (const f of list) {
-          let key: string;
-          if ((f.game === 'D1' && f.type === 'raid') || (f.game === 'D2' && (f.type === 'raid' || f.type === 'dungeon'))) {
-            // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
-            key = `${f.game}|${f.type}|${f.name}|${f.referenceId}`;
-          } else {
-            // For other activities, use the original logic
-            key = `${f.game}|${f.type}|${f.name}`;
-          }
-          const existing = aggregate.find(x => {
-            if ((x.game === 'D1' && x.type === 'raid') || (x.game === 'D2' && (x.type === 'raid' || x.type === 'dungeon'))) {
-              return `${x.game}|${x.type}|${x.name}|${x.referenceId}` === key;
-            } else {
-              return `${x.game}|${x.type}|${x.name}` === key;
-            }
-          });
+          const key = this.guardianFirstsDedupKey(f);
+          const existing = aggregate.find(x => this.guardianFirstsDedupKey(x) === key);
           if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
             if (existing) {
               // replace later completion with earlier one
@@ -6088,15 +6199,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       });
       this.aggregateGuardianFirsts = aggregate.sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
-      
-      // Debug logging for D1 raids
-      const d1Raids = this.aggregateGuardianFirsts.filter(f => f.game === 'D1' && f.type === 'raid');
-      console.log('[DEBUG][D1UI] aggregateGuardianFirsts D1 raids after calculation:', d1Raids.map(r => ({
-        name: r.name,
-        referenceId: r.referenceId,
-        completionDate: r.completionDate
-      })));
-      
+
       // Aggregate guardian firsts computation completed
       // Default existing property points to aggregate so legacy helpers keep working
       this.guardianFirsts = this.aggregateGuardianFirsts;
@@ -6192,6 +6295,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // However, we keep it for safety in case there are edge cases.
     const earliest = this.getEarliestFirsts(filteredDungeons);
     return this.sortDungeons(earliest);
+  }
+
+  /** Story milestone firsts (all platforms), timeline order */
+  getAggregateStoryMilestones(game: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    return this.aggregateGuardianFirsts
+      .filter((f) => f.game === game && f.type === 'story')
+      .sort((a, b) => getStoryAnchorSortOrder(a.storyReleaseId) - getStoryAnchorSortOrder(b.storyReleaseId));
+  }
+
+  /** Story milestone firsts for one linked account */
+  getPlayerStoryMilestones(player: PlayerSearchDisplay, game?: 'D1' | 'D2'): ActivityFirstCompletion[] {
+    const g: 'D1' | 'D2' =
+      game === 'D1' || game === 'D2' ? game : this.isD1Player(player) ? 'D1' : 'D2';
+    return this.getFirstsForPlayer(player)
+      .filter((f) => f.game === g && f.type === 'story')
+      .sort((a, b) => getStoryAnchorSortOrder(a.storyReleaseId) - getStoryAnchorSortOrder(b.storyReleaseId));
   }
 
   /**
@@ -6656,21 +6775,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Collect all completed raids
     const allRaids = this.getAggregateRaids('D1');
-    console.log('[DEBUG][D1UI] getAllD1RaidVariants - allRaids:', allRaids);
-    
+
     for (const raid of allRaids) {
       const baseName = this.getBaseActivityName(raid.name);
       // For D1 raids, use referenceId to determine variant type since all variants have the same name
       const version = this.getD1RaidVariantName(raid.referenceId, raid.name);
-      
-      console.log('[DEBUG][D1UI] Processing raid:', {
-        name: raid.name,
-        baseName,
-        referenceId: raid.referenceId,
-        version,
-        completionDate: raid.completionDate
-      });
-      
+
       if (!raidVariants.has(baseName)) {
         raidVariants.set(baseName, new Map());
       }
@@ -7887,6 +7997,46 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   activeFirstsGame: 'D1' | 'D2' = 'D2';
 
   /**
+   * Guardian Firsts sub-view: show everything or isolate one category to reduce scrolling.
+   */
+  firstsSectionFilter: 'all' | 'first-ever' | 'story' | 'raids' | 'dungeons' = 'all';
+
+  get firstsSectionFilterOptions(): { value: string; label: string }[] {
+    const base: { value: string; label: string }[] = [
+      { value: 'all', label: 'All sections' },
+      { value: 'first-ever', label: 'First ever only' },
+      { value: 'story', label: 'Story milestones only' },
+      { value: 'raids', label: 'Raids only' },
+    ];
+    if (this.activeFirstsGame === 'D2') {
+      base.push({ value: 'dungeons', label: 'Dungeons only' });
+    }
+    return base;
+  }
+
+  showFirstsSection(section: 'first-ever' | 'story' | 'raids' | 'dungeons'): boolean {
+    return this.firstsSectionFilter === 'all' || this.firstsSectionFilter === section;
+  }
+
+  /**
+   * If every selected account is D1 (or all D2), align the Firsts game tab so D1-only users
+   * are not stuck on an empty Destiny 2 view.
+   */
+  syncActiveFirstsGameWithPlayers(): void {
+    if (this.selectedPlayers.length === 0) return;
+    const allD1 = this.selectedPlayers.every((p) => this.isD1Player(p));
+    const allD2 = this.selectedPlayers.every((p) => !this.isD1Player(p));
+    if (allD1) {
+      this.activeFirstsGame = 'D1';
+      if (this.firstsSectionFilter === 'dungeons') {
+        this.firstsSectionFilter = 'all';
+      }
+    } else if (allD2) {
+      this.activeFirstsGame = 'D2';
+    }
+  }
+
+  /**
    * Switch the Guardian Firsts view between Destiny 1 and Destiny 2.
    * Resets the sub-platform selector back to "All" and recalculates the
    * platform chip list for the chosen game.
@@ -7899,6 +8049,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (this.activeFirstsGame !== game) {
       this.activeFirstsGame = game;
       this.activeFirstsTab = 'all';
+      if (game === 'D1' && this.firstsSectionFilter === 'dungeons') {
+        this.firstsSectionFilter = 'all';
+      }
       this.updatePlatformTabs();
       this.cdr.detectChanges();
     }
@@ -8041,11 +8194,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (typeof localStorage !== 'undefined') localStorage.setItem(HIDE_GET_STARTED_KEY, 'true');
   }
 
-  /** Season/expansion name for a given game and year (mid-year). Used to label year boxes in the activity list. */
+  /**
+   * Season/expansion for the activity list & On This Day sidebar: uses the selected month/day in that calendar year
+   * (not July 1), so e.g. March 21 shows the correct season for that date.
+   */
   getSeasonForYear(game: 'D1' | 'D2', year: number | string): string | null {
     const y = typeof year === 'string' ? parseInt(year, 10) : year;
     if (Number.isNaN(y)) return null;
-    return this.seasonService.getSeasonForYear(game, y);
+    return this.seasonService.getSeasonForDate(game, y, this.selectedMonth, this.selectedDay);
   }
 
   /** Toggle selection of an activity breakdown card for filtering */
@@ -8176,7 +8332,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    */
   getFirstsWeightForPlayer(player: PlayerSearchDisplay): number {
     if (!player) return 0;
-    const list = this.guardianFirstsMap[player.membershipId] || [];
+    const list = this.guardianFirstsMap[this.getPlayerKey(player)] || [];
     return list.length;
   }
 
@@ -8592,7 +8748,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown') {
     this.activeTab = tab;
     if (tab === 'firsts' && this.selectedPlayers.length > 0) {
-      // Update platform tabs when switching to firsts tab
+      this.syncActiveFirstsGameWithPlayers();
       this.updatePlatformTabs();
     }
     if (tab === 'breakdown' && this.selectedPlayers.length > 0) {

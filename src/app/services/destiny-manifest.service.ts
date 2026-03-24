@@ -104,6 +104,11 @@ export class DestinyManifestService {
     }
   }
 
+  /** @see Destiny1ManifestService.findActivityHashesByExactName */
+  findD1ActivityHashesByExactName(displayName: string): string[] {
+    return this.d1Manifest.findActivityHashesByExactName(displayName);
+  }
+
   /** Known D1 raid (and key activity) names when definition is missing from manifest/API. */
   private static D1_KNOWN_NAMES: Record<string, string> = {
     '3801607287': "Vault of Glass", '708693006': "Vault of Glass", '2659248071': "Vault of Glass", '2659248068': "Vault of Glass", '2659248069': "Vault of Glass", '856898338': "Vault of Glass", '4038697181': "Vault of Glass",

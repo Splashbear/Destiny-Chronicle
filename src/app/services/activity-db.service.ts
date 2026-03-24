@@ -2,6 +2,12 @@ import { Injectable } from '@angular/core';
 import Dexie, { Table } from 'dexie';
 import { ActivityHistory } from '../models/activity-history.model';
 import { RAID_NAMES, GuardianFirsts, ActivityFirstCompletion } from '../models/guardian-firsts.model';
+import {
+  STORY_RELEASE_ANCHORS,
+  buildStoryHashToAnchorMap,
+  buildStoryLabelToAnchorMap,
+  type StoryReleaseAnchor,
+} from '../config/story-first-missions';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { BungieApiService } from './bungie-api.service';
 import { firstValueFrom } from 'rxjs';
@@ -12,6 +18,7 @@ import { map, catchError } from 'rxjs/operators';
 import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
+import { environment } from '../../environments/environment';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -273,6 +280,148 @@ export class ActivityDbService extends Dexie {
     '4007500989': 'Wrath of the Machine',
   };
 
+  /**
+   * Coerce D1 activity hash strings to unsigned 32-bit form so map lookups match config/manifest keys
+   * (some pipelines store signed ints, e.g. -123456 → different string than "4284511840").
+   */
+  private static normalizeD1ActivityHashKey(ref: string): string {
+    const t = ref.trim();
+    if (!t) return t;
+    const n = Number(t);
+    if (!Number.isFinite(n)) return t;
+    return (n >>> 0).toString();
+  }
+
+  /**
+   * Same reference resolution for story milestones and first-completions loops:
+   * Bungie may expose `referenceId`, `activityHash`, or only one nested under `activityDetails`.
+   */
+  static normalizeHistoryReferenceKeyForStory(activity: any, game: 'D1' | 'D2'): string {
+    const raw =
+      activity?.activityDetails?.referenceId ??
+      activity?.activityDetails?.directorActivityHash ??
+      activity?.activityDetails?.activityHash ??
+      activity?.activityDetails?.activityId ??
+      activity?.referenceId ??
+      activity?.activityHash ??
+      activity?.directorActivityHash ??
+      activity?.activityId ??
+      activity?.definition?.activityHash ??
+      '';
+    if (raw == null || raw === '') return '';
+    const s = String(raw).trim();
+    if (!s || s === 'undefined') return '';
+    return game === 'D1' ? ActivityDbService.normalizeD1ActivityHashKey(s) : s;
+  }
+
+  /**
+   * Bungie activity history uses `values.completed.basic.value === 1`, but D1 (and some stored rows)
+   * may use a bare number/boolean or `completed.value` without `basic`. Read all common shapes.
+   */
+  static readHistoryCompletedRaw(activity: any): unknown {
+    const c = activity?.values?.completed;
+    if (c === undefined || c === null) return undefined;
+    if (typeof c === 'boolean' || typeof c === 'number') return c;
+    if (typeof c === 'string') return c;
+    if (typeof c === 'object') {
+      const basic = (c as any).basic;
+      if (basic && typeof basic === 'object' && 'value' in basic) return basic.value;
+      if ('value' in (c as any)) return (c as any).value;
+    }
+    return undefined;
+  }
+
+  /** True when history row represents a finished activity (clear). */
+  static isHistoryActivityClear(activity: any): boolean {
+    const raw = ActivityDbService.readHistoryCompletedRaw(activity);
+    return raw === true || Number(raw) === 1 || String(raw) === '1';
+  }
+
+  /**
+   * Story “firsts” for D1: Bungie often omits `values.completed` on Activity History rows even when the row
+   * has a real PGCR `instanceId` (a finished play). Treat missing completion + present instance as cleared.
+   * D2 keeps strict `values.completed` checks.
+   */
+  private static isHistoryRowClearForStoryMilestone(activity: any, game: 'D1' | 'D2'): boolean {
+    if (ActivityDbService.isHistoryActivityClear(activity)) {
+      return true;
+    }
+    if (game !== 'D1') {
+      return false;
+    }
+    const raw = ActivityDbService.readHistoryCompletedRaw(activity);
+    if (raw !== undefined && raw !== null) {
+      return false;
+    }
+    const inst = ActivityDbService.resolveStoredActivityInstanceId(activity);
+    return !!inst && inst !== '0';
+  }
+
+  /** Bungie history rows sometimes keep instance id only on the root `StoredActivity` field. */
+  static resolveStoredActivityInstanceId(activity: StoredActivity): string {
+    const fromDetails = activity.activityDetails?.instanceId;
+    if (fromDetails != null) {
+      const t = String(fromDetails).trim();
+      if (t !== '' && t !== '0') return t;
+    }
+    const root = (activity as any).instanceId;
+    if (root != null) {
+      const t = String(root).trim();
+      if (t !== '' && t !== '0') return t;
+    }
+    const aid = (activity as any).activityId;
+    if (aid != null) {
+      const t = String(aid).trim();
+      if (t !== '' && t !== '0') return t;
+    }
+    return '';
+  }
+
+  /**
+   * When hash isn't in STORY_RELEASE_ANCHORS, match manifest display name to anchor label
+   * (handles "Mission: Foo", "Foo (Heroic)", signed/unsigned hash mismatches in defs).
+   */
+  private matchStoryAnchorByManifestLabel(
+    actName: string,
+    labelMap: Map<string, StoryReleaseAnchor>
+  ): StoryReleaseAnchor | undefined {
+    const trimmed = actName.trim();
+    if (!trimmed || trimmed === 'Unknown Activity') return undefined;
+    const lower = trimmed.toLowerCase();
+    const direct = labelMap.get(lower);
+    if (direct) return direct;
+
+    const entries = [...labelMap.entries()].sort((a, b) => b[0].length - a[0].length);
+
+    // "Mission: The Coming War" / "Story: A Guardian Rises" — mission title is usually AFTER the first colon.
+    if (lower.includes(': ')) {
+      const afterColon = lower.split(': ').slice(1).join(': ').trim();
+      if (afterColon) {
+        const afterDirect = labelMap.get(afterColon);
+        if (afterDirect) return afterDirect;
+        for (const [lbl, anchor] of entries) {
+          if (
+            afterColon === lbl ||
+            afterColon.startsWith(lbl + ' ') ||
+            afterColon.startsWith(lbl + '(')
+          ) {
+            return anchor;
+          }
+        }
+      }
+    }
+
+    const base = lower.includes(': ') ? lower.split(': ')[0].trim() : lower;
+    const baseDirect = labelMap.get(base);
+    if (baseDirect) return baseDirect;
+    for (const [lbl, anchor] of entries) {
+      if (base === lbl || base.startsWith(lbl + ' ') || base.startsWith(lbl + '(')) {
+        return anchor;
+      }
+    }
+    return undefined;
+  }
+
   // Add D1 family map
   private static readonly D1_FAMILY_MAP: Record<string, string> = {
     // Vault of Glass (all variants map to base name)
@@ -500,28 +649,33 @@ export class ActivityDbService extends Dexie {
   async clearActivitiesForMembership(membershipId: string) {
     await this.initPromise;
     try {
-      console.log(`[CLEAR] Clearing all activities for membership ${membershipId}`);
-      
+      if (environment.debug) {
+        console.log(`[CLEAR] Clearing all activities for membership ${membershipId}`);
+      }
+
       // First, count how many activities exist for this membership
       const beforeCount = await this.activities
         .where('membershipId')
         .equals(membershipId)
         .count();
-      console.log(`[CLEAR] Found ${beforeCount} activities for membership ${membershipId} before clearing`);
-      
+
       // Delete all activities for this membership
       const deletedCount = await this.activities
         .where('membershipId')
         .equals(membershipId)
         .delete();
-      console.log(`[CLEAR] Deleted ${deletedCount} activities for membership ${membershipId}`);
-      
+
       // Verify the deletion worked
       const afterCount = await this.activities
         .where('membershipId')
         .equals(membershipId)
         .count();
-      console.log(`[CLEAR] Verification: ${afterCount} activities remaining for membership ${membershipId} after clearing`);
+
+      if (environment.debug) {
+        console.log(
+          `[CLEAR] membership ${membershipId}: before=${beforeCount} deleted=${deletedCount} after=${afterCount}`
+        );
+      }
       
       if (afterCount > 0) {
         console.warn(`[CLEAR] WARNING: ${afterCount} activities still exist for membership ${membershipId} after clearing!`);
@@ -674,7 +828,9 @@ export class ActivityDbService extends Dexie {
     const cacheKey = `${membershipId}_all`;
     const cached = this.getFromCache(this.activitiesCache, cacheKey);
     if (cached && Array.isArray(cached) && cached.length > 0) {
-      console.log(`Cache hit for ${membershipId}: ${cached.length} activities`);
+      if (environment.debug) {
+        console.log(`Cache hit for ${membershipId}: ${cached.length} activities`);
+      }
       return cached;
     }
 
@@ -692,8 +848,10 @@ export class ActivityDbService extends Dexie {
 
       // Cache in memory for next access
       this.setInCache(this.activitiesCache, cacheKey, sortedActivities);
-      
-      console.log(`Database query for ${membershipId}: ${sortedActivities.length} activities`);
+
+      if (environment.debug) {
+        console.log(`Database query for ${membershipId}: ${sortedActivities.length} activities`);
+      }
       return sortedActivities;
       
     } catch (error) {
@@ -708,8 +866,10 @@ export class ActivityDbService extends Dexie {
   async preloadFavoritesCache(): Promise<void> {
     try {
       const favorites = await this.getFavorites();
-      console.log(`Preloading cache for ${favorites.length} favorite accounts...`);
-      
+      if (environment.debug) {
+        console.log(`Preloading cache for ${favorites.length} favorite accounts...`);
+      }
+
       const preloadPromises = favorites.map(async (favorite) => {
         // Preload activities into memory cache
         await this.getAllActivitiesForMembershipOptimized(favorite.membershipId);
@@ -719,8 +879,9 @@ export class ActivityDbService extends Dexie {
       });
       
       await Promise.allSettled(preloadPromises);
-      console.log('Favorites cache preloading completed');
-      
+      if (environment.debug) {
+        console.log('Favorites cache preloading completed');
+      }
     } catch (error) {
       console.error('Error preloading favorites cache:', error);
     }
@@ -758,19 +919,18 @@ export class ActivityDbService extends Dexie {
   async clearAllActivities() {
     await this.initPromise;
     try {
-      console.log('[CLEAR] Clearing ALL activities from database');
       const beforeCount = await this.activities.count();
-      console.log(`[CLEAR] Found ${beforeCount} total activities before clearing all`);
-      
+
       await this.activities.clear();
-      
+
       const afterCount = await this.activities.count();
-      console.log(`[CLEAR] Verification: ${afterCount} activities remaining after clearing all`);
-      
+
+      if (environment.debug) {
+        console.log(`[CLEAR] All activities: before=${beforeCount} after=${afterCount}`);
+      }
+
       if (afterCount > 0) {
         console.warn(`[CLEAR] WARNING: ${afterCount} activities still exist after clearing all!`);
-      } else {
-        console.log('[CLEAR] Successfully cleared all activities from database');
       }
     } catch (error) {
       console.error('[CLEAR] Error clearing all activities:', error);
@@ -788,6 +948,102 @@ export class ActivityDbService extends Dexie {
     }
   }
 
+  /**
+   * All stored rows whose `activityDetails.activityTypeHashOverride` matches (string compare).
+   * Note: D1 “Story” **type** is often `1686739444` for many missions — this is not the same as `referenceId`
+   * (activity definition hash).
+   */
+  async findActivitiesByActivityTypeHashOverride(hash: string | number): Promise<StoredActivity[]> {
+    await this.initPromise;
+    const want = String(hash);
+    return this.activities
+      .filter(
+        (a) =>
+          String((a as any).activityDetails?.activityTypeHashOverride ?? '') === want
+      )
+      .toArray();
+  }
+
+  /** Dexie auto-increment primary keys (stable row identity in IndexedDB). */
+  async getActivitiesByPrimaryKeys(ids: number[]): Promise<StoredActivity[]> {
+    await this.initPromise;
+    const out: StoredActivity[] = [];
+    for (const id of ids) {
+      if (!Number.isFinite(id)) continue;
+      const row = await this.activities.get(id);
+      if (row) {
+        out.push(row);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Resolve by indexed `instanceId` and by `activityDetails.instanceId` / root copy (deduped by Dexie `id`).
+   */
+  async findActivitiesByInstanceIds(instanceIds: string[]): Promise<StoredActivity[]> {
+    await this.initPromise;
+    const set = new Set(instanceIds.map((s) => String(s)));
+    const byPk = new Map<number, StoredActivity>();
+    for (const id of set) {
+      const row = await this.getActivityByInstanceId(id);
+      if (row != null && (row as any).id != null) {
+        byPk.set((row as any).id as number, row);
+      }
+    }
+    const detailMatches = await this.activities
+      .filter((a) => {
+        const resolved = ActivityDbService.resolveStoredActivityInstanceId(a);
+        return !!resolved && set.has(resolved);
+      })
+      .toArray();
+    for (const a of detailMatches) {
+      const pk = (a as any).id as number | undefined;
+      if (pk != null) {
+        byPk.set(pk, a);
+      }
+    }
+    return [...byPk.values()];
+  }
+
+  /**
+   * One-shot inspection payload (no logging). Call from any code path that has `ActivityDbService` injected,
+   * e.g. a temporary button handler: `await this.activityDb.inspectActivitiesSnapshot({ ... })`.
+   */
+  async inspectActivitiesSnapshot(params: {
+    activityTypeHashOverride?: string | number;
+    highlightInstanceIds?: string[];
+    highlightPrimaryKeys?: number[];
+  }): Promise<{
+    matchingActivityTypeHashOverride: StoredActivity[];
+    highlights: {
+      byInstanceId: Record<string, StoredActivity | undefined>;
+      byPrimaryKey: Record<number, StoredActivity | undefined>;
+    };
+  }> {
+    const { activityTypeHashOverride, highlightInstanceIds = [], highlightPrimaryKeys = [] } = params;
+    const matchingActivityTypeHashOverride =
+      activityTypeHashOverride != null
+        ? await this.findActivitiesByActivityTypeHashOverride(activityTypeHashOverride)
+        : [];
+    const byInstanceId: Record<string, StoredActivity | undefined> = {};
+    if (highlightInstanceIds.length > 0) {
+      const rows = await this.findActivitiesByInstanceIds(highlightInstanceIds.map(String));
+      for (const row of rows) {
+        const iid = ActivityDbService.resolveStoredActivityInstanceId(row);
+        if (iid) {
+          byInstanceId[iid] = row;
+        }
+      }
+    }
+    const byPrimaryKey: Record<number, StoredActivity | undefined> = {};
+    for (const pk of highlightPrimaryKeys) {
+      if (!Number.isFinite(pk)) continue;
+      byPrimaryKey[pk] = await this.activities.get(pk);
+    }
+    return { matchingActivityTypeHashOverride, highlights: { byInstanceId, byPrimaryKey } };
+  }
+
   async getUnvalidatedActivities(membershipId: string, characterId: string): Promise<StoredActivity[]> {
     await this.initPromise;
     try {
@@ -801,34 +1057,448 @@ export class ActivityDbService extends Dexie {
     }
   }
 
-  async getFirstCompletions(membershipId: string, characterId: string, game: 'D1' | 'D2'): Promise<GuardianFirsts> {
-    await this.initPromise;
-    // Fetch all stored activities for this membership/character
-    const activities = await this.activities
-      .where(['membershipId', 'characterId'])
-      .equals([membershipId, characterId])
-      .toArray();
+  /**
+   * Collapse duplicate IndexedDB rows when the same D1 completion was stored from multiple mode-scoped fetches.
+   * Same stable key as `dedupeD1FetchedActivities` so story “earliest” matches raid-style firsts.
+   */
+  private dedupeStoredActivitiesByStableKey(
+    activities: StoredActivity[],
+    game: 'D1' | 'D2',
+    characterId: string
+  ): StoredActivity[] {
+    const byKey = new Map<string, StoredActivity>();
+    for (const a of activities) {
+      const ref = ActivityDbService.normalizeHistoryReferenceKeyForStory(a, game);
+      const period = String(a.period ?? '');
+      const inst = ActivityDbService.resolveStoredActivityInstanceId(a);
+      const instStr = inst ? String(inst).trim() : '';
+      const key =
+        instStr !== '' && instStr !== '0'
+          ? `inst:${instStr}`
+          : `nop:${characterId}|${period}|${ref}`;
+      if (!byKey.has(key)) {
+        byKey.set(key, a);
+      }
+    }
+    return Array.from(byKey.values());
+  }
 
-    // Helpful debug for D1
+  /**
+   * Collapse duplicate rows returned when the same D1 completion appears under multiple mode queries.
+   */
+  private dedupeD1FetchedActivities(activities: any[], characterId: string): any[] {
+    const byKey = new Map<string, any>();
+    for (const a of activities) {
+      const ref = String(
+        a?.activityDetails?.referenceId ?? a?.referenceId ?? a?.activityHash ?? ''
+      ).trim();
+      const period = String(a?.period ?? '');
+      const inst = a?.activityDetails?.instanceId;
+      const instStr = inst != null ? String(inst).trim() : '';
+      const key =
+        instStr !== '' && instStr !== '0'
+          ? `inst:${instStr}`
+          : `nop:${characterId}|${period}|${ref}`;
+      if (!byKey.has(key)) byKey.set(key, a);
+    }
+    return Array.from(byKey.values());
+  }
+
+  /**
+   * Match one stored row to a configured story “first mission” anchor (hash from `STORY_RELEASE_ANCHORS`,
+   * then manifest display name, then D1 inline `activityName` from the API).
+   */
+  private resolveStoryReleaseAnchorForRow(
+    activity: StoredActivity,
+    game: 'D1' | 'D2',
+    hashMap: Map<string, StoryReleaseAnchor>,
+    labelMap: Map<string, StoryReleaseAnchor>
+  ): StoryReleaseAnchor | undefined {
+    const ref = ActivityDbService.normalizeHistoryReferenceKeyForStory(activity, game);
+    // D1: history rows often omit referenceId in storage/API but still carry activityName — match story anchors by name.
+    if (!ref && game === 'D1') {
+      const inlineOnly =
+        (activity as any).activityName ??
+        (activity as any).activityDetails?.activityName ??
+        (activity as any).definition?.activityName;
+      if (inlineOnly != null && String(inlineOnly).trim() !== '') {
+        return this.matchStoryAnchorByManifestLabel(String(inlineOnly), labelMap);
+      }
+      return undefined;
+    }
+    if (!ref) {
+      return undefined;
+    }
+    let anchor = hashMap.get(ref);
+    if (!anchor) {
+      const actName = this.manifest.getActivityName(ref, game === 'D1');
+      anchor = this.matchStoryAnchorByManifestLabel(actName, labelMap);
+    }
+    if (!anchor && game === 'D1') {
+      const inline =
+        (activity as any).activityName ??
+        (activity as any).activityDetails?.activityName ??
+        (activity as any).definition?.activityName;
+      if (inline != null && String(inline).trim() !== '') {
+        anchor = this.matchStoryAnchorByManifestLabel(String(inline), labelMap);
+      }
+    }
+    return anchor;
+  }
+
+  /**
+   * Earliest qualifying row per story release: walk stored history (oldest-first), match anchor hash/name
+   * against manifest + config (same pattern as D2 story firsts), require instance id for PGCR link.
+   */
+  private computeStoryMilestoneFirstCompletions(
+    activities: StoredActivity[],
+    membershipId: string,
+    characterId: string,
+    game: 'D1' | 'D2'
+  ): ActivityFirstCompletion[] {
+    const hashMap = buildStoryHashToAnchorMap(game);
+    const labelMap = buildStoryLabelToAnchorMap(game);
+    if (hashMap.size === 0 && labelMap.size === 0) return [];
+
+    // D1: merge every bundled manifest hash whose activityName matches an anchor label (fills gaps in referenceIds).
     if (game === 'D1') {
-      // debug removed
+      for (const anchor of STORY_RELEASE_ANCHORS) {
+        if (anchor.game !== 'D1') continue;
+        const fromManifest = this.manifest.findD1ActivityHashesByExactName(anchor.label);
+        for (const h of fromManifest) {
+          if (!hashMap.has(h)) hashMap.set(h, anchor);
+        }
+      }
     }
 
+    const byRelease = new Map<string, ActivityFirstCompletion>();
+    const chronological = [...activities].sort(
+      (a, b) => new Date(a.period).getTime() - new Date(b.period).getTime()
+    );
+
+    const trace = environment.traceGuardianFirsts;
+    const storyStats = trace
+      ? {
+          noAnchor: 0,
+          notClear: 0,
+          noInstance: 0,
+          dupRelease: 0,
+          samples: [] as Array<Record<string, unknown>>,
+          samplesNoAnchor: [] as Array<Record<string, unknown>>,
+        }
+      : null;
+    const pushStorySample = (kind: string, row: Record<string, unknown>) => {
+      if (!storyStats || storyStats.samples.length >= 14) {
+        return;
+      }
+      storyStats.samples.push({ kind, ...row });
+    };
+    const pushNoAnchorSample = (row: Record<string, unknown>) => {
+      if (!storyStats || storyStats.samplesNoAnchor.length >= 12) {
+        return;
+      }
+      storyStats.samplesNoAnchor.push(row);
+    };
+
+    for (const activity of chronological) {
+      const anchor = this.resolveStoryReleaseAnchorForRow(activity, game, hashMap, labelMap);
+      if (!anchor) {
+        if (storyStats) {
+          storyStats.noAnchor++;
+          const normRef = ActivityDbService.normalizeHistoryReferenceKeyForStory(activity, game);
+          const det = activity.activityDetails as any;
+          pushNoAnchorSample({
+            normalizedRef: normRef || '(empty)',
+            detailsReferenceId: det?.referenceId ?? null,
+            detailsDirectorHash: det?.directorActivityHash ?? null,
+            detailsActivityHash: det?.activityHash ?? null,
+            detailsActivityId: det?.activityId ?? null,
+            rootReferenceId: (activity as any).referenceId ?? null,
+            rootActivityHash: (activity as any).activityHash ?? null,
+            inlineName:
+              (activity as any).activityName ??
+              (activity as any).activityDetails?.activityName ??
+              (activity as any).definition?.activityName ??
+              '(none)',
+            manifestName: normRef
+              ? this.manifest.getActivityName(normRef, game === 'D1')
+              : '(no ref — cannot resolve manifest name)',
+            mode: activity.activityDetails?.mode ?? (activity as any).mode,
+            period: activity.period,
+            instanceId: ActivityDbService.resolveStoredActivityInstanceId(activity) || null,
+            gameTag: (activity as any).game ?? null,
+          });
+        }
+        continue;
+      }
+
+      let ref = ActivityDbService.normalizeHistoryReferenceKeyForStory(activity, game);
+      if (!ref && game === 'D1') {
+        const byLabel = this.manifest.findD1ActivityHashesByExactName(anchor.label);
+        const pick = byLabel[0] ?? anchor.referenceIds[0];
+        ref = pick ? ActivityDbService.normalizeD1ActivityHashKey(String(pick)) : '';
+      }
+      if (!ref) {
+        continue;
+      }
+
+      if (!ActivityDbService.isHistoryRowClearForStoryMilestone(activity, game)) {
+        if (storyStats) {
+          storyStats.notClear++;
+          pushStorySample('notClear', {
+            releaseId: anchor.releaseId,
+            ref,
+            period: activity.period,
+            completedRaw: ActivityDbService.readHistoryCompletedRaw(activity),
+            instanceId: ActivityDbService.resolveStoredActivityInstanceId(activity) || null,
+          });
+        }
+        continue;
+      }
+
+      const rawInstance = ActivityDbService.resolveStoredActivityInstanceId(activity);
+      if (!rawInstance || rawInstance === '0') {
+        if (storyStats) {
+          storyStats.noInstance++;
+          pushStorySample('noInstance', {
+            releaseId: anchor.releaseId,
+            ref,
+            period: activity.period,
+          });
+        }
+        continue;
+      }
+      const instanceId = rawInstance;
+
+      if (byRelease.has(anchor.releaseId)) {
+        if (storyStats) {
+          storyStats.dupRelease++;
+        }
+        continue;
+      }
+
+      const displayName = this.manifest.getActivityName(ref, game === 'D1') || anchor.label;
+
+      byRelease.set(anchor.releaseId, {
+        type: 'story',
+        name: displayName,
+        game,
+        period: activity.period,
+        completionDate: activity.period,
+        instanceId,
+        referenceId: ref,
+        mode: activity.activityDetails?.mode ?? (activity as any).mode ?? 0,
+        characterId,
+        membershipId,
+        membershipType: (activity as any).membershipType,
+        characterClass: (activity as any).characterClass,
+        completed: 1,
+        storyReleaseId: anchor.releaseId,
+        storySubtitle: anchor.subtitle,
+      });
+    }
+
+    const storyResult = Array.from(byRelease.values());
+    if (trace && storyStats) {
+      this.firstsTrace('step:story_milestones', {
+        game,
+        membershipIdTail: membershipId.slice(-8),
+        characterIdTail: characterId.slice(-8),
+        rowsScanned: chronological.length,
+        hashMapSize: hashMap.size,
+        labelMapSize: labelMap.size,
+        skipCounts: {
+          noAnchorMatch: storyStats.noAnchor,
+          notClear: storyStats.notClear,
+          noInstanceId: storyStats.noInstance,
+          duplicateRelease: storyStats.dupRelease,
+        },
+        /** Rows that never matched a story anchor — inspect refs/names vs STORY_RELEASE_ANCHORS */
+        samplesNoAnchorMatch: storyStats.samplesNoAnchor,
+        samplesSkipped: storyStats.samples,
+        accepted: storyResult.map((x) => ({
+          storyReleaseId: x.storyReleaseId,
+          name: x.name,
+          referenceId: x.referenceId,
+          instanceId: x.instanceId,
+          period: x.completionDate,
+        })),
+      });
+    }
+
+    return storyResult;
+  }
+
+  /** Opt-in console pipeline for Guardian Firsts (`environment.traceGuardianFirsts`). Filter DevTools on `[Firsts·trace]`. */
+  private firstsTrace(phase: string, payload: Record<string, unknown>): void {
+    if (!environment.traceGuardianFirsts) {
+      return;
+    }
+    console.log('[Firsts·trace]', phase, payload);
+  }
+
+  /**
+   * Lists every row in the slice that matches a D1 story anchor (same resolver as milestones) and
+   * reports whether known PGCR instance ids (The Coming War, etc.) appear — proof we “see” story rows in this query.
+   */
+  private traceD1StoryAnchorHitsInActivities(
+    phase: string,
+    activities: StoredActivity[],
+    membershipId: string,
+    characterId: string
+  ): void {
+    if (!environment.traceGuardianFirsts) {
+      return;
+    }
+    const hashMap = buildStoryHashToAnchorMap('D1');
+    const labelMap = buildStoryLabelToAnchorMap('D1');
+    for (const anchor of STORY_RELEASE_ANCHORS) {
+      if (anchor.game !== 'D1') continue;
+      const fromManifest = this.manifest.findD1ActivityHashesByExactName(anchor.label);
+      for (const h of fromManifest) {
+        if (!hashMap.has(h)) hashMap.set(h, anchor);
+      }
+    }
+
+    const knownPgcrInstanceIds = ['3492096595', '5475092160'];
+    const knownSet = new Set(knownPgcrInstanceIds);
+    const pgcrFound: Record<string, Record<string, unknown>> = {};
+    const storyMissionsFound: Array<Record<string, unknown>> = [];
+
+    for (const a of activities) {
+      const inst = ActivityDbService.resolveStoredActivityInstanceId(a);
+      if (inst && knownSet.has(inst)) {
+        const ag = this.resolveStoryReleaseAnchorForRow(a, 'D1', hashMap, labelMap);
+        pgcrFound[inst] = {
+          inThisSlice: true,
+          storyAnchorMatched: !!ag,
+          storyReleaseId: ag?.releaseId ?? null,
+          anchorLabel: ag?.label ?? null,
+          normalizedRef: ActivityDbService.normalizeHistoryReferenceKeyForStory(a, 'D1') || '(empty)',
+          detailsReferenceId: (a.activityDetails as any)?.referenceId ?? null,
+          period: a.period,
+          passesStoryClearRule: ActivityDbService.isHistoryRowClearForStoryMilestone(a, 'D1'),
+          mode: a.activityDetails?.mode ?? (a as any).mode,
+        };
+      }
+
+      const anchor = this.resolveStoryReleaseAnchorForRow(a, 'D1', hashMap, labelMap);
+      if (!anchor) {
+        continue;
+      }
+      let ref = ActivityDbService.normalizeHistoryReferenceKeyForStory(a, 'D1');
+      if (!ref) {
+        const hashes = this.manifest.findD1ActivityHashesByExactName(anchor.label);
+        const pick = hashes[0] ?? anchor.referenceIds[0];
+        ref = pick ? ActivityDbService.normalizeD1ActivityHashKey(String(pick)) : '';
+      }
+      storyMissionsFound.push({
+        storyReleaseId: anchor.releaseId,
+        anchorLabel: anchor.label,
+        normalizedRef: ref || '(name-only match)',
+        instanceId: inst || null,
+        period: a.period,
+        passesStoryClearRule: ActivityDbService.isHistoryRowClearForStoryMilestone(a, 'D1'),
+        mode: a.activityDetails?.mode ?? (a as any).mode,
+      });
+    }
+
+    const missingKnown = knownPgcrInstanceIds.filter((id) => !pgcrFound[id]);
+
+    this.firstsTrace(phase, {
+      membershipIdTail: membershipId.slice(-8),
+      characterIdTail: characterId.slice(-8),
+      rowsInSlice: activities.length,
+      storyAnchorRowCount: storyMissionsFound.length,
+      storyMissionsFound,
+      knownPgcrInstanceIds,
+      knownPgcrDetailsByInstanceId: pgcrFound,
+      knownPgcrMissingFromThisCharacterSlice:
+        missingKnown.length > 0 ? missingKnown : 'none — every listed id appears in this slice',
+      explain:
+        'storyMissionsFound = rows matching STORY_RELEASE_ANCHORS (hash/name). knownPgcrMissingFromThisCharacterSlice lists ids not in THIS character’s rows — normal on alts (mission ran on another character).',
+    });
+  }
+
+  /**
+   * When `game` is missing or invalid, infer from stored `activity.game` so we never run D1 rows through
+   * the D2 story-anchor map (that produced 0 milestones + empty storyModeSample for valid D1 history).
+   */
+  private resolveFirstCompletionsGameParam(
+    game: 'D1' | 'D2' | undefined,
+    activities: StoredActivity[]
+  ): 'D1' | 'D2' {
+    if (game === 'D1' || game === 'D2') {
+      return game;
+    }
+    const tagged = activities.find(
+      (a) => (a as any).game === 'D1' || (a as any).game === 'D2'
+    );
+    const g = tagged ? (tagged as any).game : undefined;
+    if (g === 'D1' || g === 'D2') {
+      return g;
+    }
+    return 'D2';
+  }
+
+  async getFirstCompletions(
+    membershipId: string,
+    characterId: string,
+    game: 'D1' | 'D2' | undefined
+  ): Promise<GuardianFirsts> {
+    await this.initPromise;
+    const traceFirsts = environment.traceGuardianFirsts;
+    // Same query as getAllActivitiesForCharacter — compound [membershipId,characterId] index is not declared;
+    // object form uses membershipId + characterId indexes (Dexie 4).
+    const activities = await this.activities.where({ membershipId, characterId }).toArray();
+    const gameResolved = this.resolveFirstCompletionsGameParam(game, activities);
+    // Align with getActivitiesByGame / UI: ignore stray rows tagged with the other game.
+    const activitiesScoped = activities.filter(
+      (a) => !(a as any).game || (a as any).game === gameResolved
+    );
+    const storyGame: 'D1' | 'D2' = gameResolved;
+
+    // Proof logs outside nested groups so they always show without expanding (D1 story diagnosis).
+    if (traceFirsts && gameResolved === 'D1') {
+      this.traceD1StoryAnchorHitsInActivities(
+        'step:01b_story_missions_in_scoped_slice',
+        activitiesScoped,
+        membershipId,
+        characterId
+      );
+    }
+
+    if (traceFirsts) {
+      // D1: expanded group so step:03b / story_milestones aren’t hidden behind a collapsed row.
+      const groupFn = gameResolved === 'D1' ? console.group.bind(console) : console.groupCollapsed.bind(console);
+      groupFn(
+        `[Firsts·trace] getFirstCompletions …${membershipId.slice(-6)}/${characterId.slice(-6)} (${game ?? '?'})`
+      );
+      this.firstsTrace('step:01_indexeddb', {
+        gameArg: game,
+        gameResolved,
+        dexieRowCount: activities.length,
+        scopedRowCount: activitiesScoped.length,
+        droppedWrongGameTag: activities.length - activitiesScoped.length,
+      });
+    }
+
+    try {
     // Group by raid/dungeon family and find the first activity for each
     const firstsByFamily: { [family: string]: ActivityFirstCompletion } = {};
 
-    console.log(`[DEBUG][Firsts] Processing ${activities.length} activities for ${membershipId}/${characterId} (${game})`);
-
-    let skippedByType = 0;
-    let skippedByCompletion = 0;
-    let skippedByFamily = 0;
-    let processedCount = 0;
-
-    for (const activity of activities) {
-      const activityHash = String(activity.activityDetails.referenceId);
+    for (const activity of activitiesScoped) {
+      const activityHash = ActivityDbService.normalizeHistoryReferenceKeyForStory(activity, gameResolved);
+      if (!activityHash) {
+        continue;
+      }
 
       // Determine activity type
-      let type = this.manifest.getActivityType(activityHash, activity.activityDetails.mode);
+      let type = this.manifest.getActivityType(
+        activityHash,
+        activity.activityDetails?.mode,
+        gameResolved === 'D1'
+      );
       const allowedTypes = ['raid', 'dungeon', 'strike', 'nightfall', 'crucible', 'gambit', 'other'];
       if (!allowedTypes.includes(type)) {
         type = 'other';
@@ -837,19 +1507,13 @@ export class ActivityDbService extends Dexie {
       // Activity type detection (debug info available if needed)
 
       // --- Game-specific filters ---
-      if (game === 'D1') {
+      if (gameResolved === 'D1') {
         // Treat any activity whose referenceId exists in the D1_FAMILY_MAP as a raid
         const isD1Raid = ActivityDbService.D1_FAMILY_MAP[activityHash];
         if (!isD1Raid) {
           // Not a D1 raid, skip
           continue;
         }
-        console.log('[DEBUG][D1Firsts] Found D1 raid activity:', {
-          activityHash,
-          family: isD1Raid,
-          period: activity.period,
-          completed: activity.values?.completed?.basic?.value
-        });
         type = 'raid';
       } else {
         // D2: only raids & dungeons
@@ -888,61 +1552,27 @@ export class ActivityDbService extends Dexie {
             // If it's contest mode with a known raid/dungeon name, or known name with matching mode, treat accordingly
             if ((isContestMode && isKnownRaid) || (isKnownRaid && isRaidMode)) {
               type = 'raid';
-              console.log(`[DEBUG][Firsts] Identified contest/unknown raid activity as raid:`, {
-                activityHash,
-                manifestName,
-                mode: activity.activityDetails.mode,
-                period: activity.period
-              });
             } else if ((isContestMode && isKnownDungeon) || (isKnownDungeon && isDungeonMode)) {
               type = 'dungeon';
-              console.log(`[DEBUG][Firsts] Identified contest/unknown dungeon activity as dungeon:`, {
-                activityHash,
-                manifestName,
-                mode: activity.activityDetails.mode,
-                period: activity.period
-              });
             } else {
-              skippedByType++;
               continue;
             }
           } else {
-            skippedByType++;
             continue;
           }
         }
       }
 
-      let family = game === 'D2'
+      let family = gameResolved === 'D2'
         ? ActivityDbService.ACTIVITY_FAMILY_MAP[activityHash]
         : ActivityDbService.D1_FAMILY_MAP[activityHash];
       if (!family) {
         // Fallback to manifest name when mapping is missing so dungeons/raids still render
-        const name = this.manifest.getActivityName(activityHash, game === 'D1');
+        const name = this.manifest.getActivityName(activityHash, gameResolved === 'D1');
         if (!name || name === 'Unknown Activity') {
-          skippedByFamily++;
-          console.warn(`[Firsts] Skipping activity - no family mapping and no manifest name:`, {
-            activityHash,
-            type,
-            mode: activity.activityDetails.mode,
-            period: activity.period,
-            instanceId: activity.activityDetails.instanceId
-          });
           continue;
         }
         family = name;
-        
-        // Log when we're using manifest name fallback for raids/dungeons (might need to add to map)
-        if (type === 'raid' || type === 'dungeon') {
-          console.log(`[Firsts] Using manifest name fallback for ${type}:`, {
-            activityHash,
-            manifestName: name,
-            mode: activity.activityDetails.mode,
-            period: activity.period,
-            instanceId: activity.activityDetails.instanceId,
-            note: 'Consider adding to ACTIVITY_FAMILY_MAP if this is a valid raid/dungeon'
-          });
-        }
         
         // For contest mode activities, try to extract the base raid/dungeon name
         // e.g., "Last Wish: Contest" -> "Last Wish: Normal" (or just "Last Wish")
@@ -962,27 +1592,26 @@ export class ActivityDbService extends Dexie {
           // If no matching family found but it's in the map (like Equilibrium: Contest), keep it as is
         }
       }
-      const completed = activity.values?.completed?.basic?.value ?? 0;
-      if (completed !== 1) {
-        skippedByCompletion++;
+      const cleared = ActivityDbService.isHistoryActivityClear(activity);
+      if (!cleared) {
         continue;
       }
+      const completed = 1;
 
       // Check for solo and flawless status
       let isSolo = false;
       let isSoloFlawless = false;
-      
-    // Store activity for batch PGCR processing
-    if ((game === 'D2' && (type === 'dungeon' || type === 'raid')) || 
-        (game === 'D1' && type === 'raid')) {
-      // We'll process PGCR data in batch after the loop to reduce individual API calls
-      (activity as any).needsPgcrProcessing = true;
-      console.log(`[DEBUG][Firsts] Marked ${this.manifest.getActivityName(activityHash, game === 'D1')} (${type}) for PGCR processing, instanceId: ${activity.activityDetails.instanceId}`);
+
+      // Store activity for batch PGCR processing
+      if ((gameResolved === 'D2' && (type === 'dungeon' || type === 'raid')) ||
+          (gameResolved === 'D1' && type === 'raid')) {
+        // We'll process PGCR data in batch after the loop to reduce individual API calls
+        (activity as any).needsPgcrProcessing = true;
       }
 
       // For D1 raids and D2 raids/dungeons, preserve variants by keying firsts by family + referenceId
       // This ensures different difficulty variants (Normal, Master, etc.) are tracked separately
-      const firstsKey = ((game === 'D1' && type === 'raid') || (game === 'D2' && (type === 'raid' || type === 'dungeon')))
+      const firstsKey = ((gameResolved === 'D1' && type === 'raid') || (gameResolved === 'D2' && (type === 'raid' || type === 'dungeon')))
         ? `${family}|${activityHash}`
         : family;
 
@@ -990,18 +1619,16 @@ export class ActivityDbService extends Dexie {
       // we will fetch PGCR and use PGCR period (the authoritative timestamp) in processPGCRData.
       // This initial comparison is just to narrow down candidates - final period comes from PGCR.
       if (!firstsByFamily[firstsKey] || new Date(activity.period) < new Date(firstsByFamily[firstsKey].period)) {
-        // Process first completion for this activity
-        processedCount++;
-
+        const resolvedInst = ActivityDbService.resolveStoredActivityInstanceId(activity as StoredActivity);
         firstsByFamily[firstsKey] = {
-          name: this.manifest.getActivityName(activityHash, game === 'D1') || 'Unknown Activity',
+          name: this.manifest.getActivityName(activityHash, gameResolved === 'D1') || 'Unknown Activity',
           type: type as ActivityFirstCompletion['type'],
-          game,
+          game: gameResolved,
           completionDate: activity.period, // Will be updated from PGCR period in processPGCRData
           referenceId: activityHash,
           period: activity.period, // Will be updated from PGCR period in processPGCRData
-          instanceId: activity.activityDetails.instanceId,
-          mode: activity.activityDetails.mode,
+          instanceId: (resolvedInst || activity.activityDetails?.instanceId) as string | undefined,
+          mode: activity.activityDetails?.mode ?? (activity as any).mode,
           characterId,
           membershipId,
           membershipType: (activity as any).membershipType,
@@ -1016,71 +1643,113 @@ export class ActivityDbService extends Dexie {
       }
     }
 
-    console.log(`[DEBUG][Firsts] Processed ${processedCount} potential first clears`);
-    console.log(`[DEBUG][Firsts] Skipped: ${skippedByType} by type, ${skippedByCompletion} by completion, ${skippedByFamily} by family`);
-    console.log(`[DEBUG][Firsts] First clears by family before PGCR filtering:`, Object.keys(firstsByFamily).map(key => ({
-      key,
-      name: firstsByFamily[key].name,
-      instanceId: firstsByFamily[key].instanceId,
-      period: firstsByFamily[key].period
-    })));
-    
-    // Batch process PGCR data for all activities that need it
-    console.log(`[DEBUG][Firsts] CALLING batchProcessPGCRData with ${Object.keys(firstsByFamily).length} first clears`);
-    const pgcrAvailable = await this.batchProcessPGCRData(firstsByFamily, membershipId, game);
-    console.log(`[DEBUG][Firsts] batchProcessPGCRData RETURNED with ${pgcrAvailable.size} PGCRs`);
+    if (environment.traceGuardianFirsts) {
+      this.firstsTrace('step:02_raid_dungeon_candidates', {
+        distinctFamilyKeys: Object.keys(firstsByFamily).length,
+        needsPgcrProcessing: Object.values(firstsByFamily).filter((f) => (f as any).needsPgcrProcessing).length,
+        snapshot: Object.values(firstsByFamily).map((f) => ({
+          name: f.name,
+          type: f.type,
+          referenceId: f.referenceId,
+          instanceId: f.instanceId,
+          period: f.period,
+          needsPgcr: !!(f as any).needsPgcrProcessing,
+        })),
+      });
+    }
 
-      // For raids and dungeons, we REQUIRE PGCR data because:
-      // 1. We need it for accurate solo/solo flawless detection
-      // 2. instanceId IS the PGCR identifier - if we have instanceId, we should be able to get the PGCR
-      // 3. Without PGCR, we can't verify the completion details or provide the PGCR link
-      const allFirsts = Object.values(firstsByFamily);
-      const filteredFirsts = allFirsts.filter(first => {
+    // Batch process PGCR data for all activities that need it
+    const pgcrAvailable = await this.batchProcessPGCRData(firstsByFamily, membershipId, gameResolved);
+
+    // For raids and dungeons, we REQUIRE PGCR data (solo/flawless + PGCR link).
+    const allFirsts = Object.values(firstsByFamily);
+    const raidFilterRejected: Array<{
+      name: string;
+      type: string;
+      reason: string;
+      instanceId?: string;
+    }> = [];
+    const filteredFirsts = allFirsts.filter((first) => {
         // All first clears need an instanceId to link to the PGCR
         if (!first.instanceId) {
-          console.warn(`[Firsts] Skipping ${first.name} - no instanceId`);
+          raidFilterRejected.push({ name: first.name, type: first.type, reason: 'no_instanceId' });
+          if (environment.debug) {
+            console.warn(`[Firsts] Skipping ${first.name} - no instanceId`);
+          }
           return false;
         }
-        
+
         // For raids and dungeons, require PGCR data (instanceId = PGCR identifier, so we should be able to get it)
         // Ensure instanceId is a string for consistent lookup (matches how we stored it in pgcrAvailable)
         const instanceIdStr = first.instanceId ? String(first.instanceId) : null;
         const hasPgcr = instanceIdStr ? pgcrAvailable.has(instanceIdStr) : false;
         if ((first as any).needsPgcrProcessing) {
           if (!hasPgcr) {
-            // Check if instanceId exists in pgcrAvailable set (debug)
-            const availableIds = Array.from(pgcrAvailable);
-            console.warn(`[Firsts] Skipping ${first.name} (${instanceIdStr}) - PGCR required but not available`, {
+            raidFilterRejected.push({
               name: first.name,
               type: first.type,
-              instanceId: instanceIdStr,
-              instanceIdOriginal: first.instanceId,
-              instanceIdType: typeof first.instanceId,
-              referenceId: first.referenceId,
-              period: first.period,
-              pgcrAvailableCount: pgcrAvailable.size,
-              sampleAvailableIds: availableIds.slice(0, 5),
-              instanceIdInSet: instanceIdStr ? pgcrAvailable.has(instanceIdStr) : false,
-              note: 'PGCR should be in cache from initial load - check if PGCR fetch failed or instanceId mismatch'
+              reason: 'pgcr_cache_or_api_miss',
+              instanceId: instanceIdStr ?? undefined,
             });
+            if (environment.debug) {
+              console.warn(
+                `[Firsts] ${first.name}: PGCR required but unavailable (instance ${instanceIdStr})`
+              );
+            }
             return false;
           }
-          // PGCR data is available - solo/flawless info will be set by processPGCRData
-          console.log(`[Firsts] Including ${first.name} (${instanceIdStr}) - PGCR available`);
         }
-        
+
         // For other activity types (strikes, crucible, etc.), PGCR is optional
         // They don't need solo/flawless detection, so we can show them without PGCR
-        
+
         return true;
       });
-    
-    const firstCompletions: ActivityFirstCompletion[] = filteredFirsts;
-    
-    console.log(`[Firsts] Returning ${firstCompletions.length} first clears (${pgcrAvailable.size} with PGCR data)`);
-    
-    // First completions processing completed
-    
+
+    if (environment.traceGuardianFirsts) {
+      this.firstsTrace('step:02b_after_pgcr_filter', {
+        pgcrResolvedInstanceIdCount: pgcrAvailable.size,
+        keptRaidDungeon: filteredFirsts.length,
+        rejectedRaidDungeon: raidFilterRejected,
+      });
+    }
+
+    // D1: same completion can be stored from multiple mode-scoped history pages — dedupe before story firsts
+    // so “earliest” matches one physical PGCR (mirrors fetch-time dedupe for raids).
+    const activitiesForStory =
+      gameResolved === 'D1'
+        ? this.dedupeStoredActivitiesByStableKey(activitiesScoped, 'D1', characterId)
+        : activitiesScoped;
+    if (environment.traceGuardianFirsts) {
+      this.firstsTrace('step:03_story_input_rows', {
+        rowsForStoryPass: activitiesForStory.length,
+        d1DedupApplied: gameResolved === 'D1' && activitiesForStory.length !== activitiesScoped.length,
+      });
+    }
+    if (traceFirsts && gameResolved === 'D1') {
+      this.traceD1StoryAnchorHitsInActivities(
+        'step:03b_story_missions_in_story_pass_slice',
+        activitiesForStory,
+        membershipId,
+        characterId
+      );
+    }
+    const storyFirsts = this.computeStoryMilestoneFirstCompletions(
+      activitiesForStory,
+      membershipId,
+      characterId,
+      storyGame
+    );
+    const firstCompletions: ActivityFirstCompletion[] = [...filteredFirsts, ...storyFirsts];
+
+    if (traceFirsts) {
+      this.firstsTrace('step:04_merge_return', {
+        keptRaidDungeon: filteredFirsts.length,
+        storyMilestones: storyFirsts.length,
+        totalFirstCompletions: firstCompletions.length,
+      });
+    }
+
     return {
       firstCompletions,
       membershipId,
@@ -1088,6 +1757,61 @@ export class ActivityDbService extends Dexie {
       displayName: '', // This will be set by the component
       platform: '' // This will be set by the component
     };
+    } finally {
+      if (traceFirsts) {
+        console.groupEnd();
+      }
+    }
+  }
+
+  /**
+   * Membership-scoped story milestones (used to align story firsts with account-wide firsts behavior).
+   * This intentionally does not alter raid/dungeon logic.
+   */
+  async getStoryMilestoneFirstCompletionsForMembership(
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<ActivityFirstCompletion[]> {
+    await this.initPromise;
+    const allForMember = await this.activities.where('membershipId').equals(membershipId).toArray();
+    const scoped = allForMember.filter((a) => !(a as any).game || (a as any).game === game);
+    const storyInput =
+      game === 'D1'
+        ? (() => {
+            const byKey = new Map<string, StoredActivity>();
+            for (const a of scoped) {
+              const ref = ActivityDbService.normalizeHistoryReferenceKeyForStory(a, 'D1');
+              const period = String(a.period ?? '');
+              const inst = ActivityDbService.resolveStoredActivityInstanceId(a);
+              const characterId = String((a as any).characterId ?? '');
+              const key =
+                inst && inst !== '0'
+                  ? `inst:${inst}`
+                  : `nop:${characterId}|${period}|${ref}`;
+              if (!byKey.has(key)) {
+                byKey.set(key, a);
+              }
+            }
+            return [...byKey.values()];
+          })()
+        : scoped;
+
+    if (environment.traceGuardianFirsts) {
+      this.firstsTrace('ui:membership_story_pass_input', {
+        game,
+        membershipIdTail: membershipId.slice(-8),
+        rowsTotalForMembership: allForMember.length,
+        rowsGameScoped: scoped.length,
+        rowsForStoryPass: storyInput.length,
+      });
+    }
+
+    return this.computeStoryMilestoneFirstCompletions(
+      storyInput,
+      membershipId,
+      'membership-scope',
+      game
+    );
   }
 
   async validateAllActivities() {
@@ -1120,7 +1844,7 @@ export class ActivityDbService extends Dexie {
       
       return new Date(activities[activities.length - 1].period);
     } catch (error) {
-      console.error('[DEBUG] Error getting last activity date:', error);
+      console.error('[ActivityDb] Error getting last activity date:', error);
       return null;
     }
   }
@@ -1178,7 +1902,9 @@ export class ActivityDbService extends Dexie {
       // 4000 days ≈ 11 years.
       const daysToFetch = isIncrementalSync ? 7 : 4000;
       
-      console.log(`[SYNC] ${isIncrementalSync ? 'Incremental' : 'Full'} sync for ${characterId}, fetching last ${daysToFetch} days`);
+      if (environment.debug) {
+        console.log(`[SYNC] ${isIncrementalSync ? 'Incremental' : 'Full'} sync for ${characterId}, fetching last ${daysToFetch} days`);
+      }
 
       let activities: any[] = [];
       if (isD1) {
@@ -1248,13 +1974,17 @@ export class ActivityDbService extends Dexie {
           const chunkResults = await Promise.all(modePromises);
           activities.push(...chunkResults.flat());
         }
+
+        activities = this.dedupeD1FetchedActivities(activities, characterId);
       } else {
         // D2 activity fetching - fetch with multiple modes to ensure we get all raids and dungeons
         // Mode undefined = all activities, mode 4 = raids, mode 82 = dungeons
         const D2_MODES: (number | undefined)[] = [undefined, 4, 82];
-        
-        console.log(`[D2 Fetch] Starting fetch for character ${characterId} with modes: ${D2_MODES.join(', ')}`);
-        
+
+        if (environment.debug) {
+          console.log(`[D2 Fetch] Starting fetch for character ${characterId} with modes: ${D2_MODES.join(', ')}`);
+        }
+
         const allModeActivities: any[] = [];
         
         for (const mode of D2_MODES) {
@@ -1295,12 +2025,16 @@ export class ActivityDbService extends Dexie {
               break; // stop this mode on error to avoid infinite loop
             }
           }
-          
-          console.log(`[D2 Fetch] Mode ${mode}: fetched ${modeActivities.length} activities`);
+
+          if (environment.debug) {
+            console.log(`[D2 Fetch] Mode ${mode}: fetched ${modeActivities.length} activities`);
+          }
           allModeActivities.push(...modeActivities);
         }
-        
-        console.log(`[D2 Fetch] Total activities fetched across all modes: ${allModeActivities.length}`);
+
+        if (environment.debug) {
+          console.log(`[D2 Fetch] Total activities fetched across all modes: ${allModeActivities.length}`);
+        }
         
         // Deduplicate activities across modes by instanceId
         const seenInstanceIds = new Set<string>();
@@ -1311,8 +2045,10 @@ export class ActivityDbService extends Dexie {
           seenInstanceIds.add(instanceId);
           return true;
         });
-        
-        console.log(`[D2 Fetch] After deduplication: ${uniqueActivities.length} unique activities`);
+
+        if (environment.debug) {
+          console.log(`[D2 Fetch] After deduplication: ${uniqueActivities.length} unique activities`);
+        }
         activities = uniqueActivities;
       }
 
@@ -1337,7 +2073,7 @@ export class ActivityDbService extends Dexie {
         if (isD1) {
           const instanceIds = newActivities
             .map((a: any) => a?.activityDetails?.instanceId)
-            .filter((id: any) => id != null && id !== '')
+            .filter((id: any) => id != null && String(id).trim() !== '' && String(id) !== '0')
             .map((id: any) => String(id));
           if (instanceIds.length > 0) {
             this.prefetchD1PgcrsInBackground([...new Set(instanceIds)]);
@@ -1356,12 +2092,11 @@ export class ActivityDbService extends Dexie {
    */
   private prefetchD1PgcrsInBackground(instanceIds: string[]): void {
     if (instanceIds.length === 0) return;
-    // Tune these with Bungie rate limits in mind. Community consensus is ~250
-    // requests / 10s per IP. getD1PGCRBatch fetches a small batch of PGCRs in
-    // a single HTTP request, so we can afford to be reasonably aggressive here
-    // without starving the rest of the app.
-    const batchSize = 10;   // up to 10 PGCRs per HTTP call
-    const delayMs = 500;    // ~20 PGCRs/sec in background
+    // getD1PGCRBatch(ids, c) chunks into size c and forkJoins each chunk — so c is
+    // parallel HTTP calls, NOT one batched endpoint. Use c=1 so each PGCR is
+    // sequential and we stay under PerEndpointRequestThrottleExceeded.
+    const batchSize = 6; // ids processed per await (each id fetched one-after-another inside batch)
+    const delayMs = 1800; // pause between batches so other app requests can run
     const chunks: string[][] = [];
     for (let i = 0; i < instanceIds.length; i += batchSize) {
       chunks.push(instanceIds.slice(i, i + batchSize));
@@ -1374,15 +2109,20 @@ export class ActivityDbService extends Dexie {
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           try {
-            const results = await firstValueFrom(this.bungieService.getD1PGCRBatch(chunk, batchSize));
+            const results = await firstValueFrom(this.bungieService.getD1PGCRBatch(chunk, 1));
             const list = Array.isArray(results) ? results : [];
             for (const raw of list) {
               if (raw?.activityDetails?.instanceId != null) {
                 await this.pgcrCacheService.cacheD1PGCR(String(raw.activityDetails.instanceId), raw);
               }
             }
-          } catch (err) {
+          } catch (err: any) {
+            const msg = String(err?.message ?? err ?? '');
+            const throttled = /Throttle|429|Too many/i.test(msg);
             console.warn('[D1 PGCR prefetch] Batch failed:', err);
+            if (throttled && i < chunks.length - 1) {
+              await new Promise((r) => setTimeout(r, 10_000));
+            }
           }
           this.pgcrPrefetchProgress$.next({ inProgress: true, current: i + 1, total });
           if (i < chunks.length - 1) {
@@ -1499,7 +2239,7 @@ export class ActivityDbService extends Dexie {
    * `values.completed.basic.value === 1` for a successfully finished activity.
    */
   private isCompletion(activity: StoredActivity): boolean {
-    return (activity.values?.completed?.basic?.value ?? 0) === 1;
+    return ActivityDbService.isHistoryActivityClear(activity);
   }
 
   /** Returns true when the activity was completed solo (playerCount === 1). */
@@ -1534,14 +2274,13 @@ export class ActivityDbService extends Dexie {
     membershipId: string, 
     game: 'D1' | 'D2'
   ): Promise<Set<string>> {
-    console.log(`[PGCR] batchProcessPGCRData called for ${game}, firstsByFamily keys:`, Object.keys(firstsByFamily));
     const activitiesNeedingPgcr = Object.values(firstsByFamily).filter(f => (f as any).needsPgcrProcessing);
     const pgcrAvailable = new Set<string>();
-    
-    console.log(`[PGCR] Activities needing PGCR: ${activitiesNeedingPgcr.length} of ${Object.values(firstsByFamily).length} total firsts`);
-    
+
     if (activitiesNeedingPgcr.length === 0) {
-      console.log(`[PGCR] No activities need PGCR processing - returning empty set`);
+      if (environment.traceGuardianFirsts) {
+        this.firstsTrace('step:02_pgcr_batch_skip', { reason: 'no_raid_or_dungeon_needs_pgcr' });
+      }
       return pgcrAvailable;
     }
 
@@ -1551,98 +2290,92 @@ export class ActivityDbService extends Dexie {
       // Ensure instanceId is a string for consistent lookup
       return id ? String(id) : null;
     }).filter((id): id is string => !!id);
-    
-    console.log(`[PGCR] Looking for ${instanceIds.length} PGCRs for activities:`, 
-      activitiesNeedingPgcr.map(f => ({ name: f.name, instanceId: f.instanceId, type: typeof f.instanceId })).slice(0, 5));
-    
+
     if (instanceIds.length === 0) return pgcrAvailable;
+
+    if (environment.traceGuardianFirsts) {
+      this.firstsTrace('step:02_pgcr_batch_start', {
+        game,
+        instanceIdsRequested: [...instanceIds],
+        candidates: activitiesNeedingPgcr.map((f) => ({
+          name: f.name,
+          type: f.type,
+          instanceId: f.instanceId != null ? String(f.instanceId) : null,
+        })),
+      });
+    }
 
     try {
       // First, try to get all PGCRs from cache in batch
       const cachedPgcrMap = await this.pgcrCacheService.getBatch(instanceIds);
-      const actuallyFound = Array.from(cachedPgcrMap.values()).filter(pgcr => pgcr !== undefined).length;
-      console.log(`[PGCR] Cache lookup: requested ${instanceIds.length} PGCRs, map size: ${cachedPgcrMap.size}, actually found: ${actuallyFound}`);
-      
-      // Debug: Check what keys are in the map vs what we're looking for
-      const mapKeys = Array.from(cachedPgcrMap.keys());
-      const missingFromMap = instanceIds.filter(id => !cachedPgcrMap.has(id));
-      if (missingFromMap.length > 0) {
-        console.warn(`[PGCR] InstanceIds not found in cachedPgcrMap:`, missingFromMap.slice(0, 5));
-        console.warn(`[PGCR] Sample map keys:`, mapKeys.slice(0, 5));
-        console.warn(`[PGCR] Sample instanceIds we're looking for:`, instanceIds.slice(0, 5));
-      }
-      
-      if (instanceIds.length > 0 && actuallyFound === 0) {
-        console.warn(`[PGCR] WARNING: No PGCRs found in cache! Sample instanceIds being looked up:`, instanceIds.slice(0, 5));
-        // Try direct lookup to see if PGCRs exist with different format
-        for (const testId of instanceIds.slice(0, 3)) {
-          const directLookup = await this.pgcrCacheService.get(testId);
-          console.log(`[PGCR] Direct lookup for ${testId}:`, directLookup ? 'FOUND' : 'NOT FOUND');
-        }
-      }
-      
+
       // Process cached PGCRs
       for (const first of activitiesNeedingPgcr) {
         if (!first.instanceId) continue;
-        
+
         // Ensure instanceId is a string for consistent lookup (matches how we stored it)
         const instanceIdStr = String(first.instanceId);
         const pgcr = cachedPgcrMap.get(instanceIdStr);
         if (pgcr) {
           this.processPGCRData(first, pgcr, game, membershipId);
           pgcrAvailable.add(instanceIdStr);
-          console.log(`[PGCR] Found cached PGCR for ${first.name} (${instanceIdStr})`);
-        } else {
-          console.log(`[PGCR] No cached PGCR for ${first.name} (${instanceIdStr}) - will fetch from API`);
         }
       }
-      
+
       // Check which PGCRs are missing from cache
       const missingIds = await this.pgcrCacheService.getMissingPGCRs(instanceIds);
-      console.log(`[PGCR] Missing from cache: ${missingIds.length} PGCRs`, missingIds.slice(0, 5));
-      
+
       if (missingIds.length > 0) {
         // Fetch missing PGCRs from API in batch
         const missingPgcrData = await this.fetchMissingPGCRs(missingIds, game);
-        console.log(`[PGCR] Fetched ${missingPgcrData.size} of ${missingIds.length} missing PGCRs from API`);
-        
+
         // Process the newly fetched PGCRs
         for (const first of activitiesNeedingPgcr) {
           if (!first.instanceId) continue;
-          
+
           // Ensure instanceId is a string for consistent lookup
           const instanceIdStr = String(first.instanceId);
           if (!missingPgcrData.has(instanceIdStr)) continue;
-          
+
           const pgcr = missingPgcrData.get(instanceIdStr);
           if (pgcr) {
             this.processPGCRData(first, pgcr, game, membershipId);
             pgcrAvailable.add(instanceIdStr);
-            console.log(`[PGCR] Processed fetched PGCR for ${first.name} (${instanceIdStr})`);
           }
         }
       }
-      
-      console.log(`[PGCR] Total PGCRs available after batch processing: ${pgcrAvailable.size} of ${activitiesNeedingPgcr.length} needed`);
-      
-      // Debug: Show which activities have PGCRs vs which don't
-      const withPgcr = activitiesNeedingPgcr.filter(f => pgcrAvailable.has(String(f.instanceId || '')));
+
       const withoutPgcr = activitiesNeedingPgcr.filter(f => !pgcrAvailable.has(String(f.instanceId || '')));
-      if (withoutPgcr.length > 0) {
-        console.warn(`[PGCR] ${withoutPgcr.length} activities missing PGCRs:`, 
-          withoutPgcr.slice(0, 5).map(f => ({ name: f.name, instanceId: f.instanceId, type: f.type })));
+      if (withoutPgcr.length > 0 && environment.debug) {
+        console.warn(
+          `[PGCR] ${withoutPgcr.length} first-clear(s) still missing PGCR after batch (e.g. ${withoutPgcr[0]?.name})`
+        );
       }
-      if (withPgcr.length > 0) {
-        console.log(`[PGCR] ${withPgcr.length} activities have PGCRs:`, 
-          withPgcr.slice(0, 5).map(f => ({ name: f.name, instanceId: f.instanceId })));
+
+      if (environment.traceGuardianFirsts) {
+        this.firstsTrace('step:02_pgcr_batch_done', {
+          resolvedCount: pgcrAvailable.size,
+          resolvedInstanceIds: [...pgcrAvailable],
+          stillMissing: withoutPgcr.map((f) => ({
+            name: f.name,
+            instanceId: f.instanceId != null ? String(f.instanceId) : null,
+          })),
+        });
       }
     } catch (error) {
       console.warn('[PGCR] Batch processing failed, falling back to individual processing:', error);
       // Fallback to individual processing if batch fails
       const individualPgcrAvailable = await this.fallbackToIndividualPGCRProcessing(activitiesNeedingPgcr, game, membershipId);
       individualPgcrAvailable.forEach(id => pgcrAvailable.add(id));
+      if (environment.traceGuardianFirsts) {
+        this.firstsTrace('step:02_pgcr_batch_fallback', {
+          message: String(error),
+          resolvedCountAfterFallback: pgcrAvailable.size,
+          resolvedInstanceIds: [...pgcrAvailable],
+        });
+      }
     }
-    
+
     return pgcrAvailable;
   }
 
@@ -1671,14 +2404,15 @@ export class ActivityDbService extends Dexie {
           }
           return { instanceId, success: false, error: 'Empty PGCR response' };
         } catch (error: any) {
-          // Log detailed error info for debugging
           const errorStatus = error?.status || error?.error?.status;
           const errorMessage = error?.message || error?.error?.message || 'Unknown error';
-          console.warn(`[PGCR] Failed to fetch PGCR ${instanceId}:`, {
-            status: errorStatus,
-            message: errorMessage,
-            error: error
-          });
+          if (environment.debug) {
+            console.warn(`[PGCR] Failed to fetch PGCR ${instanceId}:`, {
+              status: errorStatus,
+              message: errorMessage,
+              error: error
+            });
+          }
           return { instanceId, success: false, error: errorMessage, status: errorStatus };
         }
       });
@@ -1700,13 +2434,11 @@ export class ActivityDbService extends Dexie {
       }
     }
     
-    console.log(`[PGCR] Fetched ${result.size} of ${instanceIds.length} PGCRs for ${game}`);
-    if (result.size < instanceIds.length) {
+    if (result.size < instanceIds.length && environment.debug) {
       const missing = instanceIds.filter(id => !result.has(id));
-      console.warn(`[PGCR] Missing PGCRs (${missing.length} of ${instanceIds.length}):`, missing.slice(0, 10)); // Log first 10
-      console.warn(`[PGCR] Note: instanceId IS the PGCR identifier - if fetch failed, check error logs above for details`);
+      console.warn(`[PGCR] Fetched ${result.size}/${instanceIds.length}; missing sample:`, missing.slice(0, 5));
     }
-    
+
     return result;
   }
 
@@ -1840,7 +2572,9 @@ export class ActivityDbService extends Dexie {
                 pgcr = fetched;
               }
             } catch (fetchError) {
-              console.warn(`[PGCR] Failed to fetch PGCR for ${first.instanceId}:`, fetchError);
+              if (environment.debug) {
+                console.warn(`[PGCR] Failed to fetch PGCR for ${first.instanceId}:`, fetchError);
+              }
               return;
             }
           }
@@ -1850,7 +2584,9 @@ export class ActivityDbService extends Dexie {
             pgcrAvailable.add(first.instanceId);
           }
         } catch (error) {
-          console.warn(`[PGCR] Failed to process PGCR for ${first.name}:`, error);
+          if (environment.debug) {
+            console.warn(`[PGCR] Failed to process PGCR for ${first.name}:`, error);
+          }
         }
       });
       
@@ -2043,12 +2779,6 @@ export class ActivityDbService extends Dexie {
             // Default to Standard for normal dungeon mode
             family = 'Equilibrium: Standard';
           }
-          console.log(`[DungeonSoloFirsts] Using manifest fallback for Equilibrium:`, {
-            referenceId,
-            mode,
-            manifestName,
-            family
-          });
         } else {
           console.warn(`[DungeonSoloFirsts] UNMAPPED dungeon hash found:`, {
             referenceId,
@@ -2082,31 +2812,11 @@ export class ActivityDbService extends Dexie {
         const result = await this.detectSoloFromPGCRWithData(activity, pgcr, membershipId);
         solo = result.isSolo;
         flawless = result.isSoloFlawless;
-        if (family.toLowerCase().includes('equilibrium')) {
-          console.log(`[DungeonSoloFirsts] Equilibrium solo detection (cached PGCR):`, {
-            family,
-            instanceId,
-            solo,
-            flawless,
-            period: activity.period,
-            playerCount: activity.values?.playerCount?.basic?.value
-          });
-        }
       } else {
         // Fallback to async PGCR lookup or activity values
         const result = await this.detectSoloFromPGCR(activity, membershipId);
         solo = result.isSolo;
         flawless = result.isSoloFlawless;
-        if (family.toLowerCase().includes('equilibrium')) {
-          console.log(`[DungeonSoloFirsts] Equilibrium solo detection (async PGCR):`, {
-            family,
-            instanceId,
-            solo,
-            flawless,
-            period: activity.period,
-            playerCount: activity.values?.playerCount?.basic?.value
-          });
-        }
       }
 
       // Early exit optimisation: if we already have both firsts and this activity is not earlier, skip.
@@ -2164,13 +2874,6 @@ export class ActivityDbService extends Dexie {
       if (solo) {
         if (!entry.firstSolo || activityDate < new Date(entry.firstSolo.period).getTime()) {
           entry.firstSolo = activity;
-          if (family.toLowerCase().includes('equilibrium')) {
-            console.log(`[DungeonSoloFirsts] Set Equilibrium firstSolo:`, {
-              family,
-              period: activity.period,
-              instanceId
-            });
-          }
         }
       }
       
@@ -2179,14 +2882,6 @@ export class ActivityDbService extends Dexie {
       if (flawless) {
         if (!entry.firstFlawless || activityDate < new Date(entry.firstFlawless.period).getTime()) {
           entry.firstFlawless = activity;
-          if (family.toLowerCase().includes('equilibrium')) {
-            console.log(`[DungeonSoloFirsts] Set Equilibrium firstFlawless:`, {
-              family,
-              period: activity.period,
-              instanceId,
-              isAlsoSolo: solo
-            });
-          }
         }
       }
     }
@@ -2203,18 +2898,6 @@ export class ActivityDbService extends Dexie {
         firstFlawless: value.firstFlawless 
       };
       result.push(entry);
-      
-      // Debug logging for Equilibrium
-      if (baseDungeonName.toLowerCase().includes('equilibrium')) {
-        console.log(`[DungeonSoloFirsts] Equilibrium result entry:`, {
-          family: entry.family,
-          fullName: entry.fullName,
-          hasFirstSolo: !!entry.firstSolo,
-          hasFirstFlawless: !!entry.firstFlawless,
-          firstSoloPeriod: entry.firstSolo?.period,
-          firstFlawlessPeriod: entry.firstFlawless?.period
-        });
-      }
     });
 
     // Debug dungeon solo firsts results if needed
@@ -2293,6 +2976,9 @@ export class ActivityDbService extends Dexie {
    */
   async debugDungeonActivities(membershipId: string): Promise<void> {
     await this.initPromise;
+    if (!environment.debug) {
+      return;
+    }
     const activities = await this.activities
       .where('membershipId')
       .equals(membershipId)
@@ -2513,7 +3199,10 @@ export class ActivityDbService extends Dexie {
    */
   async debugPlayerActivities(membershipId: string): Promise<void> {
     await this.initPromise;
-    
+    if (!environment.debug) {
+      return;
+    }
+
     console.log(`[DEBUG] Checking activities for player ${membershipId}`);
     
     // Get all activities for this player
@@ -2657,8 +3346,10 @@ export class ActivityDbService extends Dexie {
    * Manually clears all caches (useful for testing or memory pressure)
    */
   clearAllCaches(): void {
-    console.log('[CLEAR] Clearing all ActivityDbService caches');
-    
+    if (environment.debug) {
+      console.log('[CLEAR] Clearing all ActivityDbService caches');
+    }
+
     // Clear all LRU caches
     this.activitiesCache.data.clear();
     this.filteredActivitiesCache.data.clear();
@@ -2676,8 +3367,10 @@ export class ActivityDbService extends Dexie {
     
     // Reset cleanup tracking
     this.lastCleanup = Date.now();
-    
-    console.log('[CLEAR] All ActivityDbService caches cleared');
+
+    if (environment.debug) {
+      console.log('[CLEAR] All ActivityDbService caches cleared');
+    }
   }
 
   /**
