@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://splashbear.github.io/Destiny-Chronicle/sitemap.xml
+
+# Prevent crawling of unnecessary files
+Disallow: /node_modules/
+Disallow: /.git/
+Disallow: *.map
