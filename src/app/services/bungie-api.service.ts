@@ -4,6 +4,7 @@ import { Observable, throwError, of, timer, forkJoin, from } from 'rxjs';
 import { catchError, map, switchMap, retryWhen, delayWhen, retry, mergeMap, reduce } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
+import { LocaleService } from './locale.service';
 
 export interface PlayerSearchResult {
   displayName: string;
@@ -77,7 +78,10 @@ export class BungieApiService {
   
 
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private locale: LocaleService
+  ) {}
 
   private buildUrl(url: string): string {
     // For now, use direct API calls to avoid rate limiting issues
@@ -88,7 +92,8 @@ export class BungieApiService {
   private getHeaders(): HttpHeaders {
     return new HttpHeaders({
       'X-API-Key': this.API_KEY,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Accept-Language': this.locale.acceptLanguage
     });
   }
 

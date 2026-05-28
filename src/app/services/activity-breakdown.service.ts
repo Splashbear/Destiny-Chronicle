@@ -20,6 +20,8 @@ export interface ActivityCountRow {
   fails: number;
   /** Total time played across all runs, in seconds */
   timeSeconds: number;
+  /** ISO timestamp of the most recent run for this activity (if known). */
+  lastPlayed?: string;
 }
 
 /**
@@ -66,7 +68,7 @@ const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
   26: 'Reserved26',
   27: 'Reserved27',
   28: 'Reserved28',
-  29: 'Reserved29',
+  29: 'Sparrow Racing League',
   30: 'Reserved30',
   31: 'Supremacy',
   32: 'PrivateMatchesAll',
@@ -144,7 +146,7 @@ const MODE_ORDER: Record<number, number> = {
   5: 8, 10: 8, 12: 8, 19: 8, 84: 8, 37: 8, 38: 8, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP modes
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
   69: 8, 70: 8, 71: 8, 72: 8, 73: 8, 74: 8,  // Competitive/Quickplay
-  9: 12, 21: 13, 22: 13, 27: 14, 29: 15, 30: 13,  // D1: Vehicle PVP, Prison of Elders (21,22,30), D1 Crucible, SRL
+  9: 12, 21: 13, 22: 13, 27: 14, 29: 15, 30: 13,  // D1: Vehicle PVP, Prison of Elders, Crucible, SRL; D2 SRL uses 29 as well
   79: 9, 80: 9, 81: 9, 58: 9, 64: 9, 66: 9,  // NightmareHunt, Elimination, Momentum, HeroicAdventure, AllPvECompetitive, BlackArmoryRun
   6: 10, 7: 10, 40: 10,  // Patrol, AllPvE, Social
   // Reserved and other: 999
@@ -357,11 +359,22 @@ export const SOCIAL_SPACE_AND_PATROL_REF = {
 })
 export class ActivityBreakdownService {
 
+  /** Cached full breakdown per sorted membership-id key (avoids re-scanning IndexedDB + PGCR backfill). */
+  private activityCountsCache = new Map<string, ActivityCountRow[]>();
+
   constructor(
     private activityDb: ActivityDbService,
     private manifest: DestinyManifestService,
     private pgcrCache: PGCRCacheService
   ) {}
+
+  clearActivityCountsCache(): void {
+    this.activityCountsCache.clear();
+  }
+
+  private membershipCacheKey(membershipIds: string[]): string {
+    return [...membershipIds].sort().join('|');
+  }
 
   /**
    * Get activity duration in seconds. Same logic for D1 and D2: read from stored activity.
@@ -389,6 +402,12 @@ export class ActivityBreakdownService {
   async getActivityCounts(membershipIds: string[]): Promise<ActivityCountRow[]> {
     if (membershipIds.length === 0) return [];
 
+    const cacheKey = this.membershipCacheKey(membershipIds);
+    const cached = this.activityCountsCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const allActivities: StoredActivity[] = [];
     for (const membershipId of membershipIds) {
       const list = await this.activityDb.getAllActivitiesForMembershipOptimized(membershipId);
@@ -396,7 +415,7 @@ export class ActivityBreakdownService {
     }
 
     // Aggregate per (referenceId, game). For D1 we also track instanceIds so we can backfill time from PGCR when activity history has no duration.
-    const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode?: number }>();
+    const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode?: number; lastPlayed?: string }>();
     const instanceIdsByKey = new Map<string, string[]>();
 
     for (const a of allActivities) {
@@ -414,6 +433,12 @@ export class ActivityBreakdownService {
       existing.timeSeconds += seconds;
       if (existing.mode === undefined && a.activityDetails?.mode !== undefined) {
         existing.mode = a.activityDetails.mode;
+      }
+      const period = a.period;
+      if (period) {
+        if (!existing.lastPlayed || new Date(period).getTime() > new Date(existing.lastPlayed).getTime()) {
+          existing.lastPlayed = period;
+        }
       }
       aggByKey.set(key, existing);
       const instanceId = a.activityDetails?.instanceId != null ? String(a.activityDetails.instanceId) : undefined;
@@ -462,7 +487,8 @@ export class ActivityBreakdownService {
         runs,
         clears,
         fails,
-        timeSeconds: agg.timeSeconds
+        timeSeconds: agg.timeSeconds,
+        lastPlayed: agg.lastPlayed
       });
     }
 
@@ -512,6 +538,11 @@ export class ActivityBreakdownService {
         existing.clears += row.clears;
         existing.fails += row.fails;
         existing.timeSeconds += row.timeSeconds;
+        if (row.lastPlayed) {
+          if (!existing.lastPlayed || new Date(row.lastPlayed).getTime() > new Date(existing.lastPlayed).getTime()) {
+            existing.lastPlayed = row.lastPlayed;
+          }
+        }
       }
     }
 
@@ -530,6 +561,7 @@ export class ActivityBreakdownService {
       return (a.variantName || '').localeCompare(b.variantName || '');
     });
 
+    this.activityCountsCache.set(cacheKey, dedupedRows);
     return dedupedRows;
   }
 

@@ -1,4 +1,5 @@
-import { Component, Input, Output, EventEmitter, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, ChangeDetectionStrategy, inject } from '@angular/core';
+import { TimezoneService } from '../../services/timezone.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PlayerSearchDisplay } from '../../models/player-search-display.model';
@@ -106,6 +107,8 @@ import { FavoriteAccount } from '../../services/activity-db.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FavoritesManagerComponent implements OnInit {
+  private readonly timezone = inject(TimezoneService);
+
   @Input() showModal: boolean = false;
   @Input() favorites: FavoriteAccount[] = [];
   @Input() selectedPlayers: PlayerSearchDisplay[] = [];
@@ -183,11 +186,6 @@ export class FavoritesManagerComponent implements OnInit {
    * Formats date for display
    */
   formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    return this.timezone.formatDate(dateString);
   }
 }

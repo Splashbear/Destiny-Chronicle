@@ -118,6 +118,49 @@ button {
   }
 }
 
+/* Collapsible activity headers — avoid inheriting gold primary button chrome */
+button.activity-collapse-toggle {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  border: none;
+  border-radius: 0;
+  font-weight: inherit;
+  box-shadow: none;
+
+  &:hover {
+    background: transparent;
+    color: inherit;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(148, 163, 184, 0.55);
+    outline-offset: 2px;
+  }
+}
+
+button.activity-toolbar-btn {
+  padding: 0.25rem 0.5rem;
+  background-color: rgb(51 65 85);
+  color: rgb(203 213 225);
+  border: none;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  box-shadow: none;
+
+  &:hover {
+    background-color: rgb(71 85 105);
+    color: rgb(226 232 240);
+  }
+
+  &:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+  }
+}
+
 .error-message {
   color: var(--destiny-red);
   margin-top: 0.5rem;

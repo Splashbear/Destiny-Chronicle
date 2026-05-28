@@ -1,4 +1,5 @@
-import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy, inject } from '@angular/core';
+import { TimezoneService } from '../../services/timezone.service';
 import { CommonModule } from '@angular/common';
 import { ActivityHistory } from '../../models/activity-history.model';
 import { PlayerSearchDisplay } from '../../models/player-search-display.model';
@@ -71,6 +72,8 @@ export interface ActivityVersion {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ActivityListComponent {
+  private readonly timezone = inject(TimezoneService);
+
   @Input() activityGroups: ActivityGroup[] = [];
   @Input() selectedPlayers: PlayerSearchDisplay[] = [];
   @Output() pgcrClick = new EventEmitter<ActivityHistory>();
@@ -88,14 +91,7 @@ export class ActivityListComponent {
    * Formats date and time for display
    */
   formatDateTime(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
+    return this.timezone.formatDateTime(dateString);
   }
 
   /**

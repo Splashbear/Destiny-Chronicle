@@ -10,6 +10,14 @@ I have about .01% coding skill, the app was built using Cursor AI agents and too
 - **Titles & Seals**: Check the titles you've earned and which you've got your eyes on. Titles can be sorted by release date (newest first) or alphabetically.
 - **Export**: Export activities, Guardian Firsts, titles, and account summary to Excel/CSV for offline archiving.
 
+Pantheon Events on **Guardian Firsts** (legacy Pantheon, Monument of Triumph Pantheon placeholder, Rite of the Nine) use the same stacked card layout as Story milestones. Add MoT activity hashes in `src/app/config/pantheon.config.ts` after the June 9, 2026 patch.
+
+## Localization
+
+- **Destiny 2** activity and title names come from the Bungie manifest in the browser’s language when a matching culture is available (`en`, `fr`, `es`, `de`, `pt-br`, `ja`, `zh-chs`, `zh-cht`, and others listed in manifest metadata). The app maps `navigator.language` / `navigator.languages` to the nearest Bungie culture (for example `pt` → `pt-br`, `zh-CN` → `zh-chs`) and falls back to English.
+- **Destiny 1** activity names use bundled English JSON only; Bungie does not expose multi-locale D1 definition downloads comparable to D2, so D1 labels stay in English even when the browser is set to another language.
+- UI chrome (tabs, breakdown column headers, PGCR-lite strings) uses a small in-app translation map for the same cultures. Optional override: set `localStorage` key `destiny-chronicle-locale` to a Bungie culture code (for example `fr`).
+
 ## Limitations
 - The Destiny API does not organize the Post Game Carnage Reports (PGCRs) by date. The only way to get information displayed is to call ALL histories for each character and collate them. Many players had multiple characters across multiple platforms. Each character, each platform adds up to thousands of reports very quickly. Every effort has been made to make the initial load of a user as fast as possible, but it'll still take about as much time as it takes Ghost to open a locked door. Until someone creates a searchable database of all PGCRS (15 billion and counting) and let's devs access it via API...this is as fast as it'll be. 
 - Modern browsers limit memory for inactive tabs, which means you'll want to leave this open or your browser might pause the loading of data until you come back to the tab, causing you to have to start over.

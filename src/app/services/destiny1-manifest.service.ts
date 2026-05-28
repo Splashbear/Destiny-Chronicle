@@ -26,6 +26,7 @@ export class Destiny1ManifestService {
 
   /**
    * D1 content is frozen; bundled `d1-activity-definitions.json` is the authoritative activity set for the app.
+   * D1 names are English-only (no per-locale manifest components like D2). See README “Localization”.
    * We still ping Bungie’s D1 manifest endpoint once so logs can confirm API reachability / version metadata.
    * @see https://www.bungie.net/d1/Platform/Destiny/Manifest/
    */
@@ -118,6 +119,17 @@ export class Destiny1ManifestService {
         target[key] = { ...(target[key] || {}), ...(def as object) };
       }
     }
+  }
+
+  private getActivityDefinition(referenceId: string | number): any | undefined {
+    if (!this.manifest.DestinyActivityDefinition || referenceId == null || referenceId === '') {
+      return undefined;
+    }
+    for (const key of this.referenceIdLookupKeys(referenceId)) {
+      const def = this.manifest.DestinyActivityDefinition[key];
+      if (def) return def;
+    }
+    return undefined;
   }
 
   getActivityName(referenceId: string | number): string {

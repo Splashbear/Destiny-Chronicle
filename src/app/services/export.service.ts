@@ -529,7 +529,7 @@ export class ExportService {
    */
   async exportActivityBreakdownToExcel(payload: {
     summaryCards: { label: string; runs: number; clears: number; timeSeconds: number; clearRate: number }[];
-    groups: { label: string; rows: { baseName: string; variantName: string; game: string; runs: number; clears: number; fails: number; timeSeconds: number }[] }[];
+    groups: { label: string; rows: { baseName: string; variantName: string; game: string; runs: number; clears: number; fails: number; timeSeconds: number; lastPlayed?: string }[] }[];
     formatTime: (seconds: number) => string;
   }): Promise<void> {
     const { summaryCards, groups, formatTime } = payload;
@@ -557,6 +557,7 @@ export class ExportService {
           'Runs': row.runs,
           'Clears': row.clears,
           'Fails': row.fails,
+          'Last played': row.lastPlayed ?? '',
           'Time (h:m)': formatTime(row.timeSeconds),
           'Time (seconds)': row.timeSeconds,
         });

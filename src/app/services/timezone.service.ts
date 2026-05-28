@@ -1,9 +1,11 @@
 import { Injectable } from '@angular/core';
+import { LocaleService } from './locale.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TimezoneService {
+  constructor(private locale: LocaleService) {}
   /**
    * Converts a UTC date string to the user's local timezone
    * @param utcDateString The UTC date string from the API
@@ -64,7 +66,7 @@ export class TimezoneService {
    */
   formatDate(utcDateString: string): string {
     const localDate = this.utcToLocal(utcDateString);
-    return localDate.toLocaleDateString('en-US', {
+    return localDate.toLocaleDateString(this.locale.intlLocale, {
       month: 'long',
       day: 'numeric', 
       year: 'numeric'
@@ -88,7 +90,7 @@ export class TimezoneService {
    */
   formatDateTime(utcDateString: string): string {
     const localDate = this.utcToLocal(utcDateString);
-    return localDate.toLocaleString('en-US', {
+    return localDate.toLocaleString(this.locale.intlLocale, {
       month: 'long',
       day: 'numeric',
       year: 'numeric',

@@ -46,6 +46,11 @@ export class ManifestCacheService {
     this.saveCache(newCache);
   }
 
+  /** Build a stable cache key for a manifest component (culture + version + component). */
+  manifestComponentKey(version: string, culture: string, component: string): string {
+    return `d2-${version}-${culture}-${component}`;
+  }
+
   getManifestData(hash: string): any | null {
     const cache = this.getCache();
     const entry = cache[hash];

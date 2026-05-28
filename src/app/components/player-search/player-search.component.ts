@@ -20,6 +20,15 @@ import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
 import { getStoryAnchorSortOrder } from '../../config/story-first-missions';
+import {
+  PantheonEventId,
+  getPantheonConfig,
+  isLegacyPantheonActivity,
+  isMotPantheonActivity,
+  isAnyPantheonActivity,
+  LEGACY_PANTHEON_CONFIG,
+  MOT_PANTHEON_CONFIG
+} from '../../config/pantheon.config';
 import { DatePickerComponent } from '../date-picker/date-picker.component';
 // Removed new summary/list components to revert to previous display
 import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from '../../services/stats.service';
@@ -42,6 +51,9 @@ import { AccountStatsComponent } from '../account-stats/account-stats.component'
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
+import { PGCRModalService } from '../../services/pgcr-modal.service';
+import { UiI18nService } from '../../services/ui-i18n.service';
+import { LocaleService } from '../../services/locale.service';
 // Chart.js imports – load only what we use (pie + bar)
 import {
   Chart as ChartJS,
@@ -70,6 +82,8 @@ ChartJS.register(
 );
 
 const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
+const ACTIVITY_COLLAPSE_GAMES_KEY = 'destiny-chronicle-collapsed-activity-games';
+const ACTIVITY_COLLAPSE_YEARS_KEY = 'destiny-chronicle-collapsed-activity-years';
 
 interface ActivityEntry {
   game: string;
@@ -716,6 +730,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   breakdownTilesCollapsed = false;
   /** Whether the chart section is collapsed */
   breakdownChartCollapsed = false;
+  /** Collapsed Destiny game panels on Activities tab (D1 / D2). */
+  collapsedActivityGames = new Set<'D1' | 'D2'>();
+  /** Collapsed year sections: keys like "D2-2024". */
+  collapsedActivityYears = new Set<string>();
+  /** Activity Breakdown: sort direction for Last played column. */
+  breakdownLastPlayedSort: 'asc' | 'desc' | null = null;
   /** 'all' = aggregated across all accounts; otherwise platform name (e.g. 'Xbox') for per-account view */
   activeBreakdownTab = 'all';
   /** True when user has selected one or more account cards on the Breakdown tab. */
@@ -1316,12 +1336,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private firstActivityService: FirstActivityService,
     private activityBreakdownService: ActivityBreakdownService,
     private seasonService: SeasonService,
+    private pgcrModalService: PGCRModalService,
+    public uiI18n: UiI18nService,
+    private locale: LocaleService,
     private router: Router,
     private route: ActivatedRoute,
     private location: Location
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
+    this.loadActivityCollapseState();
     this.updatePlatformTabs();
 
     // Debounce username input changes (300 ms). No API hit yet; prepares for future live suggestions.
@@ -6056,10 +6080,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   // For Guardian Firsts PGCR button
-  openExternalPGCRForFirst(first: ActivityFirstCompletion) {
+  openExternalPGCRForFirst(first: ActivityFirstCompletion, event?: MouseEvent) {
     if (!first.instanceId) return;
-    const game = first.game === 'D1' ? 'destiny1' : 'destiny2';
-    window.open(`https://pgcr.eververse.trade/${game}/${first.instanceId}`, '_blank', 'noopener');
+    const isD1 = first.game === 'D1';
+    if (event && (event.ctrlKey || event.metaKey)) {
+      this.openFullPgcrInNewTab(first.instanceId, isD1);
+      return;
+    }
+    if (this.activeTab === 'firsts') {
+      this.pgcrModalService.openPgcrLiteFromFirst(first);
+      return;
+    }
+    this.openFullPgcrInNewTab(first.instanceId, isD1);
   }
 
   private isDuplicateActivity(a1: any, a2: any): boolean {
@@ -6246,23 +6278,99 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   getPlayerPantheonRaids(player: PlayerSearchDisplay): ActivityFirstCompletion[] {
-    // Check by hash to ensure we catch all Pantheon raids
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    const list = this.getFirstsForPlayer(player).filter(f => {
-      if (f.type !== 'raid' || f.game !== 'D2') return false;
-      const isPantheonByName = f.name.includes('The Pantheon:') || f.name.includes('Pantheon:');
-      const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
-      return isPantheonByName || isPantheonByHash;
-    });
-    return this.sortPantheonRaids(list);
+    return this.filterPantheonEventFirsts(this.getFirstsForPlayer(player), 'legacy-pantheon');
   }
 
   getPlayerRegularRaids(player: PlayerSearchDisplay, game: 'D1' | 'D2'): ActivityFirstCompletion[] {
-    const list = this.getFirstsForPlayer(player).filter(f => 
-      f.type === 'raid' && f.game === game && 
-      !f.name.includes('The Pantheon:') && !f.name.includes('Pantheon:')
+    const list = this.getFirstsForPlayer(player).filter(f =>
+      f.type === 'raid' && f.game === game &&
+      (game !== 'D2' || !isAnyPantheonActivity(f.referenceId, f.name))
     );
     return this.sortRaids(list, game);
+  }
+
+  private filterPantheonEventFirsts(
+    list: ActivityFirstCompletion[],
+    eventId: PantheonEventId
+  ): ActivityFirstCompletion[] {
+    const match = eventId === 'mot-pantheon' ? isMotPantheonActivity : isLegacyPantheonActivity;
+    return list.filter(
+      (f) => f.type === 'raid' && f.game === 'D2' && match(f.referenceId, f.name)
+    );
+  }
+
+  private sortPantheonEventRaids(
+    list: ActivityFirstCompletion[],
+    eventId: PantheonEventId
+  ): ActivityFirstCompletion[] {
+    const order = getPantheonConfig(eventId).versionSortOrder;
+    if (!order.length) {
+      return list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list.slice().sort((a, b) => {
+      const ia = order.findIndex((p) => a.name.includes(p));
+      const ib = order.findIndex((p) => b.name.includes(p));
+      return (ib === -1 ? 999 : ib) - (ia === -1 ? 999 : ia);
+    });
+  }
+
+  private sortPantheonEventGroupsByReleaseOrder(
+    groups: Array<{ baseName: string; versions: ActivityFirstCompletion[] }>,
+    eventId: PantheonEventId
+  ): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    const order = getPantheonConfig(eventId).versionSortOrder;
+    if (!order.length) {
+      return [...groups].sort((a, b) => a.baseName.localeCompare(b.baseName));
+    }
+    const index = new Map<string, number>();
+    order.forEach((name, i) => index.set(name, i));
+    return [...groups].sort((a, b) => {
+      const ia = order.findIndex((p) => a.baseName.includes(p));
+      const ib = order.findIndex((p) => b.baseName.includes(p));
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+  }
+
+  getGroupedPantheonEvent(
+    eventId: PantheonEventId
+  ): Array<{ baseName: string; versions: ActivityFirstCompletion[]; cardTitle: string }> {
+    const config = getPantheonConfig(eventId);
+    const pantheonRaids = this.filterPantheonEventFirsts(this.aggregateGuardianFirsts, eventId);
+    if (!pantheonRaids.length) {
+      return [];
+    }
+    const sorted = this.sortPantheonEventRaids(pantheonRaids, eventId);
+    const groups = this.groupActivitiesByBaseName(sorted);
+    const ordered = this.sortPantheonEventGroupsByReleaseOrder(groups, eventId);
+    return ordered.map((g) => ({ ...g, cardTitle: config.cardTitle }));
+  }
+
+  getGroupedLegacyPantheonRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[]; cardTitle: string }> {
+    return this.getGroupedPantheonEvent('legacy-pantheon');
+  }
+
+  getGroupedMotPantheonRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[]; cardTitle: string }> {
+    return this.getGroupedPantheonEvent('mot-pantheon');
+  }
+
+  getGroupedPantheonRaidsForPlayer(
+    player: PlayerSearchDisplay,
+    eventId: PantheonEventId = 'legacy-pantheon'
+  ): Array<{ baseName: string; versions: ActivityFirstCompletion[]; cardTitle: string }> {
+    const config = getPantheonConfig(eventId);
+    const list = this.filterPantheonEventFirsts(this.getFirstsForPlayer(player), eventId);
+    if (!list.length) {
+      return [];
+    }
+    const sorted = this.sortPantheonEventRaids(list, eventId);
+    const groups = this.groupActivitiesByBaseName(sorted);
+    const ordered = this.sortPantheonEventGroupsByReleaseOrder(groups, eventId);
+    return ordered.map((g) => ({ ...g, cardTitle: config.cardTitle }));
+  }
+
+  /** @deprecated Use getGroupedLegacyPantheonRaids */
+  getGroupedPantheonRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
+    return this.getGroupedLegacyPantheonRaids();
   }
 
   /** Aggregate helpers */
@@ -6271,16 +6379,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Note: getEarliestFirsts is redundant here since loadGuardianFirsts already aggregates
     // by keeping the earliest completion for each activity across all players.
     // However, we keep it for safety in case there are edge cases.
-    // For D2, we need to exclude Pantheon raids (they have their own card)
-    // Check by hash to ensure we catch all Pantheon raids
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    const filteredRaids = game === 'D2' 
-      ? raids.filter(r => {
-          const isPantheonByName = r.name.includes('The Pantheon:') || r.name.includes('Pantheon:');
-          const isPantheonByHash = PANTHEON_HASHES.includes(String(r.referenceId));
-          return !isPantheonByName && !isPantheonByHash;
-        })
-      : raids;
+    const filteredRaids =
+      game === 'D2'
+        ? raids.filter((r) => !isAnyPantheonActivity(r.referenceId, r.name))
+        : raids;
     const earliest = this.getEarliestFirsts(filteredRaids);
     return this.sortRaids(earliest, game);
   }
@@ -6340,52 +6442,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.groupActivitiesByBaseName(dungeons);
   }
 
-  /**
-   * Gets Pantheon raids grouped by base activity name with versions
-   */
-  getGroupedPantheonRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
-    // Get Pantheon raids from aggregate, checking by hash to ensure we catch all
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    const allRaids = this.aggregateGuardianFirsts.filter(f => f.game === 'D2' && f.type === 'raid');
-    const pantheonRaids = allRaids.filter(raid => {
-      const isPantheonByName = raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:');
-      const isPantheonByHash = PANTHEON_HASHES.includes(String(raid.referenceId));
-      return isPantheonByName || isPantheonByHash;
-    });
-    const sortedPantheonRaids = this.sortPantheonRaids(pantheonRaids);
-    const groups = this.groupActivitiesByBaseName(sortedPantheonRaids);
-    return this.sortPantheonGroupsByReleaseOrder(groups);
-  }
-
   /** Wrapper to allow grouping from template */
   public groupActivitiesByBaseNamePublic(activities: ActivityFirstCompletion[]): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
     return this.groupActivitiesByBaseName(activities);
   }
 
-  /** Per-player Pantheon groups */
-  public getGroupedPantheonRaidsForPlayer(player: PlayerSearchDisplay): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
-    // Check by hash to ensure we catch all Pantheon raids
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    const list = this.getFirstsForPlayer(player).filter(f => {
-      if (f.type !== 'raid' || f.game !== 'D2') return false;
-      const isPantheonByName = f.name.includes('The Pantheon:') || f.name.includes('Pantheon:');
-      const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
-      return isPantheonByName || isPantheonByHash;
-    });
-    const sorted = this.sortPantheonRaids(list);
-    const groups = this.groupActivitiesByBaseName(sorted);
-    return this.sortPantheonGroupsByReleaseOrder(groups);
-  }
-
   /**
-   * Gets regular D2 raids (excluding Pantheon) grouped by base activity name with versions
+   * Gets regular D2 raids (excluding Pantheon events) grouped by base activity name with versions
    */
   getGroupedRegularRaids(): Array<{ baseName: string; versions: ActivityFirstCompletion[] }> {
     const allRaids = this.getAggregateRaids('D2');
-    const regularRaids = allRaids.filter(raid => 
-      !raid.name.includes('The Pantheon:') && !raid.name.includes('Pantheon:')
-    );
-    return this.groupActivitiesByBaseName(regularRaids);
+    return this.groupActivitiesByBaseName(allRaids);
   }
 
   /**
@@ -6433,14 +6500,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }> {
     const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
     
-    // Collect all completed raids, excluding Pantheon (they have their own card)
-    // Check by hash to ensure we catch all Pantheon raids
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    const allRaids = this.getAggregateRaids('D2').filter(raid => {
-      const isPantheonByName = raid.name.includes('The Pantheon:') || raid.name.includes('Pantheon:');
-      const isPantheonByHash = PANTHEON_HASHES.includes(String(raid.referenceId));
-      return !isPantheonByName && !isPantheonByHash;
-    });
+    const allRaids = this.getAggregateRaids('D2');
     
     for (const raid of allRaids) {
       // Handle special case: "The Desert Perpetual (Epic): Contest" -> base: "The Desert Perpetual", version: "Epic: Contest"
@@ -6520,15 +6580,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }>;
   }> {
     const raidVariants = new Map<string, Map<string, ActivityFirstCompletion>>();
-    // Exclude Pantheon raids (they have their own card)
-    // Check by hash to ensure we catch all Pantheon raids
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    const all = this.getFirstsForPlayer(player).filter(f => {
-      if (f.type !== 'raid' || f.game !== 'D2') return false;
-      const isPantheonByName = f.name.includes('The Pantheon:') || f.name.includes('Pantheon:');
-      const isPantheonByHash = PANTHEON_HASHES.includes(String(f.referenceId));
-      return !isPantheonByName && !isPantheonByHash;
-    });
+    const all = this.getFirstsForPlayer(player).filter(
+      (f) => f.type === 'raid' && f.game === 'D2' && !isAnyPantheonActivity(f.referenceId, f.name)
+    );
     for (const raid of all) {
       // Handle special case: "The Desert Perpetual (Epic): Contest" -> base: "The Desert Perpetual", version: "Epic: Contest"
       let baseName = this.getBaseActivityName(raid.name);
@@ -7140,9 +7194,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.filteredActivitiesCache.clear();
   }
 
-  openExternalPGCR(activity: ActivityHistory, isD1: boolean) {
+  openExternalPGCR(activity: ActivityHistory, isD1: boolean, event?: MouseEvent) {
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
+    if (event && (event.ctrlKey || event.metaKey)) {
+      this.openFullPgcrInNewTab(instanceId, isD1);
+      return;
+    }
+    if (this.activeTab === 'activities' || this.activeTab === 'firsts') {
+      this.pgcrModalService.openPgcrLiteFromActivity(activity, isD1);
+      return;
+    }
+    this.openFullPgcrInNewTab(instanceId, isD1);
+  }
+
+  private openFullPgcrInNewTab(instanceId: string | number, isD1: boolean): void {
     const game = isD1 ? 'destiny1' : 'destiny2';
     window.open(`https://pgcr.eververse.trade/${game}/${instanceId}`, '_blank', 'noopener');
   }
@@ -7550,11 +7616,170 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.dungeonSoloFirsts[player.membershipId]?.find(d => d.family === family);
   }
 
-  openExternalPGCRFromStored(activity: any) {
+  openExternalPGCRFromStored(activity: any, event?: MouseEvent) {
     if (!activity) return;
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
-    this.openExternalPGCR(activity as any, false);
+    if (event && (event.ctrlKey || event.metaKey)) {
+      this.openFullPgcrInNewTab(instanceId, false);
+      return;
+    }
+    if (this.activeTab === 'firsts') {
+      this.pgcrModalService.openPgcrLiteFromStored(activity, false);
+      return;
+    }
+    this.openExternalPGCR(activity as any, false, event);
+  }
+
+  activityYearCollapseKey(game: 'D1' | 'D2', year: string): string {
+    return `${game}-${year}`;
+  }
+
+  isActivityGameCollapsed(game: 'D1' | 'D2'): boolean {
+    return this.collapsedActivityGames.has(game);
+  }
+
+  toggleActivityGameCollapsed(game: 'D1' | 'D2'): void {
+    if (this.collapsedActivityGames.has(game)) {
+      this.collapsedActivityGames.delete(game);
+    } else {
+      this.collapsedActivityGames.add(game);
+    }
+    this.persistActivityCollapseState();
+    this.cdr.markForCheck();
+  }
+
+  isActivityYearCollapsed(game: 'D1' | 'D2', year: string): boolean {
+    return this.collapsedActivityYears.has(this.activityYearCollapseKey(game, year));
+  }
+
+  toggleActivityYearCollapsed(game: 'D1' | 'D2', year: string): void {
+    const key = this.activityYearCollapseKey(game, year);
+    if (this.collapsedActivityYears.has(key)) {
+      this.collapsedActivityYears.delete(key);
+    } else {
+      this.collapsedActivityYears.add(key);
+    }
+    this.persistActivityCollapseState();
+    this.cdr.markForCheck();
+  }
+
+  private loadActivityCollapseState(): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const games = localStorage.getItem(ACTIVITY_COLLAPSE_GAMES_KEY);
+      if (games) {
+        const parsed = JSON.parse(games) as ('D1' | 'D2')[];
+        this.collapsedActivityGames = new Set(parsed.filter(g => g === 'D1' || g === 'D2'));
+      }
+      const years = localStorage.getItem(ACTIVITY_COLLAPSE_YEARS_KEY);
+      if (years) {
+        this.collapsedActivityYears = new Set(JSON.parse(years) as string[]);
+      }
+    } catch {
+      // ignore corrupt storage
+    }
+  }
+
+  private persistActivityCollapseState(): void {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(ACTIVITY_COLLAPSE_GAMES_KEY, JSON.stringify([...this.collapsedActivityGames]));
+    localStorage.setItem(ACTIVITY_COLLAPSE_YEARS_KEY, JSON.stringify([...this.collapsedActivityYears]));
+  }
+
+  private collectActivityYearKeys(): string[] {
+    const keys: string[] = [];
+    for (const game of ['D1', 'D2'] as const) {
+      for (const group of this.getDisplayedAccountGroupsForGame(game)) {
+        for (const yg of group.yearGroups ?? []) {
+          keys.push(this.activityYearCollapseKey(game, yg.year));
+        }
+      }
+    }
+    return keys;
+  }
+
+  collapseAllActivityYears(): void {
+    for (const key of this.collectActivityYearKeys()) {
+      this.collapsedActivityYears.add(key);
+    }
+    this.persistActivityCollapseState();
+    this.cdr.markForCheck();
+  }
+
+  expandAllActivityYears(): void {
+    for (const key of this.collectActivityYearKeys()) {
+      this.collapsedActivityYears.delete(key);
+    }
+    this.persistActivityCollapseState();
+    this.cdr.markForCheck();
+  }
+
+  toggleBreakdownLastPlayedSort(): void {
+    if (this.breakdownLastPlayedSort === null) {
+      this.breakdownLastPlayedSort = 'desc';
+    } else if (this.breakdownLastPlayedSort === 'desc') {
+      this.breakdownLastPlayedSort = 'asc';
+    } else {
+      this.breakdownLastPlayedSort = null;
+    }
+    this.cdr.markForCheck();
+  }
+
+  formatBreakdownLastPlayed(iso?: string): string {
+    if (!iso) return '—';
+    try {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '—';
+      const now = Date.now();
+      const diffMs = now - date.getTime();
+      if (diffMs < 0) {
+        return this.formatDateTime(iso);
+      }
+      const rtf = new Intl.RelativeTimeFormat(this.locale.intlLocale, { numeric: 'auto' });
+      const minutes = Math.floor(diffMs / 60000);
+      if (minutes < 60) {
+        return rtf.format(-Math.max(1, minutes), 'minute');
+      }
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) {
+        return rtf.format(-hours, 'hour');
+      }
+      const days = Math.floor(hours / 24);
+      if (days < 14) {
+        return rtf.format(-days, 'day');
+      }
+      const weeks = Math.floor(days / 7);
+      if (weeks < 8) {
+        return rtf.format(-weeks, 'week');
+      }
+      const months = Math.floor(days / 30);
+      if (months < 24) {
+        return rtf.format(-months, 'month');
+      }
+      const years = Math.floor(days / 365);
+      if (years < 3) {
+        return rtf.format(-years, 'year');
+      }
+      return this.formatDateTime(iso);
+    } catch {
+      return '—';
+    }
+  }
+
+  private sortBreakdownRows(rows: ActivityCountRow[]): ActivityCountRow[] {
+    if (!this.breakdownLastPlayedSort) {
+      return rows;
+    }
+    const dir = this.breakdownLastPlayedSort === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const ta = a.lastPlayed ? new Date(a.lastPlayed).getTime() : 0;
+      const tb = b.lastPlayed ? new Date(b.lastPlayed).getTime() : 0;
+      if (ta === tb) return 0;
+      if (!ta) return 1;
+      if (!tb) return -1;
+      return (ta - tb) * dir;
+    });
   }
 
   private formatDateSolo(dateStr: string | Date | undefined): string {
@@ -8010,22 +8235,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * Guardian Firsts sub-view: show everything or isolate one category to reduce scrolling.
    */
-  firstsSectionFilter: 'all' | 'first-ever' | 'story' | 'raids' | 'dungeons' = 'all';
+  firstsSectionFilter: 'all' | 'first-ever' | 'story' | 'pantheon-events' | 'raids' | 'dungeons' = 'all';
 
   get firstsSectionFilterOptions(): { value: string; label: string }[] {
     const base: { value: string; label: string }[] = [
       { value: 'all', label: 'All sections' },
       { value: 'first-ever', label: 'First ever only' },
       { value: 'story', label: 'Story milestones only' },
-      { value: 'raids', label: 'Raids only' },
     ];
     if (this.activeFirstsGame === 'D2') {
+      base.push({ value: 'pantheon-events', label: 'Pantheon Events only' });
+      base.push({ value: 'raids', label: 'Raids only' });
       base.push({ value: 'dungeons', label: 'Dungeons only' });
+    } else {
+      base.push({ value: 'raids', label: 'Raids only' });
     }
     return base;
   }
 
-  showFirstsSection(section: 'first-ever' | 'story' | 'raids' | 'dungeons'): boolean {
+  showFirstsSection(section: 'first-ever' | 'story' | 'pantheon-events' | 'raids' | 'dungeons'): boolean {
     return this.firstsSectionFilter === 'all' || this.firstsSectionFilter === section;
   }
 
@@ -8267,8 +8495,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Filtered groups for display: when cards are selected, only those; otherwise all */
   get filteredActivityBreakdownGroups(): { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] {
     if (!this.activityBreakdownGroups?.length) return [];
-    if (this.selectedBreakdownCardLabels.size === 0) return this.activityBreakdownGroups;
-    return this.activityBreakdownGroups.filter(g => this.selectedBreakdownCardLabels.has(g.label));
+    const base = this.selectedBreakdownCardLabels.size === 0
+      ? this.activityBreakdownGroups
+      : this.activityBreakdownGroups.filter(g => this.selectedBreakdownCardLabels.has(g.label));
+    if (!this.breakdownLastPlayedSort) {
+      return base;
+    }
+    return base.map(g => ({
+      ...g,
+      rows: this.sortBreakdownRows(g.rows)
+    }));
   }
 
   /** Unique platform names across selected players for Breakdown tab (All vs per-account). */
@@ -8731,6 +8967,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     try {
       const membershipIds = this.getBreakdownMembershipIds();
       if (membershipIds.length === 0) return;
+      this.activityBreakdownService.clearActivityCountsCache();
       const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
 
       // When specific account cards are selected, restrict Breakdown to the games (D1/D2)

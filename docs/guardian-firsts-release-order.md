@@ -59,7 +59,17 @@ Display order is **most recently released → oldest**. In code, arrays are stor
 
 ---
 
-## The Pantheon (newest first in UI)
+## Pantheon Events (Guardian Firsts section)
+
+Shown **above** D2 Raids and D2 Dungeons in a **Pantheon Events** section (stacked card layout: image on top, details below).
+
+| Card | Config |
+|------|--------|
+| **The Pantheon** | Legacy four encounters — `src/app/config/pantheon.config.ts` → `LEGACY_PANTHEON_CONFIG` |
+| **Monument of Triumph Pantheon** | Separate card — `MOT_PANTHEON_CONFIG` (add activity hashes after June 9, 2026) |
+| **Rite of the Nine** | Moved from Dungeons into Pantheon Events |
+
+## The Pantheon (legacy, newest first in UI)
 
 Display order: **Nezarec Sublime → Rhulk Indomitable → Oryx Exalted → Atraks Sovereign**.
 

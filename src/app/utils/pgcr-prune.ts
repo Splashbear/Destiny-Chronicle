@@ -8,11 +8,13 @@ export interface PrunedPgcr {
   teams?: { score: number; standing: number }[];
   players: {
     id: string;      // membershipId
+    name: string;
     charId: string;
     class: string;
     kills: number;
     deaths: number;
     assists: number;
+    timeSeconds: number;
   }[];
   entries: any[];
 }
@@ -42,11 +44,18 @@ export function prunePgcr(pgcr: any, requestedMemberId?: string): PrunedPgcr {
     players:   Array.isArray(pgcr.entries)
                   ? pgcr.entries.map((e: any) => ({
                       id:      e.player?.destinyUserInfo?.membershipId ?? '',
+                      name:    e.player?.destinyUserInfo?.displayName
+                                 ?? e.player?.destinyUserInfo?.bungieGlobalDisplayName
+                                 ?? 'Guardian',
                       charId:  e.characterId ?? '',
                       class:   e.player?.characterClass ?? '',
                       kills:   e.values?.kills?.basic?.value ?? 0,
                       deaths:  e.values?.deaths?.basic?.value ?? 0,
-                      assists: e.values?.assists?.basic?.value ?? 0
+                      assists: e.values?.assists?.basic?.value ?? 0,
+                      timeSeconds:
+                        e.values?.timePlayedSeconds?.basic?.value
+                        ?? e.values?.activityDurationSeconds?.basic?.value
+                        ?? 0
                     }))
                   : [],
     entries: Array.isArray(pgcr.entries)

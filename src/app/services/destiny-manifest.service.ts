@@ -3,6 +3,9 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 import { Destiny1ManifestService } from './destiny1-manifest.service';
 import { ActivityDbService } from './activity-db.service';
+import { LocaleService } from './locale.service';
+import { ManifestCacheService } from './manifest-cache.service';
+import { isAnyPantheonActivity } from '../config/pantheon.config';
 
 @Injectable({
   providedIn: 'root'
@@ -24,25 +27,58 @@ export class DestinyManifestService {
 
   constructor(
     private http: HttpClient,
-    private d1Manifest: Destiny1ManifestService
+    private d1Manifest: Destiny1ManifestService,
+    private locale: LocaleService,
+    private manifestCache: ManifestCacheService
   ) {
     this.loadManifest();
+  }
+
+  /** Active Bungie manifest culture for D2 definition strings. */
+  get manifestCulture(): string {
+    return this.locale.culture;
+  }
+
+  private async fetchDefinition(
+    version: string,
+    culture: string,
+    component: string,
+    path: string
+  ): Promise<any> {
+    const cacheKey = this.manifestCache.manifestComponentKey(version, culture, component);
+    const cached = this.manifestCache.getManifestData(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    const raw = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + path)));
+    this.manifestCache.cacheManifestData(cacheKey, raw);
+    return raw;
   }
 
   async loadManifest() {
     try {
       // Step 1: Get manifest metadata
       const manifestMeta: any = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net/Platform/Destiny2/Manifest/')));
-      const enPath = manifestMeta.Response.jsonWorldComponentContentPaths.en;
-      if (!enPath) {
-        throw new Error('Manifest metadata missing en path');
+      const contentPaths = manifestMeta.Response?.jsonWorldComponentContentPaths ?? {};
+      const cultures = Object.keys(contentPaths);
+      this.locale.setAvailableCultures(cultures);
+      const culture = this.locale.culture;
+      const culturePath = contentPaths[culture] ?? contentPaths.en;
+      if (!culturePath) {
+        throw new Error('Manifest metadata missing culture path');
       }
-      // Step 2: Get activity, title, presentation node, and activity family definitions
+      const version = String(manifestMeta.Response?.version ?? 'unknown');
+      if (culture !== 'en' && !contentPaths[culture]) {
+        console.info(`[Manifest] Culture "${culture}" unavailable; using English definitions.`);
+      }
+      // Step 2: Get activity, title, presentation node, and activity family definitions (localized)
       const [activityDefsRaw, titleDefsRaw, presentationNodesRaw, activityFamilyDefsRaw] = await Promise.all([
-        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyActivityDefinition))),
-        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyRecordDefinition))),
-        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyPresentationNodeDefinition))),
-        firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + enPath.DestinyActivityFamilyDefinition))).catch(() => ({}) as any) // Optional, may not exist
+        this.fetchDefinition(version, culture, 'DestinyActivityDefinition', culturePath.DestinyActivityDefinition),
+        this.fetchDefinition(version, culture, 'DestinyRecordDefinition', culturePath.DestinyRecordDefinition),
+        this.fetchDefinition(version, culture, 'DestinyPresentationNodeDefinition', culturePath.DestinyPresentationNodeDefinition),
+        culturePath.DestinyActivityFamilyDefinition
+          ? this.fetchDefinition(version, culture, 'DestinyActivityFamilyDefinition', culturePath.DestinyActivityFamilyDefinition).catch(() => ({}))
+          : Promise.resolve({})
       ]);
       // Defensive: handle both possible structures
       this.activityDefs = (activityDefsRaw as any).DestinyActivityDefinition || activityDefsRaw;
@@ -61,7 +97,7 @@ export class DestinyManifestService {
       (window as any).titleDefs = this.titleDefs; // Expose for browser debugging
       (window as any).presentationNodes = this.presentationNodes; // Expose for browser debugging
       this.manifestLoaded.next(true);
-      console.log('[Manifest] Successfully loaded Destiny 2 manifest.');
+      console.log(`[Manifest] Loaded Destiny 2 manifest (culture: ${culture}, version: ${version}).`);
     } catch (error: unknown) {
       const msg = error instanceof HttpErrorResponse
         ? `Bungie manifest unavailable (${error.status ?? 'network'}). Activity names may load once the API is reachable.`
@@ -240,9 +276,8 @@ export class DestinyManifestService {
       return 'dungeon';
     }
     
-    // Explicit Pantheon raid hash detection
-    const PANTHEON_HASHES = ['4169648176', '4169648177', '4169648179', '4169648182'];
-    if (PANTHEON_HASHES.includes(refIdStr)) {
+    const activityName = this.activityDefs[refIdStr]?.displayProperties?.name as string | undefined;
+    if (isAnyPantheonActivity(refIdStr, activityName)) {
       return 'raid';
     }
 
