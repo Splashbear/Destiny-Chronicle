@@ -655,9 +655,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   showBackgroundProcessingIndicator = false;
 
   onDatePickerChange(dateInfo: {month: number, day: number}) {
-    this.selectedMonth = dateInfo.month;
-    this.selectedDay = dateInfo.day;
-    // Don't trigger search immediately - wait for Search button click
+    const newMonth = Number(dateInfo.month);
+    let newDay = Number(dateInfo.day);
+    if (!newMonth || !newDay) {
+      return;
+    }
+    const daysInMonth = new Date(2000, newMonth, 0).getDate();
+    newDay = Math.min(newDay, daysInMonth);
+    // Do not assign selectedMonth/Day here — onDateSelect compares old vs new and updates selectedDate.
+    void this.onDateSelect(String(newMonth), String(newDay));
   }
 
   /**
@@ -3665,16 +3671,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private async processAndGroupActivities(progressMessage?: string): Promise<void> {
     const totalToProcess = this.filteredActivitiesForDate.length;
     if (totalToProcess === 0) {
-      // If we have no activities for the current refresh **but** the UI
-      // already has data from earlier players, keep the existing view so
-      // it doesn't flicker away while the new account finishes syncing.
-      if (this.groupedActivitiesByAccount.length === 0) {
-        this.groupedActivitiesByAccount = [];
-        this.firstEverActivity = undefined;
-        this.cdr.detectChanges();
-      }
+      this.groupedActivitiesByAccount = [];
+      this.firstEverActivity = undefined;
+      this.cdr.detectChanges();
       await this.setFirstEverActivityFromDb();
-
       return;
     }
     // Initialise process-phase progress bar
@@ -3889,10 +3889,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       this.updateLoadingProgress('process', 0, 1, organizeMessage);
 
-      // Show partial results immediately if we have some activities
+      this.filteredActivitiesForDate = activities;
       if (activities.length > 0) {
-        this.filteredActivitiesForDate = activities;
-        // Use batched updates to prevent excessive re-renders
         this.scheduleBatchedUpdate();
       }
 
@@ -4654,29 +4652,36 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   async onDateSelect(month: string, day: string) {
-    const newMonth = parseInt(month);
-    const newDay   = parseInt(day);
-
-    // If the user clicked "Search" for the same day we're already showing, we
-    // just trigger a lightweight refresh instead of blowing away caches and
-    // restarting the fast-load logic (which caused the visible refresh loop).
-    const sameDate = this.selectedMonth === newMonth && this.selectedDay === newDay;
-    if (sameDate) {
-      await this.loadAllFilteredActivities();
+    const newMonth = parseInt(month, 10);
+    const newDay = parseInt(day, 10);
+    if (!newMonth || !newDay) {
       return;
     }
 
-    // Date actually changed – reset fast-load state so the first slice renders
-    // quickly once again.
+    this.selectedYear = this.selectedYear || new Date().getFullYear();
+    const paddedMonth = String(newMonth).padStart(2, '0');
+    const paddedDay = String(newDay).padStart(2, '0');
+    const newSelectedDate = `${this.selectedYear}-${paddedMonth}-${paddedDay}`;
+
+    // Search Date on the same month/day: refresh only (skip cache reset).
+    const sameDate =
+      this.selectedMonth === newMonth &&
+      this.selectedDay === newDay &&
+      this.selectedDate === newSelectedDate;
+    if (sameDate) {
+      await this.loadAllFilteredActivities(true);
+      return;
+    }
+
+    // Date actually changed – reset fast-load state so the first slice renders quickly.
+    this.currentLoadToken++;
     this.initialDisplayShown = false;
     this.filteredActivitiesForDate = [];
+    this.groupedActivitiesByAccount = [];
     this.clearFilteredActivitiesCache();
     this.selectedMonth = newMonth;
     this.selectedDay = newDay;
-    
-    // Update URL for permalink sharing (using current year for URL)
-    this.selectedYear = this.selectedYear || new Date().getFullYear();
-    this.selectedDate = `${this.selectedYear}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    this.selectedDate = newSelectedDate;
     this.updateUrlForPermalink();
     
     // Clear loading statuses for all accounts when date changes
@@ -5735,9 +5740,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       return [];
     }
-    const [year, month, day] = dateParts.map(Number);
-    // debug removed
-    
+    const [, month, day] = dateParts.map(Number);
+
     const allFilteredActivities: ActivityWithMembership[] = [];
 
     // Get all activities for selected players in parallel
@@ -5768,37 +5772,27 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const activitiesArrays = await Promise.all(activitiesPromises);
         playerActivities = activitiesArrays.flat();
       } else {
-        // Get activities filtered by mode and date
-        const startDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
-        const endDate = new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
-        // For dungeons, we need to use a different approach since they don't have a consistent mode
+        const charIds = (this.characters[this.getPlayerKey(player)] || [])
+          .map(getCharacterId)
+          .filter((id): id is string => !!id);
+
+        const activitiesPromises = charIds.map(async charId => {
+          return this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
+        });
+        playerActivities = (await Promise.all(activitiesPromises)).flat();
+
         let mode: number | undefined;
         if (this.selectedActivityType.label === 'Dungeon' && player.game === 'D2') {
-          // For dungeons, we'll get all activities and filter by type later
-          mode = undefined;
+          playerActivities = playerActivities.filter(a => {
+            const referenceId = String(a.activityDetails?.referenceId ?? '');
+            const activityType = this.manifest.getActivityType(referenceId, a.activityDetails?.mode);
+            return activityType === 'dungeon';
+          });
         } else {
           mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;
-        }
-        
-        if (mode !== undefined) {
-        playerActivities = await this.activityDb.getActivitiesByModeAndDate(
-          player.membershipId,
-            mode,
-          startDate,
-          endDate
-        );
-        } else {
-          // For dungeons, get all activities and filter by type
-          const charIds = (this.characters[this.getPlayerKey(player)] || [])
-            .map(getCharacterId)
-            .filter((id): id is string => !!id);
-          
-          const activitiesArrays = await Promise.all(
-            charIds.map(async (charId: string) => {
-              return this.activityDb.getActivitiesByGame(player.membershipId, charId, player.game);
-            })
-          );
-          playerActivities = activitiesArrays.flat();
+          if (mode !== undefined) {
+            playerActivities = playerActivities.filter(a => a.activityDetails?.mode === mode);
+          }
         }
       }
 
