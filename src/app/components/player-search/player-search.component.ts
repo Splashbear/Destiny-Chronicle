@@ -52,6 +52,7 @@ import { AccountCardGridComponent } from '../account-card-grid/account-card-grid
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
+import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '../../utils/pgcr-prune';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 // Chart.js imports – load only what we use (pie + bar)
@@ -84,6 +85,11 @@ ChartJS.register(
 const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
 const ACTIVITY_COLLAPSE_GAMES_KEY = 'destiny-chronicle-collapsed-activity-games';
 const ACTIVITY_COLLAPSE_YEARS_KEY = 'destiny-chronicle-collapsed-activity-years';
+const ACTIVITIES_VIEW_MODE_KEY = 'destinyChronicle.activitiesViewMode';
+const ACTIVITIES_CHRON_SORT_KEY = 'destinyChronicle.activitiesChronSort';
+
+export type ActivitiesViewMode = 'cards' | 'chronological';
+export type ActivitiesChronologicalSort = 'oldest' | 'newest';
 
 interface ActivityEntry {
   game: string;
@@ -116,6 +122,15 @@ interface YearGroup {
   year: string;
   // For template rendering we keep arrays, not Maps
   typeGroups: TypeGroup[];
+}
+
+interface ChronologicalActivityRow {
+  activity: ActivityWithMembership;
+  activityName: string;
+  activityType: string;
+  version: string;
+  isD1: boolean;
+  game: 'D1' | 'D2';
 }
 
 interface GameGroup {
@@ -734,6 +749,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   collapsedActivityGames = new Set<'D1' | 'D2'>();
   /** Collapsed year sections: keys like "D2-2024". */
   collapsedActivityYears = new Set<string>();
+  /** Activities tab: grouped cards vs flat chronological list per year. */
+  activitiesViewMode: ActivitiesViewMode = 'cards';
+  /** Sort order for chronological view within each year section. */
+  activitiesChronologicalSort: ActivitiesChronologicalSort = 'oldest';
   /** Activity Breakdown: sort direction for Last played column. */
   breakdownLastPlayedSort: 'asc' | 'desc' | null = null;
   /** 'all' = aggregated across all accounts; otherwise platform name (e.g. 'Xbox') for per-account view */
@@ -1346,6 +1365,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
     this.loadActivityCollapseState();
+    this.loadActivitiesViewPreferences();
     this.updatePlatformTabs();
 
     // Debounce username input changes (300 ms). No API hit yet; prepares for future live suggestions.
@@ -3085,7 +3105,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return {
         promise: (async () => {
           const cached = character.game === 'D1'
-            ? await this.pgcrCacheService.getD1PGCR(instanceId)
+            ? await this.pgcrCacheService.getD1PGCR(instanceId, activity.period)
             : await this.pgcrCacheService.getD2PGCR(instanceId);
 
           if (cached) {
@@ -3098,7 +3118,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           );
 
           if (character.game === 'D1') {
-            await this.pgcrCacheService.cacheD1PGCR(instanceId, fetched);
+            await this.pgcrCacheService.cacheD1PGCR(
+              instanceId,
+              fetched,
+              character.membershipId,
+              activity.period
+            );
           } else {
             await this.pgcrCacheService.cacheD2PGCR(instanceId, fetched);
           }
@@ -3120,11 +3145,25 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (result.status === 'fulfilled' && result.value) {
         const pgcr = result.value;
         
-        // Enhanced debug logging for PGCR entries
-        if (!pgcr.entries || !Array.isArray(pgcr.entries) || pgcr.entries.length === 0) {
+        const hasEntries = Array.isArray(pgcr.entries) && pgcr.entries.length > 0;
+        const hasPrunedPlayers = Array.isArray(pgcr.players) && pgcr.players.length > 0;
+        if (!hasEntries && !hasPrunedPlayers) {
           if (environment.debug) {
           console.warn(`[DEBUG] PGCR ${instanceId} has no entries (undefined or empty). Marking as unavailable.`);
           }
+          validatedActivities.push({
+            ...activity,
+            pgcrUnavailable: true
+          });
+          return;
+        }
+
+        const pgcrPeriod = resolvePgcrPeriod(pgcr);
+        const periodMatches =
+          character.game === 'D1'
+            ? pgcrPeriodMatchesForD1(activity.period, pgcrPeriod)
+            : pgcrPeriodMatches(activity.period, pgcrPeriod);
+        if (activity.period && !periodMatches) {
           validatedActivities.push({
             ...activity,
             pgcrUnavailable: true
@@ -3143,10 +3182,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
         }
 
-        // Determine if the PGCR belongs to the player: membershipId match is sufficient
-        const playerInPgcr = pgcr.entries.some((entry: PGCREntry) => {
-          return entry.player?.destinyUserInfo?.membershipId === character.membershipId;
-        });
+        const playerInPgcr = hasPrunedPlayers
+          ? pgcr.players.some((p: { id?: string }) => String(p.id) === String(character.membershipId))
+          : pgcr.entries.some((entry: PGCREntry) => {
+              return entry.player?.destinyUserInfo?.membershipId === character.membershipId;
+            });
 
         if (playerInPgcr) {
           if (environment.debug) {
@@ -3157,12 +3197,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             validated: true,
             validatedAt: new Date().toISOString(),
             // Attach character class of the matching entry so the UI can render the icon
-            characterClass: (pgcr.entries.find((entry: PGCREntry) => (
-              (entry.player?.destinyUserInfo?.membershipId === character.membershipId && entry.characterId === character.characterId) ||
-              (entry.player?.destinyUserInfo?.membershipId === character.membershipId) ||
-              (entry.characterId === character.characterId) ||
-              (entry.player?.destinyUserInfo?.membershipType === character.membershipType && entry.player?.destinyUserInfo?.membershipId === character.membershipId)
-            ))?.player?.characterClass) || activity.characterClass
+            characterClass: hasPrunedPlayers
+              ? pgcr.players.find((p: { id?: string; class?: string }) =>
+                  String(p.id) === String(character.membershipId)
+                )?.class
+              : (pgcr.entries.find((entry: PGCREntry) => (
+                  (entry.player?.destinyUserInfo?.membershipId === character.membershipId && entry.characterId === character.characterId) ||
+                  (entry.player?.destinyUserInfo?.membershipId === character.membershipId) ||
+                  (entry.characterId === character.characterId) ||
+                  (entry.player?.destinyUserInfo?.membershipType === character.membershipType && entry.player?.destinyUserInfo?.membershipId === character.membershipId)
+                ))?.player?.characterClass) || activity.characterClass
           });
         } else {
           if (environment.debug) {
@@ -6080,13 +6124,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   // For Guardian Firsts PGCR button
-  openExternalPGCRForFirst(first: ActivityFirstCompletion, event?: MouseEvent) {
+  openExternalPGCRForFirst(first: ActivityFirstCompletion, _event?: MouseEvent) {
     if (!first.instanceId) return;
     const isD1 = first.game === 'D1';
-    if (event && (event.ctrlKey || event.metaKey)) {
-      this.openFullPgcrInNewTab(first.instanceId, isD1);
-      return;
-    }
     if (this.activeTab === 'firsts') {
       this.pgcrModalService.openPgcrLiteFromFirst(first);
       return;
@@ -7194,13 +7234,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.filteredActivitiesCache.clear();
   }
 
-  openExternalPGCR(activity: ActivityHistory, isD1: boolean, event?: MouseEvent) {
+  openExternalPGCR(activity: ActivityHistory, isD1: boolean, _event?: MouseEvent) {
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
-    if (event && (event.ctrlKey || event.metaKey)) {
-      this.openFullPgcrInNewTab(instanceId, isD1);
-      return;
-    }
     if (this.activeTab === 'activities' || this.activeTab === 'firsts') {
       this.pgcrModalService.openPgcrLiteFromActivity(activity, isD1);
       return;
@@ -7616,19 +7652,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.dungeonSoloFirsts[player.membershipId]?.find(d => d.family === family);
   }
 
-  openExternalPGCRFromStored(activity: any, event?: MouseEvent) {
+  openExternalPGCRFromStored(activity: any, _event?: MouseEvent) {
     if (!activity) return;
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
-    if (event && (event.ctrlKey || event.metaKey)) {
-      this.openFullPgcrInNewTab(instanceId, false);
-      return;
-    }
     if (this.activeTab === 'firsts') {
       this.pgcrModalService.openPgcrLiteFromStored(activity, false);
       return;
     }
-    this.openExternalPGCR(activity as any, false, event);
+    this.openExternalPGCR(activity as any, false);
   }
 
   activityYearCollapseKey(game: 'D1' | 'D2', year: string): string {
@@ -7685,6 +7717,98 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (typeof localStorage === 'undefined') return;
     localStorage.setItem(ACTIVITY_COLLAPSE_GAMES_KEY, JSON.stringify([...this.collapsedActivityGames]));
     localStorage.setItem(ACTIVITY_COLLAPSE_YEARS_KEY, JSON.stringify([...this.collapsedActivityYears]));
+  }
+
+  private loadActivitiesViewPreferences(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      const mode = localStorage.getItem(ACTIVITIES_VIEW_MODE_KEY);
+      if (mode === 'cards' || mode === 'chronological') {
+        this.activitiesViewMode = mode;
+      }
+      const sort = localStorage.getItem(ACTIVITIES_CHRON_SORT_KEY);
+      if (sort === 'oldest' || sort === 'newest') {
+        this.activitiesChronologicalSort = sort;
+      }
+    } catch {
+      // ignore corrupt storage
+    }
+  }
+
+  private persistActivitiesViewPreferences(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    localStorage.setItem(ACTIVITIES_VIEW_MODE_KEY, this.activitiesViewMode);
+    localStorage.setItem(ACTIVITIES_CHRON_SORT_KEY, this.activitiesChronologicalSort);
+  }
+
+  setActivitiesViewMode(mode: ActivitiesViewMode): void {
+    if (this.activitiesViewMode === mode) {
+      return;
+    }
+    this.activitiesViewMode = mode;
+    this.persistActivitiesViewPreferences();
+    this.cdr.markForCheck();
+  }
+
+  setActivitiesChronologicalSort(sort: ActivitiesChronologicalSort): void {
+    if (this.activitiesChronologicalSort === sort) {
+      return;
+    }
+    this.activitiesChronologicalSort = sort;
+    this.persistActivitiesViewPreferences();
+    this.cdr.markForCheck();
+  }
+
+  getChronologicalRowsForYear(yearGroup: YearGroup, game: 'D1' | 'D2'): ChronologicalActivityRow[] {
+    const rows: ChronologicalActivityRow[] = [];
+    for (const typeGroup of yearGroup.typeGroups ?? []) {
+      const isD1 = typeGroup.isD1 ?? game === 'D1';
+      for (const activity of typeGroup.activities ?? []) {
+        const refId = activity.activityDetails?.referenceId;
+        let activityName = this.manifest.getActivityName(refId, isD1);
+        if (!activityName || activityName === 'Unknown Activity') {
+          activityName =
+            this.getMappedActivityName(String(refId)) || typeGroup.name || 'Unknown Activity';
+        }
+        const version = this.getActivityVersion(activityName);
+        const displayName = activityName.includes(': ')
+          ? activityName.substring(0, activityName.indexOf(': '))
+          : activityName;
+        rows.push({
+          activity,
+          activityName: displayName,
+          activityType: typeGroup.type || '',
+          version,
+          isD1,
+          game: activity.game ?? game,
+        });
+      }
+    }
+    const dir = this.activitiesChronologicalSort === 'oldest' ? 1 : -1;
+    rows.sort((a, b) => {
+      const ta = new Date(a.activity.period).getTime();
+      const tb = new Date(b.activity.period).getTime();
+      if (Number.isNaN(ta) && Number.isNaN(tb)) {
+        return 0;
+      }
+      if (Number.isNaN(ta)) {
+        return 1;
+      }
+      if (Number.isNaN(tb)) {
+        return -1;
+      }
+      return (ta - tb) * dir;
+    });
+    return rows;
+  }
+
+  trackByChronologicalRow(_index: number, row: ChronologicalActivityRow): string {
+    const inst = row.activity.activityDetails?.instanceId ?? '';
+    return `${row.activity.membershipId}|${inst}|${row.activity.period}`;
   }
 
   private collectActivityYearKeys(): string[] {

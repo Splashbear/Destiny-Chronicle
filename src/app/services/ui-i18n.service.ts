@@ -21,6 +21,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': 'Hide',
     'activities.expand': 'Expand',
     'activities.collapse': 'Collapse',
+    'activities.viewCards': 'Cards',
+    'activities.viewChronological': 'Chronological',
+    'activities.sortOldest': 'Oldest first',
+    'activities.sortNewest': 'Newest first',
     'pgcr.title': 'Activity report',
     'pgcr.loading': 'Loading fireteam…',
     'pgcr.error': 'Could not load activity report.',
@@ -29,6 +33,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': 'Close',
     'pgcr.full': 'Full PGCR ↗',
     'pgcr.ctrlHint': 'Ctrl+click for full PGCR',
+    'pgcr.openReportHint': 'Opens activity report',
     'common.close': 'Close'
   },
   fr: {
@@ -47,6 +52,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': 'Masquer',
     'activities.expand': 'Déplier',
     'activities.collapse': 'Replier',
+    'activities.viewCards': 'Cartes',
+    'activities.viewChronological': 'Chronologique',
+    'activities.sortOldest': 'Plus ancien',
+    'activities.sortNewest': 'Plus récent',
     'pgcr.title': 'Rapport d\'activité',
     'pgcr.loading': 'Chargement de l\'escouade…',
     'pgcr.error': 'Impossible de charger le rapport.',
@@ -55,6 +64,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': 'Fermer',
     'pgcr.full': 'PGCR complet ↗',
     'pgcr.ctrlHint': 'Ctrl+clic pour le PGCR complet',
+    'pgcr.openReportHint': 'Ouvre le rapport d\'activité',
     'common.close': 'Fermer'
   },
   es: {
@@ -73,6 +83,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': 'Ocultar',
     'activities.expand': 'Expandir',
     'activities.collapse': 'Contraer',
+    'activities.viewCards': 'Tarjetas',
+    'activities.viewChronological': 'Cronológico',
+    'activities.sortOldest': 'Más antiguo',
+    'activities.sortNewest': 'Más reciente',
     'pgcr.title': 'Informe de actividad',
     'pgcr.loading': 'Cargando equipo…',
     'pgcr.error': 'No se pudo cargar el informe.',
@@ -81,6 +95,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': 'Cerrar',
     'pgcr.full': 'PGCR completo ↗',
     'pgcr.ctrlHint': 'Ctrl+clic para PGCR completo',
+    'pgcr.openReportHint': 'Abre el informe de actividad',
     'common.close': 'Cerrar'
   },
   de: {
@@ -99,6 +114,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': 'Ausblenden',
     'activities.expand': 'Ausklappen',
     'activities.collapse': 'Einklappen',
+    'activities.viewCards': 'Karten',
+    'activities.viewChronological': 'Chronologisch',
+    'activities.sortOldest': 'Älteste zuerst',
+    'activities.sortNewest': 'Neueste zuerst',
     'pgcr.title': 'Aktivitätsbericht',
     'pgcr.loading': 'Trupp wird geladen…',
     'pgcr.error': 'Bericht konnte nicht geladen werden.',
@@ -107,6 +126,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': 'Schließen',
     'pgcr.full': 'Vollständiger PGCR ↗',
     'pgcr.ctrlHint': 'Strg+Klick für vollständigen PGCR',
+    'pgcr.openReportHint': 'Aktivitätsbericht öffnen',
     'common.close': 'Schließen'
   },
   'pt-br': {
@@ -125,6 +145,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': 'Ocultar',
     'activities.expand': 'Expandir',
     'activities.collapse': 'Recolher',
+    'activities.viewCards': 'Cartões',
+    'activities.viewChronological': 'Cronológico',
+    'activities.sortOldest': 'Mais antigo',
+    'activities.sortNewest': 'Mais recente',
     'pgcr.title': 'Relatório de atividade',
     'pgcr.loading': 'Carregando equipe…',
     'pgcr.error': 'Não foi possível carregar o relatório.',
@@ -133,6 +157,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': 'Fechar',
     'pgcr.full': 'PGCR completo ↗',
     'pgcr.ctrlHint': 'Ctrl+clique para PGCR completo',
+    'pgcr.openReportHint': 'Abre o relatório de atividade',
     'common.close': 'Fechar'
   },
   ja: {
@@ -151,6 +176,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': '非表示',
     'activities.expand': '展開',
     'activities.collapse': '折りたたむ',
+    'activities.viewCards': 'カード',
+    'activities.viewChronological': '年表',
+    'activities.sortOldest': '古い順',
+    'activities.sortNewest': '新しい順',
     'pgcr.title': 'アクティビティレポート',
     'pgcr.loading': 'メンバーを読み込み中…',
     'pgcr.error': 'レポートを読み込めませんでした。',
@@ -159,6 +188,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': '閉じる',
     'pgcr.full': '完全な PGCR ↗',
     'pgcr.ctrlHint': 'Ctrl+クリックで完全な PGCR',
+    'pgcr.openReportHint': 'アクティビティレポートを開く',
     'common.close': '閉じる'
   },
   'zh-chs': {
@@ -177,6 +207,10 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'activities.hide': '隐藏',
     'activities.expand': '展开',
     'activities.collapse': '折叠',
+    'activities.viewCards': '卡片',
+    'activities.viewChronological': '时间线',
+    'activities.sortOldest': '最早优先',
+    'activities.sortNewest': '最新优先',
     'pgcr.title': '活动报告',
     'pgcr.loading': '正在加载小队…',
     'pgcr.error': '无法加载活动报告。',
@@ -185,6 +219,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'pgcr.close': '关闭',
     'pgcr.full': '完整 PGCR ↗',
     'pgcr.ctrlHint': 'Ctrl+点击打开完整 PGCR',
+    'pgcr.openReportHint': '打开活动报告',
     'common.close': '关闭'
   }
 };
