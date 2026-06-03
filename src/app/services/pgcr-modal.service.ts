@@ -21,7 +21,6 @@ export class PGCRModalService {
     });
   }
 
-  /** Compact fireteam + duration popup; includes link to full external PGCR. */
   openPgcrLite(data: PgcrLiteDialogData): void {
     this.dialog.open(PgcrLiteComponent, {
       data,
@@ -33,34 +32,50 @@ export class PGCRModalService {
 
   openPgcrLiteFromActivity(activity: ActivityHistory, isD1: boolean, activityLabel?: string): void {
     const instanceId = activity.activityDetails?.instanceId;
-    if (!instanceId) return;
+    if (!instanceId) {
+      return;
+    }
     const period = activity.period ?? (activity as { completionDate?: string }).completionDate;
+    const row = activity as ActivityHistory & { membershipId?: string; displayName?: string };
     this.openPgcrLite({
       instanceId: String(instanceId),
       isD1,
+      membershipId: row.membershipId ? String(row.membershipId) : undefined,
       activityLabel,
-      period
+      period: period ? String(period) : undefined,
+      preferredDisplayName: row.displayName?.trim() || undefined,
     });
   }
 
   openPgcrLiteFromFirst(first: ActivityFirstCompletion, activityLabel?: string): void {
-    if (!first.instanceId) return;
+    if (!first.instanceId) {
+      return;
+    }
     const isD1 = first.game === 'D1';
     this.openPgcrLite({
       instanceId: String(first.instanceId),
       isD1,
+      membershipId: first.membershipId ? String(first.membershipId) : undefined,
       activityLabel: activityLabel ?? first.name,
-      period: first.completionDate || undefined
+      period: first.completionDate || first.period || undefined,
     });
   }
 
-  openPgcrLiteFromStored(activity: ActivityHistory | { activityDetails?: { instanceId?: string }; period?: string }, isD1: boolean): void {
+  openPgcrLiteFromStored(
+    activity: ActivityHistory | { activityDetails?: { instanceId?: string }; period?: string; membershipId?: string; displayName?: string },
+    isD1: boolean
+  ): void {
     const instanceId = activity.activityDetails?.instanceId;
-    if (!instanceId) return;
+    if (!instanceId) {
+      return;
+    }
+    const row = activity as { membershipId?: string; displayName?: string };
     this.openPgcrLite({
       instanceId: String(instanceId),
       isD1,
-      period: activity.period
+      membershipId: row.membershipId ? String(row.membershipId) : undefined,
+      period: activity.period,
+      preferredDisplayName: row.displayName?.trim() || undefined,
     });
   }
 }
