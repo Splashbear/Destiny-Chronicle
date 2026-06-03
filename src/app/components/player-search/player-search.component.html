@@ -439,7 +439,7 @@
                     <div class="w-20 h-8 bg-slate-700 rounded animate-pulse mr-3"></div>
                     <div class="w-48 h-6 bg-slate-700 rounded animate-pulse"></div>
                 </div>
-                  <div class="flex flex-col md:flex-row md:flex-wrap gap-6">
+                  <div *ngIf="activitiesViewMode === 'cards'" class="flex flex-col md:flex-row md:flex-wrap gap-6">
                     <div class="w-full md:flex-1 md:min-w-[280px] md:max-w-[400px]">
                       <div class="flex items-center mb-2 gap-3">
                         <div class="w-20 h-20 bg-slate-700 rounded animate-pulse"></div>
@@ -452,6 +452,12 @@
               </div>
                 </div>
                 </div>
+                  <div *ngIf="activitiesViewMode === 'chronological'" class="space-y-2">
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                  </div>
                 </div>
               </div>
                 </div>
@@ -468,7 +474,7 @@
                     <div class="w-20 h-8 bg-slate-700 rounded animate-pulse mr-3"></div>
                     <div class="w-32 h-6 bg-slate-700 rounded animate-pulse"></div>
                       </div>
-                  <div class="flex flex-col md:flex-row md:flex-wrap gap-6">
+                  <div *ngIf="activitiesViewMode === 'cards'" class="flex flex-col md:flex-row md:flex-wrap gap-6">
                     <div class="w-full md:flex-1 md:min-w-[280px] md:max-w-[400px]">
                       <div class="flex items-center mb-2 gap-3">
                         <div class="w-20 h-20 bg-slate-700 rounded animate-pulse"></div>
@@ -481,9 +487,15 @@
                     </div>
                   </div>
                 </div>
+                  <div *ngIf="activitiesViewMode === 'chronological'" class="space-y-2">
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                    <div class="h-14 bg-slate-700 rounded animate-pulse"></div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && (groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0)"
                class="space-y-6 w-full min-w-0">
@@ -501,6 +513,37 @@
                         (click)="expandAllActivityYears()">
                   {{ uiI18n.t('activities.expandAllYears') }}
                 </button>
+                <div class="activity-view-segment" role="group" [attr.aria-label]="uiI18n.t('activities.viewCards')">
+                  <button type="button"
+                          class="activity-segment-btn"
+                          [class.activity-segment-btn-active]="activitiesViewMode === 'cards'"
+                          (click)="setActivitiesViewMode('cards')">
+                    {{ uiI18n.t('activities.viewCards') }}
+                  </button>
+                  <button type="button"
+                          class="activity-segment-btn"
+                          [class.activity-segment-btn-active]="activitiesViewMode === 'chronological'"
+                          (click)="setActivitiesViewMode('chronological')">
+                    {{ uiI18n.t('activities.viewChronological') }}
+                  </button>
+                </div>
+                <div *ngIf="activitiesViewMode === 'chronological'"
+                     class="activity-view-segment"
+                     role="group"
+                     [attr.aria-label]="uiI18n.t('activities.sortOldest')">
+                  <button type="button"
+                          class="activity-segment-btn"
+                          [class.activity-segment-btn-active]="activitiesChronologicalSort === 'oldest'"
+                          (click)="setActivitiesChronologicalSort('oldest')">
+                    {{ uiI18n.t('activities.sortOldest') }}
+                  </button>
+                  <button type="button"
+                          class="activity-segment-btn"
+                          [class.activity-segment-btn-active]="activitiesChronologicalSort === 'newest'"
+                          (click)="setActivitiesChronologicalSort('newest')">
+                    {{ uiI18n.t('activities.sortNewest') }}
+                  </button>
+                </div>
                 <span class="text-xl font-bold text-blue-300 font-mono">{{ formatSecondsToHoursMinutes(totalTimeForSelectedDate) }}</span>
               </div>
             </div>
@@ -535,48 +578,13 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  <div *ngIf="!isActivityYearCollapsed('D2', yearGroup.year)" class="flex flex-col md:flex-row md:flex-wrap gap-6">
-                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="w-full md:flex-1 md:min-w-[280px] md:max-w-[400px]">
-                      <div class="flex items-center mb-2 gap-3">
-                        <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
-                          <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
-                          <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
-                        </ng-container>
-                        <span class="font-semibold text-slate-200 text-lg ml-2">
-                          {{ typeGroup.name }}<span *ngIf="typeGroup.type"> / {{ typeGroup.type | titlecase }}</span>
-                        </span>
-                      </div>
-                      <div class="grid grid-cols-1 gap-2">
-                        <!-- Group activities by version -->
-                        <div *ngFor="let versionGroup of getVersionGroups(typeGroup.activities); trackBy: trackByVersionGroup" class="mb-4">
-                          <div class="flex items-center mb-2">
-                            <span class="text-sm font-medium text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
-                              {{ versionGroup.version }}
-                            </span>
-                            <span class="text-xs text-slate-400 ml-2">
-                              ({{ versionGroup.activities.length }} {{ versionGroup.activities.length === 1 ? 'completion' : 'completions' }})
-                            </span>
-                          </div>
-                          <div *ngFor="let activity of versionGroup.activities; trackBy: trackByActivity" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors ml-4">
-                           <!-- Game Icon (Destiny 1 or Destiny 2) - Use account.game as fallback -->
-                          <img [src]="(activity.game || gameGroup.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                           <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
-                           <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
-                            <!-- Account Display Name -->
-                          <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ getActivityDisplayName(activity) }}</span>
-                           <!-- Character Class Icon (Hunter, Titan, Warlock) -->
-                           <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
-                           <!-- Timestamp Link -->
-                          <a (click)="openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1', $event)"
-                             [title]="uiI18n.t('pgcr.ctrlHint')"
-                             class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
-                            {{ formatTime(activity.period) }}
-                          </a>
-                           <!-- Account Name removed in consolidated view -->
-                         </div>
-                        </div>
-                      </div>
-                    </div>
+                  <div *ngIf="!isActivityYearCollapsed('D2', yearGroup.year)">
+                    <ng-container *ngIf="activitiesViewMode === 'cards'">
+                      <ng-container *ngTemplateOutlet="yearActivitiesCards; context: { game: 'D2', yearGroup: yearGroup, gameGroup: gameGroup }"></ng-container>
+                    </ng-container>
+                    <ng-container *ngIf="activitiesViewMode === 'chronological'">
+                      <ng-container *ngTemplateOutlet="yearActivitiesChronological; context: { game: 'D2', yearGroup: yearGroup }"></ng-container>
+                    </ng-container>
                   </div>
                 </div>
               </div>
@@ -614,48 +622,13 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  <div *ngIf="!isActivityYearCollapsed('D1', yearGroup.year)" class="flex flex-col md:flex-row md:flex-wrap gap-6">
-                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="w-full md:flex-1 md:min-w-[280px] md:max-w-[400px]">
-                      <div class="flex items-center mb-2 gap-3">
-                        <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
-                          <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
-                          <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
-                        </ng-container>
-                        <span class="font-semibold text-slate-200 text-lg ml-2">
-                          {{ typeGroup.name }}<span *ngIf="typeGroup.type"> / {{ typeGroup.type | titlecase }}</span>
-                        </span>
-                      </div>
-                      <div class="grid grid-cols-1 gap-2">
-                        <!-- Group activities by version -->
-                        <div *ngFor="let versionGroup of getVersionGroups(typeGroup.activities); trackBy: trackByVersionGroup" class="mb-4">
-                          <div class="flex items-center mb-2">
-                            <span class="text-sm font-medium text-blue-300 bg-blue-900/30 px-2 py-1 rounded">
-                              {{ versionGroup.version }}
-                            </span>
-                            <span class="text-xs text-slate-400 ml-2">
-                              ({{ versionGroup.activities.length }} {{ versionGroup.activities.length === 1 ? 'completion' : 'completions' }})
-                            </span>
-                          </div>
-                          <div *ngFor="let activity of versionGroup.activities" class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors ml-4">
-                          <!-- Game Icon (Destiny 1 or Destiny 2) - Use account.game as fallback -->
-                          <img [src]="(activity.game || gameGroup.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
-                          <!-- Platform Icon (Xbox, PlayStation, Steam, etc.) -->
-                          <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
-                          <!-- Account Display Name -->
-                          <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ getActivityDisplayName(activity) }}</span>
-                          <!-- Character Class Icon (Hunter, Titan, Warlock) -->
-                          <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
-                          <!-- Timestamp Link -->
-                           <a (click)="openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1', $event)"
-                              [title]="uiI18n.t('pgcr.ctrlHint')"
-                              class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
-                            {{ formatTime(activity.period) }}
-                          </a>
-                          <!-- Account Name removed in consolidated view -->
-                        </div>
-                        </div>
-                      </div>
-                    </div>
+                  <div *ngIf="!isActivityYearCollapsed('D1', yearGroup.year)">
+                    <ng-container *ngIf="activitiesViewMode === 'cards'">
+                      <ng-container *ngTemplateOutlet="yearActivitiesCards; context: { game: 'D1', yearGroup: yearGroup, gameGroup: gameGroup }"></ng-container>
+                    </ng-container>
+                    <ng-container *ngIf="activitiesViewMode === 'chronological'">
+                      <ng-container *ngTemplateOutlet="yearActivitiesChronological; context: { game: 'D1', yearGroup: yearGroup }"></ng-container>
+                    </ng-container>
                   </div>
                 </div>
               </div>
@@ -1709,6 +1682,69 @@
     </div>
   </details>
 </div> 
+
+  <!-- Activities view templates (root-level for template ref scope) -->
+  <ng-template #yearActivitiesCards let-game="game" let-yearGroup="yearGroup" let-gameGroup="gameGroup">
+    <div class="flex flex-col md:flex-row md:flex-wrap gap-6">
+      <div *ngFor="let typeGroup of yearGroup.typeGroups" class="w-full md:flex-1 md:min-w-[280px] md:max-w-[400px]">
+        <div class="flex items-center mb-2 gap-3">
+          <ng-container *ngIf="getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
+            <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-20 h-20 object-cover rounded shadow" />
+            <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
+          </ng-container>
+          <span class="font-semibold text-slate-200 text-lg ml-2">
+            {{ typeGroup.name }}<span *ngIf="typeGroup.type"> / {{ typeGroup.type | titlecase }}</span>
+          </span>
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <div *ngFor="let versionGroup of getVersionGroups(typeGroup.activities); trackBy: trackByVersionGroup" class="mb-4">
+            <div class="flex items-center mb-2">
+              <span class="text-sm font-medium text-blue-300 bg-blue-900/30 px-2 py-1 rounded">{{ versionGroup.version }}</span>
+              <span class="text-xs text-slate-400 ml-2">
+                ({{ versionGroup.activities.length }} {{ versionGroup.activities.length === 1 ? 'completion' : 'completions' }})
+              </span>
+            </div>
+            <div *ngFor="let activity of versionGroup.activities; trackBy: trackByActivity"
+                 class="activity-row flex items-center gap-4 bg-slate-800 hover:bg-slate-700 rounded p-3 transition-colors ml-4">
+              <img [src]="(activity.game || gameGroup.game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+              <img [src]="getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
+              <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ getActivityDisplayName(activity) }}</span>
+              <img *ngIf="activity.characterClass as cls" [src]="getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
+              <a (click)="openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1', $event)"
+                 [title]="uiI18n.t('pgcr.openReportHint')"
+                 class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
+                {{ formatTime(activity.period) }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </ng-template>
+
+  <ng-template #yearActivitiesChronological let-game="game" let-yearGroup="yearGroup">
+    <div class="space-y-2">
+      <div *ngFor="let row of getChronologicalRowsForYear(yearGroup, game); trackBy: trackByChronologicalRow"
+           class="activity-chrono-row activity-row flex items-center gap-3 bg-slate-800 hover:bg-slate-700 rounded p-2 transition-colors min-w-0">
+        <ng-container *ngIf="getActivityImage(row.activity, row.isD1) as img">
+          <img *ngIf="img && typeof img === 'string'" [src]="img" class="activity-chrono-thumb w-14 h-14 object-cover rounded shadow shrink-0" alt="" />
+          <span *ngIf="img && typeof img !== 'string'" class="activity-chrono-thumb activity-image shrink-0" [innerHTML]="img"></span>
+        </ng-container>
+        <span class="text-sm text-slate-200 font-medium truncate min-w-0 flex-1">
+          {{ row.activityName }}<span *ngIf="row.activityType" class="text-slate-400"> / {{ row.activityType | titlecase }}</span>
+        </span>
+        <span class="text-xs font-medium text-blue-300 bg-blue-900/30 px-2 py-1 rounded shrink-0">{{ row.version }}</span>
+        <img [src]="(row.game || game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4 shrink-0" alt="game" />
+        <img [src]="getPlatformIconUrl(row.activity.membershipType || 0)" class="w-4 h-4 platform-icon shrink-0" alt="platform" />
+        <span class="text-xs text-slate-300 font-medium truncate shrink-0 max-w-[120px]">{{ getActivityDisplayName(row.activity) }}</span>
+        <a (click)="openExternalPGCR(row.activity, (row.game || game) === 'D1', $event)"
+           [title]="uiI18n.t('pgcr.openReportHint')"
+           class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors shrink-0">
+          {{ formatTime(row.activity.period) }}
+        </a>
+      </div>
+    </div>
+  </ng-template>
 
   <!-- Export Options Dialog Placeholder -->
   <app-export-options-dialog *ngIf="showExportDialog" [selectedDate]="selectedDate" (close)="showExportDialog = false" (export)="handleExportOptions($event)"></app-export-options-dialog> 

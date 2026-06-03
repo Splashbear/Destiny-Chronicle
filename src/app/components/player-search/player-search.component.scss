@@ -154,11 +154,46 @@ button.activity-toolbar-btn {
     background-color: rgb(71 85 105);
     color: rgb(226 232 240);
   }
+}
 
-  &:disabled {
-    background-color: #666;
-    cursor: not-allowed;
+.activity-view-segment {
+  display: inline-flex;
+  border-radius: 0.25rem;
+  overflow: hidden;
+  border: 1px solid rgb(51 65 85);
+}
+
+button.activity-segment-btn {
+  padding: 0.25rem 0.5rem;
+  background-color: rgb(30 41 59);
+  color: rgb(148 163 184);
+  border: none;
+  font-weight: 500;
+  font-size: 0.75rem;
+  line-height: 1rem;
+
+  &:hover {
+    background-color: rgb(51 65 85);
+    color: rgb(226 232 240);
   }
+
+  &.activity-segment-btn-active {
+    background-color: rgb(59 130 246);
+    color: rgb(255 255 255);
+  }
+}
+
+.activity-chrono-row {
+  flex-wrap: wrap;
+
+  @media (min-width: 640px) {
+    flex-wrap: nowrap;
+  }
+}
+
+.activity-chrono-thumb {
+  width: 3.5rem;
+  height: 3.5rem;
 }
 
 .error-message {
