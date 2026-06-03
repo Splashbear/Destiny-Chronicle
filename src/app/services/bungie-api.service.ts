@@ -5,6 +5,7 @@ import { catchError, map, switchMap, retryWhen, delayWhen, retry, mergeMap, redu
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 import { LocaleService } from './locale.service';
+import { unwrapD1PgcrBody } from '../utils/pgcr-prune';
 
 export interface PlayerSearchResult {
   displayName: string;
@@ -414,11 +415,12 @@ export class BungieApiService {
   }
 
   getPGCR(activityId: string, isD1: boolean = false): Observable<any> {
-    // Use stats.bungie.net for PGCR endpoint
+    if (isD1) {
+      return this.getD1PGCR(activityId);
+    }
+    // D2 PGCRs are served from stats.bungie.net
     const baseUrl = 'https://stats.bungie.net/Platform';
-    const url = isD1 
-      ? `${baseUrl}/Destiny/Stats/PostGameCarnageReport/${activityId}/`
-      : `${baseUrl}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`;
+    const url = `${baseUrl}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`;
     
     const headers = this.getHeaders();
     
@@ -548,8 +550,13 @@ export class BungieApiService {
   getD1PGCR(activityId: string): Observable<any> {
     const url = `${this.D1_BASE_URL}/Destiny/Stats/PostGameCarnageReport/${activityId}/`;
     const finalUrl = this.buildUrl(url);
-    return this.http.get(finalUrl).pipe(
-      map((response: any) => response.Response),
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      map((response: BungieResponse<any>) => {
+        if (response.ErrorCode !== 1) {
+          throw new Error(`Bungie API Error: ${response.ErrorStatus} - ${response.Message}`);
+        }
+        return unwrapD1PgcrBody(response.Response);
+      }),
       catchError(this.handleError)
     );
   }
@@ -589,7 +596,7 @@ export class BungieApiService {
     
     return from(chunks).pipe(
       mergeMap(chunk => {
-        const chunkRequests = chunk.map(id => this.getPGCR(id, true));
+        const chunkRequests = chunk.map(id => this.getD1PGCR(id));
         return forkJoin(chunkRequests);
       }, concurrencyLimit),
       reduce((acc, chunk) => acc.concat(chunk), [] as any[])
