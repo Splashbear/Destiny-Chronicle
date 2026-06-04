@@ -51,9 +51,10 @@ export class DatePickerComponent implements OnInit {
   }
 
   onDateChange() {
-    // Only emit if both month and day are valid
-    if (this.selectedMonth && this.selectedDay) {
-      this.dateChange.emit({ month: this.selectedMonth, day: this.selectedDay });
+    const month = Number(this.selectedMonth);
+    const day = Number(this.selectedDay);
+    if (month && day) {
+      this.dateChange.emit({ month, day });
     }
   }
 

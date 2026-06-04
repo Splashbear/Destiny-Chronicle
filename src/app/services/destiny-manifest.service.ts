@@ -18,6 +18,7 @@ export class DestinyManifestService {
   private presentationNodes: { [key: string]: any } = {};
   private activityFamilyDefs: { [key: string]: any } = {};
   private manifestLoaded = new BehaviorSubject<boolean>(false);
+  private loadedCulture: string | null = null;
   
 
 
@@ -59,6 +60,18 @@ export class DestinyManifestService {
     const raw = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + path)));
     this.manifestCache.cacheManifestData(cacheKey, raw);
     return raw;
+  }
+
+  /** Ensure live D2 defs match the active locale before archiving a manifest subset. */
+  async ensureReadyForArchiveSnapshot(): Promise<void> {
+    if (this.archiveRuntime.isOfflineMode && !this.archiveRuntime.allowLiveApi) {
+      return;
+    }
+    const culture = this.locale.culture;
+    if (this.manifestLoaded.value && this.loadedCulture === culture) {
+      return;
+    }
+    await this.loadManifest();
   }
 
   async loadManifest() {
@@ -105,6 +118,7 @@ export class DestinyManifestService {
       }
       (window as any).titleDefs = this.titleDefs; // Expose for browser debugging
       (window as any).presentationNodes = this.presentationNodes; // Expose for browser debugging
+      this.loadedCulture = culture;
       this.manifestLoaded.next(true);
       console.log(`[Manifest] Loaded Destiny 2 manifest (culture: ${culture}, version: ${version}).`);
     } catch (error: unknown) {

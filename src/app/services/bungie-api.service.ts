@@ -667,7 +667,7 @@ export class BungieApiService {
     );
   }
 
-  // Fetch both ProfileRecords (900) and CharacterRecords (1000) in a single request – used for achievements & triumphs
+  // Fetch both ProfileRecords (900) and CharacterRecords (1000) in a single request – used for titles & triumphs
   getPlayerRecords(membershipType: number, membershipId: string) {
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900,1000`;
     const finalUrl = this.buildUrl(url);

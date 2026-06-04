@@ -58,7 +58,6 @@ That iteration introduced calculation and display of total account statistics: t
 - **Real-Time Loading Status Modal:** Progress tracking, platform/game icons, auto-hide.
 - **Date Filtering and Timezone Handling:** Activities grouped by date using local timezone.
 - **Guardian Firsts:** First completion per raid/dungeon (and variants), solo/solo flawless where applicable; PGCR linking.
-- **Analytics/Achievements tab:** Currently disabled in UI (platform achievements refactor exists in code but is not shown).
 
 ---
 *Last updated: January 2026* 

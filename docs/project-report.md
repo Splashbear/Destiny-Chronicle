@@ -94,9 +94,6 @@
 2. **UI**
    - Some loading states could be more informative; mobile layout may need refinement.
 
-3. **Analytics / Achievements**
-   - Legacy in-app Analytics/Achievements tab implementation has been removed. Platform achievements remain documented as a future feature in `PLATFORM_ACHIEVEMENTS_REFACTOR.md` and can be reintroduced with a new UI when ready.
-
 ### Success Metrics
 1. **User Experience**
    - Reduced loading times

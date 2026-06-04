@@ -14,6 +14,8 @@ export interface ArchiveManifest {
   version: number;
   frozenAt: string;
   lastSyncedAt: string;
+  /** Bungie manifest culture used for D2 definition strings in this archive (e.g. `es`, `fr`). */
+  culture?: string;
   accounts: ArchiveAccount[];
   includePgcr: boolean;
   activityCount: number;

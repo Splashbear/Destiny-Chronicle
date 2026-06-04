@@ -50,7 +50,6 @@ Pantheon Events on **Guardian Firsts** (legacy Pantheon, Monument of Triumph Pan
 - **docs/project-report.md** – Project report (features, technical implementation, known issues)
 - **TECHNICAL_DOCUMENTATION.md** – Architecture, data models, core functionality
 - **docs/setup-guide.md** – Setup and run instructions
-- **PLATFORM_ACHIEVEMENTS_REFACTOR.md** – Platform achievements refactor (tab currently disabled in UI)
 - **PERFORMANCE_FEATURES.md** – Smart data prioritization and cache display
 - **RAID_DUNGEON_HASHES.md** – Raid and dungeon activity hashes reference
 

@@ -11,6 +11,8 @@ import { Destiny1ManifestService } from './destiny1-manifest.service';
 import { TitleService, TitleItem } from './title.service';
 import { ArchiveMediaService } from './archive-media.service';
 import { ArchiveRuntimeService } from './archive-runtime.service';
+import { LocaleService } from './locale.service';
+import { UiI18nService } from './ui-i18n.service';
 import {
   ARCHIVE_EXTENSION,
   ARCHIVE_VERSION,
@@ -56,8 +58,20 @@ export class ArchiveService {
     private d1Manifest: Destiny1ManifestService,
     private titleService: TitleService,
     private archiveMedia: ArchiveMediaService,
-    private archiveRuntime: ArchiveRuntimeService
+    private archiveRuntime: ArchiveRuntimeService,
+    private locale: LocaleService,
+    private i18n: UiI18nService
   ) {}
+
+  private progress(key: string, vars?: Record<string, string | number>): string {
+    let s = this.i18n.t(key);
+    if (vars) {
+      for (const [k, v] of Object.entries(vars)) {
+        s = s.split(`{${k}}`).join(String(v));
+      }
+    }
+    return s;
+  }
 
   async exportArchive(
     accounts: ArchiveAccount[],
@@ -65,12 +79,12 @@ export class ArchiveService {
   ): Promise<void> {
     const { blob, manifest } = await this.buildArchiveZip(accounts, options);
     if (options.downloadFile !== false) {
-      options.onProgress?.('Saving download…', 95);
+      options.onProgress?.(this.progress('archive.progress.savingDownload'), 95);
       const label = accounts[0]?.displayName?.replace(/[^\w.-]+/g, '_') || 'archive';
       saveAs(blob, `${label}${ARCHIVE_EXTENSION}`);
     }
     localStorage.setItem('destinyChronicle.lastExportManifest', JSON.stringify(manifest));
-    options.onProgress?.('Archive export complete.', 100);
+    options.onProgress?.(this.progress('archive.progress.exportComplete'), 100);
   }
 
   /**
@@ -82,22 +96,22 @@ export class ArchiveService {
     options: ArchiveExportOptions = {}
   ): Promise<ArchiveManifest> {
     const onProgress = options.onProgress ?? (() => undefined);
-    onProgress('Preparing offline copy on this device…', 2);
+    onProgress(this.progress('archive.progress.prepareDevice'), 2);
     const gathered = await this.gatherArchiveData(accounts, options);
 
-    onProgress('Saving images for offline viewing…', 75);
+    onProgress(this.progress('archive.progress.savingImages'), 75);
     await this.archiveMedia.clearAll();
     for (const [bungiePath, blob] of gathered.mediaByBungiePath) {
       await this.archiveMedia.store(bungiePath, blob, blob.type || 'image/jpeg');
     }
 
-    onProgress('Activating offline mode…', 90);
+    onProgress(this.progress('archive.progress.activatingOffline'), 90);
     this.manifest.loadFromArchive(gathered.d2ActivityDefs, gathered.d2PresentationNodes);
     localStorage.setItem('destinyChronicle.titlesSnapshot', JSON.stringify(gathered.titlesSnapshot));
     this.archiveRuntime.activateOffline(gathered.manifest, gathered.assetMap);
     localStorage.setItem('destinyChronicle.lastExportManifest', JSON.stringify(gathered.manifest));
     localStorage.setItem(DEVICE_READY_KEY, gathered.manifest.frozenAt);
-    onProgress('Ready for offline use on this device.', 100);
+    onProgress(this.progress('archive.progress.readyDevice'), 100);
     return gathered.manifest;
   }
 
@@ -112,7 +126,7 @@ export class ArchiveService {
     const onProgress = options.onProgress ?? (() => undefined);
     const gathered = await this.gatherArchiveData(accounts, options);
 
-    onProgress('Building archive file…', 85);
+    onProgress(this.progress('archive.progress.buildingZip'), 85);
     const zip = new JSZip();
     const { manifest, assetMap, favorites, activities, titlesSnapshot, d2ActivityDefs, d2PresentationNodes, pgcrEntries, mediaByBungiePath } = gathered;
 
@@ -155,16 +169,19 @@ export class ArchiveService {
       ? new Set(options.membershipIds)
       : null;
 
-    onProgress('Collecting activities…', 5);
+    await this.manifest.ensureReadyForArchiveSnapshot();
+    const snapshotCulture = this.locale.culture;
+
+    onProgress(this.progress('archive.progress.collectingActivities'), 5);
     let activities = await this.activityDb.activities.toArray();
     if (membershipFilter) {
       activities = activities.filter((a) => membershipFilter.has(String(a.membershipId)));
     }
 
-    onProgress('Collecting favorites…', 10);
+    onProgress(this.progress('archive.progress.collectingFavorites'), 10);
     const favorites = await this.activityDb.getFavorites();
 
-    onProgress('Building manifest subset…', 15);
+    onProgress(this.progress('archive.progress.buildingManifestSubset'), 15);
     const referenceIds = new Set<string>();
     for (const act of activities) {
       const ref = act.activityDetails?.referenceId;
@@ -187,7 +204,7 @@ export class ArchiveService {
       }
     }
 
-    onProgress('Snapshotting titles…', 20);
+    onProgress(this.progress('archive.progress.snapshottingTitles'), 20);
     const titlesSnapshot: ArchiveTitlesSnapshot = {};
     for (const acct of accounts) {
       if (membershipFilter && !membershipFilter.has(acct.membershipId)) {
@@ -207,13 +224,13 @@ export class ArchiveService {
       }
     }
 
-    onProgress('Collecting PGCR cache…', 30);
+    onProgress(this.progress('archive.progress.collectingPgcr'), 30);
     const pgcrEntries: PrunedPgcr[] = includePgcr ? await this.pgcrCache.getAllEntries() : [];
 
-    onProgress('Collecting image URLs…', 35);
+    onProgress(this.progress('archive.progress.collectingImageUrls'), 35);
     const urlCategories = this.collectMediaUrls(activities, accounts, titlesSnapshot);
 
-    onProgress('Downloading images…', 40);
+    onProgress(this.progress('archive.progress.downloadingImages', { done: 0, total: 0 }), 40);
     const assetMap: ArchiveAssetMap = {};
     const mediaByBungiePath = new Map<string, Blob>();
     const allUrls = [
@@ -240,7 +257,10 @@ export class ArchiveService {
             /* skip failed CDN fetch */
           }
           done++;
-          onProgress(`Downloading images (${done}/${allUrls.length})…`, 40 + (done / Math.max(allUrls.length, 1)) * 40);
+          onProgress(
+            this.progress('archive.progress.downloadingImages', { done, total: allUrls.length }),
+            40 + (done / Math.max(allUrls.length, 1)) * 40
+          );
         })
       );
     }
@@ -250,6 +270,7 @@ export class ArchiveService {
       version: ARCHIVE_VERSION,
       frozenAt: now,
       lastSyncedAt: now,
+      culture: snapshotCulture,
       accounts,
       includePgcr,
       activityCount: activities.length,
@@ -412,14 +433,15 @@ export class ArchiveService {
     });
 
     if (newActivities.length === 0) {
-      options.onProgress?.('Archive is up to date.', 100);
+      options.onProgress?.(this.progress('archive.upToDate'), 100);
       return;
     }
 
     await this.exportArchive(accounts, {
       ...options,
       includePgcr: options.includePgcr ?? manifest.includePgcr,
-      onProgress: (msg, pct) => options.onProgress?.(`Update: ${msg}`, pct),
+      onProgress: (msg, pct) =>
+        options.onProgress?.(this.progress('archive.progress.updatePrefix', { message: msg }), pct),
     });
   }
 
