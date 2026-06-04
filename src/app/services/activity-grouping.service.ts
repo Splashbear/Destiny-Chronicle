@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivityHistory } from '../models/activity-history.model';
 import { DestinyManifestService } from './destiny-manifest.service';
+import { AssetUrlService } from './asset-url.service';
 
 export interface GroupedActivity {
   type: string;
@@ -25,7 +26,10 @@ export interface ActivityGroup {
 export class ActivityGroupingService {
   private groupingCache = new Map<string, ActivityGroup[]>();
 
-  constructor(private manifest: DestinyManifestService) {}
+  constructor(
+    private manifest: DestinyManifestService,
+    private assetUrl: AssetUrlService
+  ) {}
 
   /** Get activity duration in seconds; supports D2 and D1 alternate keys. */
   private getActivityDurationSeconds(activity: ActivityHistory): number {
@@ -184,8 +188,8 @@ export class ActivityGroupingService {
     
     // Try to get PGCR image first
     const pgcrImage = this.manifest.getActivityPgcrImage(referenceId, isD1);
-    if (pgcrImage && (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/'))) {
-      return 'https://www.bungie.net' + pgcrImage;
+    if (pgcrImage) {
+      return this.assetUrl.resolve(pgcrImage);
     }
 
     // Fall back to activity type icon

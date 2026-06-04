@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 import { BungieApiService } from './bungie-api.service';
+import { AssetUrlService } from './asset-url.service';
 
 @Injectable({
   providedIn: 'root'
@@ -19,7 +20,8 @@ export class Destiny1ManifestService {
 
   constructor(
     private http: HttpClient,
-    private bungieApi: BungieApiService
+    private bungieApi: BungieApiService,
+    private assetUrl: AssetUrlService
   ) {
     this.loadManifest();
   }
@@ -188,9 +190,9 @@ export class Destiny1ManifestService {
       return '';
     }
     if (def.icon) {
-      return 'https://www.bungie.net' + def.icon;
+      return this.assetUrl.resolve(def.icon);
     }
-    return def.displayProperties?.icon ? 'https://www.bungie.net' + def.displayProperties.icon : '';
+    return def.displayProperties?.icon ? this.assetUrl.resolve(def.displayProperties.icon) : '';
   }
 
   getActivityRaidImage(referenceId: string | number): string {
@@ -206,7 +208,7 @@ export class Destiny1ManifestService {
     }
     if (def && def.pgcrImage) {
       if (def.pgcrImage.startsWith('/img') || def.pgcrImage.startsWith('/common')) {
-        return 'https://www.bungie.net' + def.pgcrImage;
+        return this.assetUrl.resolve(def.pgcrImage);
       }
       return def.pgcrImage;
     }

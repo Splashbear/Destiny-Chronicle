@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AssetUrlService } from '../../services/asset-url.service';
 
 export interface AccountCardPlatformStats {
   accountKey: string;
@@ -35,12 +36,12 @@ export interface AccountCardPlatformStats {
              (keydown.space)="accountKeyToggle.emit(plat.accountKey); $event.preventDefault()"
              [attr.aria-pressed]="selectedAccountKeys?.has(plat.accountKey)"
              [attr.aria-label]="'Filter by ' + (plat.displayName || plat.platform) + ' ' + plat.platform">
-          <img *ngIf="plat.emblemBackground" [src]="'https://www.bungie.net' + plat.emblemBackground" class="absolute inset-0 w-full h-full object-cover" alt="emblem bg" />
+          <img *ngIf="plat.emblemBackground" [src]="resolveBungie(plat.emblemBackground)" class="absolute inset-0 w-full h-full object-cover" alt="emblem bg" />
           <div class="absolute inset-0 bg-black/60"></div>
           <div class="absolute bottom-0 left-0 right-0 p-3 flex flex-col gap-0.5 z-10">
             <div class="flex items-center justify-between">
               <span class="text-slate-100 font-bold truncate">{{ plat.displayName || plat.platform }}</span>
-              <img *ngIf="plat.emblemIcon" [src]="'https://www.bungie.net' + plat.emblemIcon" class="w-6 h-6 rounded-full border border-slate-300" alt="emblem icon" />
+              <img *ngIf="plat.emblemIcon" [src]="resolveBungie(plat.emblemIcon)" class="w-6 h-6 rounded-full border border-slate-300" alt="emblem icon" />
             </div>
             <div class="flex items-center gap-2 text-slate-300 text-sm">
               <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform icon" />
@@ -62,6 +63,12 @@ export class AccountCardGridComponent {
   @Input() selectedAccountKeys: Set<string> | null = null;
   @Input() hint: string | null = null;
   @Output() accountKeyToggle = new EventEmitter<string>();
+
+  constructor(private assetUrl: AssetUrlService) {}
+
+  resolveBungie(path: string | undefined): string {
+    return path ? this.assetUrl.resolve(path) : '';
+  }
 
   private pad(n: number): string {
     return n.toString().padStart(2, '0');

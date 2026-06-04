@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { BungieApiService } from './bungie-api.service';
 import { DestinyManifestService } from './destiny-manifest.service';
+import { AssetUrlService } from './asset-url.service';
+import { ArchiveRuntimeService } from './archive-runtime.service';
 import { firstValueFrom } from 'rxjs';
 
 export interface TitleItem {
@@ -29,7 +31,12 @@ export interface PlayerIdentityMin {
 
 @Injectable({ providedIn: 'root' })
 export class TitleService {
-  constructor(private bungie: BungieApiService, private manifest: DestinyManifestService) {}
+  constructor(
+    private bungie: BungieApiService,
+    private manifest: DestinyManifestService,
+    private assetUrl: AssetUrlService,
+    private archiveRuntime: ArchiveRuntimeService
+  ) {}
 
   /**
    * Fetches the player's title records and returns a raw map of record hashes
@@ -47,6 +54,9 @@ export class TitleService {
    * the service incrementally without breaking the build.
    */
   async getPlayerTitles(player: PlayerIdentityMin): Promise<TitleItem[]> {
+    if (this.archiveRuntime.isReadOnly) {
+      return this.getOfflineTitles(player);
+    }
     // Load manifest if not yet ready
     if (!this.manifest.isLoadedSync) {
       await this.manifest.isLoaded().toPromise();
@@ -378,14 +388,14 @@ export class TitleService {
         titleMap[uniqueKey] = {
           hash: node.completionRecordHash,
           name: displayName,
-          icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+          icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null),
           completed,
           isGilded,
           timesGilded: (completed && timesGilded > 0) ? timesGilded : undefined,
           locked: !completed,
           altIcon: (() => {
             const frames = node.iconSequences && node.iconSequences[1]?.frames;
-            return frames && frames.length ? `https://www.bungie.net${frames[frames.length-1]}` : undefined;
+            return frames && frames.length ? this.assetUrl.resolve(frames[frames.length - 1]) : undefined;
           })(),
           legacy: (node.parentNodeHashes || []).includes(1881970629),
           releaseRank: releaseRank,
@@ -550,6 +560,20 @@ export class TitleService {
       } else {
         console.log(`[TitleService] ❌ New title not found by presentation hash: ${hash}`);
       }
+    }
+  }
+
+  private getOfflineTitles(player: PlayerIdentityMin): TitleItem[] {
+    try {
+      const raw = localStorage.getItem('destinyChronicle.titlesSnapshot');
+      if (!raw) {
+        return [];
+      }
+      const map = JSON.parse(raw) as Record<string, TitleItem[]>;
+      const key = `${player.game}|${player.membershipType}|${player.membershipId}`;
+      return map[key] ?? [];
+    } catch {
+      return [];
     }
   }
 } 

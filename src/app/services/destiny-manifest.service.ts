@@ -5,6 +5,8 @@ import { Destiny1ManifestService } from './destiny1-manifest.service';
 import { ActivityDbService } from './activity-db.service';
 import { LocaleService } from './locale.service';
 import { ManifestCacheService } from './manifest-cache.service';
+import { AssetUrlService } from './asset-url.service';
+import { ArchiveRuntimeService } from './archive-runtime.service';
 import { isAnyPantheonActivity } from '../config/pantheon.config';
 
 @Injectable({
@@ -29,9 +31,13 @@ export class DestinyManifestService {
     private http: HttpClient,
     private d1Manifest: Destiny1ManifestService,
     private locale: LocaleService,
-    private manifestCache: ManifestCacheService
+    private manifestCache: ManifestCacheService,
+    private assetUrl: AssetUrlService,
+    private archiveRuntime: ArchiveRuntimeService
   ) {
-    this.loadManifest();
+    if (!this.archiveRuntime.isOfflineMode) {
+      this.loadManifest();
+    }
   }
 
   /** Active Bungie manifest culture for D2 definition strings. */
@@ -56,6 +62,9 @@ export class DestinyManifestService {
   }
 
   async loadManifest() {
+    if (this.archiveRuntime.isOfflineMode && !this.archiveRuntime.allowLiveApi) {
+      return;
+    }
     try {
       // Step 1: Get manifest metadata
       const manifestMeta: any = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net/Platform/Destiny2/Manifest/')));
@@ -174,7 +183,18 @@ export class DestinyManifestService {
     }
     if (!this.activityDefs) return '';
     const def = this.activityDefs[referenceId];
-    return def && def.displayProperties?.icon ? 'https://www.bungie.net' + def.displayProperties.icon : '';
+    return def && def.displayProperties?.icon ? this.assetUrl.resolve(def.displayProperties.icon) : '';
+  }
+
+  getActivityDefinitionRaw(referenceId: string | number): any {
+    return this.activityDefs[String(referenceId)];
+  }
+
+  /** Load trimmed manifest defs from an offline archive bundle. */
+  loadFromArchive(activityDefs: Record<string, unknown>, presentationNodes: Record<string, unknown>): void {
+    this.activityDefs = { ...this.activityDefs, ...activityDefs };
+    this.presentationNodes = { ...this.presentationNodes, ...presentationNodes };
+    this.manifestLoaded.next(true);
   }
 
   getActivityPgcrImage(referenceId: number | string, isD1: boolean): string | undefined {
@@ -200,7 +220,7 @@ export class DestinyManifestService {
       const refIdStr = String(referenceId);
       const activityDef = this.activityDefs[refIdStr];
       const result = activityDef?.pgcrImage;
-      return result;
+      return result ? this.assetUrl.resolve(result) : undefined;
     }
   }
 
@@ -622,7 +642,7 @@ export class DestinyManifestService {
           node.originalIcon ||
           node.rootViewIcon;
         if (iconPath) {
-          return iconPath.startsWith('http') ? iconPath : 'https://www.bungie.net' + iconPath;
+          return this.assetUrl.resolve(iconPath);
         }
       }
     }
