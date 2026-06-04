@@ -4,6 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
 import { BungieApiService } from '../../services/bungie-api.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
+import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { firstValueFrom } from 'rxjs';
@@ -68,7 +69,7 @@ interface LitePlayerRow {
         <button type="button" mat-dialog-close class="px-3 py-1.5 text-sm text-slate-300 hover:text-white rounded">
           {{ i18n.t('pgcr.close') }}
         </button>
-        <button type="button"
+        <button *ngIf="!isOfflineMode" type="button"
                 (click)="openFullPgcr()"
                 class="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-500 text-black font-medium rounded">
           {{ i18n.t('pgcr.full') }}
@@ -88,6 +89,7 @@ export class PgcrLiteComponent implements OnInit {
   durationSeconds = 0;
   period = '';
   intlLocale = 'en-US';
+  isOfflineMode = false;
 
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: PgcrLiteDialogData,
@@ -95,9 +97,11 @@ export class PgcrLiteComponent implements OnInit {
     private bungie: BungieApiService,
     private pgcrCache: PGCRCacheService,
     public i18n: UiI18nService,
-    locale: LocaleService
+    locale: LocaleService,
+    private archiveRuntime: ArchiveRuntimeService
   ) {
     this.intlLocale = locale.intlLocale;
+    this.isOfflineMode = archiveRuntime.isOfflineMode;
   }
 
   async ngOnInit(): Promise<void> {
@@ -109,6 +113,10 @@ export class PgcrLiteComponent implements OnInit {
       }
 
       if (!pruned) {
+        if (this.archiveRuntime.isReadOnly) {
+          this.error = this.i18n.t('archive.pgcrNotArchived');
+          return;
+        }
         const raw = await firstValueFrom(this.bungie.getPGCR(this.data.instanceId, this.data.isD1));
         const fromRaw = this.pruneRaw(raw);
 

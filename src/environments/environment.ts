@@ -16,6 +16,10 @@ export const environment = {
     cloudflareToken: ''
   },
   // Experimental external PGCR API integration (disabled by default in dev)
-  pgcrApiRoot: '',        // e.g. 'https://pgcr-api.example.com'
-  useExternalPgcr: false  // set true to enable calling external PGCR API
-}; 
+  pgcrApiRoot: '',
+  pgcrApiKey: '',
+  useExternalPgcr: false,
+  /** When true, app runs from an imported offline archive (no Bungie API). */
+  offlineMode: false,
+  archiveRoot: ''
+};

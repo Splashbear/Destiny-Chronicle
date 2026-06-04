@@ -12,7 +12,8 @@
     "download-icons": "node scripts/download-icons.js",
     "update-d1-manifest": "node scripts/d1-manifest-to-json.js",
     "clean": "rimraf dist .angular node_modules/.cache",
-    "e2e:splashbear": "playwright test e2e/splashbear-load.spec.ts"
+    "e2e:splashbear": "playwright test e2e/splashbear-load.spec.ts",
+    "archive:download-images": "node tools/archive-builder/download-images.mjs"
   },
   "private": true,
   "dependencies": {
@@ -29,6 +30,7 @@
     "@angular/platform-server": "^19.2.0",
     "@angular/router": "^19.2.0",
     "@angular/ssr": "^19.2.9",
+    "@types/jszip": "^3.4.0",
     "bungie-api-ts": "^5.2.0",
     "chart.js": "^4.5.0",
     "core-js": "^3.36.0",
@@ -36,6 +38,7 @@
     "file-saver": "^2.0.5",
     "html2canvas": "^1.4.1",
     "idb": "^8.0.3",
+    "jszip": "^3.10.1",
     "ng2-charts": "^8.0.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",

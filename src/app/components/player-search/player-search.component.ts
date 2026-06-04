@@ -9,6 +9,10 @@ import { DestinyManifestService } from '../../services/destiny-manifest.service'
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { environment } from '../../../environments/environment';
+import { ArchiveService } from '../../services/archive.service';
+import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
+import { AssetUrlService } from '../../services/asset-url.service';
+import { ArchiveAccount } from '../../models/archive.types';
 
 import { ActivityHistory, Character } from '../../models/activity-history.model';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption, ActivityMode, ACTIVITY_MODE_MAP } from '../../models/activity-types';
@@ -160,6 +164,7 @@ const ACTIVITY_TYPE_REFERENCE_IDS: { [type: string]: number } = {
 interface PlayerSearchDisplay extends PlayerSearchResult {
   game: 'D1' | 'D2';
   platform: string;
+  iconPath?: string;
   isPrimary?: boolean;
   crossSaveOverride?: number;
 }
@@ -668,6 +673,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private lastGroupedActivities: any[] = [];
 
   showBackgroundProcessingIndicator = false;
+
+  /** Offline archive export/import UI */
+  archiveExporting = false;
+  archiveProgressMessage = '';
+  archiveProgressPercent = 0;
+  showArchiveBackupOptions = false;
+  showOfflineDeviceReady = false;
+  dismissOfflineDeviceReady = false;
+
+  get isOfflineArchiveMode(): boolean {
+    return this.archiveRuntime.isOfflineMode;
+  }
+
+  get isArchiveSyncing(): boolean {
+    return this.archiveRuntime.isOnlineSyncSession;
+  }
+
+  get showInstallAppHint(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+    const standalone = window.matchMedia('(display-mode: standalone)').matches;
+    return !standalone && (this.showOfflineDeviceReady || this.isOfflineArchiveMode);
+  }
+
+  get offlineFrozenLabel(): string | null {
+    return this.archiveRuntime.frozenAtLabel;
+  }
 
   onDatePickerChange(dateInfo: {month: number, day: number}) {
     this.selectedMonth = dateInfo.month;
@@ -1360,7 +1393,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private locale: LocaleService,
     private router: Router,
     private route: ActivatedRoute,
-    private location: Location
+    private location: Location,
+    private archiveService: ArchiveService,
+    public archiveRuntime: ArchiveRuntimeService,
+    private assetUrl: AssetUrlService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
@@ -1406,6 +1442,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     console.log('[INIT] Component initializing');
+
+    if (this.isOfflineArchiveMode) {
+      await this.hydrateFromOfflineArchive();
+      this.showOfflineDeviceReady = this.archiveService.isDevicePreparedForOffline();
+    }
 
     // Set default date to today (use YYYY-MM-DD format)
     const today = new Date();
@@ -5016,6 +5057,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * The APIs are separate for a reason and return different data structures.
    */
   async addPlayer() {
+    if (this.isOfflineArchiveMode) {
+      this.errorMessage = this.uiI18n.t('archive.offlineSearchDisabled');
+      return;
+    }
     console.log('addPlayer called with searchUsername:', this.searchUsername);
     
     const pending = (this.searchUsername || '').trim();
@@ -5993,8 +6038,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // For D2, try PGCR image first
     if (first.referenceId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(first.referenceId, false);
-      if (pgcrImage && (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/')))
-        return 'https://www.bungie.net' + pgcrImage;
+      if (pgcrImage) {
+        return this.assetUrl.resolve(pgcrImage);
+      }
     }
     // Fallback to activity type icon
     return this.activityIconService.getActivityIconPath(first.type, false);
@@ -6111,8 +6157,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // For D2, try PGCR image first
     if (referenceId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(referenceId, false);
-      if (pgcrImage && (pgcrImage.startsWith('/img/') || pgcrImage.startsWith('/common/')))
-        return 'https://www.bungie.net' + pgcrImage;
+      if (pgcrImage) {
+        return this.assetUrl.resolve(pgcrImage);
+      }
     }
     // Fallback to activity type icon
     const mode = activity.activityDetails?.mode;
@@ -6714,9 +6761,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (refId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(refId, isD1);
       if (pgcrImage) {
-        // Normalize to absolute URL when needed
-        if (pgcrImage.startsWith('http')) return pgcrImage;
-        return 'https://www.bungie.net' + pgcrImage;
+        return this.assetUrl.resolve(pgcrImage);
       }
     }
 
@@ -7510,7 +7555,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 titleMap[uniqueKey] = {
                   hash: node.completionRecordHash,
                   name: displayName,
-                  icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+                  icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null),
                   completed: isCompleted,
                   isGilded,
                   timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
@@ -7520,7 +7565,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                   altIcon: (() => {
                     const frames = node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames;
                     if (frames && frames.length > 0) {
-                      return `https://www.bungie.net${frames[frames.length - 1]}`; // grey/silver variant
+                      return this.assetUrl.resolve(frames[frames.length - 1]); // grey/silver variant
                     }
                     return undefined;
                   })(),
@@ -9266,7 +9311,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 titleMap[uniqueKey] = {
                   hash: node.completionRecordHash,
                   name: displayName,
-                  icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+                  icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null),
                   completed: isCompleted,
                   isGilded,
                   timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
@@ -9276,7 +9321,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                   altIcon: (() => {
                     const frames = node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames;
                     if (frames && frames.length > 0) {
-                      return `https://www.bungie.net${frames[frames.length - 1]}`; // grey/silver variant
+                      return this.assetUrl.resolve(frames[frames.length - 1]); // grey/silver variant
                     }
                     return undefined;
                   })(),
@@ -9498,7 +9543,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           titleMap[uniqueKey] = {
             hash: node.completionRecordHash,
             name: displayName,
-            icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? `https://www.bungie.net${node.displayProperties.icon}` : null),
+            icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null),
             completed: isCompleted,
             isGilded,
             timesGilded: (isCompleted && timesGilded > 0) ? timesGilded : undefined,
@@ -9508,7 +9553,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             altIcon: (() => {
               const frames = node.iconSequences && node.iconSequences[1] && node.iconSequences[1].frames;
               if (frames && frames.length > 0) {
-                return `https://www.bungie.net${frames[frames.length - 1]}`;
+                return this.assetUrl.resolve(frames[frames.length - 1]);
               }
               return undefined;
             })(),
@@ -10366,6 +10411,251 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (activityName.includes('Heroic')) return 'Heroic';
     if (activityName.includes('Easy')) return 'Easy';
     return 'Normal';
+  }
+
+  private async hydrateFromOfflineArchive(): Promise<void> {
+    const manifest = this.archiveRuntime.archiveManifest;
+    if (!manifest?.accounts?.length) {
+      return;
+    }
+    this.apiAvailable = false;
+    this.bungieUnavailable = true;
+    await this.archiveRuntime.preloadMedia();
+    await this.loadFavorites();
+    const players: PlayerSearchDisplay[] = manifest.accounts.map((acct) => ({
+      membershipId: acct.membershipId,
+      membershipType: acct.membershipType,
+      displayName: acct.displayName,
+      platform: acct.platform,
+      game: acct.game,
+      iconPath: acct.iconPath ? this.assetUrl.resolve(acct.iconPath) : undefined,
+    }));
+    for (const player of players) {
+      const playerKey = this.getPlayerKey(player);
+      await this.showCachedDataInstantly(player, playerKey);
+    }
+    this.selectedPlayers = players;
+    this.loadingActivities[this.selectedDate] = false;
+    this.cdr.detectChanges();
+  }
+
+  async saveForOfflineOnDevice(includePgcr = true): Promise<void> {
+    if (this.selectedPlayers.length === 0) {
+      this.errorMessage = this.uiI18n.t('archive.needProfiles');
+      return;
+    }
+    this.archiveExporting = true;
+    this.archiveProgressMessage = this.uiI18n.t('archive.exportStarting');
+    this.archiveProgressPercent = 0;
+    this.cdr.detectChanges();
+    try {
+      const accounts: ArchiveAccount[] = this.selectedPlayers.map((p) => ({
+        membershipId: p.membershipId,
+        membershipType: p.membershipType,
+        displayName: p.displayName,
+        platform: p.platform,
+        game: p.game as 'D1' | 'D2',
+        iconPath: p.iconPath,
+      }));
+      await this.archiveService.prepareDeviceForOffline(accounts, {
+        includePgcr,
+        onProgress: (message, percent) => {
+          this.archiveProgressMessage = message;
+          this.archiveProgressPercent = percent;
+          this.cdr.detectChanges();
+        },
+      });
+      await this.archiveRuntime.preloadMedia();
+      this.apiAvailable = false;
+      this.bungieUnavailable = true;
+      this.showOfflineDeviceReady = true;
+      this.dismissOfflineDeviceReady = false;
+      await this.loadAllFilteredActivities(true);
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.error('[Archive] prepare device failed', err);
+      this.errorMessage = this.uiI18n.t('archive.exportFailed');
+    } finally {
+      this.archiveExporting = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async buildOfflineArchive(includePgcr = true): Promise<void> {
+    if (this.selectedPlayers.length === 0) {
+      this.errorMessage = this.uiI18n.t('archive.needProfiles');
+      return;
+    }
+    this.archiveExporting = true;
+    this.archiveProgressMessage = this.uiI18n.t('archive.exportStarting');
+    this.archiveProgressPercent = 0;
+    this.cdr.detectChanges();
+    try {
+      const accounts: ArchiveAccount[] = this.selectedPlayers.map((p) => ({
+        membershipId: p.membershipId,
+        membershipType: p.membershipType,
+        displayName: p.displayName,
+        platform: p.platform,
+        game: p.game as 'D1' | 'D2',
+        iconPath: p.iconPath,
+      }));
+      await this.archiveService.exportArchive(accounts, {
+        includePgcr,
+        onProgress: (message, percent) => {
+          this.archiveProgressMessage = message;
+          this.archiveProgressPercent = percent;
+          this.cdr.detectChanges();
+        },
+      });
+    } catch (err) {
+      console.error('[Archive] export failed', err);
+      this.errorMessage = this.uiI18n.t('archive.exportFailed');
+    } finally {
+      this.archiveExporting = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async updateOfflineArchive(): Promise<void> {
+    const manifest = this.archiveRuntime.archiveManifest;
+    const accounts: ArchiveAccount[] = (manifest?.accounts?.length
+      ? manifest.accounts
+      : this.selectedPlayers.map((p) => ({
+          membershipId: p.membershipId,
+          membershipType: p.membershipType,
+          displayName: p.displayName,
+          platform: p.platform,
+          game: p.game as 'D1' | 'D2',
+          iconPath: p.iconPath,
+        })));
+    this.archiveExporting = true;
+    try {
+      await this.archiveService.updateArchive(accounts, manifest, {
+        includePgcr: manifest?.includePgcr ?? true,
+        onProgress: (message, percent) => {
+          this.archiveProgressMessage = message;
+          this.archiveProgressPercent = percent;
+          this.cdr.detectChanges();
+        },
+      });
+    } finally {
+      this.archiveExporting = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async onArchiveFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    try {
+      this.archiveExporting = true;
+      this.archiveProgressMessage = this.uiI18n.t('archive.importStarting');
+      await this.archiveService.importArchive(file);
+      await this.archiveRuntime.preloadMedia();
+      await this.hydrateFromOfflineArchive();
+      this.showOfflineDeviceReady = true;
+      this.dismissOfflineDeviceReady = false;
+    } catch (err) {
+      console.error('[Archive] import failed', err);
+      this.errorMessage = this.uiI18n.t('archive.importFailed');
+    } finally {
+      this.archiveExporting = false;
+      input.value = '';
+      this.cdr.detectChanges();
+    }
+  }
+
+  exitOfflineArchive(): void {
+    this.archiveService.exitOfflineMode();
+    this.showOfflineDeviceReady = false;
+    window.location.reload();
+  }
+
+  dismissOfflineReadyBanner(): void {
+    this.dismissOfflineDeviceReady = true;
+    this.cdr.detectChanges();
+  }
+
+  toggleArchiveBackupOptions(): void {
+    this.showArchiveBackupOptions = !this.showArchiveBackupOptions;
+    this.cdr.detectChanges();
+  }
+
+  triggerArchiveImport(): void {
+    document.getElementById('archive-import-input')?.click();
+  }
+
+  /** While in offline mode: reach out to Bungie, sync archived accounts, refresh archive in place. */
+  async checkForArchiveUpdates(): Promise<void> {
+    const manifest = this.archiveRuntime.archiveManifest;
+    if (!manifest?.accounts?.length) {
+      this.errorMessage = this.uiI18n.t('archive.needProfiles');
+      return;
+    }
+
+    this.archiveExporting = true;
+    this.archiveProgressMessage = this.uiI18n.t('archive.checkingUpdates');
+    this.archiveProgressPercent = 0;
+    this.archiveRuntime.beginOnlineSyncSession();
+    this.cdr.detectChanges();
+
+    try {
+      await this.manifest.refreshManifest();
+      const reachable = await this.archiveService.isBungieReachable();
+      if (!reachable) {
+        this.errorMessage = this.uiI18n.t('archive.bungieOffline');
+        return;
+      }
+
+      const players: PlayerSearchDisplay[] = manifest.accounts.map((acct) => ({
+        membershipId: acct.membershipId,
+        membershipType: acct.membershipType,
+        displayName: acct.displayName,
+        platform: acct.platform,
+        game: acct.game,
+        iconPath: acct.iconPath ? this.assetUrl.resolve(acct.iconPath) : undefined,
+      }));
+
+      let step = 0;
+      for (const player of players) {
+        step++;
+        this.archiveProgressMessage = `${this.uiI18n.t('archive.syncingAccount')} ${player.displayName}…`;
+        this.archiveProgressPercent = Math.round((step / (players.length + 2)) * 40);
+        this.cdr.detectChanges();
+        await this.loadCharacterHistory(player);
+      }
+
+      const hasNew = await this.archiveService.hasActivitiesSince(manifest.lastSyncedAt);
+      if (!hasNew) {
+        this.archiveProgressMessage = this.uiI18n.t('archive.upToDate');
+        this.archiveProgressPercent = 100;
+        return;
+      }
+
+      await this.archiveService.prepareDeviceForOffline(manifest.accounts, {
+        includePgcr: manifest.includePgcr,
+        onProgress: (message, percent) => {
+          this.archiveProgressMessage = message;
+          this.archiveProgressPercent = 40 + Math.round(percent * 0.55);
+          this.cdr.detectChanges();
+        },
+      });
+      await this.archiveRuntime.preloadMedia();
+      await this.hydrateFromOfflineArchive();
+      this.showOfflineDeviceReady = true;
+      this.archiveProgressMessage = this.uiI18n.t('archive.updateSuccess');
+      this.archiveProgressPercent = 100;
+    } catch (err) {
+      console.error('[Archive] check for updates failed', err);
+      this.errorMessage = this.uiI18n.t('archive.updateFailed');
+    } finally {
+      this.archiveRuntime.endOnlineSyncSession();
+      this.archiveExporting = false;
+      this.cdr.detectChanges();
+    }
   }
 
 }

@@ -200,6 +200,26 @@ export class PGCRCacheService {
     this.stored$.next();
   }
 
+  async getAllEntries(): Promise<PrunedPgcr[]> {
+    const db = await this.dbPromise;
+    return db.getAll('pgcr');
+  }
+
+  async importEntries(entries: PrunedPgcr[]): Promise<void> {
+    if (!entries.length) {
+      return;
+    }
+    const db = await this.dbPromise;
+    const tx = db.transaction('pgcr', 'readwrite');
+    for (const entry of entries) {
+      if (entry?.id) {
+        await tx.store.put(entry);
+      }
+    }
+    await tx.done;
+    this.stored$.next();
+  }
+
   async getMissingPGCRs(activityIds: string[]): Promise<string[]> {
     if (activityIds.length === 0) {
       return [];
