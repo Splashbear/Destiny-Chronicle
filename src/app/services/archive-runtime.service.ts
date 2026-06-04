@@ -3,6 +3,7 @@ import { BehaviorSubject } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { ArchiveAssetMap, ArchiveManifest } from '../models/archive.types';
 import { ArchiveMediaService } from './archive-media.service';
+import { LocaleService } from './locale.service';
 import { hashAssetPath } from '../utils/archive-hash';
 
 const STORAGE_KEY = 'destinyChronicle.offlineArchive';
@@ -20,7 +21,10 @@ export class ArchiveRuntimeService {
     syncing: false,
   });
 
-  constructor(private media: ArchiveMediaService) {
+  constructor(
+    private media: ArchiveMediaService,
+    private locale: LocaleService
+  ) {
     this.restoreFromStorage();
   }
 
@@ -61,7 +65,7 @@ export class ArchiveRuntimeService {
       return null;
     }
     try {
-      return new Date(this.manifest.frozenAt).toLocaleDateString(undefined, {
+      return new Date(this.manifest.frozenAt).toLocaleDateString(this.locale.intlLocale, {
         year: 'numeric',
         month: 'long',
         day: 'numeric',

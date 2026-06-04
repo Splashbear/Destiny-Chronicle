@@ -19,6 +19,7 @@ export const environment = {
   },
   // External PGCR API integration (disabled by default until configured)
   pgcrApiRoot: '',        // e.g. 'https://pgcr-api.example.com'
+  pgcrApiKey: '',
   useExternalPgcr: false,  // set true to enable calling external PGCR API
   offlineMode: false,
   archiveRoot: ''

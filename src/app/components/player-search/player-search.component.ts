@@ -34,6 +34,10 @@ import {
   MOT_PANTHEON_CONFIG
 } from '../../config/pantheon.config';
 import { DatePickerComponent } from '../date-picker/date-picker.component';
+import { PlayerSearchActivitiesTabComponent } from './player-search-activities-tab.component';
+import { PlayerSearchBreakdownTabComponent } from './player-search-breakdown-tab.component';
+import { PlayerSearchFirstsTabComponent } from './player-search-firsts-tab.component';
+import { PlayerSearchTitlesTabComponent } from './player-search-titles-tab.component';
 // Removed new summary/list components to revert to previous display
 import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from '../../services/stats.service';
 import type { ActivityIconType } from '../../services/activity-icon.service';
@@ -574,11 +578,12 @@ interface PlatformStats {
   imports: [
     CommonModule,
     FormsModule,
-    AccountStatsComponent,
-    AccountCardGridComponent,
     ExportOptionsDialogComponent,
     DatePickerComponent,
-    BaseChartDirective
+    PlayerSearchActivitiesTabComponent,
+    PlayerSearchBreakdownTabComponent,
+    PlayerSearchFirstsTabComponent,
+    PlayerSearchTitlesTabComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
@@ -2669,7 +2674,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.selectedPlayers = [displayPlayer];
     this.selectedCharacterIds[player.membershipId] = undefined;
 
-    // Add to selected accounts service for Analytics component
+    // Sync selected account for multi-account consumers
     const acc: PlatformAccount = {
       platformType: player.membershipType,
       membershipId: player.membershipId,
@@ -5697,7 +5702,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.filteredActivities$.next([]);
     this.statsDebounce$.next();
     
-    // Clear selected accounts service for Analytics component
+    // Clear selected accounts service
     this.selectedAccounts.clear();
     
     // Reset sync tracking

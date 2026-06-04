@@ -1,0 +1,87 @@
+<div class="space-y-6">
+  <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+    <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
+    <div class="flex items-center gap-3">
+      <button (click)="ps.refreshTitles()" 
+              [disabled]="ps.loadingTitlesOverall"
+              class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded text-sm flex items-center gap-2">
+        <svg *ngIf="ps.loadingTitlesOverall" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+        </svg>
+        {{ ps.loadingTitlesOverall ? 'Refreshing...' : 'Refresh Titles' }}
+      </button>
+      <button (click)="ps.debugTitles()" 
+              class="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm">
+        Debug Titles
+      </button>
+      <select [(ngModel)]="ps.titleSort" class="bg-slate-700 text-sm text-white rounded px-2 py-1 border border-slate-600">
+        <option value="alpha">Alphabetical</option>
+        <option value="release">Newest First</option>
+      </select>
+      <div class="flex gap-1 text-xs">
+        <button (click)="ps.titleFilter='all'" [ngClass]="{'d2-tab d2-tab-active-blue': ps.titleFilter==='all', 'd2-tab': ps.titleFilter!=='all'}">All</button>
+        <button (click)="ps.titleFilter='current'" [ngClass]="{'d2-tab d2-tab-active-blue': ps.titleFilter==='current', 'd2-tab': ps.titleFilter!=='current'}">Current</button>
+        <button (click)="ps.titleFilter='legacy'" [ngClass]="{'d2-tab d2-tab-active-blue': ps.titleFilter==='legacy', 'd2-tab': ps.titleFilter!=='legacy'}">Legacy</button>
+      </div>
+    </div>
+  </div>
+  <!-- Loading State -->
+  <div *ngIf="ps.loadingTitlesOverall" class="flex flex-col items-center justify-center py-12 w-full">
+    <svg class="animate-spin h-8 w-8 text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+    </svg>
+    <div class="text-lg text-white font-medium">Loading titles...</div>
+    <div class="text-sm text-slate-400 mt-2">Fetching title data from Bungie</div>
+  </div>
+
+  <!-- Empty State -->
+  <div *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length === 0" class="flex flex-col items-center justify-center py-12 w-full">
+    <div class="text-lg text-slate-400 font-medium mb-2">No titles found</div>
+    <div class="text-sm text-slate-500 text-center">
+      No Destiny 2 titles are available for the selected accounts.<br>
+      Make sure you have Destiny 2 accounts selected and try refreshing.
+    </div>
+  </div>
+
+  <!-- Earned Titles -->
+  <h4 *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length > 0" class="text-white font-semibold mt-2">Earned Titles</h4>
+  <div *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-4 mb-6">
+    <div *ngFor="let title of ps.unlockedTitlesDisplay" class="flex items-center gap-2 sm:gap-4 bg-slate-700/50 rounded-lg p-2 sm:p-3 relative min-w-0" [ngClass]="{'text-slate-400': title.legacy}">
+      <img *ngIf="title.icon" [src]="(title.legacy && title.altIcon) ? title.altIcon : title.icon" class="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded shadow" alt="Seal Icon" [ngClass]="{'grayscale opacity-70': title.legacy && !title.altIcon}" />
+      <div class="min-w-0 flex-1">
+        <div class="font-bold text-lg flex flex-wrap items-center gap-2 break-words" [ngClass]="{'text-slate-300': title.legacy, 'text-yellow-300': !(title.legacy)}">
+          {{ title.name }}
+          <img *ngIf="title.isGilded && title.gildedIcon" [src]="title.gildedIcon" class="w-6 h-6 ml-2" alt="Gilded Icon" />
+          <span *ngIf="title.isGilded && title.timesGilded" class="text-xs text-yellow-400 ml-1">x{{ title.timesGilded }}</span>
+        </div>
+        <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
+      </div>
+      <div class="absolute top-1 right-1 flex gap-1" *ngIf="title.holders?.length">
+        <ng-container *ngFor="let h of title.holders">
+          <img [src]="ps.getPlatformIconUrl(ps.getPlatformId(h.platform))" class="w-4 h-4" [title]="h.displayName" />
+        </ng-container>
+      </div>
+    </div>
+  </div>
+
+  <!-- Locked Titles -->
+  <h4 *ngIf="!ps.loadingTitlesOverall && ps.lockedTitlesDisplay.length > 0" class="text-white font-semibold">Locked Titles</h4>
+  <div *ngIf="!ps.loadingTitlesOverall && ps.lockedTitlesDisplay.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-4">
+    <div *ngFor="let title of ps.lockedTitlesDisplay" class="flex items-center gap-2 sm:gap-4 bg-slate-800/60 rounded-lg p-2 sm:p-3 relative text-slate-400 min-w-0">
+      <img *ngIf="title.icon" [src]="(title.altIcon || title.icon)" class="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0 rounded shadow grayscale opacity-70" alt="Seal Icon" />
+      <div class="min-w-0 flex-1">
+        <div class="font-bold text-lg flex flex-wrap items-center gap-2 break-words">
+          {{ title.name }}
+</div>
+        <!-- Progress bar for incomplete titles -->
+        <div *ngIf="title.progressPercent !== undefined" class="w-40 h-2 bg-slate-700 rounded mt-1 overflow-hidden">
+          <div class="h-full bg-blue-500" [style.width.%]="title.progressPercent"></div>
+        </div>
+        <div class="text-red-400 text-sm font-semibold">Locked</div>
+        <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
+      </div>
+    </div>
+  </div>
+</div>
