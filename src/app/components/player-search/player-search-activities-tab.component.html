@@ -277,11 +277,12 @@
             <img [src]="ps.getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
             <span class="text-xs text-slate-300 font-medium min-w-[80px]">{{ ps.getActivityDisplayName(activity) }}</span>
             <img *ngIf="activity.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-4 h-4 ml-1 inline-block align-middle" [title]="cls" alt="class" />
-            <a (click)="ps.openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1', $event)"
-               [title]="ps.uiI18n.t('pgcr.openReportHint')"
-               class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors duration-200 flex-shrink-0">
+            <button type="button"
+                    (click)="ps.openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1', $event)"
+                    [title]="ps.uiI18n.t('pgcr.openReportHint')"
+                    class="activity-pgcr-link text-xs font-mono text-yellow-400 hover:text-yellow-300 transition-colors duration-200 flex-shrink-0">
               {{ ps.formatTime(activity.period) }}
-            </a>
+            </button>
           </div>
         </div>
       </div>
@@ -304,11 +305,12 @@
       <img [src]="(row.game || game) === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4 shrink-0" alt="game" />
       <img [src]="ps.getPlatformIconUrl(row.activity.membershipType || 0)" class="w-4 h-4 platform-icon shrink-0" alt="platform" />
       <span class="text-xs text-slate-300 font-medium truncate shrink-0 max-w-[120px]">{{ ps.getActivityDisplayName(row.activity) }}</span>
-      <a (click)="ps.openExternalPGCR(row.activity, (row.game || game) === 'D1', $event)"
-         [title]="ps.uiI18n.t('pgcr.openReportHint')"
-         class="text-xs font-mono text-yellow-400 hover:text-yellow-300 underline cursor-pointer transition-colors shrink-0">
+      <button type="button"
+              (click)="ps.openExternalPGCR(row.activity, (row.game || game) === 'D1', $event)"
+              [title]="ps.uiI18n.t('pgcr.openReportHint')"
+              class="activity-pgcr-link text-xs font-mono text-yellow-400 hover:text-yellow-300 transition-colors shrink-0">
         {{ ps.formatTime(row.activity.period) }}
-      </a>
+      </button>
     </div>
   </div>
 </ng-template>

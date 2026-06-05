@@ -707,6 +707,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.archiveRuntime.frozenAtLabel;
   }
 
+  /** Sync month/day from the picker only; user clicks Search Date to load activities. */
   onDatePickerChange(dateInfo: {month: number, day: number}) {
     const newMonth = Number(dateInfo.month);
     let newDay = Number(dateInfo.day);
@@ -715,8 +716,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     const daysInMonth = new Date(2000, newMonth, 0).getDate();
     newDay = Math.min(newDay, daysInMonth);
-    // Do not assign selectedMonth/Day here — onDateSelect compares old vs new and updates selectedDate.
-    void this.onDateSelect(String(newMonth), String(newDay));
+    this.selectedMonth = newMonth;
+    this.selectedDay = newDay;
+    this.cdr.markForCheck();
   }
 
   /**
@@ -7278,7 +7280,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.filteredActivitiesCache.clear();
   }
 
-  openExternalPGCR(activity: ActivityHistory, isD1: boolean, _event?: MouseEvent) {
+  openExternalPGCR(activity: ActivityHistory, isD1: boolean, event?: MouseEvent) {
+    event?.preventDefault();
+    event?.stopPropagation();
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
     if (this.activeTab === 'activities' || this.activeTab === 'firsts') {
@@ -7722,7 +7726,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.collapsedActivityGames.add(game);
     }
     this.persistActivityCollapseState();
-    this.cdr.markForCheck();
+    this.refreshActivitiesTabView();
   }
 
   isActivityYearCollapsed(game: 'D1' | 'D2', year: string): boolean {
@@ -7737,7 +7741,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.collapsedActivityYears.add(key);
     }
     this.persistActivityCollapseState();
-    this.cdr.markForCheck();
+    this.refreshActivitiesTabView();
   }
 
   private loadActivityCollapseState(): void {
@@ -7795,7 +7799,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     this.activitiesViewMode = mode;
     this.persistActivitiesViewPreferences();
-    this.cdr.markForCheck();
+    this.refreshActivitiesTabView();
   }
 
   setActivitiesChronologicalSort(sort: ActivitiesChronologicalSort): void {
@@ -7804,7 +7808,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     this.activitiesChronologicalSort = sort;
     this.persistActivitiesViewPreferences();
-    this.cdr.markForCheck();
+    this.refreshActivitiesTabView();
+  }
+
+  /** OnPush parent + tab child components need an explicit detectChanges for toolbar toggles. */
+  private refreshActivitiesTabView(): void {
+    this.cdr.detectChanges();
   }
 
   getChronologicalRowsForYear(yearGroup: YearGroup, game: 'D1' | 'D2'): ChronologicalActivityRow[] {
@@ -7872,7 +7881,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.collapsedActivityYears.add(key);
     }
     this.persistActivityCollapseState();
-    this.cdr.markForCheck();
+    this.refreshActivitiesTabView();
   }
 
   expandAllActivityYears(): void {
@@ -7880,7 +7889,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.collapsedActivityYears.delete(key);
     }
     this.persistActivityCollapseState();
-    this.cdr.markForCheck();
+    this.refreshActivitiesTabView();
   }
 
   toggleBreakdownLastPlayedSort(): void {

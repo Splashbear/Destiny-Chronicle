@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { PlayerSearchComponent } from './player-search.component';
 
 @Component({
@@ -8,7 +8,9 @@ import { PlayerSearchComponent } from './player-search.component';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './player-search-titles-tab.component.html',
+  styleUrls: ['./player-search-tab-shared.scss'],
+  changeDetection: ChangeDetectionStrategy.Default,
 })
 export class PlayerSearchTitlesTabComponent {
-  readonly ps = inject(PlayerSearchComponent, { host: true });
+  readonly ps = inject(PlayerSearchComponent);
 }
