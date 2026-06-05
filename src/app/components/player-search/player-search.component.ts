@@ -707,6 +707,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.archiveRuntime.frozenAtLabel;
   }
 
+  /** Sync month/day from the picker only; user clicks Search Date to load activities. */
   onDatePickerChange(dateInfo: {month: number, day: number}) {
     const newMonth = Number(dateInfo.month);
     let newDay = Number(dateInfo.day);
@@ -715,8 +716,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     const daysInMonth = new Date(2000, newMonth, 0).getDate();
     newDay = Math.min(newDay, daysInMonth);
-    // Do not assign selectedMonth/Day here — onDateSelect compares old vs new and updates selectedDate.
-    void this.onDateSelect(String(newMonth), String(newDay));
+    this.selectedMonth = newMonth;
+    this.selectedDay = newDay;
+    this.cdr.markForCheck();
   }
 
   /**
