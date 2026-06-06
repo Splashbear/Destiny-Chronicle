@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/played-with/played-with.component.scss", "src/app/components/played-with/played-with.component.scss"],
+  "sourcesContent": [".played-with table {\n  border-collapse: collapse;\n}\n\n.sortable-th {\n  @apply inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-white transition-colors cursor-pointer;\n}\n", ".played-with table {\n  border-collapse: collapse;\n}\n\n.sortable-th {\n  @apply inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-white transition-colors cursor-pointer;\n}\n/*# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyJmaWxlOi8vL2hvbWUvcnVubmVyL3dvcmsvRGVzdGlueS1DaHJvbmljbGUvRGVzdGlueS1DaHJvbmljbGUvc3JjL2FwcC9jb21wb25lbnRzL3BsYXllZC13aXRoL3BsYXllZC13aXRoLmNvbXBvbmVudC5zY3NzIl0sIm5hbWVzIjpbXSwibWFwcGluZ3MiOiJBQUFBO0VBQ0U7OztBQUdGO0VBQ0UiLCJzb3VyY2VzQ29udGVudCI6WyIucGxheWVkLXdpdGggdGFibGUge1xuICBib3JkZXItY29sbGFwc2U6IGNvbGxhcHNlO1xufVxuXG4uc29ydGFibGUtdGgge1xuICBAYXBwbHkgaW5saW5lLWZsZXggaXRlbXMtY2VudGVyIGdhcC0wLjUgdXBwZXJjYXNlIHRyYWNraW5nLXdpZGUgaG92ZXI6dGV4dC13aGl0ZSB0cmFuc2l0aW9uLWNvbG9ycyBjdXJzb3ItcG9pbnRlcjtcbn1cbiJdfQ== */"],
+  "mappings": "AAAA,CAAA,YAAA,MACE,gBAAA,QCCF,CDGE,CAAA,YAAA,QAAA,YAAA,OAAA,QAAA,YAAA,OAAA,IAAA,QAAA,eAAA,UAAA,eAAA,OAAA,oBAAA,KAAA,CAAA,gBAAA,CAAA,YAAA,CAAA,qBAAA,CAAA,IAAA,CAAA,OAAA,2BAAA,aAAA,EAAA,CAAA,CAAA,CAAA,EAAA,CAAA,GAAA,oBAAA,IAAA,CAAA,CAAA,WAAA,OAAA,mBAAA,EAAA,MAAA,IAAA,IAAA,IAAA,IAAA,EAAA,IAAA,iBAAA,EAAA,GAAA",
+  "names": []
+}

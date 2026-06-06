@@ -1,7 +1,7 @@
 {
   "version": 3,
   "sources": ["src/app/components/pgcr-lite/pgcr-lite.component.ts"],
-  "sourcesContent": ["\n    :host { display: block; }\n    .pgcr-lite { background: #1a1f2e; }\n  "],
+  "sourcesContent": ["\n    :host { display: block; }\n    .pgcr-lite { background: #0c0a14; }\n  "],
   "mappings": "AACI,MAAQ,QAAA,MACR,CAAA,UAAa,WAAA",
   "names": []
 }
