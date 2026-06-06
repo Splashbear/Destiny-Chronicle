@@ -1,4 +1,5 @@
 import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy, HostListener } from '@angular/core';
+import { trigger, transition, style, animate } from '@angular/animations';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -38,9 +39,9 @@ import { PlayerSearchActivitiesTabComponent } from './player-search-activities-t
 import { PlayerSearchBreakdownTabComponent } from './player-search-breakdown-tab.component';
 import { PlayerSearchFirstsTabComponent } from './player-search-firsts-tab.component';
 import { PlayerSearchTitlesTabComponent } from './player-search-titles-tab.component';
+import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 // Removed new summary/list components to revert to previous display
 import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from '../../services/stats.service';
-import type { ActivityIconType } from '../../services/activity-icon.service';
 import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
@@ -583,11 +584,23 @@ interface PlatformStats {
     PlayerSearchActivitiesTabComponent,
     PlayerSearchBreakdownTabComponent,
     PlayerSearchFirstsTabComponent,
-    PlayerSearchTitlesTabComponent
+    PlayerSearchTitlesTabComponent,
+    DestinyLoaderComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
-  changeDetection: ChangeDetectionStrategy.OnPush // Optimize change detection
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  animations: [
+    trigger('tabContent', [
+      transition(':enter', [
+        style({ opacity: 0, transform: 'translateY(8px)' }),
+        animate('250ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
+      ]),
+      transition(':leave', [
+        animate('150ms ease-in', style({ opacity: 0, transform: 'translateY(-4px)' }))
+      ])
+    ])
+  ]
 })
 export class PlayerSearchComponent implements OnInit, OnDestroy {
   d1XboxSearchTerm: string = '';
@@ -3813,16 +3826,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const groupKey = `${baseActivityName}`;
       
       if (!yearGroup.typeGroups.has(groupKey)) {
-        let icon = this.activityIconService.getActivityIconPath(normalizedType, isD1);
-        if (!icon) {
-          icon = this.activityIconService.getActivityIconPath('other', isD1);
-        }
         yearGroup.typeGroups.set(groupKey, {
           name: baseActivityName,      // for display (base name)
-          type: activityType,          // for icon
+          type: activityType,          // for accent styling
           isD1,
           image: this.getActivityImage(activity, isD1),
-          icon,
+          icon: null,
           activities: [],
           seenInstanceIds: new Set<string>()
         });
@@ -6028,23 +6037,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getFirstCompletionImage(first: ActivityFirstCompletion): string | SafeHtml | null {
     if (!first) return null;
     if (first.game === 'D1') {
-      // For D1, try raid image first
       const raidImage = this.manifest.getActivityPgcrImage(first.referenceId, true);
       if (raidImage) {
         return raidImage;
       }
-      // Then try activity type icon
-      return this.activityIconService.getActivityIconPath(first.type, true);
+      return null;
     }
-    // For D2, try PGCR image first
     if (first.referenceId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(first.referenceId, false);
       if (pgcrImage) {
         return this.assetUrl.resolve(pgcrImage);
       }
     }
-    // Fallback to activity type icon
-    return this.activityIconService.getActivityIconPath(first.type, false);
+    return null;
   }
 
   // Build per-character earliest for a given list of first completions
@@ -6140,35 +6145,39 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (!activity) return null;
     const referenceId = activity.activityDetails?.referenceId;
     if (isD1) {
-      // For D1, try raid image first
       if (referenceId) {
         const raidImage = this.manifest.getActivityPgcrImage(referenceId, true);
         if (raidImage) {
           return raidImage;
         }
       }
-      // Then try activity type icon
-      const mode = activity.activityDetails?.mode;
-      if (mode !== undefined) {
-        const type = this.getActivityType(mode);
-        return this.activityIconService.getActivityIconPath(type, true);
-      }
       return null;
     }
-    // For D2, try PGCR image first
     if (referenceId) {
       const pgcrImage = this.manifest.getActivityPgcrImage(referenceId, false);
       if (pgcrImage) {
         return this.assetUrl.resolve(pgcrImage);
       }
     }
-    // Fallback to activity type icon
-    const mode = activity.activityDetails?.mode;
-    if (mode !== undefined) {
-      const type = this.getActivityType(mode);
-      return this.activityIconService.getActivityIconPath(type, false);
-    }
     return null;
+  }
+
+  getActivityTypeAccent(type: string): string {
+    return this.activityIconService.getActivityTypeAccent(type);
+  }
+
+  getActivityRowStyle(activity: any, isD1: boolean, activityType = 'other'): Record<string, string> {
+    const accent = this.getActivityTypeAccent(activityType);
+    const img = this.getActivityImage(activity, isD1);
+    if (img && img.startsWith('http')) {
+      return {
+        '--activity-accent': accent,
+        'background-image': `linear-gradient(90deg, rgba(32, 38, 44, 0.62) 0%, rgba(32, 38, 44, 0.38) 55%, rgba(32, 38, 44, 0.28) 100%), url('${img}')`,
+        'background-size': 'cover',
+        'background-position': 'center',
+      };
+    }
+    return { '--activity-accent': accent };
   }
 
   // For Guardian Firsts PGCR button
@@ -6184,6 +6193,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   private isDuplicateActivity(a1: any, a2: any): boolean {
     return a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
+  }
+
+  /** Original Bungie-style game badge (tricorn, with "2" on D2). */
+  getGameIconUrl(game: 'D1' | 'D2' | string): string {
+    return game === 'D1'
+      ? 'assets/icons/destiny/Destiny 1 icon.jpg'
+      : 'assets/icons/destiny/Destiny 2 icon.png';
   }
 
   /** Returns local SVG icon path for the given platform */
@@ -7285,7 +7301,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
-    if (this.activeTab === 'activities' || this.activeTab === 'firsts') {
+    if (this.activeTab === 'activities' || this.activeTab === 'firsts' || this.activeTab === 'breakdown') {
       this.pgcrModalService.openPgcrLiteFromActivity(activity, isD1);
       return;
     }
@@ -7903,20 +7919,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  formatBreakdownLastPlayed(iso?: string): string {
+  formatBreakdownLastPlayedDate(iso?: string): string {
     if (!iso) return '—';
     try {
       const date = new Date(iso);
       if (Number.isNaN(date.getTime())) return '—';
-      const now = Date.now();
-      const diffMs = now - date.getTime();
+      return this.formatDateTime(iso);
+    } catch {
+      return '—';
+    }
+  }
+
+  formatBreakdownElapsedSince(iso?: string): string {
+    if (!iso) return '—';
+    try {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return '—';
+      const diffMs = Date.now() - date.getTime();
       if (diffMs < 0) {
-        return this.formatDateTime(iso);
+        return '—';
       }
       const rtf = new Intl.RelativeTimeFormat(this.locale.intlLocale, { numeric: 'auto' });
       const minutes = Math.floor(diffMs / 60000);
+      if (minutes < 1) {
+        return rtf.format(0, 'minute');
+      }
       if (minutes < 60) {
-        return rtf.format(-Math.max(1, minutes), 'minute');
+        return rtf.format(-minutes, 'minute');
       }
       const hours = Math.floor(minutes / 60);
       if (hours < 24) {
@@ -7935,13 +7964,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         return rtf.format(-months, 'month');
       }
       const years = Math.floor(days / 365);
-      if (years < 3) {
-        return rtf.format(-years, 'year');
-      }
-      return this.formatDateTime(iso);
+      return rtf.format(-Math.max(1, years), 'year');
     } catch {
       return '—';
     }
+  }
+
+  /** @deprecated Use formatBreakdownLastPlayedDate or formatBreakdownElapsedSince */
+  formatBreakdownLastPlayed(iso?: string): string {
+    return this.formatBreakdownElapsedSince(iso);
+  }
+
+  openBreakdownPgcr(row: ActivityCountRow, event?: MouseEvent): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (!row.lastPlayedInstanceId) return;
+    const label = row.variantName ? `${row.baseName}: ${row.variantName}` : row.baseName;
+    this.pgcrModalService.openPgcrLite({
+      instanceId: row.lastPlayedInstanceId,
+      isD1: row.game === 'D1',
+      activityLabel: label,
+      period: row.lastPlayed,
+    });
   }
 
   private sortBreakdownRows(rows: ActivityCountRow[]): ActivityCountRow[] {
@@ -8123,6 +8167,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (c.includes('titan')) return 'assets/icons/destiny/class-titan-svgrepo-com.svg';
     if (c.includes('warlock')) return 'assets/icons/destiny/class-warlock-svgrepo-com.svg';
     return undefined;
+  }
+
+  /** Resolve completing character class for first-ever / story milestone rows */
+  resolveCharacterClassForFirst(first: ActivityFirstCompletion | ActivityHistory | null | undefined): string | undefined {
+    if (!first) return undefined;
+    const direct = (first as ActivityHistory).characterClass;
+    if (direct && direct !== 'Unknown') return direct;
+    const charId = (first as ActivityFirstCompletion).characterId ?? (first as any).characterId;
+    const membershipId = (first as ActivityFirstCompletion).membershipId ?? (first as any).membershipId;
+    if (!charId) return undefined;
+    for (const pl of this.selectedPlayers) {
+      if (membershipId && pl.membershipId !== membershipId) continue;
+      const chars = this.characters[this.getPlayerKey(pl)] || [];
+      const match = chars.find((c) => getCharacterId(c) === charId);
+      if (match) {
+        const classType = (match as any).classType;
+        if (typeof classType === 'number') return this.getClassName(classType);
+      }
+    }
+    return undefined;
+  }
+
+  getClassIconForFirst(first: ActivityFirstCompletion | ActivityHistory | null | undefined): string | undefined {
+    return this.getClassIconUrl(this.resolveCharacterClassForFirst(first));
   }
 
   /** Returns cached first ever activity for player */
@@ -9972,6 +10040,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private accountLoadingStatus = new Map<string, LoadingStatus>();
   public accountLoadingStatuses: LoadingStatus[] = [];
   public showLoadingModal = false;
+  loadingPanelExpanded = false;
   public isLoadingComplete = false;
 
   /** Expose for template: show progress while D1 PGCR prefetch runs in the background. */

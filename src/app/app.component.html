@@ -1,39 +1,35 @@
-<div class="min-h-screen destiny-bg-gradient-dark">
-  <!-- Modern header with glass effect -->
-  <header class="glass-effect border-b border-destiny-border-primary/30">
+<div class="min-h-screen destiny-bg-shell">
+  <div class="iron-temple-fire" aria-hidden="true"></div>
+  <div class="siva-projection-sparkles" aria-hidden="true"></div>
+  <header class="glass-effect border-b border-destiny-border-primary/30 relative z-10">
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
       <div class="flex items-center justify-between">
-        <!-- Logo area with Destiny styling (theme toggle removed; dark mode only) -->
         <div class="flex items-center space-x-3">
-          <div class="w-10 h-10 bg-destiny-gradient rounded-destiny flex items-center justify-center">
-            <div class="w-6 h-6 bg-destiny-accent-primary rounded-full animate-glow"></div>
+          <div class="w-10 h-10 flex items-center justify-center shrink-0">
+            <img src="assets/icons/destiny/destiny.svg" alt="" class="w-9 h-9 drop-shadow-glow" aria-hidden="true" />
           </div>
           <div>
-            <h1 class="text-3xl font-bold font-d2-headline text-gradient">{{ title }}</h1>
-            <p class="text-sm text-destiny-text-secondary">Track your Destiny 1 & 2 activity history</p>
+            <h1 class="text-3xl font-bold font-d2-headline text-gradient tracking-tight">{{ title }}</h1>
+            <p class="text-sm text-destiny-text-secondary">Track your Destiny 1 &amp; 2 activity history</p>
           </div>
         </div>
       </div>
     </div>
   </header>
 
-  <!-- Main content area with enhanced spacing -->
-  <main class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-    <!-- Background decoration -->
+  <main class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 animate-fade-in relative z-10">
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute -top-40 -right-40 w-80 h-80 bg-destiny-accent-primary/5 rounded-full blur-3xl"></div>
-      <div class="absolute top-40 -left-40 w-96 h-96 bg-destiny-accent-secondary/5 rounded-full blur-3xl"></div>
+      <div class="absolute -top-40 -right-40 w-80 h-80 bg-[var(--destiny-flame)]/8 rounded-full blur-3xl"></div>
+      <div class="absolute bottom-0 left-1/4 w-96 h-48 bg-[var(--destiny-ember)]/10 rounded-full blur-3xl"></div>
+      <div class="absolute top-40 -left-40 w-96 h-96 bg-[var(--destiny-iron)]/8 rounded-full blur-3xl"></div>
     </div>
-    
-    <!-- Browser compatibility warning -->
+
     <app-browser-compatibility-warning></app-browser-compatibility-warning>
-    
-    <!-- Main component with enhanced container -->
+
     <div class="relative">
       <app-player-search></app-player-search>
     </div>
   </main>
 
-  <!-- Performance monitor (if enabled) -->
   <app-performance-monitor></app-performance-monitor>
 </div>

@@ -92,12 +92,12 @@ module.exports = {
           },
           // Accent colors for UI elements
           accent: {
-            primary: '#6366f1',     // Primary accent (indigo)
-            secondary: '#8b5cf6',   // Secondary accent (purple)
-            success: '#10b981',     // Success green
-            warning: '#f59e0b',     // Warning yellow
-            error: '#ef4444',       // Error red
-            info: '#3b82f6',        // Info blue
+            primary: '#f5c542',
+            secondary: '#f0e6c8',
+            success: '#10b981',
+            warning: '#f59e0b',
+            error: '#ef4444',
+            info: '#60a5fa',
           },
           // Gradient stops for modern effects
           gradient: {
@@ -114,11 +114,10 @@ module.exports = {
         'd1-silver': '#b1b5b9',
       },
       fontFamily: {
-        // Enhanced typography system
-        destiny: ['"Inter"', '"Segoe UI"', '"Roboto"', 'system-ui', 'sans-serif'],
-        'd2-headline': ['"Orbitron"', '"Exo 2"', '"DIN Condensed"', 'Helvetica', 'Arial', 'sans-serif'],
-        'd2-body': ['"Inter"', '"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
-        mono: ['"JetBrains Mono"', '"Fira Code"', '"SF Mono"', 'Consolas', 'monospace'],
+        destiny: ['"Helvetica Neue"', 'Helvetica', 'Arial', '"Segoe UI"', 'system-ui', 'sans-serif'],
+        'd2-headline': ['"Helvetica Neue"', 'Helvetica', 'Arial', '"Segoe UI"', 'sans-serif'],
+        'd2-body': ['"Helvetica Neue"', 'Helvetica', 'Arial', '"Segoe UI"', 'sans-serif'],
+        mono: ['"SF Mono"', 'Consolas', '"JetBrains Mono"', 'monospace'],
       },
       fontSize: {
         // Enhanced typography scale
@@ -154,14 +153,14 @@ module.exports = {
         'destiny-xl': '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
         'destiny-2xl': '0 25px 50px -12px rgba(0, 0, 0, 0.6)',
         'destiny-inner': 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.3)',
-        'glow-sm': '0 0 5px rgba(99, 102, 241, 0.5)',
-        'glow': '0 0 10px rgba(99, 102, 241, 0.5)',
-        'glow-lg': '0 0 20px rgba(99, 102, 241, 0.4)',
+        'glow-sm': '0 0 5px rgba(245, 197, 66, 0.45)',
+        'glow': '0 0 10px rgba(245, 197, 66, 0.5)',
+        'glow-lg': '0 0 20px rgba(245, 197, 66, 0.4)',
       },
       backgroundImage: {
         // Gradient backgrounds inspired by Destiny UI
         'destiny-gradient': 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e3a8a 100%)',
-        'destiny-gradient-dark': 'linear-gradient(135deg, #0c0a1e 0%, #1a1625 50%, #0f1419 100%)',
+        'destiny-gradient-dark': 'linear-gradient(160deg, #0c0a14 0%, #0a0f1c 50%, #0f1419 100%)',
         'card-gradient': 'linear-gradient(135deg, rgba(30, 27, 75, 0.3) 0%, rgba(49, 46, 129, 0.2) 50%, rgba(30, 58, 138, 0.3) 100%)',
         'glass-gradient': 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
       },
@@ -189,8 +188,11 @@ module.exports = {
           '100%': { transform: 'translateX(0)', opacity: '1' },
         },
         glow: {
-          '0%': { boxShadow: '0 0 5px rgba(99, 102, 241, 0.5)' },
-          '100%': { boxShadow: '0 0 20px rgba(99, 102, 241, 0.8)' },
+          '0%': { boxShadow: '0 0 5px rgba(245, 197, 66, 0.45)' },
+          '100%': { boxShadow: '0 0 20px rgba(245, 197, 66, 0.75)' },
+        },
+        loaderScan: {
+          to: { strokeDashoffset: '-128', transform: 'rotate(360deg)' },
         },
       },
     },

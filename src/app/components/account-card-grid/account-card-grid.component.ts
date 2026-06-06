@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AssetUrlService } from '../../services/asset-url.service';
+import { ActivityIconService } from '../../services/activity-icon.service';
 
 export interface AccountCardPlatformStats {
   accountKey: string;
@@ -45,7 +46,7 @@ export interface AccountCardPlatformStats {
             </div>
             <div class="flex items-center gap-2 text-slate-300 text-sm">
               <img [src]="getPlatformIconUrl(getPlatformId(plat.platform))" class="w-4 h-4" alt="platform icon" />
-              <img [src]="plat.game === 'D1' ? 'assets/icons/destiny/Destiny 1 icon.jpg' : 'assets/icons/destiny/Destiny 2 icon.png'" class="w-4 h-4" alt="game" />
+              <img [src]="getGameIconUrl(plat.game)" class="w-4 h-4 object-contain" alt="game" />
               <span>{{ plat.platform }}</span>
               <span *ngIf="plat.className">· {{ plat.className }}</span>
               <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
@@ -64,7 +65,14 @@ export class AccountCardGridComponent {
   @Input() hint: string | null = null;
   @Output() accountKeyToggle = new EventEmitter<string>();
 
-  constructor(private assetUrl: AssetUrlService) {}
+  constructor(
+    private assetUrl: AssetUrlService,
+    private activityIcons: ActivityIconService,
+  ) {}
+
+  getGameIconUrl(game: 'D1' | 'D2'): string {
+    return this.activityIcons.getGameIconPath(game);
+  }
 
   resolveBungie(path: string | undefined): string {
     return path ? this.assetUrl.resolve(path) : '';

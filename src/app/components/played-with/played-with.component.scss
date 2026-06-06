@@ -1,0 +1,7 @@
+.played-with table {
+  border-collapse: collapse;
+}
+
+.sortable-th {
+  @apply inline-flex items-center gap-0.5 uppercase tracking-wide hover:text-white transition-colors cursor-pointer;
+}

@@ -28,10 +28,10 @@ export interface ActivityVersion {
             <div class="relative">
               <!-- Activity Image -->
               <ng-container *ngIf="getActivityImage(version.activities[0]) as img">
-                <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-20 object-cover" />
+                <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-20 object-cover pgcr-thumb" />
                 <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
               </ng-container>
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+              <div class="pgcr-image-scrim pgcr-image-scrim--compact"></div>
               
               <!-- Activity Info -->
               <div class="absolute bottom-0 left-0 right-0 p-2">

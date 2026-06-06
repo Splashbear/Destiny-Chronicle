@@ -5,23 +5,23 @@
     <p class="text-xs text-slate-500 mb-2">Images come from the manifest PGCR thumbnail for that activity (per hash), then fall back to the story icon.</p>
     <div *ngIf="milestones.length > 0" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
       <div *ngFor="let s of milestones; trackBy: ps.trackByGuardianFirst"
-           class="rounded-lg overflow-hidden bg-slate-900/80 border border-slate-700/60 min-h-[7rem] flex flex-col">
-        <div class="relative flex-1 min-h-[5.5rem] bg-cover bg-center"
+           class="rounded-lg overflow-hidden destiny-modal-section min-h-[7rem] flex flex-col">
+        <div class="relative flex-1 min-h-[5.5rem] firsts-card-media firsts-card-media--banner bg-cover bg-center"
              [ngStyle]="typeof ps.getFirstCompletionImage(s) === 'string'
                ? {'background-image': 'url(' + ps.getFirstCompletionImage(s) + ')'} : null">
           <ng-container *ngIf="ps.getFirstCompletionImage(s) as simg">
             <span *ngIf="simg && typeof simg !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="simg"></span>
           </ng-container>
-          <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none"></div>
+          <div class="pgcr-image-scrim"></div>
         </div>
-        <div class="relative px-3 py-2 bg-black/60 border-t border-slate-700/50">
+        <div class="pgcr-image-caption px-3 py-2">
           <div class="text-[11px] text-slate-400 leading-tight" *ngIf="s.storySubtitle">{{ s.storySubtitle }}</div>
           <div class="text-sm font-semibold text-white truncate">{{ s.name }}</div>
           <div class="flex flex-wrap items-center gap-2 mt-1 text-xs">
             <a *ngIf="s.instanceId" (click)="ps.openExternalPGCRForFirst(s, $event)" class="text-yellow-400 hover:text-yellow-200 cursor-pointer underline">{{ ps.formatDateTime(s.completionDate) }}</a>
             <span *ngIf="!s.instanceId" class="text-slate-300">{{ ps.formatDateTime(s.completionDate) }}</span>
             <img [src]="ps.getPlatformIconUrlForFirst($any(s))" class="w-3 h-3" alt="platform" />
-            <img *ngIf="s.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+            <img *ngIf="ps.getClassIconForFirst(s) as clsIcon" [src]="clsIcon" class="w-3 h-3" [title]="ps.resolveCharacterClassForFirst(s)" alt="class" />
           </div>
         </div>
       </div>
@@ -41,16 +41,16 @@
 <ng-template #firstsPantheonEventCard let-groups="groups" let-emptyMessage="emptyMessage">
   <div *ngIf="groups?.length > 0" class="space-y-4 mb-4">
     <div *ngFor="let group of groups"
-         class="rounded-lg overflow-hidden bg-slate-900/80 border border-slate-700/60 flex flex-col">
+         class="rounded-lg overflow-hidden destiny-modal-section flex flex-col">
       <div class="relative min-h-[5.5rem] bg-cover bg-center"
            [ngStyle]="group.versions?.[0] && typeof ps.getFirstCompletionImage(group.versions[0]) === 'string'
              ? {'background-image': 'url(' + ps.getFirstCompletionImage(group.versions[0]) + ')'} : null">
         <ng-container *ngIf="group.versions?.[0] && ps.getFirstCompletionImage(group.versions[0]) as img">
           <span *ngIf="img && typeof img !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="img"></span>
         </ng-container>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none"></div>
+        <div class="pgcr-image-scrim"></div>
       </div>
-      <div class="px-3 py-2 bg-black/60 border-t border-slate-700/50">
+      <div class="pgcr-image-caption px-3 py-2">
         <h5 class="text-lg font-bold text-white mb-1">{{ group.cardTitle || group.baseName }}</h5>
         <div class="space-y-1">
           <div *ngFor="let first of group.versions" class="flex flex-wrap items-center gap-2 text-xs">
@@ -69,16 +69,16 @@
 <ng-template #firstsRiteStackedCard let-riteGroups="riteGroups" let-emptyMessage="emptyMessage">
   <div *ngIf="riteGroups?.length > 0" class="space-y-4 mb-4">
     <div *ngFor="let rite of riteGroups"
-         class="rounded-lg overflow-hidden bg-slate-900/80 border border-slate-700/60 flex flex-col">
+         class="rounded-lg overflow-hidden destiny-modal-section flex flex-col">
       <div class="relative min-h-[5.5rem] bg-cover bg-center"
            [ngStyle]="rite.variants?.[0]?.first && typeof ps.getFirstCompletionImage(rite.variants[0].first!) === 'string'
              ? {'background-image': 'url(' + ps.getFirstCompletionImage(rite.variants[0].first!) + ')'} : null">
         <ng-container *ngIf="rite.variants?.[0]?.first && ps.getFirstCompletionImage(rite.variants[0].first!) as rimg">
           <span *ngIf="rimg && typeof rimg !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="rimg"></span>
         </ng-container>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none"></div>
+        <div class="pgcr-image-scrim"></div>
       </div>
-      <div class="px-3 py-2 bg-black/60 border-t border-slate-700/50">
+      <div class="pgcr-image-caption px-3 py-2">
         <h5 class="text-lg font-bold text-white mb-2">{{ rite.baseName }}</h5>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           <ng-container *ngFor="let dungeonGroup of ps.getRiteOfTheNineDungeonGroups(rite.variants)">
@@ -103,16 +103,16 @@
 
 <!-- Stacked raid/dungeon card: PGCR image on top, variants below (matches Story / Pantheon) -->
 <ng-template #firstsStackedVariantCard let-item="item" let-showSoloFlawless="showSoloFlawless" let-titleClass="titleClass">
-  <div class="rounded-lg overflow-hidden bg-slate-900/80 border border-slate-700/60 flex flex-col min-w-0">
+  <div class="rounded-lg overflow-hidden destiny-modal-section flex flex-col min-w-0">
     <div class="relative min-h-[5.5rem] bg-cover bg-center"
          [ngStyle]="typeof ps.getFirstCompletionImageForRaid(item) === 'string'
            ? {'background-image': 'url(' + ps.getFirstCompletionImageForRaid(item) + ')'} : null">
       <ng-container *ngIf="ps.getFirstCompletionImageForRaid(item) as cardImg">
         <span *ngIf="cardImg && typeof cardImg !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="cardImg"></span>
       </ng-container>
-      <div class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none"></div>
+      <div class="pgcr-image-scrim"></div>
     </div>
-    <div class="px-3 py-2 bg-black/60 border-t border-slate-700/50">
+    <div class="pgcr-image-caption px-3 py-2">
       <h5 [ngClass]="titleClass || 'text-lg sm:text-xl font-bold text-white mb-1'">{{ item.baseName }}</h5>
       <div class="space-y-1">
         <div *ngFor="let variant of item.variants" class="flex flex-wrap items-center gap-2 whitespace-normal text-xs">
@@ -178,7 +178,7 @@
   <label class="text-sm text-slate-400 whitespace-nowrap" for="firsts-section-filter">Show</label>
   <select id="firsts-section-filter"
           name="ps.firstsSectionFilter"
-          class="bg-slate-900 border border-slate-600 text-sm text-white rounded px-3 py-1.5 max-w-[240px]"
+          class="destiny-input text-sm py-1.5 max-w-[240px]"
           [(ngModel)]="ps.firstsSectionFilter">
     <option *ngFor="let opt of ps.firstsSectionFilterOptions" [value]="opt.value">{{ opt.label }}</option>
   </select>
@@ -196,7 +196,7 @@
   <h3 class="text-xl font-bold text-white">Guardian Firsts ({{ ps.selectedAccountKeysForFirsts.size }} selected)</h3>
 </div>
 <!-- Aggregated Firsts across all linked accounts (when no cards selected) -->
-<div *ngIf="ps.selectedAccountKeysForFirsts.size === 0" class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+<div *ngIf="ps.selectedAccountKeysForFirsts.size === 0" class="destiny-surface-panel p-4">
   <h3 class="text-lg font-semibold text-white mb-4">{{ ps.selectedPlayers[0].displayName }}'s Guardian Firsts (All Platforms)</h3>
   <!-- Destiny 2 Sections -->
   <ng-container *ngIf="ps.activeFirstsGame==='D2'">
@@ -204,13 +204,13 @@
   <!-- First Ever Activity (D2) -->
   <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">First Ever Activity (D2)</h4>
   <ng-container *ngIf="ps.getAggregateFirstEver('D2') as firstD2; else noFirstD2">
-    <div class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors mb-4">
-      <div class="relative">
+    <div class="destiny-modal-section rounded-lg overflow-hidden hover:border-[rgba(245,197,66,0.35)] transition-colors mb-4">
+      <div class="relative firsts-card-media">
         <ng-container *ngIf="ps.getActivityImage(firstD2, false) as img">
-          <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+          <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover pgcr-thumb" />
           <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
         </ng-container>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+        <div class="pgcr-image-scrim pgcr-image-scrim--compact"></div>
         <div class="absolute bottom-0 left-0 right-0 p-3">
           <h6 class="text-white font-medium truncate">{{ ps.getActivityName(firstD2, false) }}</h6>
           <div class="text-sm text-slate-300 flex items-center gap-2">
@@ -218,7 +218,7 @@
               {{ ps.formatDateTime(firstD2.period) }}
             </a>
             <img [src]="ps.getPlatformIconUrlForFirst($any(firstD2))" class="w-4 h-4" alt="platform" />
-            <img *ngIf="firstD2.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
+            <img *ngIf="ps.getClassIconForFirst(firstD2) as clsIcon" [src]="clsIcon" class="w-4 h-4" [title]="ps.resolveCharacterClassForFirst(firstD2)" alt="class" />
           </div>
         </div>
       </div>
@@ -256,13 +256,13 @@
   <!-- First Ever Activity (D1) -->
   <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-8">First Ever Activity (D1)</h4>
   <ng-container *ngIf="ps.getAggregateFirstEver('D1') as firstD1; else noFirstD1">
-    <div class="bg-slate-700/50 rounded-lg overflow-hidden hover:bg-slate-700/70 transition-colors mb-4">
-      <div class="relative">
+    <div class="destiny-modal-section rounded-lg overflow-hidden hover:border-[rgba(245,197,66,0.35)] transition-colors mb-4">
+      <div class="relative firsts-card-media">
         <ng-container *ngIf="ps.getActivityImage(firstD1, true) as img">
-          <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+          <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover pgcr-thumb" />
           <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
         </ng-container>
-        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+        <div class="pgcr-image-scrim pgcr-image-scrim--compact"></div>
         <div class="absolute bottom-0 left-0 right-0 p-3">
           <h6 class="text-white font-medium truncate">{{ ps.getActivityName(firstD1, true) }}</h6>
           <div class="text-sm text-slate-300 flex items-center gap-2">
@@ -270,7 +270,7 @@
               {{ ps.formatDateTime(firstD1.period) }}
             </a>
             <img [src]="ps.getPlatformIconUrlForFirst($any(firstD1))" class="w-4 h-4" alt="platform" />
-            <img *ngIf="firstD1.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
+            <img *ngIf="ps.getClassIconForFirst(firstD1) as clsIcon" [src]="clsIcon" class="w-4 h-4" [title]="ps.resolveCharacterClassForFirst(firstD1)" alt="class" />
           </div>
         </div>
       </div>
@@ -306,24 +306,24 @@
              [ngClass]="group.players.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'">
           <ng-container *ngFor="let player of group.players">
             <!-- Reuse the existing secondary player card layout for each comparison column -->
-            <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 w-full min-w-0">
+            <div class="destiny-surface-panel p-4 w-full min-w-0">
               <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                 <img [src]="ps.getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
                 <span>{{ player.displayName }}'s Guardian Firsts ({{ player.platform }})</span>
               </h3>
               <ng-container *ngIf="ps.showFirstsSection('first-ever')">
               <!-- First Ever Activity Card -->
-              <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
+              <div class="destiny-modal-section rounded-lg overflow-hidden mb-4 relative hover:border-[rgba(245,197,66,0.35)] transition-colors">
                 <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
                 <ng-container *ngIf="ps.getFirstEverForPlayer(player) as first">
-                  <div class="relative">
+                  <div class="relative firsts-card-media">
                     <ng-container *ngIf="ps.getActivityImage(first, ps.isD1Player(player)) as img">
                       <img *ngIf="img && typeof img === 'string'" [src]="img"
-                           class="w-full object-cover"
+                           class="w-full object-cover pgcr-thumb"
                            [ngClass]="group.players.length === 1 ? 'h-40 sm:h-52 md:h-56' : 'h-24'" />
                       <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
                     </ng-container>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div class="pgcr-image-scrim pgcr-image-scrim--compact"></div>
                     <div class="absolute bottom-0 left-0 right-0 p-3">
                       <h6 class="text-white font-medium truncate">{{ ps.getActivityName(first, ps.isD1Player(player)) }}</h6>
                       <div class="text-sm text-slate-300 flex items-center gap-2">
@@ -332,7 +332,7 @@
                           {{ ps.formatDateTime(first.period) }}
                         </a>
                         <img [src]="ps.getPlatformIconUrl(player.membershipType)" class="w-4 h-4" alt="platform" />
-                        <img *ngIf="first.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
+                        <img *ngIf="ps.getClassIconForFirst(first) as clsIcon" [src]="clsIcon" class="w-4 h-4" [title]="ps.resolveCharacterClassForFirst(first)" alt="class" />
                       </div>
                     </div>
                   </div>
@@ -382,22 +382,22 @@
     <ng-container *ngIf="ps.getFirstsPrimaryAndSecondary() as layout">
     <!-- Primary player: full-width card -->
     <ng-container *ngIf="layout.primary as player">
-      <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 mb-8">
+      <div class="destiny-surface-panel p-4 mb-8">
         <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <img [src]="ps.getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
           <span>{{ player.displayName }}'s Guardian Firsts ({{ player.platform }})</span>
         </h3>
         <ng-container *ngIf="ps.showFirstsSection('first-ever')">
         <!-- First Ever Activity Card (moved to top) -->
-        <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
+        <div class="destiny-modal-section rounded-lg overflow-hidden mb-4 relative hover:border-[rgba(245,197,66,0.35)] transition-colors">
           <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
           <ng-container *ngIf="ps.getFirstEverForPlayer(player) as first">
-            <div class="relative">
+            <div class="relative firsts-card-media">
               <ng-container *ngIf="ps.getActivityImage(first, ps.isD1Player(player)) as img">
-                <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover pgcr-thumb" />
                 <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
               </ng-container>
-              <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+              <div class="pgcr-image-scrim pgcr-image-scrim--compact"></div>
               <div class="absolute bottom-0 left-0 right-0 p-3">
                 <h6 class="text-white font-medium truncate">{{ ps.getActivityName(first, ps.isD1Player(player)) }}</h6>
                 <div class="text-sm text-slate-300 flex items-center gap-2">
@@ -406,7 +406,7 @@
                     {{ ps.formatDateTime(first.period) }}
                   </a>
                   <img [src]="ps.getPlatformIconUrl(player.membershipType)" class="w-4 h-4" alt="platform" />
-                  <img *ngIf="first.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-4 h-4" [title]="cls" alt="class" />
+                  <img *ngIf="ps.getClassIconForFirst(first) as clsIcon" [src]="clsIcon" class="w-4 h-4" [title]="ps.resolveCharacterClassForFirst(first)" alt="class" />
                 </div>
               </div>
             </div>
@@ -451,22 +451,22 @@
     <!-- Secondary players: compact grid below -->
     <div *ngIf="layout.secondary.length > 0" class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 grid-flow-row-dense gap-6 lg:gap-8">
       <ng-container *ngFor="let player of layout.secondary">
-        <div class="bg-slate-800/95 rounded-lg shadow-lg p-4">
+        <div class="destiny-surface-panel p-4">
           <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <img [src]="ps.getPlatformIconUrl(player.membershipType)" class="w-5 h-5" alt="platform" />
             <span>{{ player.displayName }}'s Guardian Firsts ({{ player.platform }})</span>
           </h3>
           <ng-container *ngIf="ps.showFirstsSection('first-ever')">
           <!-- First Ever Activity Card (moved to top) -->
-          <div class="bg-slate-700/50 rounded-lg overflow-hidden mb-4 relative hover:bg-slate-700/70 transition-colors">
+          <div class="destiny-modal-section rounded-lg overflow-hidden mb-4 relative hover:border-[rgba(245,197,66,0.35)] transition-colors">
             <h4 class="text-yellow-300 font-bold mb-2 px-4 pt-4">First Ever Activity ({{ player.game }})</h4>
             <ng-container *ngIf="ps.getFirstEverForPlayer(player) as first">
-              <div class="relative">
+              <div class="relative firsts-card-media">
                 <ng-container *ngIf="ps.getActivityImage(first, ps.isD1Player(player)) as img">
-                  <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover" />
+                  <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-full h-24 object-cover pgcr-thumb" />
                   <span *ngIf="img && typeof img !== 'string'" class="activity-image" [innerHTML]="img"></span>
                 </ng-container>
-                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                <div class="pgcr-image-scrim pgcr-image-scrim--compact"></div>
                 <div class="absolute bottom-0 left-0 right-0 p-3">
                   <h6 class="text-white font-medium truncate">{{ ps.getActivityName(first, ps.isD1Player(player)) }}</h6>
                   <div class="text-sm text-slate-300 flex items-center gap-2">

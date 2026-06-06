@@ -1,54 +1,82 @@
 import { Component, EventEmitter, Output, Input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';
 
 @Component({
   selector: 'app-export-options-dialog',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CommonModule],
   template: `
-    <div class="export-modal-backdrop">
-      <div class="export-modal">
-        <h2 class="text-lg font-bold mb-4">Export Options</h2>
-        <form (ngSubmit)="onExport()">
-          <div class="mb-4">
-            <label class="font-semibold">Date Range:</label><br>
-            <label><input type="radio" name="dateRange" [(ngModel)]="allDates" [value]="false" ngModel> Selected Date</label>
-            <label class="ml-4"><input type="radio" name="dateRange" [(ngModel)]="allDates" [value]="true" ngModel> All Activities</label>
+    <div class="destiny-modal-overlay" (click)="onClose()" role="dialog" aria-modal="true" aria-labelledby="export-options-title">
+      <div class="destiny-modal-panel export-options-panel max-w-md w-full" (click)="$event.stopPropagation()">
+        <h2 id="export-options-title" class="text-lg font-semibold text-[var(--destiny-gold-bright)] font-d2-headline mb-4">Export Options</h2>
+        <form (ngSubmit)="onExport()" class="export-options-form">
+          <fieldset class="export-options-fieldset mb-4">
+            <legend class="export-options-legend">Date Range</legend>
+            <label class="export-options-radio">
+              <input type="radio" name="dateRange" [(ngModel)]="allDates" [value]="false"> Selected Date
+            </label>
+            <label class="export-options-radio">
+              <input type="radio" name="dateRange" [(ngModel)]="allDates" [value]="true"> All Activities
+            </label>
+          </fieldset>
+          <fieldset class="export-options-fieldset mb-4">
+            <legend class="export-options-legend">Sheets to Export</legend>
+            <label class="export-options-check"><input type="checkbox" [(ngModel)]="includeActivities" name="activities"> Activities</label>
+            <label class="export-options-check"><input type="checkbox" [(ngModel)]="includeFirsts" name="firsts"> Guardian Firsts</label>
+            <label class="export-options-check"><input type="checkbox" [(ngModel)]="includeTitles" name="titles"> Titles/Seals</label>
+            <label class="export-options-check"><input type="checkbox" [(ngModel)]="includeSummary" name="summary"> Account Summary</label>
+            <label class="export-options-check"><input type="checkbox" [(ngModel)]="includeBreakdown" name="breakdown"> Activity Breakdown</label>
+          </fieldset>
+          <div class="export-options-fieldset mb-5">
+            <label class="export-options-check">
+              <input type="checkbox" [(ngModel)]="showIconsInline" name="showIconsInline"> Show icons inline (Google Sheets only)
+            </label>
+            <p class="text-xs text-slate-400 mt-1 ml-6">Icons display in Google Sheets, not Excel.</p>
           </div>
-          <div class="mb-4">
-            <label class="font-semibold">Sheets to Export:</label><br>
-            <label><input type="checkbox" [(ngModel)]="includeActivities" name="activities"> Activities</label><br>
-            <label><input type="checkbox" [(ngModel)]="includeFirsts" name="firsts"> Guardian Firsts</label><br>
-            <label><input type="checkbox" [(ngModel)]="includeTitles" name="titles"> Titles/Seals</label><br>
-            <label><input type="checkbox" [(ngModel)]="includeSummary" name="summary"> Account Summary</label><br>
-            <label><input type="checkbox" [(ngModel)]="includeBreakdown" name="breakdown"> Activity Breakdown</label>
-          </div>
-          <div class="mb-4">
-            <label><input type="checkbox" [(ngModel)]="showIconsInline" name="showIconsInline"> Show icons inline (Google Sheets only)</label>
-            <div class="text-xs text-slate-400 mt-1">Icons will display in Google Sheets, but not in Excel.</div>
-          </div>
-          <div class="flex gap-2 justify-end">
-            <button type="button" (click)="onClose()" class="d2-btn bg-slate-600 hover:bg-slate-500">Cancel</button>
-            <button type="submit" class="d2-btn bg-blue-600 hover:bg-blue-500">Export</button>
+          <div class="flex flex-wrap gap-2 justify-end">
+            <button type="button" (click)="onClose()" class="chronicle-toolbar-btn">Cancel</button>
+            <button type="submit" class="chronicle-toolbar-btn chronicle-toolbar-btn--primary">Export</button>
           </div>
         </form>
       </div>
     </div>
   `,
   styles: [`
-    .export-modal-backdrop {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;
+    .export-options-form {
+      color: rgba(226, 232, 240, 0.95);
+      font-size: 0.875rem;
     }
-    .export-modal {
-      background: #1e293b; color: #fff; border-radius: 8px; padding: 2rem; min-width: 320px; box-shadow: 0 4px 32px #000a;
+
+    .export-options-fieldset {
+      border: 1px solid rgba(255, 208, 32, 0.2);
+      border-radius: 0.5rem;
+      padding: 0.75rem 0.875rem;
+      background: rgba(14, 20, 26, 0.35);
     }
-    .d2-btn { padding: 0.5rem 1.2rem; border-radius: 4px; font-weight: bold; }
-    .ml-4 { margin-left: 1rem; }
-    .mb-4 { margin-bottom: 1rem; }
-    .gap-2 { gap: 0.5rem; }
-    .flex { display: flex; }
-    .justify-end { justify-content: flex-end; }
+
+    .export-options-legend {
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--destiny-gold-bright, #e4c04a);
+      padding: 0 0.25rem;
+    }
+
+    .export-options-radio,
+    .export-options-check {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.375rem;
+      cursor: pointer;
+    }
+
+    .export-options-radio input,
+    .export-options-check input {
+      accent-color: var(--destiny-flame, #e67e22);
+    }
   `]
 })
 export class ExportOptionsDialogComponent {
@@ -80,7 +108,6 @@ export class ExportOptionsDialogComponent {
     if (!this.allDates && this.selectedDate) {
       options.from = this.selectedDate;
     }
-    console.log('Export options:', options);
     this.export.emit(options);
   }
-} 
+}
