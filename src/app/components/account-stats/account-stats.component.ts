@@ -26,22 +26,26 @@ interface PlatformStats {
   standalone: true,
   imports: [CommonModule, AccountCardGridComponent],
   template: `
-    <div class="bg-slate-800/95 rounded-lg shadow-lg p-4 flex flex-col gap-4" *ngIf="stats">
-      <!-- Header -->
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-lg font-semibold text-white">Account Summary</h3>
+    <div class="destiny-surface-panel account-summary-panel p-4 flex flex-col gap-4" *ngIf="stats">
+      <h3 class="text-lg font-semibold text-[var(--destiny-gold)] font-d2-headline m-0">Account Summary</h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="account-summary-stat">
+          <span class="account-summary-stat-label">Total Time Played</span>
+          <span class="destiny-stat-value text-xl">{{ formatDuration(stats.totalTime) }}</span>
+        </div>
+        <div class="account-summary-stat">
+          <span class="account-summary-stat-label">Total Seals</span>
+          <span class="destiny-stat-value text-xl">{{ stats.totalSeals || 0 }}</span>
+        </div>
+        <div class="account-summary-stat">
+          <span class="account-summary-stat-label">Total Activities</span>
+          <span class="destiny-stat-value text-xl">{{ stats.totalActivityCount }}</span>
+        </div>
       </div>
 
-      <!-- Main stats grid -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <div class="stat-item"><strong>Total Time Played:</strong> <span class="ml-1">{{ formatDuration(stats.totalTime) }}</span></div>
-        <div class="stat-item"><strong>Total Seals:</strong> <span class="ml-1">{{ stats.totalSeals || 0 }}</span></div>
-        <div class="stat-item"><strong>Total Activities:</strong> <span class="ml-1">{{ stats.totalActivityCount }}</span></div>
-      </div>
-
-      <!-- Per-type table -->
-      <table class="w-full text-sm text-left text-slate-300 border-t border-slate-700" *ngIf="stats.perType">
-        <thead class="text-xs uppercase text-slate-400">
+      <table class="account-summary-table w-full text-sm text-left" *ngIf="stats.perType">
+        <thead>
           <tr>
             <th class="py-2 pr-2">Activity Type</th>
             <th class="py-2 pr-2 text-right">Count</th>
@@ -49,18 +53,17 @@ interface PlatformStats {
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let entry of perTypeEntries" class="border-t border-slate-700">
-            <td class="py-1 pr-2">{{ entry[0] }}</td>
-            <td class="py-1 pr-2 text-right">{{ entry[1].count }}</td>
-            <td class="py-1 text-right">{{ formatDuration(entry[1].time) }}</td>
+          <tr *ngFor="let entry of perTypeEntries">
+            <td class="py-1.5 pr-2">{{ entry[0] }}</td>
+            <td class="py-1.5 pr-2 text-right font-mono">{{ entry[1].count }}</td>
+            <td class="py-1.5 text-right font-mono text-[var(--destiny-gold)]">{{ formatDuration(entry[1].time) }}</td>
           </tr>
         </tbody>
       </table>
 
-      <!-- Per-Platform Breakdown -->
-      <div *ngIf="perPlatformStats && perPlatformStats.length > 0" class="platform-breakdown mt-6">
-        <h4 class="text-md font-semibold text-white mb-2">Per-Platform Breakdown</h4>
-        <p class="text-xs text-slate-400 mb-2">Click a card to filter the Activities list below by that account. Click again to include it again.</p>
+      <div *ngIf="perPlatformStats && perPlatformStats.length > 0" class="platform-breakdown mt-2 pt-4 border-t border-[rgba(201,162,39,0.22)]">
+        <h4 class="text-md font-semibold text-[var(--destiny-gold)] mb-1">Per-Platform Breakdown</h4>
+        <p class="text-xs text-slate-400 mb-3">Click a card to filter the Activities list below by that account. Click again to include it again.</p>
         <app-account-card-grid
           [perPlatformStats]="perPlatformStats"
           [selectedAccountKeys]="selectedAccountKeys"
@@ -137,4 +140,4 @@ export class AccountStatsComponent {
       this.onShareDailyView();
     }
   }
-} 
+}

@@ -7,6 +7,7 @@ import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
+import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { firstValueFrom } from 'rxjs';
 import { pickBestPlayerDisplayName } from '../../utils/pgcr-player-name';
 import {
@@ -39,26 +40,31 @@ interface LitePlayerRow {
 @Component({
   selector: 'app-pgcr-lite',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, DestinyLoaderComponent],
   template: `
-    <div class="pgcr-lite p-4 text-white min-w-[280px] max-w-[480px]">
-      <div class="flex items-start justify-between gap-2 mb-3">
-        <div>
-          <h2 class="text-lg font-semibold m-0">{{ data.activityLabel || i18n.t('pgcr.title') }}</h2>
-          <p *ngIf="period" class="text-sm text-slate-400 m-0 mt-1">{{ period | date:'medium':'':intlLocale }}</p>
-          <p *ngIf="durationSeconds > 0" class="text-xs text-slate-500 m-0 mt-0.5">
-            Activity duration: {{ formatTime(durationSeconds) }}
-          </p>
+    <div class="pgcr-lite pgcr-modal-enter p-0 text-white min-w-[280px] max-w-[480px] overflow-hidden">
+      <div class="pgcr-modal-header-band px-4 pt-4 pb-3">
+        <div class="flex items-start justify-between gap-2 relative z-10">
+          <div>
+            <h2 class="text-lg font-semibold m-0 font-d2-headline text-gradient">{{ data.activityLabel || i18n.t('pgcr.title') }}</h2>
+            <p *ngIf="period" class="text-sm text-slate-400 m-0 mt-1">{{ period | date:'medium':'':intlLocale }}</p>
+            <p *ngIf="durationSeconds > 0" class="text-xs text-slate-500 m-0 mt-0.5">
+              Activity duration: {{ formatTime(durationSeconds) }}
+            </p>
+          </div>
+          <button type="button" mat-dialog-close class="text-slate-400 hover:text-white text-xl leading-none" [attr.aria-label]="i18n.t('common.close')">&times;</button>
         </div>
-        <button type="button" mat-dialog-close class="text-slate-400 hover:text-white text-xl leading-none" [attr.aria-label]="i18n.t('common.close')">&times;</button>
       </div>
 
-      <div *ngIf="loading" class="py-6 text-center text-slate-400 text-sm">{{ i18n.t('pgcr.loading') }}</div>
+      <div class="px-4 pb-4">
+      <div *ngIf="loading" class="py-6 flex justify-center">
+        <app-destiny-loader [label]="i18n.t('pgcr.loading')"></app-destiny-loader>
+      </div>
       <div *ngIf="!loading && error" class="py-4 px-3 rounded bg-amber-900/30 border border-amber-600/40 text-amber-200 text-sm mb-3">{{ error }}</div>
 
       <ul *ngIf="!loading && !error && players.length" class="space-y-2 max-h-[50vh] overflow-y-auto mb-4">
         <li *ngFor="let p of players"
-            class="flex items-center justify-between gap-2 bg-slate-800/80 rounded px-3 py-2 text-sm">
+            class="flex items-center justify-between gap-2 destiny-panel rounded px-3 py-2 text-sm">
           <span class="text-slate-200 truncate" [title]="p.name">{{ p.name }}</span>
           <span class="text-slate-400 shrink-0 font-mono text-xs">{{ formatTime(p.timeSeconds) }}</span>
         </li>
@@ -71,15 +77,16 @@ interface LitePlayerRow {
         </button>
         <button *ngIf="!isOfflineMode" type="button"
                 (click)="openFullPgcr()"
-                class="px-3 py-1.5 text-sm bg-yellow-600 hover:bg-yellow-500 text-black font-medium rounded">
+                class="px-3 py-1.5 text-sm bg-[var(--destiny-gold)] hover:brightness-110 text-slate-900 font-medium rounded">
           {{ i18n.t('pgcr.full') }}
         </button>
+      </div>
       </div>
     </div>
   `,
   styles: [`
     :host { display: block; }
-    .pgcr-lite { background: #1a1f2e; }
+    .pgcr-lite { background: #0c0a14; }
   `]
 })
 export class PgcrLiteComponent implements OnInit {

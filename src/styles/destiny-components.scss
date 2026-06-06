@@ -1,0 +1,1088 @@
+/* Destiny UI components — active theme layer (ported from styles.css + geometric shell) */
+
+@layer components {
+  .destiny-card {
+    @apply bg-destiny-bg-secondary border border-destiny-border-primary rounded-destiny;
+    @apply shadow-destiny backdrop-blur-destiny;
+    @apply hover:border-destiny-border-secondary hover:shadow-destiny-md;
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .destiny-card-glass {
+    @apply bg-glass-gradient border border-destiny-border-primary/50 rounded-destiny;
+    @apply shadow-destiny-lg backdrop-blur-destiny;
+    @apply hover:border-destiny-border-secondary/70 hover:shadow-destiny-xl;
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .destiny-btn {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-destiny-sm;
+    @apply font-medium transition-all duration-200 ease-in-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+  }
+
+  .destiny-btn-primary {
+    @apply destiny-btn text-slate-900;
+    background: linear-gradient(180deg, var(--destiny-gold-bright) 0%, var(--destiny-gold) 55%, #a88420 100%);
+    @apply hover:brightness-110 active:brightness-95;
+    @apply focus:ring-[var(--destiny-flame)] focus:ring-offset-destiny-bg-primary;
+    box-shadow: 0 0 10px var(--destiny-flame-glow), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  }
+
+  .destiny-btn-secondary {
+    @apply destiny-btn text-slate-200;
+    background: rgba(30, 30, 45, 0.85);
+    border: 1px solid rgba(245, 197, 66, 0.2);
+    @apply hover:bg-destiny-surface-300 hover:border-[rgba(245,197,66,0.35)];
+    @apply focus:ring-[var(--destiny-gold)] focus:ring-offset-destiny-bg-primary;
+  }
+
+  .destiny-btn-outline {
+    @apply destiny-btn text-[var(--destiny-gold)];
+    background: rgba(245, 197, 66, 0.08);
+    border: 1px solid rgba(245, 197, 66, 0.35);
+    @apply hover:bg-[rgba(245,197,66,0.15)];
+    @apply focus:ring-[var(--destiny-gold)] focus:ring-offset-destiny-bg-primary;
+  }
+
+  .destiny-banner {
+    @apply rounded-lg p-3 border;
+  }
+
+  .destiny-banner-info {
+    @apply destiny-banner;
+    background: rgba(245, 197, 66, 0.06);
+    border-color: rgba(245, 197, 66, 0.25);
+    color: rgba(240, 230, 200, 0.95);
+  }
+
+  .destiny-banner-success {
+    @apply destiny-banner;
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.35);
+    color: rgba(187, 247, 208, 0.95);
+  }
+
+  .destiny-chip {
+    @apply inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full;
+    background: rgba(21, 21, 32, 0.9);
+    border: 1px solid rgba(245, 197, 66, 0.2);
+    color: rgba(226, 232, 240, 0.95);
+  }
+
+  .destiny-chip-favorite {
+    @apply destiny-chip;
+    border-color: var(--destiny-gold);
+    background: rgba(245, 197, 66, 0.12);
+  }
+
+  .destiny-dropdown {
+    @apply rounded-lg shadow-lg z-50 overflow-hidden;
+    background: rgba(15, 15, 25, 0.96);
+    border: 1px solid rgba(245, 197, 66, 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .destiny-dropdown-item {
+    @apply w-full px-4 py-2 text-left text-sm text-white transition-colors;
+    &:hover { background: rgba(245, 197, 66, 0.12); }
+  }
+
+  /* Site-wide modal overlay (fixed to viewport — not scoped to a component) */
+  .destiny-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .destiny-modal-panel {
+    background: linear-gradient(145deg, rgba(44, 50, 58, 0.98) 0%, rgba(34, 40, 48, 0.96) 100%);
+    border: 1px solid rgba(220, 230, 240, 0.42);
+    border-radius: 0.75rem;
+    padding: 24px;
+    width: min(100%, 42rem);
+    max-height: min(80vh, 900px);
+    overflow-y: auto;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 0 0 1px rgba(228, 192, 74, 0.22),
+      0 16px 48px rgba(0, 0, 0, 0.5),
+      0 0 24px rgba(230, 126, 34, 0.14);
+  }
+
+  .destiny-empty-state {
+    @apply destiny-surface-panel rounded-lg shadow-lg p-6 text-center;
+    color: rgba(203, 213, 225, 0.9);
+  }
+
+  .destiny-progress-track {
+    @apply rounded-full overflow-hidden;
+    background: rgba(30, 30, 45, 0.9);
+    border: 1px solid rgba(245, 197, 66, 0.12);
+  }
+
+  .destiny-progress-fill {
+    @apply h-full transition-all duration-300;
+    background: linear-gradient(90deg, var(--destiny-ember) 0%, var(--destiny-flame) 45%, var(--destiny-gold-bright) 100%);
+  }
+
+  .destiny-modal-section {
+    @apply rounded-lg p-3;
+    background: rgba(38, 44, 50, 0.72);
+    border: 1px solid rgba(216, 228, 238, 0.28);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 0 0 1px rgba(201, 162, 39, 0.1),
+      0 0 14px rgba(230, 126, 34, 0.08);
+  }
+
+  /* Holographic projected light-box edges (site-wide) */
+  .holographic-lightbox,
+  .glass-effect,
+  .destiny-surface-panel,
+  .destiny-panel,
+  .destiny-year-block,
+  .destiny-empty-state,
+  .destiny-modal-section,
+  .destiny-stat-highlight,
+  .loading-profiles-strip,
+  .destiny-tab-nav {
+    --holo-edge: rgba(220, 230, 240, 0.48);
+    --holo-gold-glow: rgba(228, 192, 74, 0.28);
+    --holo-flame-glow: rgba(230, 126, 34, 0.16);
+    --holo-siva-glow: rgba(196, 30, 58, 0.1);
+  }
+
+
+  /* PGCR / activity imagery — brighter, less crushed shadow */
+  .pgcr-thumb,
+  .pgcr-hero img,
+  .firsts-card-media img,
+  .activity-image img {
+    filter: brightness(1.14) contrast(1.05) saturate(1.08);
+    box-shadow:
+      0 0 0 1px rgba(216, 228, 238, 0.3),
+      0 0 10px rgba(201, 162, 39, 0.12);
+  }
+
+  .pgcr-thumb {
+    border-radius: 0.375rem;
+  }
+
+  .pgcr-image-scrim {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to top,
+      rgba(32, 38, 44, 0.48) 0%,
+      rgba(32, 38, 44, 0.14) 42%,
+      transparent 100%
+    );
+  }
+
+  .pgcr-image-scrim--compact {
+    background: linear-gradient(to top, rgba(32, 38, 44, 0.42) 0%, transparent 68%);
+  }
+
+  .pgcr-image-caption {
+    position: relative;
+    background: rgba(36, 42, 48, 0.78);
+    border-top: 1px solid rgba(216, 228, 238, 0.24);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .firsts-card-media {
+    position: relative;
+    background-color: rgba(48, 54, 60, 0.4);
+
+    &.firsts-card-media--banner {
+      min-height: 5.5rem;
+      background-size: cover;
+      background-position: center;
+      filter: brightness(1.12) saturate(1.06);
+    }
+  }
+
+  .destiny-stat-highlight {
+    @apply destiny-surface-panel p-4;
+    border-color: var(--holo-edge, rgba(220, 230, 240, 0.42));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 0 0 1px var(--holo-gold-glow),
+      0 0 18px var(--holo-flame-glow);
+  }
+
+  .destiny-stat-value {
+    @apply text-2xl font-bold font-mono;
+    color: var(--destiny-gold);
+  }
+
+  .destiny-input {
+    @apply w-full px-3 py-2 rounded-destiny-sm;
+    @apply bg-destiny-surface-300 border border-destiny-border-primary;
+    @apply text-destiny-text-primary placeholder-destiny-text-muted;
+    @apply focus:border-[var(--destiny-gold)] focus:ring-1 focus:ring-[var(--destiny-gold)];
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .destiny-skeleton {
+    @apply animate-pulse bg-destiny-surface-300 rounded-destiny-sm;
+  }
+
+  .destiny-loading {
+    @apply animate-spin h-5 w-5 border-2 border-destiny-border-primary rounded-full;
+    border-top-color: var(--destiny-gold);
+  }
+
+  .destiny-bg-gradient {
+    @apply bg-destiny-gradient;
+  }
+
+  .destiny-bg-gradient-dark {
+    @apply bg-destiny-gradient-dark;
+  }
+
+  .glass-effect {
+    @apply bg-glass-gradient backdrop-blur-destiny;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: linear-gradient(180deg, rgba(40, 48, 56, 0.82) 0%, rgba(32, 38, 44, 0.75) 100%);
+    border-bottom: 1px solid var(--holo-edge, rgba(220, 230, 240, 0.48));
+    box-shadow:
+      0 4px 24px rgba(0, 0, 0, 0.22),
+      inset 0 -3px 16px var(--destiny-ember-glow),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 0 0 1px var(--holo-gold-glow, rgba(228, 192, 74, 0.28)),
+      0 0 20px var(--holo-flame-glow, rgba(230, 126, 34, 0.16));
+  }
+
+  /* Iron Temple fire + SIVA holographic projection layers */
+  .iron-temple-fire {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50vh;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 130% 90% at 50% 100%, rgba(230, 126, 34, 0.32) 0%, rgba(192, 57, 43, 0.14) 40%, transparent 72%),
+      radial-gradient(ellipse 50% 40% at 15% 100%, rgba(243, 156, 18, 0.18) 0%, transparent 55%),
+      radial-gradient(ellipse 50% 40% at 85% 100%, rgba(192, 57, 43, 0.14) 0%, transparent 55%);
+    animation: iron-banner-ember 7s ease-in-out infinite;
+  }
+
+  .siva-projection-sparkles {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.55;
+    mix-blend-mode: screen;
+    background-image: url('../assets/patterns/siva-sparkle.svg');
+    background-size: 256px 256px;
+    animation: siva-sparkle-drift 18s linear infinite;
+  }
+
+  /* Forged-iron shell — brighter mid-tone, temple fire wash, star chart */
+  .destiny-bg-shell {
+    position: relative;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse 100% 55% at 50% 0%, rgba(200, 212, 222, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse 90% 45% at 50% 100%, rgba(230, 126, 34, 0.18) 0%, transparent 55%),
+      linear-gradient(168deg, #1e2430 0%, #283038 32%, #242a26 62%, #322418 100%);
+    overflow-x: hidden;
+
+    &::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.24;
+      background-image: url('../assets/patterns/radial-lines.svg');
+      background-size: 1200px 1200px;
+      background-position: center top;
+      animation: destiny-radial-drift 120s linear infinite;
+    }
+
+    &::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.14;
+      background-image:
+        repeating-linear-gradient(60deg, transparent, transparent 48px, rgba(196, 30, 58, 0.045) 48px, rgba(196, 30, 58, 0.045) 49px),
+        url('../assets/patterns/constellation-grid.svg');
+      background-size: auto, 512px 512px;
+      animation: destiny-constellation-drift 200s linear infinite;
+    }
+
+    > *:not(.iron-temple-fire):not(.siva-projection-sparkles) {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  /* SIVA-projected glass panels — hologram over temple fire */
+  .destiny-surface-panel {
+    position: relative;
+    background: linear-gradient(145deg, rgba(44, 52, 60, 0.82) 0%, rgba(34, 40, 46, 0.78) 100%);
+    border: 1px solid var(--holo-edge, rgba(220, 230, 240, 0.48));
+    border-radius: 0.75rem;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      inset 1px 0 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px var(--holo-gold-glow, rgba(228, 192, 74, 0.28)),
+      0 8px 28px rgba(0, 0, 0, 0.24),
+      0 0 18px var(--holo-flame-glow, rgba(230, 126, 34, 0.16)),
+      0 0 32px var(--holo-siva-glow, rgba(196, 30, 58, 0.1)),
+      inset 3px 0 0 rgba(201, 162, 39, 0.45),
+      inset 0 -1px 0 var(--destiny-ember-glow);
+    backdrop-filter: blur(12px) saturate(1.15);
+    -webkit-backdrop-filter: blur(12px) saturate(1.15);
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      z-index: 2;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+        inset 0 0 20px rgba(216, 228, 238, 0.04);
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: inherit;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(196, 30, 58, 0.1) 0%, transparent 42%),
+        radial-gradient(circle at 82% 88%, rgba(230, 126, 34, 0.08) 0%, transparent 38%),
+        linear-gradient(125deg, transparent 40%, rgba(255, 255, 255, 0.04) 50%, transparent 60%);
+      opacity: 0.9;
+      animation: siva-projection-sheen 9s ease-in-out infinite;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  .loading-profiles-strip {
+    border: 1px solid var(--holo-edge, rgba(220, 230, 240, 0.48));
+    border-left: 3px solid var(--destiny-gold);
+    border-radius: 0.5rem;
+    background: rgba(38, 44, 50, 0.85);
+    padding: 0.5rem 0.75rem;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 0 0 1px var(--holo-gold-glow),
+      inset 0 -1px 10px var(--destiny-ember-glow),
+      0 0 16px var(--holo-flame-glow);
+  }
+
+  /* Toolbar buttons — match activity view segments */
+  .chronicle-toolbar-btn {
+    @apply inline-flex items-center justify-center gap-1.5;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    border-radius: 0.25rem;
+    background: rgba(44, 52, 58, 0.8);
+    color: rgba(216, 228, 238, 0.92);
+    border: 1px solid rgba(180, 190, 200, 0.3);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+    &:hover {
+      background: rgba(201, 162, 39, 0.12);
+      border-color: rgba(201, 162, 39, 0.45);
+      color: var(--destiny-parchment);
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  }
+
+  .chronicle-toolbar-btn--primary {
+    background: linear-gradient(180deg, rgba(230, 126, 34, 0.22) 0%, rgba(201, 162, 39, 0.16) 100%);
+    color: var(--destiny-flame-bright);
+    border-color: rgba(230, 126, 34, 0.45);
+    box-shadow: 0 0 8px var(--destiny-flame-glow);
+
+    &:hover {
+      background: linear-gradient(180deg, rgba(230, 126, 34, 0.32) 0%, rgba(201, 162, 39, 0.22) 100%);
+      color: #fff;
+      box-shadow: 0 0 12px var(--destiny-flame-glow);
+    }
+  }
+
+  .chronicle-action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    width: 100%;
+  }
+
+  .destiny-year-block {
+    position: relative;
+    background: rgba(40, 46, 52, 0.78);
+    border: 1px solid var(--holo-edge, rgba(220, 230, 240, 0.38));
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 0 1px var(--holo-gold-glow),
+      inset 0 -1px 0 var(--destiny-ember-glow),
+      0 0 20px var(--holo-siva-glow);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--destiny-gold) 0%, var(--destiny-flame) 50%, var(--destiny-ember) 100%);
+      pointer-events: none;
+      animation: iron-banner-ember 4s ease-in-out infinite;
+    }
+  }
+
+  /* Title tab — steel badges on a remembrance wall */
+  .title-wall-of-remembrance {
+    position: relative;
+    padding: 1rem 1.125rem 1.25rem;
+    border-radius: 0.625rem;
+    background:
+      linear-gradient(180deg, rgba(52, 48, 44, 0.55) 0%, rgba(38, 36, 34, 0.65) 100%),
+      repeating-linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.015) 0,
+        rgba(255, 255, 255, 0.015) 1px,
+        transparent 1px,
+        transparent 48px
+      );
+    border: 1px solid rgba(120, 110, 100, 0.35);
+    box-shadow:
+      inset 0 2px 8px rgba(0, 0, 0, 0.35),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .title-steel-badge {
+    position: relative;
+    background:
+      linear-gradient(165deg, rgba(148, 158, 168, 0.42) 0%, rgba(88, 96, 104, 0.52) 38%, rgba(58, 64, 72, 0.62) 100%);
+    border: 2px solid rgba(176, 186, 196, 0.38);
+    border-radius: 3px;
+    box-shadow:
+      inset 0 2px 5px rgba(255, 255, 255, 0.16),
+      inset 0 -4px 8px rgba(0, 0, 0, 0.38),
+      0 5px 14px rgba(0, 0, 0, 0.42),
+      0 0 0 1px rgba(201, 162, 39, 0.12);
+    transform: rotate(var(--badge-tilt, -0.35deg));
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, rgba(220, 228, 236, 0.85), rgba(90, 98, 108, 0.95));
+      box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.5), 0 1px 1px rgba(255, 255, 255, 0.2);
+      pointer-events: none;
+    }
+
+    &::before {
+      top: 6px;
+      left: 8px;
+    }
+
+    &::after {
+      top: 6px;
+      right: 8px;
+    }
+
+    &:hover {
+      transform: rotate(0deg) translateY(-1px);
+      box-shadow:
+        inset 0 2px 5px rgba(255, 255, 255, 0.18),
+        inset 0 -4px 8px rgba(0, 0, 0, 0.35),
+        0 8px 18px rgba(0, 0, 0, 0.45),
+        0 0 12px rgba(230, 126, 34, 0.1);
+    }
+
+    &.title-steel-badge--locked {
+      filter: grayscale(0.35) brightness(0.92);
+      opacity: 0.88;
+    }
+  }
+
+  .activity-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: 1.25rem;
+    width: 100%;
+  }
+
+  .activity-card-column {
+    position: relative;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    contain: paint;
+    padding: 0.875rem 1rem 1rem;
+    border-radius: 0.75rem;
+    background: linear-gradient(
+      155deg,
+      rgba(16, 22, 28, 0.14) 0%,
+      rgba(12, 16, 20, 0.1) 50%,
+      rgba(24, 18, 14, 0.12) 100%
+    );
+    border: 1px solid rgba(255, 208, 32, 0.55);
+    backdrop-filter: blur(4px) saturate(1.12);
+    -webkit-backdrop-filter: blur(4px) saturate(1.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -28px 56px rgba(230, 126, 34, 0.18),
+      0 0 0 1px rgba(255, 208, 32, 0.28),
+      0 0 18px rgba(255, 180, 40, 0.22),
+      0 0 32px rgba(230, 126, 34, 0.12);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: -55% -45%;
+      pointer-events: none;
+      z-index: 0;
+      will-change: opacity;
+      background:
+        radial-gradient(ellipse 72% 58% at 18% 100%, rgba(230, 126, 34, 0.72) 0%, rgba(230, 126, 34, 0.22) 42%, transparent 68%),
+        radial-gradient(ellipse 62% 52% at 82% 100%, rgba(243, 156, 18, 0.55) 0%, rgba(192, 57, 43, 0.18) 48%, transparent 70%),
+        radial-gradient(ellipse 50% 38% at 50% 105%, rgba(255, 200, 120, 0.35) 0%, transparent 62%);
+      animation: activity-firelight-shift 4s ease-in-out infinite;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  .activity-year-heading {
+    position: relative;
+    z-index: 2;
+    isolation: isolate;
+  }
+
+  .activity-year-label {
+    position: relative;
+    z-index: 1;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  .account-summary-panel {
+    .account-summary-stat {
+      padding: 0.75rem 0.875rem;
+      border-radius: 0.5rem;
+      background: rgba(14, 20, 26, 0.35);
+      border: 1px solid rgba(201, 162, 39, 0.18);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .account-summary-stat-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(148, 163, 184, 0.95);
+      margin-bottom: 0.25rem;
+    }
+
+    .account-summary-table {
+      color: rgba(203, 213, 225, 0.95);
+      border-top: 1px solid rgba(201, 162, 39, 0.22);
+
+      thead th {
+        font-size: 0.6875rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: rgba(148, 163, 184, 0.9);
+        border-bottom: 1px solid rgba(201, 162, 39, 0.15);
+      }
+
+      tbody tr + tr td {
+        border-top: 1px solid rgba(148, 163, 184, 0.12);
+      }
+    }
+  }
+
+  /* Activities tab — translucent panels so the animated shell shows through */
+  .activities-glass-view {
+    .destiny-surface-panel {
+      background: linear-gradient(145deg, rgba(18, 24, 32, 0.1) 0%, rgba(12, 18, 24, 0.06) 100%) !important;
+      backdrop-filter: blur(3px) saturate(1.25);
+      -webkit-backdrop-filter: blur(3px) saturate(1.25);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        0 0 0 1px rgba(228, 192, 74, 0.15),
+        0 0 14px rgba(230, 126, 34, 0.08);
+
+      &::before {
+        opacity: 0.35;
+      }
+
+      &::after {
+        display: none;
+      }
+    }
+
+    .destiny-year-block {
+      background: rgba(14, 20, 26, 0.08) !important;
+      backdrop-filter: blur(2px) saturate(1.15);
+      -webkit-backdrop-filter: blur(2px) saturate(1.15);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 0 1px rgba(228, 192, 74, 0.12);
+
+      &::before {
+        animation: none;
+        opacity: 0.9;
+      }
+    }
+
+    .account-summary-panel {
+      background: linear-gradient(145deg, rgba(18, 24, 32, 0.1) 0%, rgba(12, 18, 24, 0.06) 100%) !important;
+      backdrop-filter: blur(3px) saturate(1.25);
+      -webkit-backdrop-filter: blur(3px) saturate(1.25);
+
+      &::after {
+        display: none;
+      }
+
+      .account-summary-stat {
+        background: rgba(14, 20, 26, 0.2);
+        border-color: rgba(228, 192, 74, 0.14);
+      }
+    }
+
+    .activity-card-column {
+      background: linear-gradient(
+        155deg,
+        rgba(16, 22, 28, 0.14) 0%,
+        rgba(12, 16, 20, 0.1) 50%,
+        rgba(24, 18, 14, 0.12) 100%
+      ) !important;
+      backdrop-filter: blur(4px) saturate(1.2);
+      -webkit-backdrop-filter: blur(4px) saturate(1.2);
+      border-color: rgba(255, 208, 32, 0.45) !important;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -20px 40px rgba(230, 126, 34, 0.12),
+        0 0 0 1px rgba(255, 208, 32, 0.22),
+        0 0 14px rgba(255, 180, 40, 0.16) !important;
+
+      &::before {
+        opacity: 0.75;
+      }
+    }
+
+    .activity-card-row.destiny-panel--compact {
+      border-color: rgba(255, 208, 32, 0.35);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.08),
+        0 0 0 1px rgba(255, 208, 32, 0.12),
+        0 0 8px rgba(255, 160, 40, 0.08);
+    }
+
+    .destiny-panel,
+    .destiny-panel--compact {
+      background: linear-gradient(135deg, rgba(20, 26, 32, 0.16) 0%, rgba(14, 18, 22, 0.12) 100%) !important;
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+    }
+  }
+
+  /* Account picker — click the username row, not a tiny checkbox */
+  .modal-account-pick {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(30, 36, 44, 0.72);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+
+    &:hover {
+      background: rgba(44, 52, 60, 0.85);
+      border-color: rgba(201, 162, 39, 0.4);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--destiny-gold);
+      outline-offset: 2px;
+    }
+
+    &.modal-account-pick--selected {
+      border-color: var(--destiny-gold);
+      background: linear-gradient(135deg, rgba(201, 162, 39, 0.18) 0%, rgba(230, 126, 34, 0.1) 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(228, 192, 74, 0.35),
+        0 0 12px rgba(230, 126, 34, 0.12);
+    }
+  }
+
+  .modal-account-pick-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .modal-account-pick-name {
+    color: #fff;
+    font-weight: 600;
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  .modal-account-pick-meta {
+    color: rgba(148, 163, 184, 0.95);
+    font-size: 0.8125rem;
+    line-height: 1.25;
+    margin-top: 0.125rem;
+  }
+
+  .modal-account-pick-badge {
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.45rem;
+    border-radius: 9999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    color: rgba(203, 213, 225, 0.9);
+    background: rgba(15, 20, 26, 0.5);
+
+    .modal-account-pick--selected & {
+      border-color: rgba(228, 192, 74, 0.55);
+      color: var(--destiny-gold-bright);
+      background: rgba(201, 162, 39, 0.12);
+    }
+  }
+
+  .activity-card-row {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.5rem 0.375rem 0.625rem;
+
+    .activity-row-meta {
+      flex-shrink: 0;
+    }
+
+    .activity-row-name {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .activity-pgcr-link {
+      margin-left: auto;
+      flex: 0 0 auto;
+    }
+  }
+
+  .share-archive-panel {
+    border-color: rgba(255, 208, 32, 0.45);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 0 0 1px rgba(255, 208, 32, 0.28),
+      0 16px 48px rgba(0, 0, 0, 0.5),
+      0 0 24px rgba(255, 160, 40, 0.18);
+  }
+
+  .destiny-tab-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.375rem;
+    padding: 0.375rem;
+    background: rgba(38, 44, 50, 0.72);
+    border: 1px solid var(--holo-edge, rgba(220, 230, 240, 0.48));
+    border-radius: 0.75rem;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 0 0 1px var(--holo-gold-glow),
+      0 0 18px var(--holo-flame-glow);
+
+    @media (min-width: 768px) {
+      display: flex;
+      flex-wrap: wrap;
+    }
+  }
+
+  .destiny-section-title {
+    @apply font-d2-headline font-semibold tracking-tight;
+    color: var(--destiny-gold);
+    text-shadow: 0 0 20px var(--destiny-flame-glow);
+  }
+
+  /* Chamfered panel — SIVA projection card */
+  .destiny-panel {
+    position: relative;
+    background: linear-gradient(135deg, rgba(48, 54, 62, 0.86) 0%, rgba(38, 44, 52, 0.8) 100%);
+    border: 1px solid var(--holo-edge, rgba(220, 230, 240, 0.42));
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 0 0 1px var(--holo-gold-glow, rgba(228, 192, 74, 0.24)),
+      0 4px 18px rgba(0, 0, 0, 0.2),
+      0 0 16px var(--holo-flame-glow, rgba(230, 126, 34, 0.14)),
+      0 0 24px var(--holo-siva-glow, rgba(196, 30, 58, 0.08));
+    filter: drop-shadow(0 0 8px rgba(230, 126, 34, 0.1));
+    backdrop-filter: blur(10px) saturate(1.1);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--activity-accent, var(--destiny-gold));
+      opacity: 0.9;
+      z-index: 2;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 90% 10%, rgba(196, 30, 58, 0.09) 0%, transparent 35%),
+        radial-gradient(circle at 10% 90%, rgba(230, 126, 34, 0.07) 0%, transparent 30%);
+      opacity: 0.85;
+      z-index: 0;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    &:hover {
+      border-color: rgba(240, 230, 200, 0.55);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.24),
+        0 0 0 1px rgba(228, 192, 74, 0.35),
+        0 6px 22px rgba(0, 0, 0, 0.24),
+        0 0 22px rgba(230, 126, 34, 0.18),
+        0 0 32px rgba(196, 30, 58, 0.1);
+    }
+  }
+
+  /* Compact rows (activity cards): no clip-path so PGCR times aren't clipped */
+  .destiny-panel--compact {
+    clip-path: none !important;
+    border-radius: 6px;
+    padding: 0.5rem 0.625rem 0.5rem 0.75rem;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: visible;
+    border-left-width: 3px;
+    border-left-color: var(--activity-accent, var(--destiny-gold));
+  }
+
+  .destiny-panel--pgcr-backdrop {
+    background-size: cover;
+    background-position: center;
+    background-blend-mode: overlay;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(32, 38, 44, 0.55) 0%, rgba(32, 38, 44, 0.35) 55%, rgba(32, 38, 44, 0.25) 100%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  .activity-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .activity-badge-raid {
+    @apply activity-badge bg-destiny-raid-bg text-destiny-raid border border-destiny-raid/30;
+  }
+
+  .activity-badge-strike {
+    @apply activity-badge bg-destiny-strike-bg text-destiny-strike border border-destiny-strike/30;
+  }
+
+  .activity-badge-crucible {
+    @apply activity-badge bg-destiny-crucible-bg text-destiny-crucible border border-destiny-crucible/30;
+  }
+
+  .activity-badge-gambit {
+    @apply activity-badge bg-destiny-gambit-bg text-destiny-gambit border border-destiny-gambit/30;
+  }
+
+  .activity-badge-dungeon {
+    @apply activity-badge bg-destiny-dungeon-bg text-destiny-dungeon border border-destiny-dungeon/30;
+  }
+
+  .activity-badge-nightfall {
+    @apply activity-badge bg-destiny-nightfall-bg text-destiny-nightfall border border-destiny-nightfall/30;
+  }
+
+  .game-badge-d1 {
+    @apply inline-flex items-center px-2 py-1 rounded-destiny-sm text-xs font-semibold;
+    @apply bg-destiny-d1-bg text-destiny-d1 border border-destiny-d1/30;
+  }
+
+  .game-badge-d2 {
+    @apply inline-flex items-center px-2 py-1 rounded-destiny-sm text-xs font-semibold;
+    @apply bg-destiny-d2-bg text-destiny-d2 border border-destiny-d2/30;
+  }
+
+  /* PGCR modal geometric header band */
+  .pgcr-modal-header-band {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(245, 197, 66, 0.08) 0%, transparent 100%);
+
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      opacity: 0.12;
+      background-image: url('../assets/patterns/radial-lines.svg');
+      background-size: 600px 600px;
+      background-position: center;
+    }
+  }
+
+  .pgcr-modal-enter {
+    animation: pgcr-modal-in 0.28s ease-out;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      90deg,
+      var(--destiny-iron-light) 0%,
+      var(--destiny-gold) 25%,
+      var(--destiny-flame-bright) 55%,
+      var(--destiny-parchment) 100%
+    );
+  }
+
+  .hover-lift {
+    @apply transition-transform duration-200 ease-in-out hover:-translate-y-0.5;
+  }
+}
+
+@keyframes destiny-radial-drift {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes destiny-constellation-drift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 0 0, 512px 512px; }
+}
+
+@keyframes pgcr-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes siva-sparkle-drift {
+  from { background-position: 0 0; }
+  to { background-position: 256px 256px; }
+}
+
+@keyframes siva-projection-sheen {
+  0%, 100% { opacity: 0.75; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(2%); }
+}
+
+@keyframes iron-banner-ember {
+  0%, 100% { opacity: 0.85; filter: brightness(1); }
+  50% { opacity: 1; filter: brightness(1.08); }
+}
+
+@keyframes activity-firelight-shift {
+  0%, 100% { opacity: 0.72; }
+  33% { opacity: 1; }
+  66% { opacity: 0.82; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .destiny-bg-shell::before,
+  .destiny-bg-shell::after,
+  .iron-temple-fire,
+  .siva-projection-sparkles,
+  .destiny-surface-panel::after,
+  .pgcr-modal-enter,
+  .destiny-year-block::before,
+  .activity-card-column::before {
+    animation: none !important;
+  }
+}

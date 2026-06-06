@@ -22,6 +22,8 @@ export interface ActivityCountRow {
   timeSeconds: number;
   /** ISO timestamp of the most recent run for this activity (if known). */
   lastPlayed?: string;
+  /** Instance id of the most recent run (for PGCR link). */
+  lastPlayedInstanceId?: string;
 }
 
 /**
@@ -359,6 +361,9 @@ export const SOCIAL_SPACE_AND_PATROL_REF = {
 })
 export class ActivityBreakdownService {
 
+  /** Bumped when row shape changes so stale cached rows are not reused. */
+  private readonly activityCountsCacheVersion = 'v2-instance';
+
   /** Cached full breakdown per sorted membership-id key (avoids re-scanning IndexedDB + PGCR backfill). */
   private activityCountsCache = new Map<string, ActivityCountRow[]>();
 
@@ -373,7 +378,7 @@ export class ActivityBreakdownService {
   }
 
   private membershipCacheKey(membershipIds: string[]): string {
-    return [...membershipIds].sort().join('|');
+    return `${this.activityCountsCacheVersion}|${[...membershipIds].sort().join('|')}`;
   }
 
   /**
@@ -415,7 +420,7 @@ export class ActivityBreakdownService {
     }
 
     // Aggregate per (referenceId, game). For D1 we also track instanceIds so we can backfill time from PGCR when activity history has no duration.
-    const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode?: number; lastPlayed?: string }>();
+    const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode?: number; lastPlayed?: string; lastPlayedInstanceId?: string }>();
     const instanceIdsByKey = new Map<string, string[]>();
 
     for (const a of allActivities) {
@@ -434,14 +439,15 @@ export class ActivityBreakdownService {
       if (existing.mode === undefined && a.activityDetails?.mode !== undefined) {
         existing.mode = a.activityDetails.mode;
       }
+      const instanceId = a.activityDetails?.instanceId != null ? String(a.activityDetails.instanceId) : undefined;
       const period = a.period;
       if (period) {
         if (!existing.lastPlayed || new Date(period).getTime() > new Date(existing.lastPlayed).getTime()) {
           existing.lastPlayed = period;
+          existing.lastPlayedInstanceId = instanceId;
         }
       }
       aggByKey.set(key, existing);
-      const instanceId = a.activityDetails?.instanceId != null ? String(a.activityDetails.instanceId) : undefined;
       if (instanceId) {
         const list = instanceIdsByKey.get(key) || [];
         list.push(instanceId);
@@ -488,7 +494,8 @@ export class ActivityBreakdownService {
         clears,
         fails,
         timeSeconds: agg.timeSeconds,
-        lastPlayed: agg.lastPlayed
+        lastPlayed: agg.lastPlayed,
+        lastPlayedInstanceId: agg.lastPlayedInstanceId
       });
     }
 
@@ -541,6 +548,7 @@ export class ActivityBreakdownService {
         if (row.lastPlayed) {
           if (!existing.lastPlayed || new Date(row.lastPlayed).getTime() > new Date(existing.lastPlayed).getTime()) {
             existing.lastPlayed = row.lastPlayed;
+            existing.lastPlayedInstanceId = row.lastPlayedInstanceId;
           }
         }
       }

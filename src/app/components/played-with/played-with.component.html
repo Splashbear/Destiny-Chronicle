@@ -1,0 +1,78 @@
+<div class="played-with space-y-4">
+  <p class="text-sm text-slate-400">{{ uiI18n.t('playedWith.intro') }}</p>
+
+  <div *ngIf="coverage" class="rounded-lg bg-slate-800/95 border border-slate-700 p-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+      <span class="text-sm text-slate-300">{{ uiI18n.t('playedWith.coverage') }}</span>
+      <span class="text-sm font-mono text-blue-300">
+        {{ coverage.pgcrCached }} / {{ coverage.totalActivities }} ({{ coverage.percent }}%)
+      </span>
+    </div>
+    <div class="w-full bg-slate-700 rounded-full h-2">
+      <div
+        class="bg-[var(--destiny-gold)] h-2 rounded-full transition-all duration-300"
+        [style.width.%]="coverage.percent">
+      </div>
+    </div>
+    <p *ngIf="prefetchActive && prefetchRemaining > 0" class="text-xs text-amber-300/90 mt-2">
+      {{ uiI18n.t('playedWith.downloading') }}
+      <span class="font-mono">{{ prefetchRemaining }} {{ uiI18n.t('playedWith.remaining') }}</span>
+    </p>
+  </div>
+
+  <div *ngIf="loading && !sortedPartners.length" class="flex items-center gap-2 py-6 text-slate-400 text-sm">
+    <app-destiny-loader size="sm"></app-destiny-loader>
+    {{ uiI18n.t('playedWith.loading') }}
+  </div>
+
+  <div
+    *ngIf="!loading && coverage && coverage.pgcrCached === 0"
+    class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
+    {{ uiI18n.t('playedWith.empty') }}
+  </div>
+
+  <div
+    *ngIf="coverage && coverage.pgcrCached > 0 && sortedPartners.length === 0 && !loading"
+    class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
+    {{ uiI18n.t('playedWith.noPartners') }}
+  </div>
+
+  <div
+    *ngIf="sortedPartners.length > 0"
+    class="overflow-x-auto rounded-lg bg-slate-800/95 border border-slate-700">
+    <table class="w-full text-sm text-left">
+      <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">
+        <tr>
+          <th class="py-3 px-4 font-medium">#</th>
+          <th class="py-3 px-4 font-medium">{{ uiI18n.t('playedWith.player') }}</th>
+          <th class="py-3 px-4 font-medium text-right">
+            <button type="button" class="sortable-th" (click)="toggleSort('activities')">
+              {{ uiI18n.t('playedWith.activities') }}<span class="text-yellow-400/80">{{ sortIndicator('activities') }}</span>
+            </button>
+          </th>
+          <th class="py-3 px-4 font-medium text-right">
+            <button type="button" class="sortable-th" (click)="toggleSort('time')">
+              {{ uiI18n.t('playedWith.time') }}<span class="text-yellow-400/80">{{ sortIndicator('time') }}</span>
+            </button>
+          </th>
+          <th class="py-3 px-4 font-medium text-right hidden sm:table-cell">
+            <button type="button" class="sortable-th" (click)="toggleSort('lastPlayed')">
+              {{ uiI18n.t('playedWith.lastPlayed') }}<span class="text-yellow-400/80">{{ sortIndicator('lastPlayed') }}</span>
+            </button>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let row of sortedPartners; let i = index"
+          class="border-b border-slate-700/60 hover:bg-slate-700/30">
+          <td class="py-2.5 px-4 text-slate-500">{{ i + 1 }}</td>
+          <td class="py-2.5 px-4 text-white font-medium">{{ row.displayName }}</td>
+          <td class="py-2.5 px-4 text-right font-mono text-blue-300">{{ row.activitiesTogether }}</td>
+          <td class="py-2.5 px-4 text-right font-mono text-slate-300">{{ formatDuration(row.timeTogetherSeconds) }}</td>
+          <td class="py-2.5 px-4 text-right text-slate-400 hidden sm:table-cell">{{ formatDate(row.lastPlayedTogether) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

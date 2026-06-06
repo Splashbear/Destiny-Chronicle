@@ -1,7 +1,10 @@
-/* Google font for DIN substitute — must come before other rules */
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+/* DIN Condensed available locally on some systems; UI body uses Helvetica Neue. */
 
 @layer base {
+  html {
+    font-family: var(--destiny-font-ui, 'Helvetica Neue', Helvetica, Arial, sans-serif);
+  }
+
   @font-face {
     font-family: 'DIN Condensed';
     src: local('DIN Condensed');
@@ -16,14 +19,18 @@
   /* Buttons */
   .d2-btn {
     @apply px-4 py-1.5 rounded uppercase tracking-wider font-d2-headline bg-d2-gold text-d2-slate hover:bg-yellow-300 transition-colors;
+    letter-spacing: 0.06em;
   }
   .d2-btn-outline {
     @apply px-4 py-1.5 rounded uppercase tracking-wider font-d2-headline border border-d2-gold text-d2-gold hover:bg-d2-gold hover:text-d2-slate transition-colors;
+    letter-spacing: 0.06em;
   }
 
   /* Tabs */
   .d2-tab {
     @apply px-3 py-2 font-d2-headline uppercase tracking-wider text-d2-gold border-b-2 border-transparent hover:border-d2-gold transition-colors;
+    letter-spacing: 0.05em;
+    font-weight: 500;
   }
   .d2-tab-active {
     @apply border-d2-gold text-d2-gold;
