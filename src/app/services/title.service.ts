@@ -76,7 +76,12 @@ export class TitleService {
     const HASH_RELEASE_ORDER: { [hash: number]: number } = {
       // MMXXIII MoT (2023) - Rank 40
       3175660257: 40,
-      126238604: 50
+      // MMXXIV MoT (2024) - Rank 50
+      126238604: 50,
+      // Monument of Triumph (Immortal) - Rank 59
+      1210906304: 59,
+      // The Pantheon (Godsbane) - Rank 59
+      548534407: 59,
     };
 
     // Normalize title names: lowercase and remove all non-alphanumeric characters
@@ -279,8 +284,14 @@ export class TitleService {
       'renegade': 57,
       'undertaker': 57,
       
-      // Rank 58: 12/13/2025 - Most recent
+      // Rank 58: 12/13/2025
       'praxic': 58,
+
+      // Rank 59: 6/9/2026 - Monument of Triumph update (alphabetical by seal name)
+      'godsbane': 59,
+      'immortal': 59,
+      'monument of triumph': 59,
+      'the pantheon': 59,
     };
 
     const RELEASE_ORDER: { [normalized: string]: number } = Object.fromEntries(

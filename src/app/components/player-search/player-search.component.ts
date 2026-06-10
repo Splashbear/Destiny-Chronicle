@@ -351,6 +351,20 @@ const SPECIAL_TITLES: { [hash: number]: { name: string; gildingTrackingRecordHas
   1733555826: { name: 'Flawless', gildingTrackingRecordHash: 2506618338 },   // Current
 };
 
+/** completionRecordHash -> release rank; takes precedence over name lookup */
+const HASH_RELEASE_ORDER: { [hash: number]: number } = {
+  3175660257: 40, // MMXXIII MoT
+  126238604: 50,  // MMXXIV MoT
+  1210906304: 59, // Monument of Triumph (Immortal)
+  548534407: 59,  // The Pantheon (Godsbane)
+};
+
+function titleReleaseRank(completionRecordHash: number, normalizedName: string): number {
+  const hashRank = HASH_RELEASE_ORDER[completionRecordHash];
+  if (hashRank !== undefined) return hashRank;
+  return RELEASE_ORDER[normalizedName] || 0;
+}
+
 // Explicit release order mapping (higher = newer).
 // IMPORTANT: keys are normalized via normalizeTitleName(). We keep a readable
 // raw list and normalize it once so lookups match `normalizedName`.
@@ -549,8 +563,14 @@ const RELEASE_ORDER_RAW: { [name: string]: number } = {
   'renegade': 57,
   'undertaker': 57,
   
-  // Rank 58: 12/13/2025 - Most recent
+  // Rank 58: 12/13/2025
   'praxic': 58,
+
+  // Rank 59: 6/9/2026 - Monument of Triumph update (alphabetical by seal name)
+  'godsbane': 59,
+  'immortal': 59,
+  'monument of triumph': 59,
+  'the pantheon': 59,
 };
 
 const RELEASE_ORDER: { [normalized: string]: number } = Object.fromEntries(
@@ -7589,7 +7609,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                     return undefined;
                   })(),
                   legacy: (node.parentNodeHashes || []).includes(1881970629),
-                  releaseRank: RELEASE_ORDER[normalizedName] || 0,
+                  releaseRank: titleReleaseRank(node.completionRecordHash, normalizedName),
                   normalized: normalizedName,
                   progressPercent: progressPercent,
                 };
@@ -7601,7 +7621,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             const locked = allTitles.filter((t: any) => !t.completed).sort((a: any, b: any) => a.name.localeCompare(b.name));
             this.playerTitles[pKey] = [...completed, ...locked];
             // Debug: Print all record hashes for the current user
-            const motHashes = ['126238604', '3175660257']; // MoT 2024, 2023
+            const motHashes = ['126238604', '3175660257', '1210906304', '548534407'];
             const recordKeys = Object.keys(records);
             // debug removed
             for (const motHash of motHashes) {
@@ -9402,7 +9422,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                     return undefined;
                   })(),
                   legacy: (node.parentNodeHashes || []).includes(1881970629),
-                  releaseRank: RELEASE_ORDER[normalizedName] || 0,
+                  releaseRank: titleReleaseRank(node.completionRecordHash, normalizedName),
                   normalized: normalizedName,
                   progressPercent: progressPercent,
                 };
@@ -9414,7 +9434,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             const locked = allTitles.filter((t: any) => !t.completed).sort((a: any, b: any) => a.name.localeCompare(b.name));
             this.playerTitles[pKey] = [...completed, ...locked];
             // Debug: Print all record hashes for the current user
-            const motHashes = ['126238604', '3175660257']; // MoT 2024, 2023
+            const motHashes = ['126238604', '3175660257', '1210906304', '548534407'];
             const recordKeys = Object.keys(records);
             // debug removed
             for (const motHash of motHashes) {
@@ -9634,7 +9654,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               return undefined;
             })(),
             legacy: (node.parentNodeHashes || []).includes(1881970629),
-            releaseRank: RELEASE_ORDER[normalizedName] || 0,
+            releaseRank: titleReleaseRank(node.completionRecordHash, normalizedName),
             normalized: normalizedName,
             progressPercent: progressPercent,
           };

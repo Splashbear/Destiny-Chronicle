@@ -9,7 +9,7 @@ export interface PantheonEventConfig {
   id: PantheonEventId;
   /** Card title on Guardian Firsts */
   cardTitle: string;
-  /** Activity referenceIds — fill MOT hashes after June 9 manifest ships */
+  /** Activity referenceIds for this Pantheon event card */
   hashes: string[];
   /** Fallback when hash unknown (manifest name contains any of these) */
   namePatterns: string[];
@@ -22,7 +22,7 @@ export const LEGACY_PANTHEON_CONFIG: PantheonEventConfig = {
   id: 'legacy-pantheon',
   cardTitle: 'The Pantheon',
   hashes: ['4169648176', '4169648177', '4169648179', '4169648182'],
-  namePatterns: ['The Pantheon:', 'Pantheon:'],
+  namePatterns: ['The Pantheon:'],
   versionSortOrder: [
     'Nezarec Sublime',
     'Rhulk Indomitable',
@@ -31,16 +31,16 @@ export const LEGACY_PANTHEON_CONFIG: PantheonEventConfig = {
   ]
 };
 
-/**
- * Monument of Triumph Pantheon — hashes TBD at launch.
- * Name patterns help surface activities before hashes are wired.
- */
+/** Monument of Triumph Pantheon 2.0 (permanent, June 2026+) */
 export const MOT_PANTHEON_CONFIG: PantheonEventConfig = {
   id: 'mot-pantheon',
   cardTitle: 'Monument of Triumph Pantheon',
-  hashes: [],
+  hashes: ['2530656885', '1516551982'],
   namePatterns: ['Monument of Triumph Pantheon', 'MoT Pantheon', 'Triumph Pantheon'],
-  versionSortOrder: []
+  versionSortOrder: [
+    'Morgeth Surpassing',
+    'Calus Resplendent'
+  ]
 };
 
 export const PANTHEON_EVENT_CONFIGS: PantheonEventConfig[] = [
@@ -63,6 +63,8 @@ export function isMotPantheonActivity(referenceId: string | number, name?: strin
   const ref = String(referenceId);
   if (MOT_PANTHEON_HASHES.includes(ref)) return true;
   if (!name) return false;
+  // MoT uses "Pantheon: Boss" (no leading "The"); legacy uses "The Pantheon:"
+  if (name.startsWith('Pantheon:') && !name.startsWith('The Pantheon:')) return true;
   return MOT_PANTHEON_CONFIG.namePatterns.some((p) => name.includes(p));
 }
 

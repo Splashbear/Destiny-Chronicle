@@ -151,7 +151,7 @@
     <h4 class="text-md font-semibold text-purple-300 mb-2 mt-8">Pantheon Events</h4>
     <p class="text-xs text-slate-500 mb-3">Pinnacle activities — legacy Pantheon, Rite of the Nine, and Monument of Triumph Pantheon.</p>
     <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedLegacyPantheonRaids(), emptyMessage: 'No legacy Pantheon firsts found.' }"></ng-container>
-    <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedMotPantheonRaids(), emptyMessage: 'No Monument of Triumph Pantheon firsts yet (activity hashes added after June 9).' }"></ng-container>
+    <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedMotPantheonRaids(), emptyMessage: 'No Monument of Triumph Pantheon firsts found.' }"></ng-container>
     <ng-container *ngTemplateOutlet="firstsRiteStackedCard; context: { riteGroups: ps.getRiteOfTheNineDungeons(), emptyMessage: 'No Rite of the Nine firsts found.' }"></ng-container>
   </ng-container>
 </ng-template>

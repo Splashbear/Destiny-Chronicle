@@ -97,11 +97,15 @@
 - `940375169` - Standard
 - `4129614942` - Master
 
-### The Pantheon
+### The Pantheon (legacy, 2024)
 - `4169648176` - Oryx Exalted
 - `4169648177` - Rhulk Indomitable
 - `4169648179` - Atraks Sovereign
 - `4169648182` - Nezarec Sublime
+
+### Monument of Triumph Pantheon 2.0 (2026+)
+- `2530656885` - Morgeth Surpassing
+- `1516551982` - Calus Resplendent
 
 ### Desert Perpetual ⚠️ NEW - NEEDS TO BE ADDED
 **Note:** This raid is not yet in the codebase. You'll need to fetch its hashes from the Bungie API manifest.

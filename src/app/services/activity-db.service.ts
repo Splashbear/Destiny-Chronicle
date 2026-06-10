@@ -210,11 +210,14 @@ export class ActivityDbService extends Dexie {
     '1541433876': "Salvation's Edge: Standard",
     '940375169': "Salvation's Edge: Standard",
     '4129614942': "Salvation's Edge: Master",
-    // --- Pantheon Raids ---
+    // --- Legacy Pantheon (2024) ---
     '4169648176': 'The Pantheon: Oryx Exalted',
-    '4169648177': 'The Pantheon: Rhulk Indomitable', 
+    '4169648177': 'The Pantheon: Rhulk Indomitable',
     '4169648179': 'The Pantheon: Atraks Sovereign',
     '4169648182': 'The Pantheon: Nezarec Sublime',
+    // --- Monument of Triumph Pantheon 2.0 (2026+) ---
+    '2530656885': 'Pantheon: Morgeth Surpassing',
+    '1516551982': 'Pantheon: Calus Resplendent',
     // --- Destiny 2 Dungeons ---
     // The Shattered Throne - Single version
     '2032534090': 'The Shattered Throne: Standard',

@@ -393,7 +393,7 @@ export class DestinyManifestService {
         'The Pantheon', 'The Desert Perpetual'
       ]);
       if (D2_DUNGEONS.has(baseName)) return 'dungeon';
-      if (D2_RAIDS.has(baseName) || baseName.startsWith('The Pantheon')) return 'raid';
+      if (D2_RAIDS.has(baseName) || baseName.startsWith('The Pantheon') || baseName === 'Pantheon') return 'raid';
     }
     
     // Fall back to manifest-based automatic detection for new activities
