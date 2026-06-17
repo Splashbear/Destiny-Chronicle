@@ -517,9 +517,8 @@ export class ActivityBreakdownService {
       keyToInstanceIdsForBackfill.set(key, ids);
     }
     if (d1ZeroTimeInstanceIds.length > 0) {
-      // D1 PGCRs are prefetched (throttled) when activity history is synced; we only read from cache here.
-      // game=1 guard: a D2 PGCR sharing the numeric ID must not contribute its duration to a D1 row.
-      const pgcrBatch = await this.pgcrCache.getBatch(d1ZeroTimeInstanceIds, 1);
+      // D1 PGCRs are prefetched (throttled) when activity history is synced; we only read from cache here
+      const pgcrBatch = await this.pgcrCache.getBatch(d1ZeroTimeInstanceIds);
       for (const row of rows) {
         if (row.game !== 'D1' || row.timeSeconds !== 0) continue;
         const key = `${row.referenceId}|${row.game}`;
