@@ -34,6 +34,7 @@ import {
   LEGACY_PANTHEON_CONFIG,
   MOT_PANTHEON_CONFIG
 } from '../../config/pantheon.config';
+import { isSrlActivity } from '../../config/srl.config';
 import { DatePickerComponent } from '../date-picker/date-picker.component';
 import { PlayerSearchActivitiesTabComponent } from './player-search-activities-tab.component';
 import { PlayerSearchBreakdownTabComponent } from './player-search-breakdown-tab.component';
@@ -3838,7 +3839,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       
 
       
-      const activityType = this.manifest.getActivityType(referenceId, activity.activityDetails?.mode);
+      const activityType = this.manifest.getActivityType(referenceId, activity.activityDetails?.mode, isD1);
       const normalizedType = (activityType || 'other').toLowerCase().replace(/\s+/g, '-');
       
       // Group by base activity name (remove version suffixes)
@@ -4359,9 +4360,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Special case for Dungeons (D2 only) - use proper activity type detection
       if (this.selectedActivityType.label === 'Dungeon') {
         if (game !== 'D2') return false;
-        // Use the manifest service to properly detect dungeons
-        const activityType = this.manifest.getActivityType(referenceId, mode);
+        const activityType = this.manifest.getActivityType(referenceId, mode, false);
         return activityType === 'dungeon';
+      }
+      if (this.selectedActivityType.label === 'Sparrow Racing League') {
+        const isD1 = game === 'D1';
+        const activityName = this.manifest.getActivityName(referenceId, isD1);
+        const activityType = this.manifest.getActivityType(referenceId, mode, isD1);
+        return activityType === 'sparrow-racing-league' || isSrlActivity(referenceId, activityName, mode);
       }
       // Normal case - check mode against game version
       return (game === 'D1' && mode === this.selectedActivityType.d1Mode) ||
@@ -4545,7 +4551,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const list = this.activities[key] || [];
         for (const act of list) {
           const typeName = this.manifest.getActivityType(act.activityDetails.referenceId, act.activityDetails.mode);
-          const allowedTypes = ['raid','dungeon','strike','nightfall','crucible','gambit','other'];
+          const allowedTypes = ['raid','dungeon','strike','nightfall','crucible','gambit','sparrow-racing-league','other'];
           const safeType = allowedTypes.includes(typeName) ? typeName : 'other';
           if (!perType[safeType]) perType[safeType] = { count: 0, time: 0 };
           perType[safeType].count++;
@@ -5910,8 +5916,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         if (this.selectedActivityType.label === 'Dungeon' && player.game === 'D2') {
           playerActivities = playerActivities.filter(a => {
             const referenceId = String(a.activityDetails?.referenceId ?? '');
-            const activityType = this.manifest.getActivityType(referenceId, a.activityDetails?.mode);
+            const activityType = this.manifest.getActivityType(referenceId, a.activityDetails?.mode, false);
             return activityType === 'dungeon';
+          });
+        } else if (this.selectedActivityType.label === 'Sparrow Racing League') {
+          playerActivities = playerActivities.filter(a => {
+            const referenceId = String(a.activityDetails?.referenceId ?? '');
+            const activityName = this.manifest.getActivityName(referenceId, player.game === 'D1');
+            const activityType = this.manifest.getActivityType(referenceId, a.activityDetails?.mode, player.game === 'D1');
+            return activityType === 'sparrow-racing-league' || isSrlActivity(referenceId, activityName, a.activityDetails?.mode);
           });
         } else {
           mode = player.game === 'D1' ? this.selectedActivityType.d1Mode : this.selectedActivityType.d2Mode;

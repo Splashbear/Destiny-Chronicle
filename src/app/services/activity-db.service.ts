@@ -218,6 +218,20 @@ export class ActivityDbService extends Dexie {
     // --- Monument of Triumph Pantheon 2.0 (2026+) ---
     '2530656885': 'Pantheon: Morgeth Surpassing',
     '1516551982': 'Pantheon: Calus Resplendent',
+    // --- D2 Sparrow Racing League (Monument of Triumph 9.7.0+) ---
+    '2227496071': 'Campus Martius',
+    '2880643637': 'Campus Martius',
+    '672398899': 'Infinite Descent',
+    '3870512513': 'Infinite Descent',
+    '3683857964': 'Quantum Circuit',
+    '4058499058': 'Quantum Circuit',
+    '1079634867': 'Haakon Precipice',
+    '3528554193': 'Haakon Precipice',
+    '94140435': 'Shining Sands',
+    '2632405857': 'Shining Sands',
+    '342590048': 'Sparrow Racing League',
+    '1751043439': 'Sparrow Racing League',
+    '3532626736': 'Sparrow Racing League',
     // --- Destiny 2 Dungeons ---
     // The Shattered Throne - Single version
     '2032534090': 'The Shattered Throne: Standard',

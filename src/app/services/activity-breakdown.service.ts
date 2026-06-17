@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { PGCRCacheService } from './pgcr-cache.service';
+import { isSrlActivity } from '../config/srl.config';
 
 export interface ActivityCountRow {
   referenceId: string;
@@ -41,6 +42,7 @@ const D1_MODE_DISPLAY_OVERRIDES: Record<number, string> = {
   22: 'Prison of Elders',
   27: 'D1 Crucible',
   29: 'Sparrow Racing League',
+  94: 'Sparrow Racing League',
   30: 'Prison of Elders'
 };
 
@@ -71,6 +73,7 @@ const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
   27: 'Reserved27',
   28: 'Reserved28',
   29: 'Sparrow Racing League',
+  94: 'Sparrow Racing League',
   30: 'Reserved30',
   31: 'Supremacy',
   32: 'PrivateMatchesAll',
@@ -148,7 +151,7 @@ const MODE_ORDER: Record<number, number> = {
   5: 8, 10: 8, 12: 8, 19: 8, 84: 8, 37: 8, 38: 8, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP modes
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
   69: 8, 70: 8, 71: 8, 72: 8, 73: 8, 74: 8,  // Competitive/Quickplay
-  9: 12, 21: 13, 22: 13, 27: 14, 29: 15, 30: 13,  // D1: Vehicle PVP, Prison of Elders, Crucible, SRL; D2 SRL uses 29 as well
+  9: 12, 21: 13, 22: 13, 27: 14, 29: 15, 94: 15, 30: 13,  // D1 SRL=29; D2 MoT SRL=94
   79: 9, 80: 9, 81: 9, 58: 9, 64: 9, 66: 9,  // NightmareHunt, Elimination, Momentum, HeroicAdventure, AllPvECompetitive, BlackArmoryRun
   6: 10, 7: 10, 40: 10,  // Patrol, AllPvE, Social
   // Reserved and other: 999
@@ -270,7 +273,7 @@ const EXCLUDE_FROM_BREAKDOWN = new Set<string>([
  * Battlegrounds → Story Strikes → Exotic Story Missions → Seasonal Arena.
  * See docs/activity-breakdown-curated-lists.md for full lists.
  */
-type SectionOverrideKey = 'battlegrounds' | 'story-strikes' | 'exotic-story-missions' | 'seasonal-arena' | 'prison-of-elders' | 'gambit' | 'nightfall' | 'pvp';
+type SectionOverrideKey = 'battlegrounds' | 'story-strikes' | 'exotic-story-missions' | 'seasonal-arena' | 'prison-of-elders' | 'gambit' | 'nightfall' | 'pvp' | 'sparrow-racing-league';
 
 const BATTLEGROUNDS_MODES = new Set([2, 3, 18, 46, 47, 86]);
 const STORY_STRIKES_MODES = new Set([2]);
@@ -306,6 +309,7 @@ const SECTION_OVERRIDE_ORDER: Record<SectionOverrideKey, number> = {
   'prison-of-elders': 36,    // D1 Prison of Elders (modes 21, 22, 30)
   gambit: 7,                 // Gambit, Gambit Prime, Reckoning, None/Emerald Coast, mode 33
   nightfall: 2,              // All Nightfall variants (16, 17, 46, 47)
+  'sparrow-racing-league': 15, // SRL (mode 29 or name/hash when mislabeled as PvP)
   pvp: 8                     // All PvP modes
 };
 
@@ -317,6 +321,7 @@ const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
   'prison-of-elders': 'Prison of Elders',
   gambit: 'Gambit',
   nightfall: 'Nightfall',
+  'sparrow-racing-league': 'Sparrow Racing League',
   pvp: 'PvP'
 };
 
@@ -512,8 +517,9 @@ export class ActivityBreakdownService {
       keyToInstanceIdsForBackfill.set(key, ids);
     }
     if (d1ZeroTimeInstanceIds.length > 0) {
-      // D1 PGCRs are prefetched (throttled) when activity history is synced; we only read from cache here
-      const pgcrBatch = await this.pgcrCache.getBatch(d1ZeroTimeInstanceIds);
+      // D1 PGCRs are prefetched (throttled) when activity history is synced; we only read from cache here.
+      // game=1 guard: a D2 PGCR sharing the numeric ID must not contribute its duration to a D1 row.
+      const pgcrBatch = await this.pgcrCache.getBatch(d1ZeroTimeInstanceIds, 1);
       for (const row of rows) {
         if (row.game !== 'D1' || row.timeSeconds !== 0) continue;
         const key = `${row.referenceId}|${row.game}`;
@@ -616,6 +622,7 @@ export class ActivityBreakdownService {
     if (game === 'D1' && PRISON_OF_ELDERS_MODES.has(mode)) return 'prison-of-elders';
     if (GAMBIT_MODES.has(mode)) return 'gambit';
     if (NIGHTFALL_MODES.has(mode)) return 'nightfall';
+    if (isSrlActivity(row.referenceId, row.baseName, mode)) return 'sparrow-racing-league';
     if (PVP_MODES.has(mode)) return 'pvp';
     if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
 
@@ -690,7 +697,7 @@ export class ActivityBreakdownService {
 
   /** Sort rows within a section. Delegates to sortRowsForMode for mode sections; uses section-specific sort for overrides. */
   private sortRowsForSection(sectionKey: string, mode: number | undefined, list: ActivityCountRow[], game?: 'D1' | 'D2'): ActivityCountRow[] {
-    if (sectionKey === 'prison-of-elders' || sectionKey === 'gambit' || sectionKey === 'nightfall' || sectionKey === 'pvp') {
+    if (sectionKey === 'prison-of-elders' || sectionKey === 'gambit' || sectionKey === 'nightfall' || sectionKey === 'pvp' || sectionKey === 'sparrow-racing-league') {
       return list.sort((a, b) => {
         const baseCmp = (a.baseName || '').localeCompare(b.baseName || '');
         if (baseCmp !== 0) return baseCmp;

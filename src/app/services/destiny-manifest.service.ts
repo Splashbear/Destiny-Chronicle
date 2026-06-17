@@ -8,6 +8,7 @@ import { ManifestCacheService } from './manifest-cache.service';
 import { AssetUrlService } from './asset-url.service';
 import { ArchiveRuntimeService } from './archive-runtime.service';
 import { isAnyPantheonActivity } from '../config/pantheon.config';
+import { isSrlActivity, SRL_ACTIVITY_MODES, D2_SRL_TYPE_HASH } from '../config/srl.config';
 
 @Injectable({
   providedIn: 'root'
@@ -311,6 +312,10 @@ export class DestinyManifestService {
     }
     
     const activityName = this.activityDefs[refIdStr]?.displayProperties?.name as string | undefined;
+    const resolvedName = activityName || this.getActivityName(referenceId, isD1);
+    if (isSrlActivity(refIdStr, resolvedName, mode)) {
+      return 'sparrow-racing-league';
+    }
     if (isAnyPantheonActivity(refIdStr, activityName)) {
       return 'raid';
     }
@@ -350,6 +355,7 @@ export class DestinyManifestService {
     }
     // First check the mode if provided (from activity data)
     if (mode !== undefined) {
+      if ((SRL_ACTIVITY_MODES as readonly number[]).includes(mode)) return 'sparrow-racing-league';
       // Crucible modes (D1 & D2)
       const CRUCIBLE_MODES = [5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66];
       if (CRUCIBLE_MODES.includes(mode)) return 'crucible';
@@ -412,6 +418,11 @@ export class DestinyManifestService {
     // Destiny 2: Use activityTypeHash or activityModeTypes - fully automatic detection
     const typeHash = def.activityTypeHash;
     const modeTypes: number[] = def.activityModeTypes || [];
+    const displayName = def.displayProperties?.name as string | undefined;
+
+    if (typeHash === D2_SRL_TYPE_HASH || modeTypes.includes(94) || isSrlActivity(refIdStr, displayName, mode)) {
+      return 'sparrow-racing-league';
+    }
     
     // Raid detection: activityTypeHash 2043403989 OR mode type 4
     if (typeHash === 2043403989 || modeTypes.includes(4)) return 'raid';
@@ -445,6 +456,7 @@ export class DestinyManifestService {
   /** Map D1 manifest type (identifier or activityTypeName) to our breakdown type slug. */
   private normalizeD1ActivityType(d1Type: string): string {
     const lower = d1Type.toLowerCase();
+    if (lower.includes('racing') || lower.includes('sparrow')) return 'sparrow-racing-league';
     if (lower.includes('raid')) return 'raid';
     if (lower.includes('strike') || lower.includes('nightfall')) return lower.includes('nightfall') ? 'nightfall' : 'strike';
     if (lower.includes('story')) return 'story';

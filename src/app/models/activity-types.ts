@@ -19,6 +19,7 @@ export type ActivityMode =
   | 'Seasonal Event'
   | 'Crucible'
   | 'Gambit'
+  | 'Sparrow Racing League'
   | 'Other';
 
 // Map mode numbers to activity types
@@ -92,7 +93,11 @@ export const ACTIVITY_MODE_MAP: { [mode: number]: ActivityMode } = {
   45: 'Gambit',    // Gambit
   47: 'Gambit',    // Gambit Prime
   67: 'Gambit',    // Gambit (new) (renamed from 63)
-  
+
+  // Sparrow Racing League — D1 mode 29, D2 mode 94 (MoT 9.7.0+)
+  29: 'Sparrow Racing League',
+  94: 'Sparrow Racing League',
+
   // Public Events (D1 & D2)
   1: 'Public Event', // Public Events
   68: 'Public Event', // D1 Public Events (renamed from 4)
@@ -128,5 +133,6 @@ export const ACTIVITY_TYPE_OPTIONS: ActivityTypeOption[] = [
   { label: 'Seasonal Event', d2Mode: 92 }, // D2 only
   { label: 'Crucible', d1Mode: 5, d2Mode: 5 },
   { label: 'Gambit', d2Mode: 45 }, // D2 only
+  { label: 'Sparrow Racing League', d1Mode: 29, d2Mode: 94 },
   { label: 'Other' }
 ]; 

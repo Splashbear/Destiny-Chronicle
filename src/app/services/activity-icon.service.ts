@@ -17,6 +17,7 @@ export class ActivityIconService {
     'lost-sector': '#a855f7',
     seasonal: '#14b8a6',
     'exotic-mission': '#f472b6',
+    'sparrow-racing-league': '#06b6d4',
     other: '#f5c542',
   };
 
