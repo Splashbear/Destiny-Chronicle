@@ -245,28 +245,34 @@ export class ActivityDbService extends Dexie {
     '2559374375': 'Pit of Heresy: Master',
     '2582501063': 'Pit of Heresy: Standard',
     // Grasp of Avarice - Multiple versions
-    '1112917203': 'Grasp of Avarice: Standard',
-    '4078656646': 'Grasp of Avarice: Master',
+    '1112917203': 'Grasp of Avarice: Master',
+    '3774021532': 'Grasp of Avarice: Master',
+    '4078656646': 'Grasp of Avarice: Standard',
     // Prophecy - Multiple versions
     '1077850348': 'Prophecy: Normal',
     '3637651331': 'Prophecy: Explorer', // Updated hash
-    '2961030534': 'Prophecy: Eternity',
+    '1788465402': 'Prophecy: Explorer', // Matchmade variant
+    '715153594': 'Prophecy: Eternity',
+    '3193125350': 'Prophecy: Ultimatum',
     '3193152350': 'Prophecy: Ultimatum',
     '4148187374': 'Prophecy: Master',
     // Duality - Multiple versions
     '2823159265': 'Duality: Standard',
+    '1668217731': 'Duality: Master',
     '3012587626': 'Duality: Master',
     // Spire of the Watcher - Multiple versions
     '1262462921': 'Spire of the Watcher: Standard',
     '1225969316': 'Spire of the Watcher: Explorer',
+    '943878085': 'Spire of the Watcher: Explorer', // Matchmade variant
     '4046934917': 'Spire of the Watcher: Eternity',
     '3339002067': 'Spire of the Watcher: Ultimatum',
     '2296818662': 'Spire of the Watcher: Master',
     '1801496203': 'Spire of the Watcher: Master',
     // Ghosts of the Deep - Multiple versions
-    '313828469': 'Ghosts of the Deep: Normal',
+    '313828469': 'Ghosts of the Deep: Standard',
     '1094262727': 'Ghosts of the Deep: Explorer',
-    '32961030534': 'Ghosts of the Deep: Eternity',
+    '4190119662': 'Ghosts of the Deep: Explorer', // Matchmade variant
+    '2961030534': 'Ghosts of the Deep: Eternity',
     '124340010': 'Ghosts of the Deep: Ultimatum',
     '2716998124': 'Ghosts of the Deep: Master',
     // Warlord's Ruin - Multiple versions
@@ -274,13 +280,16 @@ export class ActivityDbService extends Dexie {
     '2534833093': "Warlord's Ruin: Master",
     // Vesper's Host - Multiple versions
       '300092127': "Vesper's Host: Normal", 
+      '1915770060': "Vesper's Host: Normal",
+      '3492566689': "Vesper's Host: Normal",
       '4293676253': "Vesper's Host: Master",
     // Sundered Doctrine - Multiple versions
+    '247869137': "Sundered Doctrine: Normal",
     '3834447244': "Sundered Doctrine: Normal",
     '3521648250': "Sundered Doctrine: Master",
     // Equilibrium - Multiple versions
     '1754635208': "Equilibrium: Contest", // Contest mode hash
-    // TODO: Add Equilibrium Normal and Master hashes when discovered
+    '2727361621': "Equilibrium: Standard", // Standard mode hash
     // --- Destiny 2 Raids (continued) ---
     // Desert Perpetual - Multiple versions
     '1044919065': "The Desert Perpetual: Standard", // Standard mode
