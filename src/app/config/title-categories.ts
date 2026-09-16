@@ -146,6 +146,10 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
   unbroken: competitive(),
 };
 
+export function normalizeTitleKey(name: string): string {
+  return (name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 export function getTitleCategory(normalizedName: string): TitleCategoryInfo {
   const exact = TITLE_CATEGORY_MAP[normalizedName];
   if (exact) {
@@ -156,6 +160,46 @@ export function getTitleCategory(normalizedName: string): TitleCategoryInfo {
     return competitive();
   }
   return { category: 'Seasonal/Episodal', order: 1 };
+}
+
+export function compareTitlesByCategory(
+  a: { name?: string; releaseRank?: number },
+  b: { name?: string; releaseRank?: number }
+): number {
+  const catA = getTitleCategory(normalizeTitleKey(a.name || ''));
+  const catB = getTitleCategory(normalizeTitleKey(b.name || ''));
+  if (catA.order !== catB.order) {
+    return catA.order - catB.order;
+  }
+  const release = (b.releaseRank || 0) - (a.releaseRank || 0);
+  if (release !== 0) {
+    return release;
+  }
+  return (a.name || '').localeCompare(b.name || '');
+}
+
+export interface TitleCategoryGroup<T extends { name?: string }> {
+  category: TitleCategory;
+  displayName: string;
+  titles: T[];
+}
+
+export function groupTitlesByCategory<T extends { name?: string }>(titles: T[]): TitleCategoryGroup<T>[] {
+  const groups = new Map<TitleCategory, T[]>();
+  for (const title of titles) {
+    const category = getTitleCategory(normalizeTitleKey(title.name || '')).category;
+    if (!groups.has(category)) {
+      groups.set(category, []);
+    }
+    groups.get(category)!.push(title);
+  }
+  return CATEGORY_DISPLAY_ORDER
+    .filter((category) => (groups.get(category)?.length ?? 0) > 0)
+    .map((category) => ({
+      category,
+      displayName: category,
+      titles: groups.get(category)!
+    }));
 }
 
 export const CATEGORY_DISPLAY_ORDER: TitleCategory[] = [

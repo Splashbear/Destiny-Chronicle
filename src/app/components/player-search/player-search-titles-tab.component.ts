@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { PlayerSearchComponent } from './player-search.component';
 import { SealPosterStudioComponent } from '../seal-poster-studio/seal-poster-studio.component';
+import { groupTitlesByCategory, TitleCategoryGroup } from '../../config/title-categories';
 
 @Component({
   selector: 'app-player-search-titles-tab',
@@ -16,6 +17,18 @@ import { SealPosterStudioComponent } from '../seal-poster-studio/seal-poster-stu
 export class PlayerSearchTitlesTabComponent {
   readonly ps = inject(PlayerSearchComponent);
   showPosterStudio = false;
+
+  get showCategoryGroups(): boolean {
+    return this.ps.titleSort === 'category';
+  }
+
+  get earnedGroups(): TitleCategoryGroup<any>[] {
+    return groupTitlesByCategory(this.ps.unlockedTitlesDisplay);
+  }
+
+  get lockedGroups(): TitleCategoryGroup<any>[] {
+    return groupTitlesByCategory(this.ps.lockedTitlesDisplay);
+  }
 
   openPosterStudio() {
     this.showPosterStudio = true;
