@@ -137,7 +137,6 @@ To find the hashes:
 - `3637651331` - Explorer
 - `1788465402` - Explorer (Matchmade)
 - `715153594` - Eternity
-- `2961030534` - Eternity
 - `3193125350` - Ultimatum
 - `3193152350` - Ultimatum
 - `4148187374` - Master

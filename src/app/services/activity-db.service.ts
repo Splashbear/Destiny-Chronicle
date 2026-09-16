@@ -253,7 +253,6 @@ export class ActivityDbService extends Dexie {
     '3637651331': 'Prophecy: Explorer', // Updated hash
     '1788465402': 'Prophecy: Explorer', // Matchmade variant
     '715153594': 'Prophecy: Eternity',
-    '2961030534': 'Prophecy: Eternity',
     '3193125350': 'Prophecy: Ultimatum',
     '3193152350': 'Prophecy: Ultimatum',
     '4148187374': 'Prophecy: Master',
