@@ -125,10 +125,20 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
   conquerorworthy: competitive(),
   conquerorrhunt: competitive(),
   conquerorarrivals: competitive(),
+  conquerorseasonoftheworthy: competitive(),
+  conquerorseasonofthehunt: competitive(),
+  conquerorseasonofarrivals: competitive(),
+  conquerorseasonofworthy: competitive(),
+  conquerorseasonofhunt: competitive(),
   flawless: competitive(),
   flawlessarrivals: competitive(),
   flawlesshunt: competitive(),
   flawlessworthy: competitive(),
+  flawlessseasonoftheworthy: competitive(),
+  flawlessseasonofthehunt: competitive(),
+  flawlessseasonofarrivals: competitive(),
+  flawlessseasonofworthy: competitive(),
+  flawlessseasonofhunt: competitive(),
   ironlord: competitive(),
   glorious: competitive(),
   heavymetal: competitive(),
@@ -137,7 +147,15 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
 };
 
 export function getTitleCategory(normalizedName: string): TitleCategoryInfo {
-  return TITLE_CATEGORY_MAP[normalizedName] || { category: 'Seasonal/Episodal', order: 1 };
+  const exact = TITLE_CATEGORY_MAP[normalizedName];
+  if (exact) {
+    return exact;
+  }
+  // Seasonal Conqueror / Flawless variants use the same group as the base seals.
+  if (normalizedName.startsWith('conqueror') || normalizedName.startsWith('flawless')) {
+    return competitive();
+  }
+  return { category: 'Seasonal/Episodal', order: 1 };
 }
 
 export const CATEGORY_DISPLAY_ORDER: TitleCategory[] = [
