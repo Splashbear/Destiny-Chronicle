@@ -1,14 +1,14 @@
-import { Component, OnInit, Input, Output, EventEmitter, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnChanges, SimpleChanges, Input, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import html2canvas from 'html2canvas';
 import { TitleItem } from '../../services/title.service';
-import { AssetUrlService } from '../../services/asset-url.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 
 type LayoutType = 'grid' | 'square';
 type SortType = 'release' | 'alpha' | 'category' | 'gilded';
+type LegacyFilter = 'all' | 'current' | 'legacy';
 
 interface SealDisplayItem extends TitleItem {
   category?: TitleCategory;
@@ -28,19 +28,16 @@ interface GroupedSeals {
   templateUrl: './seal-poster-studio.component.html',
   styleUrls: ['./seal-poster-studio.component.scss']
 })
-export class SealPosterStudioComponent implements OnInit {
+export class SealPosterStudioComponent implements OnInit, OnChanges {
   @Input() titles: TitleItem[] = [];
   @Input() membershipId: string = '';
-  @Output() close = new EventEmitter<void>();
 
   @ViewChild('posterCanvas', { static: false }) posterCanvas?: ElementRef<HTMLDivElement>;
 
   layout: LayoutType = 'grid';
   sortType: SortType = 'release';
   showGildedBadge: boolean = true;
-  showLegacy: boolean = true;
-  earnedOnly: boolean = true;
-  includeUnearned: boolean = false;
+  legacyFilter: LegacyFilter = 'all';
   includeChronicleFooter: boolean = true;
   isExporting: boolean = false;
 
@@ -51,16 +48,20 @@ export class SealPosterStudioComponent implements OnInit {
   private hiddenHashes = new Set<number>();
   private useManualOrder = false;
 
-  constructor(
-    private assetUrl: AssetUrlService,
-    private cdr: ChangeDetectorRef
-  ) {}
+  constructor(private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
-    this.hiddenHashes = new Set(this.loadHiddenHashes());
-    const saved = this.loadManualOrder();
-    this.useManualOrder = Object.keys(saved).length > 0;
+    this.reloadPersistedState();
     this.updateDisplaySeals();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['membershipId']) {
+      this.reloadPersistedState();
+    }
+    if (changes['titles'] || changes['membershipId']) {
+      this.updateDisplaySeals();
+    }
   }
 
   trackByHash(_index: number, seal: SealDisplayItem): number {
@@ -71,20 +72,21 @@ export class SealPosterStudioComponent implements OnInit {
     return name.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
+  private reloadPersistedState() {
+    this.hiddenHashes = new Set(this.loadHiddenHashes());
+    const saved = this.loadManualOrder();
+    this.useManualOrder = Object.keys(saved).length > 0;
+  }
+
   updateDisplaySeals() {
     const hidden = this.hiddenHashes;
     let seals = this.titles
       .filter(t => !hidden.has(t.hash))
       .filter(t => {
-        if (this.earnedOnly && !this.includeUnearned) {
-          return t.completed;
-        }
-        if (this.includeUnearned) {
-          return true;
-        }
-        return t.completed;
+        if (this.legacyFilter === 'legacy') return !!t.legacy;
+        if (this.legacyFilter === 'current') return !t.legacy;
+        return true;
       })
-      .filter(t => this.showLegacy || !t.legacy)
       .map((t, index) => ({
         ...t,
         category: getTitleCategory(this.normalizeName(t.name)).category,
@@ -305,6 +307,9 @@ export class SealPosterStudioComponent implements OnInit {
     if (seal.isGilded && seal.gildedIcon) {
       return seal.gildedIcon;
     }
+    if (!seal.completed && seal.altIcon) {
+      return seal.altIcon;
+    }
     return seal.icon || null;
   }
 
@@ -339,7 +344,34 @@ export class SealPosterStudioComponent implements OnInit {
     return { title: match[1].trim(), season: match[2].trim() };
   }
 
-  onClose() {
-    this.close.emit();
+  platformIconUrl(platform: string | undefined): string {
+    switch (this.platformId(platform)) {
+      case 1:
+        return 'assets/icons/platforms/xbox.png';
+      case 2:
+        return 'assets/icons/platforms/ps.png';
+      case 3:
+        return 'assets/icons/platforms/steam.png';
+      case 4:
+        return 'assets/icons/platforms/blizzard.svg';
+      case 5:
+        return 'assets/icons/platforms/stadia.png';
+      case 6:
+        return 'assets/icons/platforms/egs.png';
+      default:
+        return '';
+    }
+  }
+
+  private platformId(platform: string | undefined): number {
+    if (!platform) return 0;
+    const p = platform.toLowerCase();
+    if (p.includes('xbox')) return 1;
+    if (p.includes('playstation') || p.includes('psn') || p.includes('ps')) return 2;
+    if (p.includes('steam') || p.includes('pc')) return 3;
+    if (p.includes('blizzard') || p.includes('battlenet')) return 4;
+    if (p.includes('stadia')) return 5;
+    if (p.includes('epic')) return 6;
+    return 0;
   }
 }

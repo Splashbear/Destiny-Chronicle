@@ -1,6 +1,5 @@
 .seal-poster-studio {
-  @apply p-6 min-h-screen;
-  background-color: #1a1a1a;
+  @apply p-0;
 }
 
 .studio-header {
@@ -126,8 +125,56 @@
   }
 }
 
-.poster-canvas.is-exporting .seal-hide {
-  display: none;
+.poster-canvas.is-exporting .browse-only,
+.poster-canvas.is-exporting .seal-hide,
+.poster-canvas.is-exporting .seal-platforms,
+.poster-canvas.is-exporting .seal-progress,
+.poster-canvas.is-exporting .seal-missing {
+  display: none !important;
+}
+
+.seal-platforms {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.seal-platform-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+}
+
+.seal-progress {
+  width: 100%;
+  padding: 0 4px;
+  margin-top: 2px;
+}
+
+.seal-progress-track {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(30, 30, 45, 0.9);
+  border: 1px solid rgba(245, 197, 66, 0.12);
+}
+
+.seal-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #c0392b 0%, #e67e22 45%, #d4af37 100%);
+}
+
+.seal-missing {
+  font-size: 0.55rem;
+  line-height: 1.2;
+  color: #facc15;
+  font-weight: 600;
 }
 
 .seal-icon-wrap {

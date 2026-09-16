@@ -19,6 +19,8 @@ export interface TitleItem {
   timesGilded?: number;
   gildedIcon?: string;
   normalized?: string;
+  progressPercent?: number;
+  missingRecord?: boolean;
 }
 
 export interface PlayerIdentityMin {
@@ -362,6 +364,28 @@ export class TitleService {
       const normalizedName = normalizeTitleName(displayName);
 
       const completed = record ? ((record.state & 1) !== 0) : false;
+      const missingRecord = !record;
+
+      let progressPercent: number | undefined;
+      const objectives = record?.objectives as Array<{
+        complete?: boolean;
+        visible?: boolean;
+        completionValue?: number;
+        progress?: number;
+      }> | undefined;
+      if (!completed && Array.isArray(objectives) && objectives.length) {
+        let total = 0;
+        let done = 0;
+        for (const obj of objectives) {
+          if (obj?.visible === false) continue;
+          const target = obj.completionValue ?? 1;
+          total += target;
+          done += Math.min(obj.progress ?? (obj.complete ? target : 0), target);
+        }
+        if (total > 0) {
+          progressPercent = Math.round((done / total) * 100);
+        }
+      }
 
       // gilding
       let isGilded = false;
@@ -411,6 +435,8 @@ export class TitleService {
           legacy: (node.parentNodeHashes || []).includes(1881970629),
           releaseRank: releaseRank,
           normalized: normalizedName,
+          progressPercent,
+          missingRecord,
         } as TitleItem;
       }
     }
@@ -462,7 +488,10 @@ export class TitleService {
         } else {
           if (t.completed) addHolder(existing, { displayName: p.displayName, platform: p.platform });
           if (!existing.completed && t.completed) {
-            existing.completed = true; existing.locked = false;
+            existing.completed = true;
+            existing.locked = false;
+            existing.progressPercent = undefined;
+            existing.missingRecord = false;
             if (!existing.icon) existing.icon = t.icon;
           }
         }
