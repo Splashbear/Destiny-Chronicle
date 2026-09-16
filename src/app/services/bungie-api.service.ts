@@ -6,6 +6,7 @@ import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 import { LocaleService } from './locale.service';
 import { unwrapD1PgcrBody } from '../utils/pgcr-prune';
+import { bungieRequestUrl } from '../utils/bungie-request-url';
 
 export interface PlayerSearchResult {
   displayName: string;
@@ -85,9 +86,7 @@ export class BungieApiService {
   ) {}
 
   private buildUrl(url: string): string {
-    // For now, use direct API calls to avoid rate limiting issues
-    // We'll need to implement a proper solution for production deployment
-    return url;
+    return bungieRequestUrl(url);
   }
 
   private getHeaders(): HttpHeaders {

@@ -1,0 +1,173 @@
+<div class="seal-poster-studio">
+  <div class="studio-header">
+    <div class="controls-panel">
+      <div class="control-group">
+        <label class="control-label">View</label>
+        <div class="flex gap-2">
+          <button (click)="setViewMode('browse')"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'browse', 'd2-tab': viewMode !== 'browse'}">
+            Browse
+          </button>
+          <button (click)="setViewMode('poster')"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'poster', 'd2-tab': viewMode !== 'poster'}">
+            Poster
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Sort By</label>
+        <select [(ngModel)]="sortType" (ngModelChange)="onSortChange()" class="destiny-input text-sm">
+          <option value="release">Release (Newest First)</option>
+          <option value="alpha">A–Z</option>
+          <option value="category">By Season / Expansion</option>
+          <option value="gilded">Gilded First</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Filter</label>
+        <div class="flex gap-1 text-xs flex-wrap">
+          <button (click)="legacyFilter='all'; onToggleChange()"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': legacyFilter==='all', 'd2-tab': legacyFilter!=='all'}">All</button>
+          <button (click)="legacyFilter='current'; onToggleChange()"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': legacyFilter==='current', 'd2-tab': legacyFilter!=='current'}">Current</button>
+          <button (click)="legacyFilter='legacy'; onToggleChange()"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': legacyFilter==='legacy', 'd2-tab': legacyFilter!=='legacy'}">Legacy</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Options</label>
+        <div class="flex flex-col gap-2">
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="showGildedBadge" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Show Gilded Badge</span>
+          </label>
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="includeChronicleFooter" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Include Chronicle Footer</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">Actions</label>
+        <div class="flex flex-col gap-2">
+          <button (click)="exportPoster()"
+                  [disabled]="isExporting || displaySeals.length === 0"
+                  class="px-4 py-2 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+            {{ isExporting ? 'Exporting...' : 'Export PNG (2×)' }}
+          </button>
+          <button (click)="resetManualOrder()"
+                  class="px-4 py-2 destiny-btn-secondary text-sm">
+            Reset Manual Order
+          </button>
+          <button (click)="restoreHiddenSeals()"
+                  [disabled]="hiddenCount === 0"
+                  class="px-4 py-2 destiny-btn-secondary disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+            Restore Hidden ({{ hiddenCount }})
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="info-bar">
+      <span class="text-sm text-slate-400">
+        Showing {{ displaySeals.length }} seal{{ displaySeals.length !== 1 ? 's' : '' }}
+        <span *ngIf="hiddenCount > 0"> · {{ hiddenCount }} hidden</span>
+        <span *ngIf="viewMode === 'browse'"> · unearned seals are faded · platform icons shown</span>
+        <span *ngIf="viewMode === 'poster'"> · poster presentation · full-color seals, no platform icons</span>
+        <span *ngIf="sortType !== 'category'"> · drag a seal onto a slot to place it</span>
+        <span *ngIf="displaySeals.length === 0"> — adjust filters or restore hidden seals</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="poster-container">
+    <div #posterCanvas
+         class="poster-canvas canvas-grid"
+         [ngClass]="{'is-exporting': isExporting, 'is-poster': isPosterView}">
+
+      <div class="poster-title">
+        <h1 class="text-3xl font-bold text-[#d4af37]">MY DESTINY SEALS</h1>
+      </div>
+
+      <div *ngIf="sortType === 'category' && groupedSeals.length > 0" class="seals-grouped">
+        <div *ngFor="let group of groupedSeals" class="seal-group">
+          <h3 class="group-header">{{ group.displayName }}</h3>
+          <div class="seals-grid">
+            <div *ngFor="let seal of group.seals; trackBy: trackByHash"
+                 class="seal-card"
+                 [ngClass]="{'seal-card-unearned': !seal.completed && !isPosterView}">
+              <ng-container *ngTemplateOutlet="sealCardInner; context: {$implicit: seal, draggable: false}"></ng-container>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="sortType !== 'category'"
+           class="seals-flat"
+           cdkDropList
+           cdkDropListOrientation="mixed"
+           [cdkDropListData]="displaySeals"
+           (cdkDropListDropped)="onDrop($event)">
+        <div *ngFor="let seal of displaySeals; trackBy: trackByHash"
+             class="seal-card"
+             [ngClass]="{'seal-card-unearned': !seal.completed && !isPosterView}"
+             cdkDrag
+             [cdkDragData]="seal">
+          <ng-container *ngTemplateOutlet="sealCardInner; context: {$implicit: seal, draggable: true}"></ng-container>
+        </div>
+      </div>
+
+      <div *ngIf="displaySeals.length === 0" class="empty-state">
+        <p class="text-lg text-slate-400">No seals to display</p>
+        <p class="text-sm text-slate-500 mt-2">Adjust your filters or restore hidden seals</p>
+      </div>
+
+      <div *ngIf="includeChronicleFooter && displaySeals.length > 0" class="poster-footer">
+        <span class="text-sm text-slate-400">Created with Destiny Chronicle</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #sealCardInner let-seal let-draggable="draggable">
+  <button *ngIf="!isExporting"
+          type="button"
+          class="seal-hide browse-only"
+          (click)="hideSeal(seal, $event)"
+          (pointerdown)="draggable ? $event.stopPropagation() : null"
+          [attr.aria-label]="'Hide ' + seal.name">
+    ×
+  </button>
+  <div *ngIf="!isPosterView && seal.holders?.length" class="seal-platforms browse-only">
+    <img *ngFor="let h of seal.holders"
+         [src]="platformIconUrl(h.platform)"
+         class="seal-platform-icon"
+         [title]="h.displayName"
+         alt="" />
+  </div>
+  <div class="seal-icon-wrap">
+    <img *ngIf="getSealIcon(seal)"
+         [src]="getSealIcon(seal)"
+         class="seal-icon"
+         alt="{{ seal.name }}" />
+    <sup *ngIf="getGildCount(seal) as gildCount" class="gild-super">{{ gildCount }}</sup>
+  </div>
+  <div class="seal-info">
+    <div class="seal-name" [style.font-size]="nameFontSize(seal.name)">{{ sealTitleLine(seal.name) }}</div>
+    <div *ngIf="sealSeasonLine(seal.name) as season" class="seal-name-sub">{{ season }}</div>
+    <div *ngIf="!isPosterView && !seal.completed && seal.progressPercent !== undefined"
+         class="seal-progress browse-only">
+      <div class="seal-progress-track">
+        <div class="seal-progress-fill" [style.width.%]="seal.progressPercent"></div>
+      </div>
+      <div class="seal-progress-pct">{{ seal.progressPercent }}%</div>
+    </div>
+    <div *ngIf="!isPosterView && seal.missingRecord" class="seal-missing browse-only">Progress not available</div>
+  </div>
+</ng-template>

@@ -11,6 +11,8 @@ export const environment = {
     API_KEY: 'e55082388d014a79b9f5da4be0063d1c',  // Bungie API key (dev & LAN)
     API_ROOT: 'https://www.bungie.net/Platform'
   },
+  /** Route Bungie API calls through proxy.conf.js so 127.0.0.1 and localhost both work. */
+  useBungieDevProxy: true,
   analytics: {
     googleMeasurementId: '',
     cloudflareToken: ''

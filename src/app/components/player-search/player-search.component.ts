@@ -50,6 +50,7 @@ import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
 import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
 import { PlaytimeService } from '../../services/playtime.service';
 import { TitleService } from '../../services/title.service';
+import { compareTitlesByCategory } from '../../config/title-categories';
 import { SelectedAccountsService } from '../../services/selected-accounts.service';
 import { PlatformAccount } from '../../models/platform-account.model';
 import { DungeonSoloFirstsComponent } from '../dungeon-solo-firsts/dungeon-solo-firsts.component';
@@ -1247,7 +1248,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Indicates whether the UI has already rendered at least one slice of activities for the selected date. */
   private initialDisplayShown: boolean = false;
   // UI state for title view
-  titleSort: 'alpha' | 'release' = 'release';
+  titleSort: 'alpha' | 'release' | 'category' | 'gilded' = 'release';
   titleFilter: 'all' | 'current' | 'legacy' = 'all';
   loadingTitlesOverall = false;
   // -----------------------------------------------
@@ -1365,25 +1366,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (this.titleFilter !== 'all') {
       const wantLegacy = this.titleFilter === 'legacy';
       list = list.filter((t: any) => t.legacy === wantLegacy);
-
-      // Respect user-selected sort order for filtered lists
-      if (this.titleSort === 'alpha') {
-        return [...list].sort((a: any, b: any) => a.name.localeCompare(b.name));
-      }
-      // Default or "release" – newest first
-      return [...list].sort((a: any, b: any) => (b.releaseRank ?? 0) - (a.releaseRank ?? 0));
+      return this.sortTitlesList(list);
     }
 
     // ---  All view ---
-    const unlocked = list.filter((t: any) => !t.locked);
-    const locked   = list.filter((t: any) =>  t.locked);
-
-    const sortAlpha    = (a: any, b: any) => a.name.localeCompare(b.name);
-    const sortRelease  = (a: any, b: any) => (b.releaseRank ?? 0) - (a.releaseRank ?? 0);
-    const sortFn = this.titleSort === 'alpha' ? sortAlpha : sortRelease;
-
-    unlocked.sort(sortFn);
-    locked.sort(sortFn);
+    const unlocked = this.sortTitlesList(list.filter((t: any) => !t.locked));
+    const locked   = this.sortTitlesList(list.filter((t: any) =>  t.locked));
 
     return [...unlocked, ...locked];
   }
@@ -1400,9 +1388,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       list = list.filter((t: any) => t.legacy === wantLegacy);
     }
 
-    const sortAlpha   = (a: any, b: any) => a.name.localeCompare(b.name);
+    return this.sortTitlesList(list);
+  }
+
+  private sortTitlesList(list: any[]): any[] {
+    const sortAlpha = (a: any, b: any) => a.name.localeCompare(b.name);
     const sortRelease = (a: any, b: any) => (b.releaseRank ?? 0) - (a.releaseRank ?? 0);
-    const sortFn = this.titleSort === 'alpha' ? sortAlpha : sortRelease;
+    const sortGilded = (a: any, b: any) => {
+      if (!!a.isGilded !== !!b.isGilded) {
+        return a.isGilded ? -1 : 1;
+      }
+      return (b.releaseRank ?? 0) - (a.releaseRank ?? 0);
+    };
+    const sortFn =
+      this.titleSort === 'alpha' ? sortAlpha :
+      this.titleSort === 'gilded' ? sortGilded :
+      this.titleSort === 'category' ? compareTitlesByCategory :
+      sortRelease;
     return [...list].sort(sortFn);
   }
 
@@ -9235,6 +9237,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     await this.titleService.debugAllTitles();
     this.checkForSpecificTitles();
   }
+
+  getMainMembershipId(): string {
+    const mainPlayer = this.selectedPlayers.find(p => !this.isD1Player(p) && p.isPrimary) ||
+                       this.crossSavePlayer ||
+                       this.selectedPlayers.find(p => !this.isD1Player(p));
+    return mainPlayer?.membershipId || '';
+  }
+
   async loadActivityBreakdown(): Promise<void> {
     if (this.selectedPlayers.length === 0) return;
     this.loadingActivityBreakdown = true;

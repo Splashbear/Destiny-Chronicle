@@ -9,6 +9,7 @@ import { AssetUrlService } from './asset-url.service';
 import { ArchiveRuntimeService } from './archive-runtime.service';
 import { isAnyPantheonActivity } from '../config/pantheon.config';
 import { isSrlActivity, SRL_ACTIVITY_MODES, D2_SRL_TYPE_HASH } from '../config/srl.config';
+import { bungieRequestUrl } from '../utils/bungie-request-url';
 
 @Injectable({
   providedIn: 'root'
@@ -24,9 +25,7 @@ export class DestinyManifestService {
 
 
   private buildUrl(url: string): string {
-    // For now, use direct API calls to avoid rate limiting issues
-    // We'll need to implement a proper solution for production deployment
-    return url;
+    return bungieRequestUrl(url);
   }
 
   constructor(

@@ -19,6 +19,8 @@ export interface TitleItem {
   timesGilded?: number;
   gildedIcon?: string;
   normalized?: string;
+  progressPercent?: number;
+  missingRecord?: boolean;
 }
 
 export interface PlayerIdentityMin {
@@ -328,12 +330,6 @@ export class TitleService {
     RELEASE_ORDER[normalizeTitleName('MMXXIV MoT')] = mmxxivRank;
     RELEASE_ORDER[normalizeTitleName('MMXXIV MOT')] = mmxxivRank;
 
-    const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
-      "conqueror": "/assets/gilded-seals/Conqueror-Gilded.png",
-      "flawless": "/assets/gilded-seals/Flawless-Gilded.png",
-      "deadeye": "/assets/gilded-seals/Deadeye-Gilded.png"
-    };
-
     // Gather all title nodes (current + legacy)
     const titleParentHashes = [616318467, 1881970629];
     let allTitleNodes: any[] = [];
@@ -368,11 +364,32 @@ export class TitleService {
       const normalizedName = normalizeTitleName(displayName);
 
       const completed = record ? ((record.state & 1) !== 0) : false;
+      const missingRecord = !record;
+
+      let progressPercent: number | undefined;
+      const objectives = record?.objectives as Array<{
+        complete?: boolean;
+        visible?: boolean;
+        completionValue?: number;
+        progress?: number;
+      }> | undefined;
+      if (!completed && Array.isArray(objectives) && objectives.length) {
+        let total = 0;
+        let done = 0;
+        for (const obj of objectives) {
+          if (obj?.visible === false) continue;
+          const target = obj.completionValue ?? 1;
+          total += target;
+          done += Math.min(obj.progress ?? (obj.complete ? target : 0), target);
+        }
+        if (total > 0) {
+          progressPercent = Math.round((done / total) * 100);
+        }
+      }
 
       // gilding
       let isGilded = false;
       let timesGilded = 0;
-      let gildedIcon: string | undefined;
       const gildHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
       if (gildHash && completed) {
         let gildingRecord = records[gildHash];
@@ -385,9 +402,15 @@ export class TitleService {
         if (gildingRecord) {
           timesGilded = gildingRecord.completedCount || 0;
           isGilded = timesGilded > 0;
-          if (isGilded) gildedIcon = GILDED_SEAL_IMAGE_MAP[normalizedName];
         }
       }
+
+      // Icon resolution: Use gilded icon from iconSequences[0] when gilded, otherwise use base icon
+      const baseIcon = node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null;
+      const gildedIconFrames = node.iconSequences && node.iconSequences[0]?.frames;
+      const gildedIcon = (gildedIconFrames && gildedIconFrames.length) 
+        ? this.assetUrl.resolve(gildedIconFrames[gildedIconFrames.length - 1]) 
+        : null;
 
       const uniqueKey = `${displayName}#${node.completionRecordHash}`;
       if (!titleMap[uniqueKey]) {
@@ -399,7 +422,8 @@ export class TitleService {
         titleMap[uniqueKey] = {
           hash: node.completionRecordHash,
           name: displayName,
-          icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null),
+          icon: baseIcon,
+          gildedIcon: gildedIcon,
           completed,
           isGilded,
           timesGilded: (completed && timesGilded > 0) ? timesGilded : undefined,
@@ -411,6 +435,8 @@ export class TitleService {
           legacy: (node.parentNodeHashes || []).includes(1881970629),
           releaseRank: releaseRank,
           normalized: normalizedName,
+          progressPercent,
+          missingRecord,
         } as TitleItem;
       }
     }
@@ -462,7 +488,10 @@ export class TitleService {
         } else {
           if (t.completed) addHolder(existing, { displayName: p.displayName, platform: p.platform });
           if (!existing.completed && t.completed) {
-            existing.completed = true; existing.locked = false;
+            existing.completed = true;
+            existing.locked = false;
+            existing.progressPercent = undefined;
+            existing.missingRecord = false;
             if (!existing.icon) existing.icon = t.icon;
           }
         }
