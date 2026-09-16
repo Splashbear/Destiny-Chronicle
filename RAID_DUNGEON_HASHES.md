@@ -135,7 +135,10 @@ To find the hashes:
 ### Prophecy
 - `1077850348` - Normal
 - `3637651331` - Explorer
+- `1788465402` - Explorer (Matchmade)
+- `715153594` - Eternity
 - `2961030534` - Eternity
+- `3193125350` - Ultimatum
 - `3193152350` - Ultimatum
 - `4148187374` - Master
 
@@ -146,20 +149,23 @@ To find the hashes:
 
 ### Duality
 - `2823159265` - Standard
+- `1668217731` - Master
 - `3012587626` - Master
 
 ### Spire of the Watcher
 - `1262462921` - Standard
 - `1225969316` - Explorer
+- `943878085` - Explorer (Matchmade)
 - `4046934917` - Eternity
 - `3339002067` - Ultimatum
 - `2296818662` - Master
 - `1801496203` - Master
 
 ### Ghosts of the Deep
-- `313828469` - Normal
+- `313828469` - Standard
 - `1094262727` - Explorer
-- `32961030534` - Eternity (Note: This hash looks unusually long - may need verification)
+- `4190119662` - Explorer (Matchmade)
+- `2961030534` - Eternity
 - `124340010` - Ultimatum
 - `2716998124` - Master
 
@@ -169,9 +175,12 @@ To find the hashes:
 
 ### Vesper's Host
 - `300092127` - Normal
+- `1915770060` - Normal
+- `3492566689` - Normal
 - `4293676253` - Master
 
 ### Sundered Doctrine
+- `247869137` - Normal
 - `3834447244` - Normal
 - `3521648250` - Master
 
@@ -182,6 +191,10 @@ To find the hashes:
 1. Query the Bungie API manifest for activities with `activityTypeHash: 1375089621` or `activityModeTypes: [82]` (dungeon type)
 2. Search for activities with names containing "Equilibrium" or "Cosmic Equilibrium"
 3. Add all variants (Standard, Epic, Master, etc.) to the `ACTIVITY_FAMILY_MAP`
+
+**UPDATE:** Equilibrium hashes have been added:
+- `1754635208` - Contest
+- `2727361621` - Standard
 
 ---
 
