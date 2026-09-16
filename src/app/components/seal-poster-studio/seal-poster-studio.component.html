@@ -164,6 +164,7 @@
       <div class="seal-progress-track">
         <div class="seal-progress-fill" [style.width.%]="seal.progressPercent"></div>
       </div>
+      <div class="seal-progress-pct">{{ seal.progressPercent }}%</div>
     </div>
     <div *ngIf="!isExporting && seal.missingRecord" class="seal-missing browse-only">Progress not available</div>
   </div>
