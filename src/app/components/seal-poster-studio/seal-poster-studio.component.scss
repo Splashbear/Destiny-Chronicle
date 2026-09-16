@@ -39,8 +39,12 @@
   @apply max-w-6xl;
 }
 
-.canvas-square {
-  @apply w-[800px] h-[800px];
+.poster-canvas.is-poster .seal-card-unearned {
+  opacity: 1;
+
+  .seal-icon {
+    filter: none;
+  }
 }
 
 .poster-title {
@@ -127,6 +131,9 @@
 
 .poster-canvas.is-exporting .browse-only,
 .poster-canvas.is-exporting .seal-hide,
+.poster-canvas.is-poster .seal-platforms,
+.poster-canvas.is-poster .seal-progress,
+.poster-canvas.is-poster .seal-missing,
 .poster-canvas.is-exporting .seal-platforms,
 .poster-canvas.is-exporting .seal-progress,
 .poster-canvas.is-exporting .seal-missing {

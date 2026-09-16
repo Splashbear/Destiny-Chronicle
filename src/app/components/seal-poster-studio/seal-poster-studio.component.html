@@ -2,15 +2,15 @@
   <div class="studio-header">
     <div class="controls-panel">
       <div class="control-group">
-        <label class="control-label">Layout</label>
+        <label class="control-label">View</label>
         <div class="flex gap-2">
-          <button (click)="layout = 'grid'; updateDisplaySeals()"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': layout === 'grid', 'd2-tab': layout !== 'grid'}">
-            Grid
+          <button (click)="setViewMode('browse')"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'browse', 'd2-tab': viewMode !== 'browse'}">
+            Browse
           </button>
-          <button (click)="layout = 'square'; updateDisplaySeals()"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': layout === 'square', 'd2-tab': layout !== 'square'}">
-            Square Share
+          <button (click)="setViewMode('poster')"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'poster', 'd2-tab': viewMode !== 'poster'}">
+            Poster
           </button>
         </div>
       </div>
@@ -78,16 +78,18 @@
       <span class="text-sm text-slate-400">
         Showing {{ displaySeals.length }} seal{{ displaySeals.length !== 1 ? 's' : '' }}
         <span *ngIf="hiddenCount > 0"> · {{ hiddenCount }} hidden</span>
+        <span *ngIf="viewMode === 'browse'"> · unearned seals are faded · platform icons shown</span>
+        <span *ngIf="viewMode === 'poster'"> · poster presentation · full-color seals, no platform icons</span>
         <span *ngIf="sortType !== 'category'"> · drag a seal onto a slot to place it</span>
         <span *ngIf="displaySeals.length === 0"> — adjust filters or restore hidden seals</span>
       </span>
     </div>
   </div>
 
-  <div class="poster-container" [ngClass]="{'layout-square': layout === 'square', 'layout-grid': layout === 'grid'}">
+  <div class="poster-container">
     <div #posterCanvas
-         class="poster-canvas"
-         [ngClass]="{'canvas-square': layout === 'square', 'canvas-grid': layout === 'grid', 'is-exporting': isExporting}">
+         class="poster-canvas canvas-grid"
+         [ngClass]="{'is-exporting': isExporting, 'is-poster': isPosterView}">
 
       <div class="poster-title">
         <h1 class="text-3xl font-bold text-[#d4af37]">MY DESTINY SEALS</h1>
@@ -99,7 +101,7 @@
           <div class="seals-grid">
             <div *ngFor="let seal of group.seals; trackBy: trackByHash"
                  class="seal-card"
-                 [ngClass]="{'seal-card-unearned': !seal.completed}">
+                 [ngClass]="{'seal-card-unearned': !seal.completed && !isPosterView}">
               <ng-container *ngTemplateOutlet="sealCardInner; context: {$implicit: seal, draggable: false}"></ng-container>
             </div>
           </div>
@@ -114,7 +116,7 @@
            (cdkDropListDropped)="onDrop($event)">
         <div *ngFor="let seal of displaySeals; trackBy: trackByHash"
              class="seal-card"
-             [ngClass]="{'seal-card-unearned': !seal.completed}"
+             [ngClass]="{'seal-card-unearned': !seal.completed && !isPosterView}"
              cdkDrag
              [cdkDragData]="seal">
           <ng-container *ngTemplateOutlet="sealCardInner; context: {$implicit: seal, draggable: true}"></ng-container>
@@ -142,7 +144,7 @@
           [attr.aria-label]="'Hide ' + seal.name">
     ×
   </button>
-  <div *ngIf="!isExporting && seal.holders?.length" class="seal-platforms browse-only">
+  <div *ngIf="!isPosterView && seal.holders?.length" class="seal-platforms browse-only">
     <img *ngFor="let h of seal.holders"
          [src]="platformIconUrl(h.platform)"
          class="seal-platform-icon"
@@ -159,13 +161,13 @@
   <div class="seal-info">
     <div class="seal-name" [style.font-size]="nameFontSize(seal.name)">{{ sealTitleLine(seal.name) }}</div>
     <div *ngIf="sealSeasonLine(seal.name) as season" class="seal-name-sub">{{ season }}</div>
-    <div *ngIf="!isExporting && !seal.completed && seal.progressPercent !== undefined"
+    <div *ngIf="!isPosterView && !seal.completed && seal.progressPercent !== undefined"
          class="seal-progress browse-only">
       <div class="seal-progress-track">
         <div class="seal-progress-fill" [style.width.%]="seal.progressPercent"></div>
       </div>
       <div class="seal-progress-pct">{{ seal.progressPercent }}%</div>
     </div>
-    <div *ngIf="!isExporting && seal.missingRecord" class="seal-missing browse-only">Progress not available</div>
+    <div *ngIf="!isPosterView && seal.missingRecord" class="seal-missing browse-only">Progress not available</div>
   </div>
 </ng-template>

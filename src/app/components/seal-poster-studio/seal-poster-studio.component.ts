@@ -6,7 +6,7 @@ import html2canvas from 'html2canvas';
 import { TitleItem } from '../../services/title.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 
-type LayoutType = 'grid' | 'square';
+type ViewMode = 'browse' | 'poster';
 type SortType = 'release' | 'alpha' | 'category' | 'gilded';
 type LegacyFilter = 'all' | 'current' | 'legacy';
 
@@ -34,7 +34,7 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
 
   @ViewChild('posterCanvas', { static: false }) posterCanvas?: ElementRef<HTMLDivElement>;
 
-  layout: LayoutType = 'grid';
+  viewMode: ViewMode = 'browse';
   sortType: SortType = 'release';
   showGildedBadge: boolean = true;
   legacyFilter: LegacyFilter = 'all';
@@ -49,6 +49,10 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
   private useManualOrder = false;
 
   constructor(private cdr: ChangeDetectorRef) {}
+
+  get isPosterView(): boolean {
+    return this.viewMode === 'poster' || this.isExporting;
+  }
 
   ngOnInit() {
     this.reloadPersistedState();
@@ -169,6 +173,10 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
 
   onToggleChange() {
     this.updateDisplaySeals();
+  }
+
+  setViewMode(mode: ViewMode) {
+    this.viewMode = mode;
   }
 
   onDrop(event: CdkDragDrop<SealDisplayItem[]>) {
@@ -307,7 +315,7 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     if (seal.isGilded && seal.gildedIcon) {
       return seal.gildedIcon;
     }
-    if (!seal.completed && seal.altIcon) {
+    if (!this.isPosterView && !seal.completed && seal.altIcon) {
       return seal.altIcon;
     }
     return seal.icon || null;
