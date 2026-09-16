@@ -245,8 +245,9 @@ export class ActivityDbService extends Dexie {
     '2559374375': 'Pit of Heresy: Master',
     '2582501063': 'Pit of Heresy: Standard',
     // Grasp of Avarice - Multiple versions
-    '1112917203': 'Grasp of Avarice: Standard',
-    '4078656646': 'Grasp of Avarice: Master',
+    '1112917203': 'Grasp of Avarice: Master',
+    '3774021532': 'Grasp of Avarice: Master',
+    '4078656646': 'Grasp of Avarice: Standard',
     // Prophecy - Multiple versions
     '1077850348': 'Prophecy: Normal',
     '3637651331': 'Prophecy: Explorer', // Updated hash

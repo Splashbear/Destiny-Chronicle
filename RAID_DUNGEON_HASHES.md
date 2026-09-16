@@ -140,8 +140,9 @@ To find the hashes:
 - `4148187374` - Master
 
 ### Grasp of Avarice
-- `1112917203` - Standard
-- `4078656646` - Master
+- `1112917203` - Master
+- `3774021532` - Master
+- `4078656646` - Standard
 
 ### Duality
 - `2823159265` - Standard
