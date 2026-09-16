@@ -1,250 +1,144 @@
 /**
- * D2 Title Categories by Season/Expansion
- * Organized chronologically for proper grouping and sorting
+ * D2 Title Categories from Google Sheet "D2 Titles by Season/Category"
+ * Organized by 7 primary category types
  */
 
 export type TitleCategory = 
-  | 'Forsaken'
-  | 'Black Armory'
-  | 'Season of the Drifter'
-  | 'Season of Opulence'
-  | 'Shadowkeep'
-  | 'Season of the Undying'
-  | 'Season of Dawn'
-  | 'Season of the Worthy'
-  | 'Season of Arrivals'
-  | 'Beyond Light'
-  | 'Season of the Hunt'
-  | 'Season of the Chosen'
-  | 'Season of the Splicer'
-  | 'Season of the Lost'
-  | 'The Witch Queen'
-  | 'Season of the Risen'
-  | 'Season of the Haunted'
-  | 'Season of Plunder'
-  | 'Season of the Seraph'
-  | 'Lightfall'
-  | 'Season of Defiance'
-  | 'Season of the Deep'
-  | 'Season of the Witch'
-  | 'Season of the Wish'
-  | 'The Final Shape'
-  | 'Episode: Echoes'
-  | 'Episode: Revenant'
-  | 'Episode: Heresy'
+  | 'Seasonal/Episodal'
   | 'Moments of Triumph'
-  | 'Unknown';
+  | 'Raid'
+  | 'Special Events'
+  | 'Dungeon'
+  | 'Expansion'
+  | 'Competitive'
+  | 'Other';
 
 export interface TitleCategoryInfo {
   category: TitleCategory;
   order: number;
-  year: number;
 }
 
 /**
  * Mapping of normalized title names to their categories
- * Includes all D2 titles through Episode: Heresy
+ * Based on Google Sheet taxonomy
  */
 export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
-  // Forsaken (Year 2 Launch - 9/4/2018)
-  'wayfarer': { category: 'Forsaken', order: 1, year: 2 },
-  'dredgen': { category: 'Forsaken', order: 1, year: 2 },
-  'chronicler': { category: 'Forsaken', order: 1, year: 2 },
-  'cursebreaker': { category: 'Forsaken', order: 1, year: 2 },
-  'rivensbane': { category: 'Forsaken', order: 1, year: 2 },
+  // Seasonal/Episodal
+  'undying': { category: 'Seasonal/Episodal', order: 1 },
+  'savior': { category: 'Seasonal/Episodal', order: 1 },
+  'almighty': { category: 'Seasonal/Episodal', order: 1 },
+  'forerunner': { category: 'Seasonal/Episodal', order: 1 },
+  'warden': { category: 'Seasonal/Episodal', order: 1 },
+  'chosen': { category: 'Seasonal/Episodal', order: 1 },
+  'splicer': { category: 'Seasonal/Episodal', order: 1 },
+  'realmwalker': { category: 'Seasonal/Episodal', order: 1 },
+  'risen': { category: 'Seasonal/Episodal', order: 1 },
+  'ironlord': { category: 'Seasonal/Episodal', order: 1 },
+  'scallywag': { category: 'Seasonal/Episodal', order: 1 },
+  'seraph': { category: 'Seasonal/Episodal', order: 1 },
+  'virtualfighter': { category: 'Seasonal/Episodal', order: 1 },
+  'dreamwarrior': { category: 'Seasonal/Episodal', order: 1 },
+  'champ': { category: 'Seasonal/Episodal', order: 1 },
+  'aquanaut': { category: 'Seasonal/Episodal', order: 1 },
+  'haruspex': { category: 'Seasonal/Episodal', order: 1 },
+  'wishbearer': { category: 'Seasonal/Episodal', order: 1 },
+  'brave': { category: 'Seasonal/Episodal', order: 1 },
+  'intrepid': { category: 'Seasonal/Episodal', order: 1 },
+  'legend': { category: 'Seasonal/Episodal', order: 1 },
+  'slayerbaron': { category: 'Seasonal/Episodal', order: 1 },
+  'unleashed': { category: 'Seasonal/Episodal', order: 1 },
+  'heretic': { category: 'Seasonal/Episodal', order: 1 },
+  'eternal': { category: 'Seasonal/Episodal', order: 1 },
+  'heavymetal': { category: 'Seasonal/Episodal', order: 1 },
+  'fatedweapon': { category: 'Seasonal/Episodal', order: 1 },
+  'atemporal': { category: 'Seasonal/Episodal', order: 1 },
+  'sharpshooter': { category: 'Seasonal/Episodal', order: 1 },
+  'avantgarde': { category: 'Seasonal/Episodal', order: 1 },
+  'renegade': { category: 'Seasonal/Episodal', order: 1 },
+  'undertaker': { category: 'Seasonal/Episodal', order: 1 },
+  'praxic': { category: 'Seasonal/Episodal', order: 1 },
   
-  // Black Armory (12/7/2018)
-  'blacksmith': { category: 'Black Armory', order: 2, year: 2 },
+  // Moments of Triumph
+  'mmxix': { category: 'Moments of Triumph', order: 2 },
+  'mmxixmot': { category: 'Moments of Triumph', order: 2 },
+  'mmxx': { category: 'Moments of Triumph', order: 2 },
+  'mmxxmot': { category: 'Moments of Triumph', order: 2 },
+  'mmxxi': { category: 'Moments of Triumph', order: 2 },
+  'mmxximot': { category: 'Moments of Triumph', order: 2 },
+  'mmxxii': { category: 'Moments of Triumph', order: 2 },
+  'mmxxiimot': { category: 'Moments of Triumph', order: 2 },
+  'mmxxiii': { category: 'Moments of Triumph', order: 2 },
+  'mmxxiiimot': { category: 'Moments of Triumph', order: 2 },
+  'mmxxiv': { category: 'Moments of Triumph', order: 2 },
+  'mmxxivmot': { category: 'Moments of Triumph', order: 2 },
+  'vidmaster': { category: 'Moments of Triumph', order: 2 },
+  'immortal': { category: 'Moments of Triumph', order: 2 },
+  'godsbane': { category: 'Moments of Triumph', order: 2 },
+  'monumentoftriumph': { category: 'Moments of Triumph', order: 2 },
+  'thepantheon': { category: 'Moments of Triumph', order: 2 },
   
-  // Season of the Drifter (3/5/2019)
-  'reckoner': { category: 'Season of the Drifter', order: 3, year: 2 },
+  // Raid
+  'rivensbane': { category: 'Raid', order: 3 },
+  'blacksmith': { category: 'Raid', order: 3 },
+  'shadow': { category: 'Raid', order: 3 },
+  'enlightened': { category: 'Raid', order: 3 },
+  'descendant': { category: 'Raid', order: 3 },
+  'fatebreaker': { category: 'Raid', order: 3 },
+  'discipleslayer': { category: 'Raid', order: 3 },
+  'kingslayer': { category: 'Raid', order: 3 },
+  'queensguard': { category: 'Raid', order: 3 },
+  'swordbearer': { category: 'Raid', order: 3 },
+  'wrathbearer': { category: 'Raid', order: 3 },
+  'godslayer': { category: 'Raid', order: 3 },
+  'iconoclast': { category: 'Raid', order: 3 },
   
-  // Season of Opulence (6/4/2019)
-  'shadow': { category: 'Season of Opulence', order: 4, year: 2 },
+  // Special Events
+  'reveler': { category: 'Special Events', order: 4 },
+  'flamekeeper': { category: 'Special Events', order: 4 },
+  'ghostwriter': { category: 'Special Events', order: 4 },
+  'starbaker': { category: 'Special Events', order: 4 },
   
-  // Moments of Triumph Y2 (7/9/2019)
-  'mmxix': { category: 'Moments of Triumph', order: 5, year: 2 },
-  'mmxixmot': { category: 'Moments of Triumph', order: 5, year: 2 },
+  // Dungeon
+  'harbinger': { category: 'Dungeon', order: 5 },
+  'reaper': { category: 'Dungeon', order: 5 },
+  'discerptor': { category: 'Dungeon', order: 5 },
+  'wanted': { category: 'Dungeon', order: 5 },
+  'glorious': { category: 'Dungeon', order: 5 },
+  'ghoul': { category: 'Dungeon', order: 5 },
+  'delver': { category: 'Dungeon', order: 5 },
   
-  // Shadowkeep (10/1/2019)
-  'undying': { category: 'Shadowkeep', order: 6, year: 3 },
+  // Expansion
+  'wayfarer': { category: 'Expansion', order: 6 },
+  'chronicler': { category: 'Expansion', order: 6 },
+  'cursebreaker': { category: 'Expansion', order: 6 },
+  'reckoner': { category: 'Expansion', order: 6 },
+  'splintered': { category: 'Expansion', order: 6 },
+  'gumshoe': { category: 'Expansion', order: 6 },
+  'transcendent': { category: 'Expansion', order: 6 },
   
-  // Season of Dawn (12/10/2019)
-  'savior': { category: 'Season of Dawn', order: 7, year: 3 },
-  
-  // Season of the Worthy (3/10/2020)
-  'almighty': { category: 'Season of the Worthy', order: 8, year: 3 },
-  'conqueror': { category: 'Season of the Worthy', order: 8, year: 3 },
-  'conquerorworthy': { category: 'Season of the Worthy', order: 8, year: 3 },
-  
-  // Season of Arrivals (6/9/2020)
-  'forerunner': { category: 'Season of Arrivals', order: 9, year: 3 },
-  'flawless': { category: 'Season of Arrivals', order: 9, year: 3 },
-  'flawlessarrivals': { category: 'Season of Arrivals', order: 9, year: 3 },
-  
-  // Moments of Triumph Y3 (7/7/2020)
-  'mmxx': { category: 'Moments of Triumph', order: 10, year: 3 },
-  'mmxxmot': { category: 'Moments of Triumph', order: 10, year: 3 },
-  
-  // Garden of Salvation (retroactive)
-  'enlightened': { category: 'Shadowkeep', order: 6, year: 3 },
-  
-  // Pit of Heresy
-  'harbinger': { category: 'Shadowkeep', order: 6, year: 3 },
-  
-  // Beyond Light (11/10/2020)
-  'splintered': { category: 'Beyond Light', order: 11, year: 4 },
-  'warden': { category: 'Beyond Light', order: 11, year: 4 },
-  
-  // Season of the Hunt (11/10/2020)
-  'descendant': { category: 'Season of the Hunt', order: 12, year: 4 },
-  'conquerorrhunt': { category: 'Season of the Hunt', order: 12, year: 4 },
-  'flawlesshunt': { category: 'Season of the Hunt', order: 12, year: 4 },
-  
-  // Season of the Chosen (2/9/2021)
-  'chosen': { category: 'Season of the Chosen', order: 13, year: 4 },
-  
-  // Season of the Splicer (5/11/2021)
-  'splicer': { category: 'Season of the Splicer', order: 14, year: 4 },
-  
-  // Vault of Glass (5/22/2021)
-  'fatebreaker': { category: 'Season of the Splicer', order: 14, year: 4 },
-  
-  // Season of the Lost (8/24/2021)
-  'realmwalker': { category: 'Season of the Lost', order: 15, year: 4 },
-  'deadeye': { category: 'Season of the Lost', order: 15, year: 4 },
-  
-  // Moments of Triumph Y4 (12/7/2021)
-  'mmxxi': { category: 'Moments of Triumph', order: 16, year: 4 },
-  'mmxximot': { category: 'Moments of Triumph', order: 16, year: 4 },
-  'vidmaster': { category: 'Moments of Triumph', order: 16, year: 4 },
-  
-  // The Witch Queen (2/22/2022)
-  'risen': { category: 'The Witch Queen', order: 17, year: 5 },
-  'gumshoe': { category: 'The Witch Queen', order: 17, year: 5 },
-  
-  // Vow of the Disciple (3/5/2022)
-  'discipleslayer': { category: 'The Witch Queen', order: 17, year: 5 },
-  
-  // Season of the Haunted (5/24/2022)
-  'reaper': { category: 'Season of the Haunted', order: 18, year: 5 },
-  'ironlord': { category: 'Season of the Haunted', order: 18, year: 5 },
-  'discerptor': { category: 'Season of the Haunted', order: 18, year: 5 },
-  'reveler': { category: 'Season of the Haunted', order: 18, year: 5 },
-  'flamekeeper': { category: 'Season of the Haunted', order: 18, year: 5 },
-  
-  // Season of Plunder (8/23/2022)
-  'scallywag': { category: 'Season of Plunder', order: 19, year: 5 },
-  'kingslayer': { category: 'Season of Plunder', order: 19, year: 5 },
-  'swordbearer': { category: 'Season of Plunder', order: 19, year: 5 },
-  
-  // Season of the Seraph (10/18/2022)
-  'ghostwriter': { category: 'Season of the Seraph', order: 20, year: 5 },
-  'seraph': { category: 'Season of the Seraph', order: 20, year: 5 },
-  'glorious': { category: 'Season of the Seraph', order: 20, year: 5 },
-  'wanted': { category: 'Season of the Seraph', order: 20, year: 5 },
-  'starbaker': { category: 'Season of the Seraph', order: 20, year: 5 },
-  
-  // Moments of Triumph Y5 (12/6/2022)
-  'mmxxii': { category: 'Moments of Triumph', order: 21, year: 5 },
-  'mmxxiimot': { category: 'Moments of Triumph', order: 21, year: 5 },
-  
-  // Lightfall (2/8/2023)
-  'virtualfighter': { category: 'Lightfall', order: 22, year: 6 },
-  'queensguard': { category: 'Lightfall', order: 22, year: 6 },
-  
-  // Season of Defiance (3/10/2023)
-  'dreamwarrior': { category: 'Season of Defiance', order: 23, year: 6 },
-  
-  // Season of the Deep (5/23/2023)
-  'champ': { category: 'Season of the Deep', order: 24, year: 6 },
-  'aquanaut': { category: 'Season of the Deep', order: 24, year: 6 },
-  'ghoul': { category: 'Season of the Deep', order: 24, year: 6 },
-  
-  // Season of the Witch (8/22/2023)
-  'haruspex': { category: 'Season of the Witch', order: 25, year: 6 },
-  
-  // Season of the Wish (11/28/2023)
-  'wishbearer': { category: 'Season of the Wish', order: 26, year: 6 },
-  'wrathbearer': { category: 'Season of the Wish', order: 26, year: 6 },
-  
-  // Moments of Triumph Y6 (1/30/2024)
-  'mmxxiii': { category: 'Moments of Triumph', order: 27, year: 6 },
-  'mmxxiiimot': { category: 'Moments of Triumph', order: 27, year: 6 },
-  
-  // The Final Shape (4/9/2024)
-  'brave': { category: 'The Final Shape', order: 28, year: 7 },
-  'godslayer': { category: 'The Final Shape', order: 28, year: 7 },
-  'transcendent': { category: 'The Final Shape', order: 28, year: 7 },
-  'iconoclast': { category: 'The Final Shape', order: 28, year: 7 },
-  
-  // Episode: Echoes (6/7/2024)
-  'intrepid': { category: 'Episode: Echoes', order: 29, year: 7 },
-  
-  // Episode: Revenant (10/8/2024)
-  'legend': { category: 'Episode: Revenant', order: 30, year: 7 },
-  'slayerbaron': { category: 'Episode: Revenant', order: 30, year: 7 },
-  'unleashed': { category: 'Episode: Revenant', order: 30, year: 7 },
-  
-  // Episode: Heresy (2/4/2025)
-  'heretic': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'delver': { category: 'Episode: Heresy', order: 31, year: 7 },
-  
-  // Moments of Triumph Y7 (3/4/2025)
-  'mmxxiv': { category: 'Moments of Triumph', order: 32, year: 7 },
-  'mmxxivmot': { category: 'Moments of Triumph', order: 32, year: 7 },
-  
-  // Into the Light / Episode: Heresy continuation (5/6/2025)
-  'eternal': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'heavymetal': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'fatedweapon': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'atemporal': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'sharpshooter': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'avantgarde': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'renegade': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'undertaker': { category: 'Episode: Heresy', order: 31, year: 7 },
-  'praxic': { category: 'Episode: Heresy', order: 31, year: 7 },
-  
-  // The Pantheon / Monument of Triumph (6/9/2026)
-  'immortal': { category: 'The Final Shape', order: 28, year: 7 },
-  'godsbane': { category: 'The Final Shape', order: 28, year: 7 },
-  'monumentoftriumph': { category: 'The Final Shape', order: 28, year: 7 },
-  'thepantheon': { category: 'The Final Shape', order: 28, year: 7 },
+  // Competitive
+  'dredgen': { category: 'Competitive', order: 7 },
+  'unbroken': { category: 'Competitive', order: 7 },
+  'conqueror': { category: 'Competitive', order: 7 },
+  'conquerorworthy': { category: 'Competitive', order: 7 },
+  'conquerorrhunt': { category: 'Competitive', order: 7 },
+  'flawless': { category: 'Competitive', order: 7 },
+  'flawlessarrivals': { category: 'Competitive', order: 7 },
+  'flawlesshunt': { category: 'Competitive', order: 7 },
+  'deadeye': { category: 'Competitive', order: 7 },
 };
 
 export function getTitleCategory(normalizedName: string): TitleCategoryInfo {
-  return TITLE_CATEGORY_MAP[normalizedName] || { category: 'Unknown', order: 999, year: 0 };
+  return TITLE_CATEGORY_MAP[normalizedName] || { category: 'Seasonal/Episodal', order: 1 };
 }
 
 export const CATEGORY_DISPLAY_ORDER: TitleCategory[] = [
-  'Forsaken',
-  'Black Armory',
-  'Season of the Drifter',
-  'Season of Opulence',
-  'Shadowkeep',
-  'Season of the Undying',
-  'Season of Dawn',
-  'Season of the Worthy',
-  'Season of Arrivals',
-  'Beyond Light',
-  'Season of the Hunt',
-  'Season of the Chosen',
-  'Season of the Splicer',
-  'Season of the Lost',
-  'The Witch Queen',
-  'Season of the Risen',
-  'Season of the Haunted',
-  'Season of Plunder',
-  'Season of the Seraph',
-  'Lightfall',
-  'Season of Defiance',
-  'Season of the Deep',
-  'Season of the Witch',
-  'Season of the Wish',
-  'The Final Shape',
-  'Episode: Echoes',
-  'Episode: Revenant',
-  'Episode: Heresy',
+  'Seasonal/Episodal',
   'Moments of Triumph',
-  'Unknown',
+  'Raid',
+  'Special Events',
+  'Dungeon',
+  'Expansion',
+  'Competitive',
+  'Other',
 ];
