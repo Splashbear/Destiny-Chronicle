@@ -59,22 +59,21 @@
   <div *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length > 0" class="title-wall-of-remembrance grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-4 mb-6">
     <div *ngFor="let title of ps.unlockedTitlesDisplay; let i = index"
          class="title-steel-badge flex items-center gap-2 sm:gap-4 p-2 sm:p-3 relative min-w-0"
-         [style.--badge-tilt]="((i % 5) - 2) * 0.18 + 'deg'"
-         [ngClass]="{'text-slate-400 title-steel-badge--locked': title.legacy}">
+         [style.--badge-tilt]="((i % 5) - 2) * 0.18 + 'deg'">
       <div class="relative flex-shrink-0">
         <img *ngIf="title.icon || title.gildedIcon" 
-             [src]="(title.isGilded && title.gildedIcon) ? title.gildedIcon : (title.legacy && title.altIcon ? title.altIcon : title.icon)" 
+             [src]="(title.isGilded && title.gildedIcon) ? title.gildedIcon : title.icon" 
              class="w-10 h-10 sm:w-12 sm:h-12 rounded shadow" 
-             [ngClass]="{'grayscale opacity-70': title.legacy && !title.altIcon}"
              alt="Seal Icon" />
-        <span *ngIf="title.isGilded && title.timesGilded" 
-              class="absolute -top-1 -right-1 bg-yellow-500 text-black text-[10px] font-bold px-1 rounded-sm leading-tight">
-          x{{title.timesGilded}}
-        </span>
       </div>
       <div class="min-w-0 flex-1">
-        <div class="font-bold text-lg flex flex-wrap items-center gap-2 break-words" [ngClass]="{'text-slate-300': title.legacy, 'text-[var(--destiny-gold)]': !(title.legacy)}">
+        <div class="font-bold text-base flex flex-wrap items-center gap-2 break-words" style="color: #d4af37;">
           {{ title.name }}
+          <span *ngIf="title.isGilded && title.timesGilded" 
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold"
+                style="background-color: rgba(255, 140, 0, 0.2); color: #ff8c00; border: 1px solid rgba(255, 140, 0, 0.4);">
+            <span style="font-size: 10px;">✓</span>V{{title.timesGilded}}
+          </span>
         </div>
         <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
       </div>

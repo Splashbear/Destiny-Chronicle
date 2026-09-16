@@ -1,5 +1,6 @@
 .seal-poster-studio {
-  @apply p-6 bg-slate-900 min-h-screen;
+  @apply p-6 min-h-screen;
+  background-color: #1a1a1a;
 }
 
 .studio-header {
@@ -7,7 +8,8 @@
 }
 
 .controls-panel {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4 p-4 bg-slate-800 rounded-lg;
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4 p-4 rounded-lg;
+  background-color: #2a2a2a;
 }
 
 .control-group {
@@ -15,11 +17,13 @@
 }
 
 .control-label {
-  @apply text-sm font-semibold text-slate-300;
+  @apply text-sm font-semibold;
+  color: #d4af37;
 }
 
 .info-bar {
-  @apply mt-4 p-3 bg-slate-800 rounded-lg;
+  @apply mt-4 p-3 rounded-lg;
+  background-color: #2a2a2a;
 }
 
 .poster-container {
@@ -27,7 +31,8 @@
 }
 
 .poster-canvas {
-  @apply bg-slate-900 p-8 mx-auto;
+  @apply p-8 mx-auto;
+  background-color: #1a1a1a;
   min-height: 400px;
 }
 
@@ -41,80 +46,113 @@
 
 .poster-title {
   @apply text-center mb-8;
+  
+  h1 {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #d4af37;
+  }
 }
 
 .seals-grouped {
-  @apply space-y-6;
+  @apply space-y-8;
 }
 
 .seal-group {
-  @apply space-y-3;
+  @apply space-y-4;
 }
 
 .group-header {
-  @apply text-xl font-bold text-white border-b-2 border-[var(--destiny-gold)] pb-2 mb-3;
+  @apply text-lg font-bold pb-2 mb-4;
+  color: #d4af37;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .seals-grid {
-  @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4;
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }
 
 .seals-flat {
-  @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4;
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
 }
 
 .seal-card {
-  @apply bg-slate-800 rounded-lg p-4 flex flex-col items-center justify-center gap-3 transition-all hover:bg-slate-700 cursor-move;
-  min-height: 140px;
-  position: relative;
+  @apply rounded-lg p-3 flex flex-col items-center justify-center gap-3 transition-all;
+  background-color: rgba(42, 42, 42, 0.5);
+  min-height: 160px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  
+  &:hover {
+    background-color: rgba(42, 42, 42, 0.8);
+    border-color: rgba(212, 175, 55, 0.4);
+  }
+}
+
+.seal-card-unearned {
+  opacity: 0.6;
+  
+  .seal-icon {
+    filter: grayscale(0.3);
+  }
 }
 
 .seal-icon {
-  @apply w-16 h-16 rounded shadow-lg;
-}
-
-.seal-icon-legacy {
-  @apply grayscale opacity-70;
+  @apply w-20 h-20 rounded;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  /* All seals use golden appearance - no grayscale for legacy */
 }
 
 .seal-info {
   @apply flex flex-col items-center gap-1 text-center w-full;
 }
 
+.seal-name-row {
+  @apply flex flex-col items-center gap-1 w-full;
+}
+
 .seal-name {
-  @apply font-bold text-sm text-[var(--destiny-gold)];
+  @apply font-bold text-xs leading-tight;
+  color: #d4af37;
   word-break: break-word;
   overflow-wrap: break-word;
   hyphens: auto;
   max-width: 100%;
-  line-height: 1.2;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
-.seal-name-legacy {
-  @apply text-slate-400;
+.gild-badge {
+  @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold;
+  background-color: rgba(255, 140, 0, 0.2);
+  color: #ff8c00;
+  border: 1px solid rgba(255, 140, 0, 0.4);
+  white-space: nowrap;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
 
-.gild-count-badge {
-  @apply absolute -top-1 -right-1 bg-yellow-500 text-black text-[10px] font-bold px-1 rounded-sm leading-tight;
-  min-width: 20px;
-  text-align: center;
-}
-
-.gilded-icon {
-  @apply w-6 h-6;
-}
-
-.gilded-count {
-  @apply text-xs text-yellow-400 font-semibold;
+.gild-badge-icon {
+  @apply inline-block;
+  font-size: 10px;
+  color: #ff8c00;
 }
 
 .empty-state {
   @apply flex flex-col items-center justify-center py-12 text-center;
   min-height: 300px;
+  color: #666;
 }
 
 .poster-footer {
-  @apply text-center mt-8 pt-4 border-t border-slate-700;
+  @apply text-center mt-8 pt-4;
+  border-top: 1px solid rgba(212, 175, 55, 0.2);
+  color: #999;
 }
 
 /* Drag and drop styles */

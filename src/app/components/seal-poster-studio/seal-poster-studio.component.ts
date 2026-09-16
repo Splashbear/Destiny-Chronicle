@@ -5,18 +5,18 @@ import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-
 import html2canvas from 'html2canvas';
 import { TitleItem } from '../../services/title.service';
 import { AssetUrlService } from '../../services/asset-url.service';
+import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 
 type LayoutType = 'grid' | 'square';
-type SortType = 'release' | 'alpha' | 'curated' | 'gilded';
-type CuratedGroup = 'expansion' | 'raid' | 'dungeon' | 'other';
+type SortType = 'release' | 'alpha' | 'category' | 'gilded';
 
 interface SealDisplayItem extends TitleItem {
-  curatedGroup?: CuratedGroup;
+  category?: TitleCategory;
   manualOrder?: number;
 }
 
 interface GroupedSeals {
-  group: CuratedGroup;
+  category: TitleCategory;
   displayName: string;
   seals: SealDisplayItem[];
 }
@@ -40,56 +40,12 @@ export class SealPosterStudioComponent implements OnInit {
   showGildedBadge: boolean = true;
   showLegacy: boolean = true;
   earnedOnly: boolean = true;
+  includeUnearned: boolean = false;
   includeChronicleFooter: boolean = true;
   isExporting: boolean = false;
 
   displaySeals: SealDisplayItem[] = [];
   groupedSeals: GroupedSeals[] = [];
-
-  private readonly RAID_DUNGEON_MAP: { [titleNormalized: string]: CuratedGroup } = {
-    // Raids
-    'lastwhish': 'raid',
-    'rivensbane': 'raid',
-    'scourgeofthepast': 'raid',
-    'blacksmith': 'raid',
-    'crownsofsorrow': 'raid',
-    'shadow': 'raid',
-    'gardenofsalvation': 'raid',
-    'enlightened': 'raid',
-    'deepstone': 'raid',
-    'descendant': 'raid',
-    'vaultofglass': 'raid',
-    'fatebreaker': 'raid',
-    'vowofthedisciple': 'raid',
-    'discipleslayer': 'raid',
-    'kingsfall': 'raid',
-    'kingslayer': 'raid',
-    'rootofnightmares': 'raid',
-    'queensguard': 'raid',
-    'crotas': 'raid',
-    'swordbearer': 'raid',
-    'votdisciple': 'raid',
-    'vaultglass': 'raid',
-    
-    // Dungeons
-    'shatteredthrone': 'dungeon',
-    'pit': 'dungeon',
-    'prophecy': 'dungeon',
-    'harbinger': 'dungeon',
-    'graspofavarice': 'dungeon',
-    'reaper': 'dungeon',
-    'duality': 'dungeon',
-    'discerptor': 'dungeon',
-    'spireofthewatcher': 'dungeon',
-    'glorious': 'dungeon',
-    'ghostsofthen': 'dungeon',
-    'ghoul': 'dungeon',
-    'warlordsruin': 'dungeon',
-    'wishbearer': 'dungeon',
-    'wrathbearer': 'dungeon',
-    'vespers': 'dungeon',
-    'delver': 'dungeon',
-  };
 
   constructor(
     private assetUrl: AssetUrlService,
@@ -105,37 +61,22 @@ export class SealPosterStudioComponent implements OnInit {
     return name.toLowerCase().replace(/[^a-z0-9]/g, '');
   }
 
-  private getCuratedGroup(seal: TitleItem): CuratedGroup {
-    const normalized = this.normalizeName(seal.name);
-    
-    // Check explicit override map first
-    if (this.RAID_DUNGEON_MAP[normalized]) {
-      return this.RAID_DUNGEON_MAP[normalized];
-    }
-
-    // If has releaseRank, it's likely an expansion seal
-    if (seal.releaseRank && seal.releaseRank > 0) {
-      // Check if it's a MoT seal (contains MMXX pattern)
-      const isMoT = /mm[x]+[iv]*/i.test(seal.name);
-      if (isMoT) {
-        return 'expansion';
-      }
-      
-      // If not explicitly mapped and has release rank, default to expansion
-      return 'expansion';
-    }
-
-    // Default to other for unknowns
-    return 'other';
-  }
-
   updateDisplaySeals() {
     let seals = this.titles
-      .filter(t => !this.earnedOnly || t.completed)
+      .filter(t => {
+        // Filter by earned/unearned
+        if (this.earnedOnly && !this.includeUnearned) {
+          return t.completed;
+        }
+        if (this.includeUnearned) {
+          return true; // Show all seals (earned and unearned)
+        }
+        return t.completed;
+      })
       .filter(t => this.showLegacy || !t.legacy)
       .map((t, index) => ({
         ...t,
-        curatedGroup: this.getCuratedGroup(t),
+        category: getTitleCategory(this.normalizeName(t.name)).category,
         manualOrder: this.getManualOrder(t.hash, index)
       }));
 
@@ -150,14 +91,18 @@ export class SealPosterStudioComponent implements OnInit {
         if (!a.isGilded && b.isGilded) return 1;
         return (b.releaseRank || 0) - (a.releaseRank || 0);
       });
-    } else if (this.sortType === 'curated') {
-      // For curated, group first, then sort within groups
-      const groupOrder: CuratedGroup[] = ['expansion', 'raid', 'dungeon', 'other'];
+    } else if (this.sortType === 'category') {
+      // For category, group by season/expansion
       seals = seals.sort((a, b) => {
-        const groupA = groupOrder.indexOf(a.curatedGroup!);
-        const groupB = groupOrder.indexOf(b.curatedGroup!);
-        if (groupA !== groupB) return groupA - groupB;
-        // Within group: release order, then alpha
+        const catA = getTitleCategory(this.normalizeName(a.name));
+        const catB = getTitleCategory(this.normalizeName(b.name));
+        
+        // First sort by category order
+        if (catA.order !== catB.order) {
+          return catA.order - catB.order;
+        }
+        
+        // Within category: release order, then alpha
         const releaseCompare = (b.releaseRank || 0) - (a.releaseRank || 0);
         if (releaseCompare !== 0) return releaseCompare;
         return a.name.localeCompare(b.name);
@@ -166,8 +111,8 @@ export class SealPosterStudioComponent implements OnInit {
 
     this.displaySeals = seals;
     
-    // Create grouped view for curated display
-    if (this.sortType === 'curated') {
+    // Create grouped view for category display
+    if (this.sortType === 'category') {
       this.createGroupedSeals();
     } else {
       this.groupedSeals = [];
@@ -175,28 +120,27 @@ export class SealPosterStudioComponent implements OnInit {
   }
 
   private createGroupedSeals() {
-    const groups: Map<CuratedGroup, SealDisplayItem[]> = new Map();
+    const groups: Map<TitleCategory, SealDisplayItem[]> = new Map();
     
     for (const seal of this.displaySeals) {
-      const group = seal.curatedGroup!;
-      if (!groups.has(group)) {
-        groups.set(group, []);
+      const category = seal.category!;
+      if (!groups.has(category)) {
+        groups.set(category, []);
       }
-      groups.get(group)!.push(seal);
+      groups.get(category)!.push(seal);
     }
 
-    const groupNames: Record<CuratedGroup, string> = {
-      expansion: 'Expansion',
-      raid: 'Raid',
-      dungeon: 'Dungeon',
-      other: 'Other'
-    };
-
-    this.groupedSeals = Array.from(groups.entries()).map(([group, seals]) => ({
-      group,
-      displayName: groupNames[group],
-      seals
-    }));
+    this.groupedSeals = Array.from(groups.entries())
+      .sort((a, b) => {
+        const orderA = CATEGORY_DISPLAY_ORDER.indexOf(a[0]);
+        const orderB = CATEGORY_DISPLAY_ORDER.indexOf(b[0]);
+        return orderA - orderB;
+      })
+      .map(([category, seals]) => ({
+        category,
+        displayName: category,
+        seals
+      }));
   }
 
   onSortChange() {
@@ -269,7 +213,7 @@ export class SealPosterStudioComponent implements OnInit {
 
       const canvas = await html2canvas(this.posterCanvas.nativeElement, {
         scale: 2,
-        backgroundColor: '#0f1419',
+        backgroundColor: '#1a1a1a',
         logging: false,
         useCORS: true,
         allowTaint: true
@@ -297,14 +241,19 @@ export class SealPosterStudioComponent implements OnInit {
   }
 
   getSealIcon(seal: SealDisplayItem): string | null {
-    // Use gilded icon if seal is gilded and we have one, otherwise use base or alt icon
+    // Use gilded icon if seal is gilded and we have one
     if (seal.isGilded && seal.gildedIcon) {
       return seal.gildedIcon;
     }
-    if (seal.legacy && seal.altIcon) {
-      return seal.altIcon;
-    }
+    // Otherwise use base icon (not alt icon, we want golden look for all)
     return seal.icon || null;
+  }
+
+  getGildText(seal: SealDisplayItem): string | null {
+    if (!seal.isGilded || !this.showGildedBadge || !seal.timesGilded) {
+      return null;
+    }
+    return `V${seal.timesGilded}`;
   }
 
   onClose() {

@@ -33,7 +33,7 @@
         <select [(ngModel)]="sortType" (ngModelChange)="onSortChange()" class="destiny-input text-sm">
           <option value="release">Release (Newest First)</option>
           <option value="alpha">A–Z</option>
-          <option value="curated">Type (Expansion / Raid / Dungeon)</option>
+          <option value="category">By Season / Expansion</option>
           <option value="gilded">Gilded First</option>
         </select>
       </div>
@@ -43,9 +43,14 @@
         <label class="control-label">Options</label>
         <div class="flex flex-col gap-2">
           <label class="d2-check">
-            <input type="checkbox" [(ngModel)]="earnedOnly" (ngModelChange)="onToggleChange()" />
+            <input type="checkbox" [(ngModel)]="earnedOnly" (ngModelChange)="onToggleChange()" [disabled]="includeUnearned" />
             <span class="box"></span>
             <span class="text-sm text-white">Earned Only</span>
+          </label>
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="includeUnearned" (ngModelChange)="onToggleChange()" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Include Unearned</span>
           </label>
           <label class="d2-check">
             <input type="checkbox" [(ngModel)]="showLegacy" (ngModelChange)="onToggleChange()" />
@@ -97,29 +102,25 @@
       
       <!-- Title -->
       <div class="poster-title">
-        <h1 class="text-3xl font-bold text-[var(--destiny-gold)]">My Destiny Seals</h1>
+        <h1 class="text-3xl font-bold text-[#d4af37]">MY DESTINY SEALS</h1>
       </div>
 
-      <!-- Curated Group Display -->
-      <div *ngIf="sortType === 'curated' && groupedSeals.length > 0" class="seals-grouped">
+      <!-- Category Group Display -->
+      <div *ngIf="sortType === 'category' && groupedSeals.length > 0" class="seals-grouped">
         <div *ngFor="let group of groupedSeals" class="seal-group">
           <h3 class="group-header">{{ group.displayName }}</h3>
           <div class="seals-grid">
-            <div *ngFor="let seal of group.seals" class="seal-card">
-              <div class="relative">
-                <img *ngIf="getSealIcon(seal)" 
-                     [src]="getSealIcon(seal)" 
-                     class="seal-icon"
-                     [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.isGilded}"
-                     alt="{{ seal.name }}" />
-                <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
-                      class="gild-count-badge">
-                  x{{seal.timesGilded}}
-                </span>
-              </div>
+            <div *ngFor="let seal of group.seals" class="seal-card" [ngClass]="{'seal-card-unearned': !seal.completed}">
+              <img *ngIf="getSealIcon(seal)" 
+                   [src]="getSealIcon(seal)" 
+                   class="seal-icon"
+                   alt="{{ seal.name }}" />
               <div class="seal-info">
-                <div class="seal-name" [ngClass]="{'seal-name-legacy': seal.legacy}">
-                  {{ seal.name }}
+                <div class="seal-name-row">
+                  <div class="seal-name">{{ seal.name }}</div>
+                  <span *ngIf="getGildText(seal)" class="gild-badge">
+                    <span class="gild-badge-icon">✓</span>{{ getGildText(seal) }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -128,27 +129,24 @@
       </div>
 
       <!-- Flat List Display (with drag-and-drop) -->
-      <div *ngIf="sortType !== 'curated'" 
+      <div *ngIf="sortType !== 'category'" 
            class="seals-flat"
            cdkDropList
            (cdkDropListDropped)="onDrop($event)">
         <div *ngFor="let seal of displaySeals" 
              class="seal-card"
+             [ngClass]="{'seal-card-unearned': !seal.completed}"
              cdkDrag>
-          <div class="relative">
-            <img *ngIf="getSealIcon(seal)" 
-                 [src]="getSealIcon(seal)" 
-                 class="seal-icon"
-                 [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.isGilded}"
-                 alt="{{ seal.name }}" />
-            <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
-                  class="gild-count-badge">
-              x{{seal.timesGilded}}
-            </span>
-          </div>
+          <img *ngIf="getSealIcon(seal)" 
+               [src]="getSealIcon(seal)" 
+               class="seal-icon"
+               alt="{{ seal.name }}" />
           <div class="seal-info">
-            <div class="seal-name" [ngClass]="{'seal-name-legacy': seal.legacy}">
-              {{ seal.name }}
+            <div class="seal-name-row">
+              <div class="seal-name">{{ seal.name }}</div>
+              <span *ngIf="getGildText(seal)" class="gild-badge">
+                <span class="gild-badge-icon">✓</span>{{ getGildText(seal) }}
+              </span>
             </div>
           </div>
         </div>
