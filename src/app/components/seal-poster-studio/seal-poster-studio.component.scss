@@ -1,0 +1,123 @@
+.seal-poster-studio {
+  @apply p-6 bg-slate-900 min-h-screen;
+}
+
+.studio-header {
+  @apply mb-6;
+}
+
+.controls-panel {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4 p-4 bg-slate-800 rounded-lg;
+}
+
+.control-group {
+  @apply flex flex-col gap-2;
+}
+
+.control-label {
+  @apply text-sm font-semibold text-slate-300;
+}
+
+.info-bar {
+  @apply mt-4 p-3 bg-slate-800 rounded-lg;
+}
+
+.poster-container {
+  @apply mt-6 overflow-auto;
+}
+
+.poster-canvas {
+  @apply bg-slate-900 p-8 mx-auto;
+  min-height: 400px;
+}
+
+.canvas-grid {
+  @apply max-w-6xl;
+}
+
+.canvas-square {
+  @apply w-[800px] h-[800px];
+}
+
+.poster-title {
+  @apply text-center mb-8;
+}
+
+.seals-grouped {
+  @apply space-y-6;
+}
+
+.seal-group {
+  @apply space-y-3;
+}
+
+.group-header {
+  @apply text-xl font-bold text-white border-b-2 border-[var(--destiny-gold)] pb-2 mb-3;
+}
+
+.seals-grid {
+  @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4;
+}
+
+.seals-flat {
+  @apply grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4;
+}
+
+.seal-card {
+  @apply bg-slate-800 rounded-lg p-4 flex flex-col items-center justify-center gap-3 transition-all hover:bg-slate-700 cursor-move;
+  min-height: 140px;
+}
+
+.seal-icon {
+  @apply w-16 h-16 rounded shadow-lg;
+}
+
+.seal-icon-legacy {
+  @apply grayscale opacity-70;
+}
+
+.seal-info {
+  @apply flex flex-col items-center gap-2 text-center;
+}
+
+.seal-name {
+  @apply font-bold text-base text-[var(--destiny-gold)];
+}
+
+.seal-name-legacy {
+  @apply text-slate-400;
+}
+
+.gilded-icon {
+  @apply w-6 h-6;
+}
+
+.gilded-count {
+  @apply text-xs text-yellow-400 font-semibold;
+}
+
+.empty-state {
+  @apply flex flex-col items-center justify-center py-12 text-center;
+  min-height: 300px;
+}
+
+.poster-footer {
+  @apply text-center mt-8 pt-4 border-t border-slate-700;
+}
+
+/* Drag and drop styles */
+.cdk-drag-preview {
+  @apply opacity-80 shadow-2xl;
+}
+
+.cdk-drag-placeholder {
+  @apply opacity-30;
+}
+
+.cdk-drag-animating {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.seals-flat.cdk-drop-list-dragging .seal-card:not(.cdk-drag-placeholder) {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}

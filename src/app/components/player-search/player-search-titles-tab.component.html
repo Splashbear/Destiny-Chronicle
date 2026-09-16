@@ -1,7 +1,23 @@
 <div class="space-y-6">
+  <!-- Poster Studio View -->
+  <div *ngIf="showPosterStudio">
+    <app-seal-poster-studio 
+      [titles]="ps.aggregatedTitles"
+      [membershipId]="ps.getMainMembershipId()"
+      (close)="closePosterStudio()">
+    </app-seal-poster-studio>
+  </div>
+
+  <!-- Normal Titles View -->
+  <div *ngIf="!showPosterStudio">
   <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
     <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
     <div class="flex items-center gap-3">
+      <button (click)="openPosterStudio()" 
+              [disabled]="ps.loadingTitlesOverall || ps.aggregatedTitles.length === 0"
+              class="px-4 py-2 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold">
+        🎨 Make Poster
+      </button>
       <button (click)="ps.refreshTitles()" 
               [disabled]="ps.loadingTitlesOverall"
               class="px-3 py-1.5 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2">
@@ -81,5 +97,6 @@
         <div *ngIf="title.missingRecord" class="text-yellow-400 text-xs font-semibold">Progress not available</div>
       </div>
     </div>
+  </div>
   </div>
 </div>

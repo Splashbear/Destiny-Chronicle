@@ -9235,6 +9235,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     await this.titleService.debugAllTitles();
     this.checkForSpecificTitles();
   }
+
+  getMainMembershipId(): string {
+    const mainPlayer = this.selectedPlayers.find(p => !this.isD1Player(p) && p.isPrimary) ||
+                       this.crossSavePlayer ||
+                       this.selectedPlayers.find(p => !this.isD1Player(p));
+    return mainPlayer?.membershipId || '';
+  }
+
   async loadActivityBreakdown(): Promise<void> {
     if (this.selectedPlayers.length === 0) return;
     this.loadingActivityBreakdown = true;

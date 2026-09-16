@@ -1,0 +1,173 @@
+<div class="seal-poster-studio">
+  <!-- Header with close and controls -->
+  <div class="studio-header">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-white">Seal Poster Studio</h2>
+      <button (click)="onClose()" 
+              class="px-4 py-2 destiny-btn-secondary text-sm"
+              [disabled]="isExporting">
+        Close
+      </button>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-panel">
+      <!-- Layout Selection -->
+      <div class="control-group">
+        <label class="control-label">Layout</label>
+        <div class="flex gap-2">
+          <button (click)="layout = 'grid'; updateDisplaySeals()"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': layout === 'grid', 'd2-tab': layout !== 'grid'}">
+            Grid
+          </button>
+          <button (click)="layout = 'square'; updateDisplaySeals()"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': layout === 'square', 'd2-tab': layout !== 'square'}">
+            Square Share
+          </button>
+        </div>
+      </div>
+
+      <!-- Sort Selection -->
+      <div class="control-group">
+        <label class="control-label">Sort By</label>
+        <select [(ngModel)]="sortType" (ngModelChange)="onSortChange()" class="destiny-input text-sm">
+          <option value="release">Release (Newest First)</option>
+          <option value="alpha">A–Z</option>
+          <option value="curated">Type (Expansion / Raid / Dungeon)</option>
+          <option value="gilded">Gilded First</option>
+        </select>
+      </div>
+
+      <!-- Toggles -->
+      <div class="control-group">
+        <label class="control-label">Options</label>
+        <div class="flex flex-col gap-2">
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="earnedOnly" (ngModelChange)="onToggleChange()" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Earned Only</span>
+          </label>
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="showLegacy" (ngModelChange)="onToggleChange()" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Include Legacy</span>
+          </label>
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="showGildedBadge" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Show Gilded Badge</span>
+          </label>
+          <label class="d2-check">
+            <input type="checkbox" [(ngModel)]="includeChronicleFooter" />
+            <span class="box"></span>
+            <span class="text-sm text-white">Include Chronicle Footer</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="control-group">
+        <label class="control-label">Actions</label>
+        <div class="flex flex-col gap-2">
+          <button (click)="exportPoster()" 
+                  [disabled]="isExporting || displaySeals.length === 0"
+                  class="px-4 py-2 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+            {{ isExporting ? 'Exporting...' : 'Export PNG (2×)' }}
+          </button>
+          <button (click)="resetManualOrder()" 
+                  class="px-4 py-2 destiny-btn-secondary text-sm">
+            Reset Manual Order
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info bar -->
+    <div class="info-bar">
+      <span class="text-sm text-slate-400">
+        Showing {{ displaySeals.length }} seal{{ displaySeals.length !== 1 ? 's' : '' }}
+        <span *ngIf="displaySeals.length === 0"> — adjust filters to see seals</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Poster Canvas -->
+  <div class="poster-container" [ngClass]="{'layout-square': layout === 'square', 'layout-grid': layout === 'grid'}">
+    <div #posterCanvas class="poster-canvas" [ngClass]="{'canvas-square': layout === 'square', 'canvas-grid': layout === 'grid'}">
+      
+      <!-- Title -->
+      <div class="poster-title">
+        <h1 class="text-3xl font-bold text-[var(--destiny-gold)]">My Destiny Seals</h1>
+      </div>
+
+      <!-- Curated Group Display -->
+      <div *ngIf="sortType === 'curated' && groupedSeals.length > 0" class="seals-grouped">
+        <div *ngFor="let group of groupedSeals" class="seal-group">
+          <h3 class="group-header">{{ group.displayName }}</h3>
+          <div class="seals-grid">
+            <div *ngFor="let seal of group.seals" class="seal-card">
+              <img *ngIf="getSealIcon(seal)" 
+                   [src]="getSealIcon(seal)" 
+                   class="seal-icon"
+                   [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.altIcon}"
+                   alt="{{ seal.name }}" />
+              <div class="seal-info">
+                <div class="seal-name" [ngClass]="{'seal-name-legacy': seal.legacy}">
+                  {{ seal.name }}
+                </div>
+                <img *ngIf="getGildedIcon(seal)" 
+                     [src]="getGildedIcon(seal)" 
+                     class="gilded-icon" 
+                     alt="Gilded" />
+                <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
+                      class="gilded-count">
+                  ×{{ seal.timesGilded }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flat List Display (with drag-and-drop) -->
+      <div *ngIf="sortType !== 'curated'" 
+           class="seals-flat"
+           cdkDropList
+           (cdkDropListDropped)="onDrop($event)">
+        <div *ngFor="let seal of displaySeals" 
+             class="seal-card"
+             cdkDrag>
+          <img *ngIf="getSealIcon(seal)" 
+               [src]="getSealIcon(seal)" 
+               class="seal-icon"
+               [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.altIcon}"
+               alt="{{ seal.name }}" />
+          <div class="seal-info">
+            <div class="seal-name" [ngClass]="{'seal-name-legacy': seal.legacy}">
+              {{ seal.name }}
+            </div>
+            <img *ngIf="getGildedIcon(seal)" 
+                 [src]="getGildedIcon(seal)" 
+                 class="gilded-icon" 
+                 alt="Gilded" />
+            <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
+                  class="gilded-count">
+              ×{{ seal.timesGilded }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="displaySeals.length === 0" class="empty-state">
+        <p class="text-lg text-slate-400">No seals to display</p>
+        <p class="text-sm text-slate-500 mt-2">Adjust your filters to show seals</p>
+      </div>
+
+      <!-- Chronicle Footer -->
+      <div *ngIf="includeChronicleFooter && displaySeals.length > 0" class="poster-footer">
+        <span class="text-sm text-slate-400">Created with Destiny Chronicle</span>
+      </div>
+    </div>
+  </div>
+</div>
