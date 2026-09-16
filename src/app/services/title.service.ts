@@ -328,12 +328,6 @@ export class TitleService {
     RELEASE_ORDER[normalizeTitleName('MMXXIV MoT')] = mmxxivRank;
     RELEASE_ORDER[normalizeTitleName('MMXXIV MOT')] = mmxxivRank;
 
-    const GILDED_SEAL_IMAGE_MAP: { [title: string]: string } = {
-      "conqueror": "/assets/gilded-seals/Conqueror-Gilded.png",
-      "flawless": "/assets/gilded-seals/Flawless-Gilded.png",
-      "deadeye": "/assets/gilded-seals/Deadeye-Gilded.png"
-    };
-
     // Gather all title nodes (current + legacy)
     const titleParentHashes = [616318467, 1881970629];
     let allTitleNodes: any[] = [];
@@ -372,7 +366,6 @@ export class TitleService {
       // gilding
       let isGilded = false;
       let timesGilded = 0;
-      let gildedIcon: string | undefined;
       const gildHash = special?.gildingTrackingRecordHash || recordDef?.titleInfo?.gildingTrackingRecordHash;
       if (gildHash && completed) {
         let gildingRecord = records[gildHash];
@@ -385,9 +378,15 @@ export class TitleService {
         if (gildingRecord) {
           timesGilded = gildingRecord.completedCount || 0;
           isGilded = timesGilded > 0;
-          if (isGilded) gildedIcon = GILDED_SEAL_IMAGE_MAP[normalizedName];
         }
       }
+
+      // Icon resolution: Use gilded icon from iconSequences[0] when gilded, otherwise use base icon
+      const baseIcon = node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null;
+      const gildedIconFrames = node.iconSequences && node.iconSequences[0]?.frames;
+      const gildedIcon = (gildedIconFrames && gildedIconFrames.length) 
+        ? this.assetUrl.resolve(gildedIconFrames[gildedIconFrames.length - 1]) 
+        : null;
 
       const uniqueKey = `${displayName}#${node.completionRecordHash}`;
       if (!titleMap[uniqueKey]) {
@@ -399,7 +398,8 @@ export class TitleService {
         titleMap[uniqueKey] = {
           hash: node.completionRecordHash,
           name: displayName,
-          icon: (isGilded && gildedIcon) ? gildedIcon : (node.displayProperties?.icon ? this.assetUrl.resolve(node.displayProperties.icon) : null),
+          icon: baseIcon,
+          gildedIcon: gildedIcon,
           completed,
           isGilded,
           timesGilded: (completed && timesGilded > 0) ? timesGilded : undefined,

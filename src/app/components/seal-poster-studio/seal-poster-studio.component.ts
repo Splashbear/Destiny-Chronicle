@@ -129,7 +129,7 @@ export class SealPosterStudioComponent implements OnInit {
     return 'other';
   }
 
-  private updateDisplaySeals() {
+  updateDisplaySeals() {
     let seals = this.titles
       .filter(t => !this.earnedOnly || t.completed)
       .filter(t => this.showLegacy || !t.legacy)
@@ -296,12 +296,11 @@ export class SealPosterStudioComponent implements OnInit {
     }
   }
 
-  getGildedIcon(seal: SealDisplayItem): string | null {
-    if (!seal.isGilded || !this.showGildedBadge) return null;
-    return seal.gildedIcon || null;
-  }
-
   getSealIcon(seal: SealDisplayItem): string | null {
+    // Use gilded icon if seal is gilded and we have one, otherwise use base or alt icon
+    if (seal.isGilded && seal.gildedIcon) {
+      return seal.gildedIcon;
+    }
     if (seal.legacy && seal.altIcon) {
       return seal.altIcon;
     }

@@ -106,23 +106,21 @@
           <h3 class="group-header">{{ group.displayName }}</h3>
           <div class="seals-grid">
             <div *ngFor="let seal of group.seals" class="seal-card">
-              <img *ngIf="getSealIcon(seal)" 
-                   [src]="getSealIcon(seal)" 
-                   class="seal-icon"
-                   [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.altIcon}"
-                   alt="{{ seal.name }}" />
+              <div class="relative">
+                <img *ngIf="getSealIcon(seal)" 
+                     [src]="getSealIcon(seal)" 
+                     class="seal-icon"
+                     [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.isGilded}"
+                     alt="{{ seal.name }}" />
+                <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
+                      class="gild-count-badge">
+                  x{{seal.timesGilded}}
+                </span>
+              </div>
               <div class="seal-info">
                 <div class="seal-name" [ngClass]="{'seal-name-legacy': seal.legacy}">
                   {{ seal.name }}
                 </div>
-                <img *ngIf="getGildedIcon(seal)" 
-                     [src]="getGildedIcon(seal)" 
-                     class="gilded-icon" 
-                     alt="Gilded" />
-                <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
-                      class="gilded-count">
-                  ×{{ seal.timesGilded }}
-                </span>
               </div>
             </div>
           </div>
@@ -137,23 +135,21 @@
         <div *ngFor="let seal of displaySeals" 
              class="seal-card"
              cdkDrag>
-          <img *ngIf="getSealIcon(seal)" 
-               [src]="getSealIcon(seal)" 
-               class="seal-icon"
-               [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.altIcon}"
-               alt="{{ seal.name }}" />
+          <div class="relative">
+            <img *ngIf="getSealIcon(seal)" 
+                 [src]="getSealIcon(seal)" 
+                 class="seal-icon"
+                 [ngClass]="{'seal-icon-legacy': seal.legacy && !seal.isGilded}"
+                 alt="{{ seal.name }}" />
+            <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
+                  class="gild-count-badge">
+              x{{seal.timesGilded}}
+            </span>
+          </div>
           <div class="seal-info">
             <div class="seal-name" [ngClass]="{'seal-name-legacy': seal.legacy}">
               {{ seal.name }}
             </div>
-            <img *ngIf="getGildedIcon(seal)" 
-                 [src]="getGildedIcon(seal)" 
-                 class="gilded-icon" 
-                 alt="Gilded" />
-            <span *ngIf="seal.isGilded && seal.timesGilded && showGildedBadge" 
-                  class="gilded-count">
-              ×{{ seal.timesGilded }}
-            </span>
           </div>
         </div>
       </div>
