@@ -315,6 +315,14 @@ export class SealPosterStudioComponent implements OnInit {
     return seal.timesGilded;
   }
 
+  nameFontSize(name: string): string {
+    const len = (name || '').trim().length;
+    if (len >= 20) return '0.52rem';
+    if (len >= 16) return '0.58rem';
+    if (len >= 12) return '0.64rem';
+    return '0.72rem';
+  }
+
   onClose() {
     this.close.emit();
   }

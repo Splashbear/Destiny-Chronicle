@@ -75,8 +75,8 @@
 .seals-grid,
 .seals-flat {
   display: grid;
-  gap: 1.5rem;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
 }
 
 .seal-card {
@@ -160,14 +160,16 @@
 }
 
 .seal-name {
-  @apply font-bold text-xs leading-tight;
+  @apply font-bold leading-none;
   color: #d4af37;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  hyphens: auto;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+  hyphens: none;
   max-width: 100%;
+  padding: 0 2px;
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 
