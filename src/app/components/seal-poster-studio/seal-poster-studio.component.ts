@@ -316,11 +316,27 @@ export class SealPosterStudioComponent implements OnInit {
   }
 
   nameFontSize(name: string): string {
-    const len = (name || '').trim().length;
+    const len = this.sealTitleLine(name).trim().length;
     if (len >= 20) return '0.52rem';
     if (len >= 16) return '0.58rem';
     if (len >= 12) return '0.64rem';
     return '0.72rem';
+  }
+
+  sealTitleLine(name: string): string {
+    return this.splitSeasonSuffix(name).title;
+  }
+
+  sealSeasonLine(name: string): string | null {
+    return this.splitSeasonSuffix(name).season;
+  }
+
+  private splitSeasonSuffix(name: string): { title: string; season: string | null } {
+    const match = (name || '').match(/^(.*?)\s*(\(\s*Season of[^)]+\))\s*$/i);
+    if (!match) {
+      return { title: name || '', season: null };
+    }
+    return { title: match[1].trim(), season: match[2].trim() };
   }
 
   onClose() {

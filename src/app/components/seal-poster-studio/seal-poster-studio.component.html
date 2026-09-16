@@ -125,7 +125,8 @@
                 <sup *ngIf="getGildCount(seal) as gildCount" class="gild-super">{{ gildCount }}</sup>
               </div>
               <div class="seal-info">
-                <div class="seal-name" [style.font-size]="nameFontSize(seal.name)">{{ seal.name }}</div>
+                <div class="seal-name" [style.font-size]="nameFontSize(seal.name)">{{ sealTitleLine(seal.name) }}</div>
+                <div *ngIf="sealSeasonLine(seal.name) as season" class="seal-name-sub">{{ season }}</div>
               </div>
             </div>
           </div>
@@ -159,7 +160,8 @@
             <sup *ngIf="getGildCount(seal) as gildCount" class="gild-super">{{ gildCount }}</sup>
           </div>
           <div class="seal-info">
-            <div class="seal-name" [style.font-size]="nameFontSize(seal.name)">{{ seal.name }}</div>
+            <div class="seal-name" [style.font-size]="nameFontSize(seal.name)">{{ sealTitleLine(seal.name) }}</div>
+            <div *ngIf="sealSeasonLine(seal.name) as season" class="seal-name-sub">{{ season }}</div>
           </div>
         </div>
       </div>

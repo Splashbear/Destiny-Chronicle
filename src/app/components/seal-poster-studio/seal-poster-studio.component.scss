@@ -159,6 +159,19 @@
   @apply flex flex-col items-center gap-1 text-center w-full;
 }
 
+.seal-name-sub {
+  white-space: nowrap;
+  font-size: 0.5rem;
+  line-height: 1.15;
+  font-weight: 600;
+  color: #d4af37;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  max-width: 100%;
+  padding: 0 2px;
+}
+
 .seal-name {
   @apply font-bold leading-none;
   color: #d4af37;
