@@ -113,9 +113,10 @@ Full TypeScript interfaces live in `src/app/services/activity-db.service.ts` (`P
 
 ## 6. Phased rollout
 
-1. **Phase 1** – Stand up PGCR API with `GET /pgcr/:instanceId` (and optionally batch), returning PgcrLite-compatible JSON. Test with a subset of instanceIds.
+0. **Phase 0 (done 2026-09-17)** – Ingest CharacterLookup into `D:\DestinyChronicleDB\chronicle.duckdb` (13.6B rows). Export membership hash partitions with `tools/pgcr-db` instead of DuckDB `CREATE INDEX`.
+1. **Phase 1** – Serve `GET /membership/:id/instances` from those Parquet partitions. Add lean activity/PGCR rows inside the watermark, then `GET /pgcr/:instanceId` (and optionally batch) returning PgcrLite-compatible JSON.
 2. **Phase 2** – In DC, set `pgcrApiRoot` and `useExternalPgcr: true`; deploy and verify fallback to Bungie when API returns 404 or errors.
-3. **Phase 3** – Add batch endpoint and tune DB indices; optionally cache hot PGCRs in memory or Redis on the server.
+3. **Phase 3** – Batch endpoint and hot-instance cache; do not ART-index the 13.6B DuckDB file.
 
 ---
 
@@ -127,4 +128,5 @@ Full TypeScript interfaces live in `src/app/services/activity-db.service.ts` (`P
 | PGCR processing | `src/app/services/activity-db.service.ts` – `processPGCRData`, batch/fallback logic |
 | Env config | `src/environments/environment.prod.ts` – `pgcrApiRoot`, `useExternalPgcr` |
 | Selfhost stack guide | `docs/pgcr-selfhost-guide.rtf` |
+| CharacterLookup partition toolkit | `tools/pgcr-db/` |
 | Handoff for home PC setup | `docs/pgcr-api-handoff-for-home-pc.md` |
