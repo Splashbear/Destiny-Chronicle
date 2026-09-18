@@ -66,6 +66,8 @@ import { PGCRModalService } from '../../services/pgcr-modal.service';
 import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '../../utils/pgcr-prune';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
+import { AnniversaryCelebrationBannerComponent, AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
+import { getFirstsOnCalendarDate } from '../../utils/anniversary-helper';
 // Chart.js imports – load only what we use (pie + bar)
 import {
   Chart as ChartJS,
@@ -98,6 +100,7 @@ const ACTIVITY_COLLAPSE_GAMES_KEY = 'destiny-chronicle-collapsed-activity-games'
 const ACTIVITY_COLLAPSE_YEARS_KEY = 'destiny-chronicle-collapsed-activity-years';
 const ACTIVITIES_VIEW_MODE_KEY = 'destinyChronicle.activitiesViewMode';
 const ACTIVITIES_CHRON_SORT_KEY = 'destinyChronicle.activitiesChronSort';
+const ANNIVERSARY_BANNER_DISMISSED_KEY = 'destiny-chronicle-anniversary-dismissed';
 
 export type ActivitiesViewMode = 'cards' | 'chronological';
 export type ActivitiesChronologicalSort = 'oldest' | 'newest';
@@ -607,7 +610,8 @@ interface PlatformStats {
     PlayerSearchBreakdownTabComponent,
     PlayerSearchFirstsTabComponent,
     PlayerSearchTitlesTabComponent,
-    DestinyLoaderComponent
+    DestinyLoaderComponent,
+    AnniversaryCelebrationBannerComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
@@ -805,6 +809,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   apiAvailable: boolean = true;
   dbReady: boolean = false;
   activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' = 'activities';
+  
+  // Anniversary celebration banner state
+  anniversaryFirsts: AnniversaryFirst[] = [];
+  showAnniversaryBanner: boolean = false;
+  private dismissedAnniversaries = new Set<string>();
   activeFirstsTab: string = 'all';
   /** Activity filter preset for Activities tab */
   activityFilterPreset: 'all' | 'clears' | 'fails' | 'raids-dungeons' = 'all';
@@ -1204,6 +1213,182 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   }
+
+  // Anniversary celebration banner methods
+
+  /**
+   * Loads dismissed anniversary celebrations from session storage.
+   * Using session storage means the banner can reappear in a new session.
+   */
+  private loadDismissedAnniversaries(): void {
+    try {
+      const dismissed = sessionStorage.getItem(ANNIVERSARY_BANNER_DISMISSED_KEY);
+      if (dismissed) {
+        this.dismissedAnniversaries = new Set(JSON.parse(dismissed));
+      }
+    } catch (e) {
+      console.warn('Failed to load dismissed anniversaries:', e);
+    }
+  }
+
+  /**
+   * Saves dismissed anniversary celebrations to session storage.
+   */
+  private saveDismissedAnniversaries(): void {
+    try {
+      sessionStorage.setItem(
+        ANNIVERSARY_BANNER_DISMISSED_KEY,
+        JSON.stringify(Array.from(this.dismissedAnniversaries))
+      );
+    } catch (e) {
+      console.warn('Failed to save dismissed anniversaries:', e);
+    }
+  }
+
+  /**
+   * Generates a unique key for dismissing an anniversary banner.
+   */
+  private getAnniversaryDismissKey(): string {
+    const playerKeys = this.selectedPlayers.map(p => this.getPlayerKey(p)).sort().join(',');
+    return `${this.selectedDate}:${playerKeys}`;
+  }
+
+  /**
+   * Checks if firsts are loaded and computes anniversaries for the selected date.
+   * Only triggers if both activities and firsts are loaded, and banner hasn't been dismissed.
+   */
+  checkAndShowAnniversaryBanner(): void {
+    // Don't show if still loading activities or firsts
+    if (this.loadingActivities[this.selectedDate] || this.loadingGuardianFirsts) {
+      return;
+    }
+
+    // Don't show if already dismissed for this date+players combination
+    const dismissKey = this.getAnniversaryDismissKey();
+    if (this.dismissedAnniversaries.has(dismissKey)) {
+      this.showAnniversaryBanner = false;
+      return;
+    }
+
+    // Don't show if no players selected or no date selected
+    if (!this.selectedPlayers.length || !this.selectedDate) {
+      this.showAnniversaryBanner = false;
+      return;
+    }
+
+    // Compute anniversaries
+    const anniversaries = this.computeAnniversariesForSelectedDate();
+    
+    if (anniversaries.length > 0) {
+      this.anniversaryFirsts = anniversaries;
+      this.showAnniversaryBanner = true;
+      this.cdr.detectChanges();
+    } else {
+      this.showAnniversaryBanner = false;
+    }
+  }
+
+  /**
+   * Computes all Guardian Firsts that fall on the selected date (anniversaries).
+   * Includes regular firsts, solo, solo flawless, and First Ever.
+   */
+  private computeAnniversariesForSelectedDate(): AnniversaryFirst[] {
+    if (!this.selectedDate) return [];
+
+    const [targetYear] = this.selectedDate.split('-').map(Number);
+    const anniversaries: AnniversaryFirst[] = [];
+    const seen = new Set<string>();
+
+    // Collect First Ever activities for all selected players and check each one
+    for (const player of this.selectedPlayers) {
+      const firstEver = this.getFirstEverForPlayer(player);
+      if (firstEver) {
+        // Get matches for this first ever
+        const matches = getFirstsOnCalendarDate([], this.selectedDate, firstEver);
+        for (const match of matches) {
+          if (match.type === 'first-ever') {
+            const activity = match.first as ActivityHistory;
+            const activityName = this.getActivityName(activity, activity.activityDetails?.referenceId ? false : true);
+            const completionDate = activity.period;
+            const instanceId = activity.activityDetails?.instanceId;
+            const game = (activity as any).game || 'D2';
+            const completionYear = new Date(completionDate).getFullYear();
+            const yearsAgo = targetYear - completionYear;
+            
+            // Deduplicate by instanceId or period
+            const key = instanceId || completionDate;
+            if (!seen.has(key)) {
+              seen.add(key);
+              anniversaries.push({
+                first: match.first,
+                type: match.type,
+                activityName,
+                year: completionYear,
+                yearsAgo,
+                game,
+                completionDate,
+                instanceId
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Get matches for Guardian Firsts
+    const firstMatches = getFirstsOnCalendarDate(
+      this.guardianFirsts,
+      this.selectedDate
+    );
+
+    // Convert matches to AnniversaryFirst format
+    for (const match of firstMatches) {
+      const first = match.first as ActivityFirstCompletion;
+      const activityName = first.name;
+      const completionDate = first.completionDate;
+      const instanceId = first.instanceId;
+      const game = first.game;
+      const completionYear = new Date(completionDate).getFullYear();
+      const yearsAgo = targetYear - completionYear;
+      
+      // Deduplicate
+      const key = `${match.type}-${instanceId || completionDate}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        anniversaries.push({
+          first: match.first,
+          type: match.type,
+          activityName,
+          year: completionYear,
+          yearsAgo,
+          game,
+          completionDate,
+          instanceId
+        });
+      }
+    }
+
+    return anniversaries;
+  }
+
+  /**
+   * Dismisses the anniversary celebration banner for this session.
+   */
+  onDismissAnniversaryBanner(): void {
+    const dismissKey = this.getAnniversaryDismissKey();
+    this.dismissedAnniversaries.add(dismissKey);
+    this.saveDismissedAnniversaries();
+    this.showAnniversaryBanner = false;
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Navigates to the Firsts tab when an anniversary is clicked.
+   */
+  onNavigateToAnniversary(anniversary: AnniversaryFirst): void {
+    this.activeTab = 'firsts';
+    this.cdr.detectChanges();
+  }
   platformTabs: string[] = [];
   playerTitles: { [key: string]: any } = {};
   loadingTitles: { [key: string]: boolean } = {};
@@ -1452,6 +1637,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.loadActivityCollapseState();
     this.loadActivitiesViewPreferences();
     this.updatePlatformTabs();
+    this.loadDismissedAnniversaries();
 
     // Debounce username input changes (300 ms). No API hit yet; prepares for future live suggestions.
     this.searchTerm$
@@ -4697,6 +4883,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.loadingAccountStats = false;
       }
       this.loadingGuardianFirsts = false;
+      this.checkAndShowAnniversaryBanner();
       this.cdr.detectChanges();
     }
   }
@@ -6396,6 +6583,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } finally {
       this.loadingGuardianFirsts = false;
       this.updatePlatformTabs();
+      this.checkAndShowAnniversaryBanner();
       this.cdr.detectChanges();
     }
   }

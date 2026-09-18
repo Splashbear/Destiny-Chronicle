@@ -11,6 +11,15 @@
         </app-account-stats>
         </div>
         
+        <!-- Anniversary Celebration Banner -->
+        <app-anniversary-celebration-banner
+          *ngIf="ps.showAnniversaryBanner && ps.anniversaryFirsts.length > 0"
+          [anniversaries]="ps.anniversaryFirsts"
+          [selectedDate]="ps.selectedDate"
+          (dismiss)="ps.onDismissAnniversaryBanner()"
+          (navigateToFirst)="ps.onNavigateToAnniversary($event)">
+        </app-anniversary-celebration-banner>
+        
         <!-- Loading States with Skeleton Loaders to Prevent Layout Shifts -->
         <div *ngIf="ps.loadingActivities[ps.selectedDate] && ps.loadingProgress" class="text-center text-slate-400 py-4 flex flex-col items-center justify-center gap-2">
           <div class="flex items-center gap-2">

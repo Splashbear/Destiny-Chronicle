@@ -1,0 +1,53 @@
+<div class="anniversary-banner" *ngIf="anniversaries.length > 0">
+  <div class="anniversary-banner-content">
+    <div class="anniversary-banner-header">
+      <div class="anniversary-banner-icon">🎊</div>
+      <div class="anniversary-banner-title">
+        <h3 class="anniversary-banner-heading">
+          {{ anniversaries.length === 1 ? 'Anniversary on This Day!' : anniversaries.length + ' Anniversaries on This Day!' }}
+        </h3>
+        <p class="anniversary-banner-subtitle">
+          {{ anniversaries.length === 1 ? 'Celebrate your Guardian milestone' : 'Celebrate your Guardian milestones' }}
+        </p>
+      </div>
+      <button 
+        type="button"
+        class="anniversary-banner-close" 
+        (click)="onDismiss()"
+        aria-label="Dismiss celebration banner">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    
+    <div class="anniversary-list">
+      <div 
+        *ngFor="let anniversary of anniversaries; trackBy: trackByAnniversary"
+        class="anniversary-item"
+        (click)="onNavigate(anniversary)">
+        <div class="anniversary-item-icon">{{ getAnniversaryIcon(anniversary) }}</div>
+        <div class="anniversary-item-content">
+          <div class="anniversary-item-name">{{ anniversary.activityName }}</div>
+          <div class="anniversary-item-meta">
+            <span class="anniversary-item-type">{{ getAnniversaryTypeLabel(anniversary) }}</span>
+            <span class="anniversary-item-separator">•</span>
+            <span class="anniversary-item-game">{{ anniversary.game }}</span>
+            <span class="anniversary-item-separator">•</span>
+            <span class="anniversary-item-date">
+              {{ anniversary.year }}
+              <ng-container *ngIf="anniversary.yearsAgo > 0">
+                ({{ anniversary.yearsAgo }} {{ anniversary.yearsAgo === 1 ? 'year' : 'years' }} ago)
+              </ng-container>
+            </span>
+          </div>
+        </div>
+        <div class="anniversary-item-arrow">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
