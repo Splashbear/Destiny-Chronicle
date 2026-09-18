@@ -640,6 +640,8 @@
                   (click)="buildOfflineArchive(true); showShareDropdown = false" class="destiny-dropdown-item text-left pl-6">{{ uiI18n.t('archive.build') }}</button>
           <button type="button" [disabled]="archiveExporting || selectedPlayers.length === 0"
                   (click)="buildOfflineArchive(false); showShareDropdown = false" class="destiny-dropdown-item text-left pl-6">{{ uiI18n.t('archive.buildLite') }}</button>
+          <button type="button" [disabled]="archiveExporting || selectedPlayers.length === 0"
+                  (click)="buildHtmlArchiveReport(); showShareDropdown = false" class="destiny-dropdown-item text-left pl-6">{{ uiI18n.t('archive.buildHtmlReport') }}</button>
           <button type="button" [disabled]="archiveExporting"
                   (click)="triggerArchiveImport(); showShareDropdown = false" class="destiny-dropdown-item text-left pl-6">{{ uiI18n.t('archive.open') }}</button>
           <button *ngIf="!isOfflineArchiveMode && selectedPlayers.length > 0" type="button"

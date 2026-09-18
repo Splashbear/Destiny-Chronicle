@@ -12,6 +12,7 @@ import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { environment } from '../../../environments/environment';
 import { ArchiveService } from '../../services/archive.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
+import { ArchiveHtmlReportService, ArchiveHtmlReportData } from '../../services/archive-html-report.service';
 import { AssetUrlService } from '../../services/asset-url.service';
 import { ArchiveAccount } from '../../models/archive.types';
 
@@ -1639,6 +1640,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private location: Location,
     private archiveService: ArchiveService,
     public archiveRuntime: ArchiveRuntimeService,
+    private archiveHtmlReportService: ArchiveHtmlReportService,
     private assetUrl: AssetUrlService
   ) {
     (window as any).activityDbService = this.activityDb;
@@ -10889,6 +10891,104 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } catch (err) {
       console.error('[Archive] export failed', err);
       this.errorMessage = this.uiI18n.t('archive.exportFailed');
+    } finally {
+      this.archiveExporting = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async buildHtmlArchiveReport(): Promise<void> {
+    if (this.selectedPlayers.length === 0) {
+      this.errorMessage = this.uiI18n.t('archive.needProfiles');
+      return;
+    }
+    this.archiveExporting = true;
+    this.archiveProgressMessage = 'Generating HTML archive report...';
+    this.archiveProgressPercent = 10;
+    this.cdr.detectChanges();
+
+    try {
+      const reportData: ArchiveHtmlReportData[] = [];
+
+      for (const player of this.selectedPlayers) {
+        this.archiveProgressPercent += 20 / this.selectedPlayers.length;
+        this.cdr.detectChanges();
+
+        // Gather activities for this player
+        const activities = await this.activityDb.getAllActivitiesForMembershipOptimized(player.membershipId);
+
+        // Gather firsts
+        const characters = this.characters[this.getPlayerKey(player)] || [];
+        const charIds = characters.map((c: any) => c.characterId).filter((id: any) => !!id);
+        const allFirsts: ActivityFirstCompletion[] = [];
+        for (const charId of charIds) {
+          const result = await this.activityDb.getFirstCompletions(player.membershipId, charId, player.game);
+          const completions: ActivityFirstCompletion[] = result?.firstCompletions || [];
+          allFirsts.push(...completions);
+        }
+
+        // Gather titles
+        const titles = await this.titleService.getPlayerTitles(player);
+
+        // Calculate summary
+        const totalTime = activities.reduce((sum, act) => {
+          return sum + ((act as any).values?.timePlayedSeconds?.basic?.value || 0);
+        }, 0);
+
+        const firstEverActivity = this.firstEverActivity;
+        const firstEverDate = firstEverActivity?.period ? new Date(firstEverActivity.period).toLocaleDateString() : undefined;
+        const firstEverName = firstEverActivity 
+          ? this.manifest.getActivityName(firstEverActivity.activityDetails?.referenceId, player.game === 'D1')
+          : undefined;
+
+        reportData.push({
+          displayName: player.displayName,
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          game: player.game as 'D1' | 'D2',
+          platform: player.platform,
+          generatedAt: new Date().toISOString(),
+          timezone: this.timezoneService.getUserTimezone(),
+          activities,
+          firsts: allFirsts.filter(f => f.completed === 1),
+          titles,
+          summary: {
+            totalActivities: activities.length,
+            totalTime,
+            totalSeals: titles.filter(t => t.completed).length,
+            firstEverDate,
+            firstEverActivity: firstEverName
+          },
+          iconMap: new Map()
+        });
+      }
+
+      this.archiveProgressMessage = 'Building HTML report...';
+      this.archiveProgressPercent = 80;
+      this.cdr.detectChanges();
+
+      const html = this.archiveHtmlReportService.generateHtmlReport(reportData);
+      
+      this.archiveProgressMessage = 'Downloading report...';
+      this.archiveProgressPercent = 95;
+      this.cdr.detectChanges();
+
+      // Download the HTML file
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const label = this.selectedPlayers[0]?.displayName?.replace(/[^\w.-]+/g, '_') || 'archive';
+      const filename = `${label}-destiny-chronicle-report.html`;
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      this.archiveProgressPercent = 100;
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.error('[Archive] HTML report generation failed', err);
+      this.errorMessage = 'Failed to generate HTML report';
     } finally {
       this.archiveExporting = false;
       this.cdr.detectChanges();
