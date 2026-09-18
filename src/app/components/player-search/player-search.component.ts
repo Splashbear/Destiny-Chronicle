@@ -610,8 +610,7 @@ interface PlatformStats {
     PlayerSearchBreakdownTabComponent,
     PlayerSearchFirstsTabComponent,
     PlayerSearchTitlesTabComponent,
-    DestinyLoaderComponent,
-    AnniversaryCelebrationBannerComponent
+    DestinyLoaderComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
