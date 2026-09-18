@@ -57,15 +57,16 @@ interface ContentMarker {
             </div>
 
             <div *ngIf="season.markers.length > 0" class="markers mb-2 space-y-1">
-              <div *ngFor="let marker of season.markers" class="text-xs px-2 py-1 rounded"
+              <div *ngFor="let marker of season.markers" class="text-[10px] px-2 py-0.5 rounded flex items-center gap-1"
                    [ngClass]="{
-                     'bg-amber-900/30 border-amber-600/40': marker.type === 'season-start' || marker.type === 'expansion',
-                     'bg-purple-900/30 border-purple-600/40': marker.type === 'raid',
-                     'bg-blue-900/30 border-blue-600/40': marker.type === 'dungeon',
+                     'bg-amber-900/40 border-amber-500/60 text-amber-200': marker.type === 'season-start' || marker.type === 'expansion',
+                     'bg-orange-900/40 border-orange-500/60 text-orange-200': marker.type === 'raid',
+                     'bg-red-900/40 border-red-500/60 text-red-200': marker.type === 'dungeon',
                      'border': true
                    }"
-                   [title]="marker.date.toLocaleDateString()">
-                <span class="text-slate-300">{{ marker.label }}</span>
+                   [title]="marker.label + ' - ' + marker.date.toLocaleDateString()">
+                <span class="marker-icon">{{ getMarkerIcon(marker.type) }}</span>
+                <span class="truncate">{{ marker.label }}</span>
               </div>
             </div>
 
@@ -108,12 +109,16 @@ interface ContentMarker {
         </div>
         <div class="flex gap-4">
           <div class="flex items-center gap-1">
-            <div class="w-3 h-3 rounded border border-purple-600/40 bg-purple-900/30"></div>
+            <span class="text-sm">🔥</span>
             <span>Raid</span>
           </div>
           <div class="flex items-center gap-1">
-            <div class="w-3 h-3 rounded border border-blue-600/40 bg-blue-900/30"></div>
+            <span class="text-sm">⚔️</span>
             <span>Dungeon</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-sm">✨</span>
+            <span>Season Start</span>
           </div>
         </div>
       </div>
@@ -121,25 +126,32 @@ interface ContentMarker {
   `,
   styles: [`
     .heatmap-scroll-container::-webkit-scrollbar {
-      height: 8px;
+      height: 12px;
     }
     .heatmap-scroll-container::-webkit-scrollbar-track {
-      background: rgba(15, 23, 42, 0.5);
-      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.1);
+      border-radius: 6px;
+      border: 1px solid rgba(245, 158, 11, 0.2);
     }
     .heatmap-scroll-container::-webkit-scrollbar-thumb {
-      background: rgba(148, 163, 184, 0.3);
-      border-radius: 4px;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.6), rgba(251, 146, 60, 0.6));
+      border-radius: 6px;
+      border: 1px solid rgba(245, 158, 11, 0.4);
     }
     .heatmap-scroll-container::-webkit-scrollbar-thumb:hover {
-      background: rgba(148, 163, 184, 0.5);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.8), rgba(251, 146, 60, 0.8));
     }
     .day-cell.empty {
       background: rgba(15, 23, 42, 0.5);
     }
     .day-cell.has-activity:hover {
-      filter: brightness(1.2);
+      filter: brightness(1.3);
       transform: scale(1.05);
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+    }
+    .marker-icon {
+      font-size: 12px;
+      line-height: 1;
     }
   `]
 })
@@ -384,13 +396,28 @@ export class ActivityHeatmapComponent implements OnInit {
       return 'rgba(15, 23, 42, 0.5)';
     }
     
-    const baseHue = 260;
-    const saturation = 70;
-    const minLightness = 20;
-    const maxLightness = 60;
-    const lightness = minLightness + (maxLightness - minLightness) * intensity;
+    // Fire/stars theme: warm colors from deep orange to bright gold
+    // Low intensity: deep orange/red (embers)
+    // High intensity: bright orange/gold (flames)
+    const hue = 25 + (intensity * 15); // 25 (orange-red) to 40 (orange-gold)
+    const saturation = 85 + (intensity * 10); // 85% to 95%
+    const lightness = 35 + (intensity * 30); // 35% to 65%
     
-    return `hsl(${baseHue}, ${saturation}%, ${lightness}%)`;
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  }
+
+  getMarkerIcon(type: 'season-start' | 'raid' | 'dungeon' | 'expansion'): string {
+    switch (type) {
+      case 'season-start':
+      case 'expansion':
+        return '✨';
+      case 'raid':
+        return '🔥';
+      case 'dungeon':
+        return '⚔️';
+      default:
+        return '•';
+    }
   }
 
   getCellTitle(cell: DayCell): string {

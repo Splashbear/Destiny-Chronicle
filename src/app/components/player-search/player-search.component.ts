@@ -1336,6 +1336,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 year: completionYear,
                 yearsAgo,
                 game,
+                platform: player.platform,
                 completionDate,
                 instanceId
               });
@@ -1372,6 +1373,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           year: completionYear,
           yearsAgo,
           game,
+          platform: (first as any).platform || this.selectedPlayers.find(p => p.membershipId === first.membershipId)?.platform,
           completionDate,
           instanceId
         });

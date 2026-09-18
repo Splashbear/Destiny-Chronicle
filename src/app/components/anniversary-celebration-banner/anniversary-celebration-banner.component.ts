@@ -10,6 +10,7 @@ export interface AnniversaryFirst {
   year: number;
   yearsAgo: number;
   game: 'D1' | 'D2';
+  platform?: string;
   completionDate: string;
   instanceId?: string;
 }
