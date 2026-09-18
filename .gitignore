@@ -42,3 +42,4 @@ testem.log
 .DS_Store
 Thumbs.db
 inkscape-1.4.2_2025-05-13_f4327f4-x64.msi
+__pycache__/

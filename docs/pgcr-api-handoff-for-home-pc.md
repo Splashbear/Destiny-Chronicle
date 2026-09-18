@@ -4,6 +4,41 @@ This document is for an agent or developer setting up the **backend (PGCR API + 
 
 ---
 
+## Current home-PC status (2026-09-17)
+
+CharacterLookup consolidate **finished**. This is a membership → instance index, not full PGCRs.
+
+| Field | Value |
+|-------|--------|
+| DuckDB | `D:\DestinyChronicleDB\chronicle.duckdb` (~236 GB) |
+| Rows | 13,606,328,282 from 6804/6804 files |
+| Splashbear membership | `4611686018465122437` |
+| Splashbear distinct instances | 7387 |
+| Sample columns | `activity_instance_id`, `character_id` (plus the membership id used to filter) |
+| Indexes | **skipped** (`CREATE INDEX` OOM on ~48 GB RAM) |
+| Summary | `D:\DestinyChronicleDB\consolidate_cl_summary.json` |
+
+**What this unlocks:** given a `membershipId`, list that player's `activity_instance_id`s without calling Bungie GetActivityHistory.
+
+**What this does not unlock yet:** activity name, date, mode, deaths, fireteam size, solo/flawless. Those need lean activity/PGCR rows inside the ingest watermark. `GET /pgcr/:instanceId` must keep returning 404 until that layer exists.
+
+**Do not `CREATE INDEX` on the DuckDB file.** Next query path is hash-partitioned Parquet:
+
+```powershell
+cd <repo>\tools\pgcr-db
+python -m pip install -r requirements.txt
+python cli.py inspect
+python cli.py export
+python cli.py query --membership-id 4611686018465122437
+python cli.py serve
+```
+
+`export` rewrites the 13.6B rows to `D:\DestinyChronicleDB\cl_parts\part=N\*.parquet`. Budget another ~150–250 GB of disk and leave it running. After it finishes, `query` should report `instanceCount: 7387` for Splashbear.
+
+The Angular app still has `useExternalPgcr: false`. Do not flip that flag until `/pgcr/:id` returns PgcrLite JSON, not just instance ids.
+
+---
+
 ## Quick start for home PC agent
 
 **Start here.** Your job is to run a small **PGCR API** on the home PC that talks to the existing PGCR database and exposes HTTP/JSON. DC never talks to the database directly—only to your API. When DC needs a PGCR it tries: (1) local IndexedDB cache, (2) your PGCR API, (3) Bungie API. If your API returns 404 or an error, DC falls back to Bungie with no extra config.
@@ -100,7 +135,7 @@ If a given **instanceId** is not in your database, return **404**. DC will then 
 | PgcrLite TypeScript interfaces | **`src/app/services/activity-db.service.ts`** (search for `PgcrLite`, `PgcrLiteEntry`, `PgcrLitePlayer`) |
 | How DC uses PGCR (solo, flawless, dates) | **`src/app/services/activity-db.service.ts`** – `processPGCRData` |
 | DC env config for API URL and feature flag | **`src/environments/environment.prod.ts`** – `pgcrApiRoot`, `useExternalPgcr` |
-| Full home PC stack (Rivenbot pipeline: Postgres, MinIO, crawler, processor, API, Caddy) | **`docs/pgcr-selfhost-guide.rtf`** |
+| Home-PC CharacterLookup toolkit | **`tools/pgcr-db/`** (`inspect` / `export` / `query` / `serve`) |
 
 ---
 
