@@ -4703,7 +4703,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           const key = this.guardianFirstsDedupKey(f);
           const existing = perName.get(key);
           if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+            // Keep the earliest completion, but merge in any solo/solo-flawless flags from existing
+            if (existing) {
+              f.isSolo = f.isSolo || existing.isSolo;
+              f.isSoloFlawless = f.isSoloFlawless || existing.isSoloFlawless;
+            }
             perName.set(key, f);
+          } else {
+            // Current record is later, but check if it has better flags
+            if (f.isSolo && !existing.isSolo) {
+              existing.isSolo = true;
+            }
+            if (f.isSoloFlawless && !existing.isSoloFlawless) {
+              existing.isSoloFlawless = true;
+            }
           }
         }
         const sorted = Array.from(perName.values()).sort(
@@ -4722,9 +4735,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
             if (existing) {
               const idx = aggregate.indexOf(existing);
+              // Merge solo/solo-flawless flags before replacing
+              f.isSolo = f.isSolo || existing.isSolo;
+              f.isSoloFlawless = f.isSoloFlawless || existing.isSoloFlawless;
               aggregate[idx] = f;
             } else {
               aggregate.push(f);
+            }
+          } else {
+            // Current record is later, but check if it has better flags
+            if (f.isSolo && !existing.isSolo) {
+              existing.isSolo = true;
+            }
+            if (f.isSoloFlawless && !existing.isSoloFlawless) {
+              existing.isSoloFlawless = true;
             }
           }
         }
@@ -6527,12 +6551,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       // Deduplicate within the account so we keep only the earliest completion for each (game,type,name)
       // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
+      // IMPORTANT: Preserve the most impressive flags (solo, solo-flawless) even if from a later completion
       const perName = new Map<string, ActivityFirstCompletion>();
       for (const f of allFirsts) {
         const key = this.guardianFirstsDedupKey(f);
         const existing = perName.get(key);
         if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+          // Keep the earliest completion, but merge in any solo/solo-flawless flags from existing
+          if (existing) {
+            f.isSolo = f.isSolo || existing.isSolo;
+            f.isSoloFlawless = f.isSoloFlawless || existing.isSoloFlawless;
+          }
           perName.set(key, f);
+        } else {
+          // Current record is later, but check if it has better flags
+          if (f.isSolo && !existing.isSolo) {
+            existing.isSolo = true;
+          }
+          if (f.isSoloFlawless && !existing.isSoloFlawless) {
+            existing.isSoloFlawless = true;
+          }
         }
       }
       const sorted = Array.from(perName.values()).sort((a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime());
@@ -6558,6 +6596,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       // recompute aggregate list (dedup by name + game + type)
       // For D1 raids and D2 raids/dungeons, use referenceId to keep variants separate
+      // IMPORTANT: Preserve the most impressive flags (solo, solo-flawless) even if from a later completion
       const aggregate: ActivityFirstCompletion[] = [];
       const seen = new Set<string>();
       Object.values(this.guardianFirstsMap).forEach(list => {
@@ -6566,11 +6605,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           const existing = aggregate.find(x => this.guardianFirstsDedupKey(x) === key);
           if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
             if (existing) {
-              // replace later completion with earlier one
+              // replace later completion with earlier one, but merge flags
               const idx = aggregate.indexOf(existing);
+              f.isSolo = f.isSolo || existing.isSolo;
+              f.isSoloFlawless = f.isSoloFlawless || existing.isSoloFlawless;
               aggregate[idx] = f;
             } else {
               aggregate.push(f);
+            }
+          } else {
+            // Current record is later, but check if it has better flags
+            if (f.isSolo && !existing.isSolo) {
+              existing.isSolo = true;
+            }
+            if (f.isSoloFlawless && !existing.isSoloFlawless) {
+              existing.isSoloFlawless = true;
             }
           }
         }
