@@ -1257,40 +1257,53 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Only triggers if both activities and firsts are loaded, and banner hasn't been dismissed.
    */
   checkAndShowAnniversaryBanner(): void {
-    console.log('[Anniversary] checkAndShowAnniversaryBanner called', {
+    console.log('[🎊 Anniversary Check] Starting', {
       selectedDate: this.selectedDate,
       loadingActivities: this.loadingActivities[this.selectedDate],
       loadingGuardianFirsts: this.loadingGuardianFirsts,
-      selectedPlayersCount: this.selectedPlayers.length
+      selectedPlayersCount: this.selectedPlayers.length,
+      guardianFirstsCount: this.guardianFirsts.length
     });
     
     // Don't show if still loading activities or firsts
     if (this.loadingActivities[this.selectedDate] || this.loadingGuardianFirsts) {
-      console.log('[Anniversary] Early return - still loading');
+      console.log('[🎊 Anniversary Check] ❌ Early return - still loading', {
+        loadingActivities: this.loadingActivities[this.selectedDate],
+        loadingGuardianFirsts: this.loadingGuardianFirsts
+      });
       return;
     }
 
     // Don't show if already dismissed for this date+players combination
     const dismissKey = this.getAnniversaryDismissKey();
     if (this.dismissedAnniversaries.has(dismissKey)) {
+      console.log('[🎊 Anniversary Check] ❌ Already dismissed for', dismissKey);
       this.showAnniversaryBanner = false;
       return;
     }
 
     // Don't show if no players selected or no date selected
     if (!this.selectedPlayers.length || !this.selectedDate) {
+      console.log('[🎊 Anniversary Check] ❌ No players or date', {
+        playersCount: this.selectedPlayers.length,
+        selectedDate: this.selectedDate
+      });
       this.showAnniversaryBanner = false;
       return;
     }
 
     // Compute anniversaries
+    console.log('[🎊 Anniversary Check] Computing anniversaries...');
     const anniversaries = this.computeAnniversariesForSelectedDate();
+    console.log('[🎊 Anniversary Check] Computed anniversaries:', anniversaries);
     
     if (anniversaries.length > 0) {
+      console.log('[🎊 Anniversary Check] ✅ SHOWING BANNER with', anniversaries.length, 'anniversaries');
       this.anniversaryFirsts = anniversaries;
       this.showAnniversaryBanner = true;
       this.cdr.detectChanges();
     } else {
+      console.log('[🎊 Anniversary Check] ❌ No anniversaries found for', this.selectedDate);
       this.showAnniversaryBanner = false;
     }
   }
@@ -1300,7 +1313,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Includes regular firsts, solo, solo flawless, and First Ever.
    */
   private computeAnniversariesForSelectedDate(): AnniversaryFirst[] {
-    if (!this.selectedDate) return [];
+    if (!this.selectedDate) {
+      console.log('[🎊 Compute] No selected date');
+      return [];
+    }
+
+    console.log('[🎊 Compute] Computing for date:', this.selectedDate);
+    console.log('[🎊 Compute] Guardian Firsts count:', this.guardianFirsts.length);
+    console.log('[🎊 Compute] Selected players count:', this.selectedPlayers.length);
 
     const [targetYear] = this.selectedDate.split('-').map(Number);
     const anniversaries: AnniversaryFirst[] = [];
@@ -1312,6 +1332,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     for (const player of this.selectedPlayers) {
       const firstEver = this.getFirstEverForPlayer(player);
+      console.log('[🎊 Compute] Player', player.displayName, 'First Ever:', firstEver ? `${firstEver.period}` : 'none');
       if (firstEver) {
         const matches = getFirstsOnCalendarDate([], this.selectedDate, firstEver);
         for (const match of matches) {
