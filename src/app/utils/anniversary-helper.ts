@@ -11,6 +11,9 @@ export interface FirstsOnDateMatch {
  * Finds Guardian Firsts that fall on a specific calendar date (month+day) in local timezone.
  * Returns matches for both exact date and anniversaries (same month+day, different year).
  * 
+ * Only includes completion-based milestones (completed === 1 or true).
+ * Excludes non-completion milestones like "first run", "first start", or "first attempt".
+ * 
  * @param firsts Array of Guardian First completions
  * @param targetDateStr Target date in YYYY-MM-DD format
  * @param includeFirstEver Optional first-ever activity to include
@@ -34,6 +37,13 @@ export function getFirstsOnCalendarDate(
   for (const first of firsts) {
     if (!first.completionDate) continue;
     
+    // Filter for completion-only records (same logic as Firsts tab)
+    // Excludes non-completion milestones like "first run", "first start", etc.
+    const completed: unknown = first.completed;
+    if (!(completed === 1 || completed === true || Number(completed) === 1)) {
+      continue;
+    }
+    
     // Parse completion date in local timezone
     const completionDate = new Date(first.completionDate);
     const completionMonth = completionDate.getMonth() + 1; // 0-based to 1-based
@@ -44,14 +54,14 @@ export function getFirstsOnCalendarDate(
     if (completionMonth === targetMonth && completionDay === targetDay) {
       const matchReason = completionYear === targetYear ? 'exact-date' : 'anniversary';
       
-      // Add regular first clear
+      // Add regular first clear (completion-based only)
       matches.push({
         first,
         type: 'guardian-first',
         matchReason
       });
       
-      // Check for solo/solo flawless variants
+      // Check for solo/solo flawless variants (these are always completion-based)
       if (first.isSolo && first.type === 'dungeon') {
         matches.push({
           first,

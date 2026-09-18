@@ -52,13 +52,13 @@ export class AnniversaryCelebrationBannerComponent {
   getAnniversaryTypeLabel(anniversary: AnniversaryFirst): string {
     switch (anniversary.type) {
       case 'first-ever':
-        return 'First Ever';
+        return 'First Ever Activity';
       case 'solo':
-        return 'Solo Clear';
+        return 'Solo';
       case 'solo-flawless':
         return 'Solo Flawless';
       default:
-        return 'First Clear';
+        return 'First Completion';
     }
   }
 

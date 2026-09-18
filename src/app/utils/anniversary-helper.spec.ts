@@ -196,4 +196,92 @@ describe('getFirstsOnCalendarDate', () => {
     expect(result.length).toBe(1);
     expect(result[0].matchReason).toBe('anniversary');
   });
+
+  it('should exclude non-completion records (completed !== 1)', () => {
+    const firsts: ActivityFirstCompletion[] = [
+      {
+        type: 'raid',
+        name: 'Vault of Glass',
+        game: 'D2',
+        period: '2021-05-22T14:30:00Z',
+        completionDate: '2021-05-22T14:30:00Z',
+        instanceId: '123',
+        referenceId: '1441982566',
+        mode: 4,
+        characterId: 'char123',
+        membershipId: 'mem123',
+        completed: 0 // First run/start/attempt (not a completion)
+      },
+      {
+        type: 'raid',
+        name: 'Deep Stone Crypt',
+        game: 'D2',
+        period: '2021-05-22T15:30:00Z',
+        completionDate: '2021-05-22T15:30:00Z',
+        instanceId: '124',
+        referenceId: '910380154',
+        mode: 4,
+        characterId: 'char123',
+        membershipId: 'mem123',
+        completed: 1 // Actual completion
+      }
+    ];
+    const result = getFirstsOnCalendarDate(firsts, '2024-05-22');
+    // Should only include the completed: 1 record
+    expect(result.length).toBe(1);
+    expect((result[0].first as ActivityFirstCompletion).name).toBe('Deep Stone Crypt');
+    expect((result[0].first as ActivityFirstCompletion).completed).toBe(1);
+  });
+
+  it('should accept completed as boolean true', () => {
+    const firsts: ActivityFirstCompletion[] = [{
+      type: 'raid',
+      name: 'Vault of Glass',
+      game: 'D2',
+      period: '2021-05-22T14:30:00Z',
+      completionDate: '2021-05-22T14:30:00Z',
+      instanceId: '123',
+      referenceId: '1441982566',
+      mode: 4,
+      characterId: 'char123',
+      membershipId: 'mem123',
+      completed: true as any // Boolean true is also valid
+    }];
+    const result = getFirstsOnCalendarDate(firsts, '2024-05-22');
+    expect(result.length).toBe(1);
+    expect(result[0].type).toBe('guardian-first');
+  });
+
+  it('should exclude records with completed as false or 0', () => {
+    const firsts: ActivityFirstCompletion[] = [
+      {
+        type: 'raid',
+        name: 'Vault of Glass',
+        game: 'D2',
+        period: '2021-05-22T14:30:00Z',
+        completionDate: '2021-05-22T14:30:00Z',
+        instanceId: '123',
+        referenceId: '1441982566',
+        mode: 4,
+        characterId: 'char123',
+        membershipId: 'mem123',
+        completed: false as any
+      },
+      {
+        type: 'raid',
+        name: 'Deep Stone Crypt',
+        game: 'D2',
+        period: '2021-05-22T15:30:00Z',
+        completionDate: '2021-05-22T15:30:00Z',
+        instanceId: '124',
+        referenceId: '910380154',
+        mode: 4,
+        characterId: 'char123',
+        membershipId: 'mem123',
+        completed: 0
+      }
+    ];
+    const result = getFirstsOnCalendarDate(firsts, '2024-05-22');
+    expect(result.length).toBe(0);
+  });
 });

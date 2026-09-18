@@ -171,7 +171,7 @@ describe('AnniversaryCelebrationBannerComponent', () => {
       game: 'D2',
       completionDate: '2021-05-22T14:30:00Z'
     };
-    expect(component.getAnniversaryTypeLabel(anniversary)).toBe('First Ever');
+    expect(component.getAnniversaryTypeLabel(anniversary)).toBe('First Ever Activity');
   });
 
   it('should return correct label for solo type', () => {
@@ -184,7 +184,7 @@ describe('AnniversaryCelebrationBannerComponent', () => {
       game: 'D2',
       completionDate: '2021-05-22T14:30:00Z'
     };
-    expect(component.getAnniversaryTypeLabel(anniversary)).toBe('Solo Clear');
+    expect(component.getAnniversaryTypeLabel(anniversary)).toBe('Solo');
   });
 
   it('should return correct label for solo-flawless type', () => {
