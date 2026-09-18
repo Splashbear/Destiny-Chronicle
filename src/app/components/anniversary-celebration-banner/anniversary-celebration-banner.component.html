@@ -33,6 +33,10 @@
             <span class="anniversary-item-type">{{ getAnniversaryTypeLabel(anniversary) }}</span>
             <span class="anniversary-item-separator">•</span>
             <span class="anniversary-item-game">{{ anniversary.game }}</span>
+            <ng-container *ngIf="anniversary.platform">
+              <span class="anniversary-item-separator">•</span>
+              <span class="anniversary-item-platform">{{ anniversary.platform }}</span>
+            </ng-container>
             <span class="anniversary-item-separator">•</span>
             <span class="anniversary-item-date">
               {{ anniversary.year }}

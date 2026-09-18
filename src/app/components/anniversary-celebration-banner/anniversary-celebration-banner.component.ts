@@ -12,6 +12,7 @@ export interface AnniversaryFirst {
   game: 'D1' | 'D2';
   completionDate: string;
   instanceId?: string;
+  platform?: string; // Platform name for First Ever differentiation (e.g., "Xbox", "PlayStation", "Steam")
 }
 
 @Component({
