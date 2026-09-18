@@ -4319,6 +4319,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } finally {
       if (loadToken === this.currentLoadToken) {
         this.loadingActivities[this.selectedDate] = false;
+        console.log('[🎯 CALLING] checkAndShowAnniversaryBanner from loadAllFilteredActivities');
         this.checkAndShowAnniversaryBanner();
         
         // Mark all accounts as complete only when this is the final load (after full sync).
@@ -4954,6 +4955,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.loadingAccountStats = false;
       }
       this.loadingGuardianFirsts = false;
+      console.log('[🎯 CALLING] checkAndShowAnniversaryBanner from calculateAccountStats');
       this.checkAndShowAnniversaryBanner();
       this.cdr.detectChanges();
     }
@@ -6679,6 +6681,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } finally {
       this.loadingGuardianFirsts = false;
       this.updatePlatformTabs();
+      console.log('[🎯 CALLING] checkAndShowAnniversaryBanner from loadGuardianFirsts');
       this.checkAndShowAnniversaryBanner();
       this.cdr.detectChanges();
     }
