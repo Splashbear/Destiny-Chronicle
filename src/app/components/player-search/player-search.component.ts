@@ -4272,6 +4272,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } finally {
       if (loadToken === this.currentLoadToken) {
         this.loadingActivities[this.selectedDate] = false;
+        this.checkAndShowAnniversaryBanner();
         
         // Mark all accounts as complete only when this is the final load (after full sync).
         // When called from incremental refresh during activity fetch, do not mark complete
