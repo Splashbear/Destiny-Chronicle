@@ -1723,6 +1723,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     console.log('[INIT] Component initializing');
+    console.log('[🎯 ANNIVERSARY FEATURE] Initialized. showAnniversaryBanner=', this.showAnniversaryBanner);
 
     if (this.isOfflineArchiveMode) {
       await this.hydrateFromOfflineArchive();
