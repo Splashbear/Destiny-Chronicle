@@ -1307,36 +1307,48 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const seen = new Set<string>();
 
     // Collect First Ever activities for all selected players and check each one
+    // Use the EARLIEST First Ever across all accounts for deduplication
+    let earliestFirstEver: { activity: ActivityHistory; player: PlayerSearchDisplay } | null = null;
+    
     for (const player of this.selectedPlayers) {
       const firstEver = this.getFirstEverForPlayer(player);
       if (firstEver) {
-        // Get matches for this first ever
-        const matches = getFirstsOnCalendarDate([], this.selectedDate, firstEver);
-        for (const match of matches) {
-          if (match.type === 'first-ever') {
-            const activity = match.first as ActivityHistory;
-            const activityName = this.getActivityName(activity, activity.activityDetails?.referenceId ? false : true);
-            const completionDate = activity.period;
-            const instanceId = activity.activityDetails?.instanceId;
-            const game = (activity as any).game || 'D2';
-            const completionYear = new Date(completionDate).getFullYear();
-            const yearsAgo = targetYear - completionYear;
-            
-            // Deduplicate by instanceId or period
-            const key = instanceId || completionDate;
-            if (!seen.has(key)) {
-              seen.add(key);
-              anniversaries.push({
-                first: match.first,
-                type: match.type,
-                activityName,
-                year: completionYear,
-                yearsAgo,
-                game,
-                completionDate,
-                instanceId
-              });
-            }
+        if (!earliestFirstEver || new Date(firstEver.period) < new Date(earliestFirstEver.activity.period)) {
+          earliestFirstEver = { activity: firstEver, player };
+        }
+      }
+    }
+    
+    // Only check the earliest First Ever activity to avoid duplicates across accounts
+    if (earliestFirstEver) {
+      const matches = getFirstsOnCalendarDate([], this.selectedDate, earliestFirstEver.activity);
+      for (const match of matches) {
+        if (match.type === 'first-ever') {
+          const activity = match.first as ActivityHistory;
+          const activityName = this.getActivityName(activity, activity.activityDetails?.referenceId ? false : true);
+          const completionDate = activity.period;
+          const instanceId = activity.activityDetails?.instanceId;
+          const game = (activity as any).game || 'D2';
+          const completionYear = new Date(completionDate).getFullYear();
+          const yearsAgo = targetYear - completionYear;
+          
+          // Deduplicate by type + activity name + calendar date (month/day)
+          const completionDate_obj = new Date(completionDate);
+          const calendarKey = `${completionDate_obj.getMonth() + 1}-${completionDate_obj.getDate()}`;
+          const key = `first-ever-${activityName}-${calendarKey}`;
+          
+          if (!seen.has(key)) {
+            seen.add(key);
+            anniversaries.push({
+              first: match.first,
+              type: match.type,
+              activityName,
+              year: completionYear,
+              yearsAgo,
+              game,
+              completionDate,
+              instanceId
+            });
           }
         }
       }
@@ -1358,8 +1370,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const completionYear = new Date(completionDate).getFullYear();
       const yearsAgo = targetYear - completionYear;
       
-      // Deduplicate
-      const key = `${match.type}-${instanceId || completionDate}`;
+      // Deduplicate by type + activity name + calendar date (month/day)
+      // This prevents multiple accounts from creating duplicate anniversaries for the same activity
+      const completionDate_obj = new Date(completionDate);
+      const calendarKey = `${completionDate_obj.getMonth() + 1}-${completionDate_obj.getDate()}`;
+      const key = `${match.type}-${activityName}-${calendarKey}`;
+      
       if (!seen.has(key)) {
         seen.add(key);
         anniversaries.push({
