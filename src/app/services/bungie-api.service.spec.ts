@@ -32,17 +32,17 @@ describe('BungieApiService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should search for a player', (done) => {
+  it('should search for a D1 player', (done) => {
     const displayName = 'testPlayer';
     const membershipType = MembershipType.TigerXbox;
 
-    service.searchPlayer(displayName, membershipType).subscribe({
-      next: (response) => {
+    service.searchD1Player(displayName, membershipType).subscribe({
+      next: (response: any) => {
         expect(response).toBeDefined();
         done();
       },
-      error: (error) => {
-        console.error('Error in searchPlayer test:', error);
+      error: (error: any) => {
+        console.error('Error in searchD1Player test:', error);
         done.fail(error);
       }
     });
@@ -82,14 +82,14 @@ describe('BungieApiService', () => {
     });
   });
 
-  it('should get destiny manifest', (done) => {
-    service.getDestinyManifest().subscribe({
-      next: (response) => {
+  it('should get D1 manifest', (done) => {
+    service.getD1Manifest().subscribe({
+      next: (response: any) => {
         expect(response).toBeDefined();
         done();
       },
-      error: (error) => {
-        console.error('Error in getDestinyManifest test:', error);
+      error: (error: any) => {
+        console.error('Error in getD1Manifest test:', error);
         done.fail(error);
       }
     });
