@@ -76,6 +76,11 @@ interface LitePlayerRow {
           {{ i18n.t('pgcr.close') }}
         </button>
         <button *ngIf="!isOfflineMode" type="button"
+                (click)="openOnBungie()"
+                class="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded">
+          {{ i18n.t('pgcr.bungie') }}
+        </button>
+        <button *ngIf="!isOfflineMode" type="button"
                 (click)="openFullPgcr()"
                 class="px-3 py-1.5 text-sm bg-[var(--destiny-gold)] hover:brightness-110 text-slate-900 font-medium rounded">
           {{ i18n.t('pgcr.full') }}
@@ -310,6 +315,11 @@ export class PgcrLiteComponent implements OnInit {
   openFullPgcr(): void {
     const game = this.data.isD1 ? 'destiny1' : 'destiny2';
     window.open(`https://pgcr.eververse.trade/${game}/${this.data.instanceId}`, '_blank', 'noopener');
+    this.dialogRef.close();
+  }
+
+  openOnBungie(): void {
+    window.open(`https://www.bungie.net/en/PGCR/${this.data.instanceId}`, '_blank', 'noopener');
     this.dialogRef.close();
   }
 

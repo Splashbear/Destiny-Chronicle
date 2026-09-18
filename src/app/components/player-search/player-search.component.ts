@@ -68,6 +68,7 @@ import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { AnniversaryCelebrationBannerComponent, AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
 import { getFirstsOnCalendarDate } from '../../utils/anniversary-helper';
+import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
 // Chart.js imports – load only what we use (pie + bar)
 import {
   Chart as ChartJS,
@@ -610,7 +611,8 @@ interface PlatformStats {
     PlayerSearchBreakdownTabComponent,
     PlayerSearchFirstsTabComponent,
     PlayerSearchTitlesTabComponent,
-    DestinyLoaderComponent
+    DestinyLoaderComponent,
+    ActivityHeatmapComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
@@ -7637,6 +7639,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.onDateSelect(this.selectedMonth.toString(), this.selectedDay.toString());
   }
 
+  // Handle navigation from heatmap to specific date
+  onHeatmapDateNavigate(date: Date) {
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const year = date.getFullYear();
+    
+    // Switch to activities tab and set the date
+    this.activeTab = 'activities';
+    this.onDateSelect(month.toString(), day.toString(), year);
+    this.cdr.detectChanges();
+  }
+
   /**
    * Debug method to manually clear caches and reload first ever activity
    */
@@ -9526,7 +9540,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
-  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown') {
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap') {
     this.activeTab = tab;
     if (tab === 'firsts' && this.selectedPlayers.length > 0) {
       this.syncActiveFirstsGameWithPlayers();

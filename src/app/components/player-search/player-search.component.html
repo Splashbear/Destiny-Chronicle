@@ -308,6 +308,16 @@
              [title]="uiI18n.t('tab.breakdown')">
              📋 {{ uiI18n.t('tab.breakdown') }}
            </button>
+           <button
+             type="button"
+             (click)="onTabChange('heatmap')"
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'heatmap' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'heatmap'"
+             [title]="uiI18n.t('tab.heatmap')">
+             🔥 {{ uiI18n.t('tab.heatmap') }}
+           </button>
            </nav>
         </div>
 
@@ -343,6 +353,11 @@
         <!-- Titles Tab -->
         <div *ngIf="activeTab === 'titles'" @tabContent>
           <app-player-search-titles-tab></app-player-search-titles-tab>
+        </div>
+
+        <!-- Heatmap Tab -->
+        <div *ngIf="activeTab === 'heatmap'" @tabContent>
+          <app-activity-heatmap (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
         </div>
 
           <!-- Analytics Tab -->
