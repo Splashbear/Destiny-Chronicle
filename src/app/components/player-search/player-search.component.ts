@@ -810,7 +810,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   favoriteAccounts: FavoriteAccount[] = [];
   apiAvailable: boolean = true;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' = 'activities';
   
   // Anniversary celebration banner state
   anniversaryFirsts: AnniversaryFirst[] = [];
@@ -7647,9 +7647,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const day = date.getDate();
     const year = date.getFullYear();
     
-    // Switch to activities tab and set the date
+    // Set the year first, then switch to activities tab and set the date
+    this.selectedYear = year;
     this.activeTab = 'activities';
-    this.onDateSelect(month.toString(), day.toString(), year);
+    this.onDateSelect(month.toString(), day.toString());
     this.cdr.detectChanges();
   }
 
@@ -10948,7 +10949,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           game: player.game as 'D1' | 'D2',
           platform: player.platform,
           generatedAt: new Date().toISOString(),
-          timezone: this.timezoneService.getUserTimezone(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           activities,
           firsts: allFirsts.filter(f => f.completed === 1),
           titles,

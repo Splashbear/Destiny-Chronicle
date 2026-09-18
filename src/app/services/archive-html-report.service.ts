@@ -35,7 +35,7 @@ export class ArchiveHtmlReportService {
 
   generateHtmlReport(data: ArchiveHtmlReportData[]): string {
     const now = new Date().toISOString();
-    const tz = this.timezoneService.getUserTimezone();
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     const accountSections = data.map(account => this.generateAccountSection(account)).join('\n');
     

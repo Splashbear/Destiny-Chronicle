@@ -57,15 +57,13 @@ interface ContentMarker {
             </div>
 
             <div *ngIf="season.markers.length > 0" class="markers mb-2 space-y-1">
-              <div *ngFor="let marker of season.markers" 
-                   class="text-xs px-2 py-1 rounded"
-                   [class.bg-amber-900/30]="marker.type === 'season-start' || marker.type === 'expansion'"
-                   [class.bg-purple-900/30]="marker.type === 'raid'"
-                   [class.bg-blue-900/30]="marker.type === 'dungeon'"
-                   [class.border-amber-600/40]="marker.type === 'season-start' || marker.type === 'expansion'"
-                   [class.border-purple-600/40]="marker.type === 'raid'"
-                   [class.border-blue-600/40]="marker.type === 'dungeon'"
-                   [class.border]="true"
+              <div *ngFor="let marker of season.markers" class="text-xs px-2 py-1 rounded"
+                   [ngClass]="{
+                     'bg-amber-900/30 border-amber-600/40': marker.type === 'season-start' || marker.type === 'expansion',
+                     'bg-purple-900/30 border-purple-600/40': marker.type === 'raid',
+                     'bg-blue-900/30 border-blue-600/40': marker.type === 'dungeon',
+                     'border': true
+                   }"
                    [title]="marker.date.toLocaleDateString()">
                 <span class="text-slate-300">{{ marker.label }}</span>
               </div>
@@ -194,7 +192,7 @@ export class ActivityHeatmapComponent implements OnInit {
     private activityDb: ActivityDbService,
     private timezoneService: TimezoneService
   ) {
-    this.timezone = this.timezoneService.getUserTimezone();
+    this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   }
 
   async ngOnInit(): Promise<void> {
