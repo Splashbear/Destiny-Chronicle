@@ -84,7 +84,7 @@ describe('getFirstsOnCalendarDate', () => {
     expect(result.length).toBe(0);
   });
 
-  it('should include solo completions for dungeons', () => {
+  it('should emit solo type for solo-only dungeons (one match per first)', () => {
     const firsts: ActivityFirstCompletion[] = [{
       type: 'dungeon',
       name: 'Prophecy',
@@ -100,12 +100,12 @@ describe('getFirstsOnCalendarDate', () => {
       isSolo: true
     }];
     const result = getFirstsOnCalendarDate(firsts, '2024-06-09');
-    expect(result.length).toBe(2); // Regular first + solo
-    expect(result.some(r => r.type === 'guardian-first')).toBe(true);
-    expect(result.some(r => r.type === 'solo')).toBe(true);
+    // Should emit exactly ONE match with type 'solo' (prefer solo over guardian-first)
+    expect(result.length).toBe(1);
+    expect(result[0].type).toBe('solo');
   });
 
-  it('should include solo flawless completions for dungeons', () => {
+  it('should emit solo-flawless type for solo flawless dungeons (one match per first)', () => {
     const firsts: ActivityFirstCompletion[] = [{
       type: 'dungeon',
       name: 'Prophecy',
@@ -122,10 +122,9 @@ describe('getFirstsOnCalendarDate', () => {
       isSoloFlawless: true
     }];
     const result = getFirstsOnCalendarDate(firsts, '2024-06-09');
-    expect(result.length).toBe(3); // Regular first + solo + solo flawless
-    expect(result.some(r => r.type === 'guardian-first')).toBe(true);
-    expect(result.some(r => r.type === 'solo')).toBe(true);
-    expect(result.some(r => r.type === 'solo-flawless')).toBe(true);
+    // Should emit exactly ONE match with type 'solo-flawless' (most specific)
+    expect(result.length).toBe(1);
+    expect(result[0].type).toBe('solo-flawless');
   });
 
   it('should include First Ever activity when provided', () => {
@@ -144,7 +143,7 @@ describe('getFirstsOnCalendarDate', () => {
     expect(result[0].matchReason).toBe('anniversary');
   });
 
-  it('should match multiple firsts on same date', () => {
+  it('should match multiple different firsts on same date (one match each)', () => {
     const firsts: ActivityFirstCompletion[] = [
       {
         type: 'raid',
@@ -174,7 +173,9 @@ describe('getFirstsOnCalendarDate', () => {
       }
     ];
     const result = getFirstsOnCalendarDate(firsts, '2024-05-22');
+    // Two different activities = two matches (one per first)
     expect(result.length).toBe(2);
+    expect(result.every(r => r.type === 'guardian-first')).toBe(true);
   });
 
   it('should handle leap year dates correctly', () => {

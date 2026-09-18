@@ -1257,8 +1257,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Only triggers if both activities and firsts are loaded, and banner hasn't been dismissed.
    */
   checkAndShowAnniversaryBanner(): void {
+    console.log('[Anniversary] checkAndShowAnniversaryBanner called', {
+      selectedDate: this.selectedDate,
+      loadingActivities: this.loadingActivities[this.selectedDate],
+      loadingGuardianFirsts: this.loadingGuardianFirsts,
+      selectedPlayersCount: this.selectedPlayers.length
+    });
+    
     // Don't show if still loading activities or firsts
     if (this.loadingActivities[this.selectedDate] || this.loadingGuardianFirsts) {
+      console.log('[Anniversary] Early return - still loading');
       return;
     }
 

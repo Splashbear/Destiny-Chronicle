@@ -54,29 +54,23 @@ export function getFirstsOnCalendarDate(
     if (completionMonth === targetMonth && completionDay === targetDay) {
       const matchReason = completionYear === targetYear ? 'exact-date' : 'anniversary';
       
-      // Add regular first clear (completion-based only)
+      // Emit exactly ONE match per first record, preferring most specific completion kind:
+      // solo-flawless > solo > guardian-first (regular completion)
+      let matchType: 'guardian-first' | 'solo' | 'solo-flawless' = 'guardian-first';
+      
+      if (first.type === 'dungeon') {
+        if (first.isSoloFlawless) {
+          matchType = 'solo-flawless';
+        } else if (first.isSolo) {
+          matchType = 'solo';
+        }
+      }
+      
       matches.push({
         first,
-        type: 'guardian-first',
+        type: matchType,
         matchReason
       });
-      
-      // Check for solo/solo flawless variants (these are always completion-based)
-      if (first.isSolo && first.type === 'dungeon') {
-        matches.push({
-          first,
-          type: 'solo',
-          matchReason
-        });
-      }
-      
-      if (first.isSoloFlawless && first.type === 'dungeon') {
-        matches.push({
-          first,
-          type: 'solo-flawless',
-          matchReason
-        });
-      }
     }
   }
   
