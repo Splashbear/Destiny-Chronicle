@@ -1325,8 +1325,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             const completionYear = new Date(completionDate).getFullYear();
             const yearsAgo = targetYear - completionYear;
             
-            // Deduplicate by instanceId or period
-            const key = instanceId || completionDate;
+            // Deduplicate by activityName + completionDate to prevent duplicates for same activity
+            const key = `first-ever-${activityName}-${completionDate}`;
             if (!seen.has(key)) {
               seen.add(key);
               anniversaries.push({
@@ -1362,8 +1362,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const completionYear = new Date(completionDate).getFullYear();
       const yearsAgo = targetYear - completionYear;
       
-      // Deduplicate
-      const key = `${match.type}-${instanceId || completionDate}`;
+      // Deduplicate by type + activityName + completionDate
+      const key = `${match.type}-${activityName}-${completionDate}`;
       if (!seen.has(key)) {
         seen.add(key);
         anniversaries.push({

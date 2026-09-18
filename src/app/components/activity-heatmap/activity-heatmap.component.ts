@@ -65,7 +65,7 @@ interface ContentMarker {
                      'border': true
                    }"
                    [title]="marker.label + ' - ' + marker.date.toLocaleDateString()">
-                <span class="marker-icon">{{ getMarkerIcon(marker.type) }}</span>
+                <img [src]="getMarkerIconUrl(marker.type)" class="w-3 h-3 inline-block opacity-90" [alt]="marker.type">
                 <span class="truncate">{{ marker.label }}</span>
               </div>
             </div>
@@ -87,7 +87,7 @@ interface ContentMarker {
                        [style.background-color]="getIntensityColor(cell.intensity)"
                        [title]="getCellTitle(cell)"
                        (click)="onDayClick(cell)">
-                    <span class="text-white text-[10px] font-medium" *ngIf="!cell.isEmpty">{{ cell.day }}</span>
+                    <span class="text-white text-[10px] font-medium">{{ cell.day || '' }}</span>
                   </div>
                 </div>
               </div>
@@ -109,15 +109,15 @@ interface ContentMarker {
         </div>
         <div class="flex gap-4">
           <div class="flex items-center gap-1">
-            <span class="text-sm">🔥</span>
+            <img src="assets/icons/raid.svg" class="w-4 h-4 inline-block" alt="Raid">
             <span>Raid</span>
           </div>
           <div class="flex items-center gap-1">
-            <span class="text-sm">⚔️</span>
+            <img src="assets/icons/dungeon.svg" class="w-4 h-4 inline-block" alt="Dungeon">
             <span>Dungeon</span>
           </div>
           <div class="flex items-center gap-1">
-            <span class="text-sm">✨</span>
+            <img src="assets/icons/activity.svg" class="w-4 h-4 inline-block" alt="Season">
             <span>Season Start</span>
           </div>
         </div>
@@ -417,6 +417,20 @@ export class ActivityHeatmapComponent implements OnInit {
         return '⚔️';
       default:
         return '•';
+    }
+  }
+
+  getMarkerIconUrl(type: 'season-start' | 'raid' | 'dungeon' | 'expansion'): string {
+    switch (type) {
+      case 'season-start':
+      case 'expansion':
+        return 'assets/icons/activity.svg';
+      case 'raid':
+        return 'assets/icons/raid.svg';
+      case 'dungeon':
+        return 'assets/icons/dungeon.svg';
+      default:
+        return 'assets/icons/activity.svg';
     }
   }
 
