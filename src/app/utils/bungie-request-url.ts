@@ -1,19 +1,28 @@
 import { environment } from '../../environments/environment';
 
-const BUNGIE_ORIGIN = 'https://www.bungie.net';
-const STATS_ORIGIN = 'https://stats.bungie.net';
+const PROXY_HOSTS = new Set(['www.bungie.net', 'stats.bungie.net']);
+
+/** Rewrite an exact Bungie host to a same-origin path. Rejects lookalike hosts. */
+export function toSameOriginBungiePath(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return null;
+  }
+  if (!PROXY_HOSTS.has(parsed.hostname.toLowerCase())) {
+    return null;
+  }
+  return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
+}
 
 /** In ng serve, rewrite Bungie URLs to same-origin paths handled by proxy.conf.js. */
 export function bungieRequestUrl(url: string): string {
   if (!environment.useBungieDevProxy) {
     return url;
   }
-  if (url.startsWith(BUNGIE_ORIGIN)) {
-    return url.slice(BUNGIE_ORIGIN.length) || '/';
-  }
-  // D2 PGCRs historically use stats.bungie.net; the /Platform proxy still serves them.
-  if (url.startsWith(STATS_ORIGIN)) {
-    return url.slice(STATS_ORIGIN.length) || '/';
-  }
-  return url;
+  return toSameOriginBungiePath(url) ?? url;
 }

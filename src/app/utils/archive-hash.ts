@@ -28,11 +28,16 @@ export function normalizeBungiePath(urlOrPath: string | null | undefined): strin
   if (!trimmed || trimmed.startsWith('assets/') || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
     return null;
   }
-  if (trimmed.startsWith('https://www.bungie.net')) {
-    return trimmed.slice('https://www.bungie.net'.length);
-  }
-  if (trimmed.startsWith('http://www.bungie.net')) {
-    return trimmed.slice('http://www.bungie.net'.length);
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
+      parsed.hostname.toLowerCase() === 'www.bungie.net'
+    ) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
+    }
+  } catch {
+    // Relative Bungie paths stay as-is below.
   }
   if (trimmed.startsWith('/')) {
     return trimmed;
