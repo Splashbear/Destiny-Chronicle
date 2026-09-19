@@ -10,9 +10,9 @@ export interface AnniversaryFirst {
   year: number;
   yearsAgo: number;
   game: 'D1' | 'D2';
-  platform?: string;
   completionDate: string;
   instanceId?: string;
+  platform?: string; // Xbox, PlayStation, Steam, Epic, Stadia
 }
 
 @Component({
