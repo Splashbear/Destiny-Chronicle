@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BUNGIE_ORIGIN, normalizeBungiePath } from '../utils/archive-hash';
+import { BUNGIE_ORIGIN, isOfficialBungieHost, normalizeBungiePath, parseHttpUrl } from '../utils/archive-hash';
 import { ArchiveRuntimeService } from './archive-runtime.service';
 
 @Injectable({ providedIn: 'root' })
@@ -12,12 +12,11 @@ export class AssetUrlService {
       return '';
     }
     const trimmed = pathOrUrl.trim();
-    if (
-      trimmed.startsWith('assets/') ||
-      trimmed.startsWith('blob:') ||
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('http') && !trimmed.includes('bungie.net')
-    ) {
+    if (trimmed.startsWith('assets/') || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+      return trimmed;
+    }
+    const absolute = parseHttpUrl(trimmed);
+    if (absolute && !isOfficialBungieHost(absolute.hostname)) {
       return trimmed;
     }
 

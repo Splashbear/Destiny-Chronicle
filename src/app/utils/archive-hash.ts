@@ -20,6 +20,23 @@ export function extensionFromBungiePath(path: string): string {
   return '.jpg';
 }
 
+export function parseHttpUrl(value: string): URL | null {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function isOfficialBungieHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === 'www.bungie.net' || host === 'stats.bungie.net' || host === 'bungie.net';
+}
+
 export function normalizeBungiePath(urlOrPath: string | null | undefined): string | null {
   if (!urlOrPath || typeof urlOrPath !== 'string') {
     return null;
@@ -28,16 +45,9 @@ export function normalizeBungiePath(urlOrPath: string | null | undefined): strin
   if (!trimmed || trimmed.startsWith('assets/') || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
     return null;
   }
-  try {
-    const parsed = new URL(trimmed);
-    if (
-      (parsed.protocol === 'https:' || parsed.protocol === 'http:') &&
-      parsed.hostname.toLowerCase() === 'www.bungie.net'
-    ) {
-      return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
-    }
-  } catch {
-    // Relative Bungie paths stay as-is below.
+  const parsed = parseHttpUrl(trimmed);
+  if (parsed && isOfficialBungieHost(parsed.hostname)) {
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
   }
   if (trimmed.startsWith('/')) {
     return trimmed;
