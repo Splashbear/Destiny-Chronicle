@@ -58,8 +58,13 @@ export class AnniversaryCelebrationBannerComponent {
         return 'Solo';
       case 'solo-flawless':
         return 'Solo Flawless';
-      default:
-        return 'First Completion';
+      default: {
+        const first = anniversary.first as ActivityFirstCompletion;
+        if (first?.type === 'story') return 'Story First';
+        if (first?.type === 'raid') return 'Raid First';
+        if (first?.type === 'dungeon') return 'Dungeon First';
+        return 'Guardian First';
+      }
     }
   }
 

@@ -1,4 +1,4 @@
-import { getFirstsOnCalendarDate } from './anniversary-helper';
+import { collectFirstsTabMilestonesOnDate, getFirstsOnCalendarDate } from './anniversary-helper';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
 import { ActivityHistory } from '../models/activity-history.model';
 
@@ -284,5 +284,66 @@ describe('getFirstsOnCalendarDate', () => {
     ];
     const result = getFirstsOnCalendarDate(firsts, '2024-05-22');
     expect(result.length).toBe(0);
+  });
+
+  it('does not celebrate First Ever Homecoming on 9/6 when Firsts story Homecoming is a different day', () => {
+    const storyFirst: ActivityFirstCompletion = {
+      type: 'story',
+      name: 'Homecoming',
+      game: 'D2',
+      period: '2017-09-20T04:38:22Z',
+      completionDate: '2017-09-20T04:38:22Z',
+      instanceId: '111',
+      referenceId: '877831883',
+      mode: 2,
+      characterId: 'char123',
+      membershipId: 'mem123',
+      completed: 1,
+      storyReleaseId: 'd2-red-war',
+      storySubtitle: 'Red War'
+    };
+    const firstEver: ActivityHistory = {
+      period: '2017-09-06T17:00:00Z',
+      activityDetails: {
+        referenceId: 1658347443,
+        instanceId: '222',
+        mode: 2
+      },
+      values: {}
+    } as any;
+    const onLaunchDay = collectFirstsTabMilestonesOnDate(
+      [storyFirst],
+      '2026-09-06',
+      [{ activity: firstEver, name: 'Homecoming', game: 'D2' }]
+    );
+    expect(onLaunchDay.length).toBe(0);
+
+    const onStoryFirstDay = collectFirstsTabMilestonesOnDate(
+      [storyFirst],
+      '2026-09-20',
+      [{ activity: firstEver, name: 'Homecoming', game: 'D2' }]
+    );
+    expect(onStoryFirstDay.length).toBe(1);
+    expect((onStoryFirstDay[0].first as ActivityFirstCompletion).name).toBe('Homecoming');
+    expect(onStoryFirstDay[0].type).toBe('guardian-first');
+  });
+
+  it('keeps First Ever when it is not already a Firsts-tab milestone', () => {
+    const firstEver: ActivityHistory = {
+      period: '2017-09-06T17:00:00Z',
+      activityDetails: {
+        referenceId: 1,
+        instanceId: '999',
+        mode: 2
+      },
+      values: {}
+    } as any;
+    const result = collectFirstsTabMilestonesOnDate(
+      [],
+      '2026-09-06',
+      [{ activity: firstEver, name: 'A Patrol', game: 'D2' }]
+    );
+    expect(result.length).toBe(1);
+    expect(result[0].type).toBe('first-ever');
   });
 });

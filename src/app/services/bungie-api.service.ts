@@ -417,13 +417,11 @@ export class BungieApiService {
     if (isD1) {
       return this.getD1PGCR(activityId);
     }
-    // D2 PGCRs are served from stats.bungie.net
-    const baseUrl = 'https://stats.bungie.net/Platform';
-    const url = `${baseUrl}/Destiny2/Stats/PostGameCarnageReport/${activityId}/`;
-    
+    const url = `https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${activityId}/`;
+    const finalUrl = this.buildUrl(url);
     const headers = this.getHeaders();
-    
-    return this.http.get<BungieResponse<any>>(url, { 
+
+    return this.http.get<BungieResponse<any>>(finalUrl, {
       headers,
       observe: 'response' // Get full response including headers
     }).pipe(

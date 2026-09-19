@@ -96,6 +96,7 @@
               <p class="font-medium mb-1 pr-6" style="color: var(--destiny-gold)">How to get started</p>
               <ul class="list-disc list-inside space-y-0.5 text-slate-300">
                 <li>Search by your <strong>Bungie Account</strong> (e.g. Splashbear#1078 or Splashbear or 4611686018465122437)</li>
+                <li>For more than one person, type a name, press <strong>Enter</strong> to save it, then repeat — click Search when the list is ready</li>
                 <li>Select profiles from the search results to add them</li>
                 <li>Initial load fetches activity history (PGCRs) – this can take a some time for multiple characters</li>
                 <li><strong>Activities</strong> tab shows your day-by-day history for the selected date</li>
@@ -154,7 +155,7 @@
                        (keydown.enter)="handleSearchEnter($any($event))"
                        [class.border-red-500]="errorMessage"
                        class="destiny-input flex-1 px-4 py-2.5 text-sm"
-                       placeholder="Bungie name (Enter to add)"
+                       placeholder="Type a name, then Enter to save"
                        aria-label="Destiny username"
                        aria-describedby="search-help">
                 <button (click)="addPlayer()"
@@ -164,10 +165,10 @@
                         [attr.aria-busy]="loading['search']">
                   {{ loading['search'] ? 'Searching...' : 'Search' }}
                 </button>
-                <div id="search-help" class="sr-only">Enter adds a name chip. Use Search to run lookup.</div>
+                <div id="search-help" class="sr-only">Press Enter after each name to save it, then click Search to look up accounts.</div>
               </div>
               <div class="text-xs text-slate-400">
-                Enter adds a name. Use Search to run lookup. For bulk, add multiple names or use a comma list and click Search.
+                Press <strong class="text-slate-300">Enter</strong> after each name to save it, then click Search. Do this once per person you want to look up.
               </div>
             </div>
             <!-- Add Mode Controls -->
@@ -357,7 +358,10 @@
 
         <!-- Heatmap Tab -->
         <div *ngIf="activeTab === 'heatmap'" @tabContent>
-          <app-activity-heatmap (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
+          <app-activity-heatmap
+            [membershipIds]="heatmapMembershipIds"
+            [characterMeta]="heatmapCharacterMeta"
+            (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
         </div>
 
           <!-- Analytics Tab -->

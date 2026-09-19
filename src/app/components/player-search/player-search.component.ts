@@ -68,7 +68,9 @@ import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '..
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { AnniversaryCelebrationBannerComponent, AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
-import { getFirstsOnCalendarDate } from '../../utils/anniversary-helper';
+import { collectFirstsTabMilestonesOnDate } from '../../utils/anniversary-helper';
+import { parseUsernames as splitSearchUsernames, shouldSearchAsSingleUsername } from '../../utils/search-usernames';
+import { characterKey, classFromProfileCharacter, HeatmapCharacterLookup } from '../../utils/heatmap-filters';
 import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
 // Chart.js imports – load only what we use (pie + bar)
 import {
@@ -641,6 +643,47 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   currentMonth: number = new Date().getMonth() + 1;
   currentDay: number = new Date().getDate();
   selectedPlayers: PlayerSearchDisplay[] = [];
+
+  get heatmapMembershipIds(): string[] {
+    return this.selectedPlayers.map(p => p.membershipId);
+  }
+
+  private heatmapClassCacheKey = '';
+  private heatmapClassCache: Record<string, HeatmapCharacterLookup> = {};
+
+  get heatmapCharacterMeta(): Record<string, HeatmapCharacterLookup> {
+    const classes: Record<string, HeatmapCharacterLookup> = {};
+    for (const player of this.selectedPlayers) {
+      const chars = this.characters[this.getPlayerKey(player)] || [];
+      for (const char of chars) {
+        const characterId = getCharacterId(char);
+        if (!characterId) {
+          continue;
+        }
+        const className = classFromProfileCharacter(char);
+        if (!className && !player.membershipType) {
+          continue;
+        }
+        classes[characterKey({
+          game: player.game as 'D1' | 'D2',
+          membershipId: player.membershipId,
+          characterId
+        })] = {
+          className,
+          membershipType: player.membershipType
+        };
+      }
+    }
+    const cacheKey = Object.keys(classes).sort()
+      .map(key => `${key}=${classes[key].className || ''}:${classes[key].membershipType || ''}`)
+      .join('|');
+    if (cacheKey === this.heatmapClassCacheKey) {
+      return this.heatmapClassCache;
+    }
+    this.heatmapClassCacheKey = cacheKey;
+    this.heatmapClassCache = classes;
+    return classes;
+  }
   selectedCharacterIds: { [key: string]: string | undefined } = {};
   characters: { [key: string]: any[] } = {};
   activities: { [key: string]: ActivityHistory[] } = {};
@@ -1312,8 +1355,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Computes all Guardian Firsts that fall on the selected date (anniversaries).
-   * Includes regular firsts, solo, solo flawless, and First Ever.
+   * Computes Guardian Firsts-tab milestones that fall on the selected date.
+   * Uses the same Firsts records as the Firsts tab (not activity clears).
+   * First Ever is shown only when it is not already that Firsts milestone.
    */
   private computeAnniversariesForSelectedDate(): AnniversaryFirst[] {
     if (!this.selectedDate) {
@@ -1326,94 +1370,77 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     console.log('[🎊 Compute] Selected players count:', this.selectedPlayers.length);
 
     const [targetYear] = this.selectedDate.split('-').map(Number);
-    const anniversaries: AnniversaryFirst[] = [];
-    const seen = new Set<string>();
+    const selectedPlayers = this.selectedPlayers;
+    if (!selectedPlayers.length) return [];
 
-    // Collect First Ever activities for all selected players and check each one
-    // Each player's First Ever is a unique milestone worth celebrating separately
-    const firstEverActivityNames = new Set<string>();
-    
-    for (const player of this.selectedPlayers) {
-      const firstEver = this.getFirstEverForPlayer(player);
-      console.log('[🎊 Compute] Player', player.displayName, 'First Ever:', firstEver ? `${firstEver.period}` : 'none');
-      if (firstEver) {
-        const matches = getFirstsOnCalendarDate([], this.selectedDate, firstEver);
-        for (const match of matches) {
-          if (match.type === 'first-ever') {
-            const activity = match.first as ActivityHistory;
-            const activityName = this.getActivityName(activity, activity.activityDetails?.referenceId ? false : true);
-            const completionDate = activity.period;
-            const instanceId = activity.activityDetails?.instanceId;
-            const game = (activity as any).game || 'D2';
-            const completionYear = new Date(completionDate).getFullYear();
-            const yearsAgo = targetYear - completionYear;
-            const platform = this.getPlatformName(player.membershipType);
-            
-            // Track activity names that are First Ever to avoid duplicating with Guardian Firsts
-            firstEverActivityNames.add(activityName.toLowerCase());
-            
-            // Deduplicate by player + activity (each platform First Ever is unique)
-            const key = `first-ever-${this.getPlayerKey(player)}-${instanceId || completionDate}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              anniversaries.push({
-                first: match.first,
-                type: match.type,
-                activityName,
-                year: completionYear,
-                yearsAgo,
-                game,
-                platform,
-                completionDate,
-                instanceId
-              });
-            }
-          }
+    const firsts: ActivityFirstCompletion[] = [];
+    for (const player of selectedPlayers) {
+      const list = this.guardianFirstsMap[this.getPlayerKey(player)] || [];
+      for (const first of list) {
+        const key = this.guardianFirstsDedupKey(first);
+        const existing = firsts.find(f => this.guardianFirstsDedupKey(f) === key);
+        if (!existing) {
+          firsts.push(first);
+        } else if (new Date(first.completionDate) < new Date(existing.completionDate)) {
+          firsts[firsts.indexOf(existing)] = first;
         }
       }
     }
 
-    // Get matches for Guardian Firsts
-    const firstMatches = getFirstsOnCalendarDate(
-      this.guardianFirsts,
-      this.selectedDate
+    const firstEvers = selectedPlayers
+      .map(player => {
+        const activity = this.getFirstEverForPlayer(player);
+        if (!activity) return null;
+        const isD1 = this.isD1Player(player);
+        return {
+          activity,
+          name: this.getActivityName(activity, isD1),
+          game: (player.game || (isD1 ? 'D1' : 'D2')) as 'D1' | 'D2',
+          platform: player.platform,
+          membershipId: player.membershipId,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x);
+
+    const matches = collectFirstsTabMilestonesOnDate(
+      firsts,
+      this.selectedDate,
+      firstEvers.map(({ activity, name, game }) => ({ activity, name, game }))
     );
 
-    // Convert matches to AnniversaryFirst format
-    for (const match of firstMatches) {
-      const first = match.first as ActivityFirstCompletion;
-      const activityName = first.name;
-      const completionDate = first.completionDate;
-      const instanceId = first.instanceId;
-      const game = first.game;
+    const anniversaries: AnniversaryFirst[] = [];
+    const seen = new Set<string>();
+    for (const match of matches) {
+      const first = match.first as ActivityFirstCompletion & ActivityHistory;
+      const isHistory = !('type' in first) || match.type === 'first-ever';
+      const activityName = isHistory && !first.name
+        ? this.getActivityName(first as ActivityHistory, ((first as any).game || 'D2') === 'D1')
+        : (first.name || this.getActivityName(first as ActivityHistory, first.game === 'D1'));
+      const completionDate = first.completionDate || first.period;
+      const instanceId = first.instanceId || first.activityDetails?.instanceId;
+      const game = (first.game || (firstEvers.find(fe => fe.activity === match.first)?.game) || 'D2') as 'D1' | 'D2';
       const completionYear = new Date(completionDate).getFullYear();
       const yearsAgo = targetYear - completionYear;
-      
-      // Skip if this activity is already showing as a First Ever
-      // (First Ever takes precedence over regular First Completion)
-      if (firstEverActivityNames.has(activityName.toLowerCase())) {
-        continue;
-      }
+      const platform =
+        (first as any).platform ||
+        this.selectedPlayers.find(p => p.membershipId === first.membershipId)?.platform ||
+        firstEvers.find(fe => fe.activity === match.first)?.platform;
 
-      // Deduplicate by type + activity name + calendar date (month/day)
-      const completionDate_obj = new Date(completionDate);
-      const calendarKey = `${completionDate_obj.getMonth() + 1}-${completionDate_obj.getDate()}`;
-      const key = `${match.type}-${activityName}-${calendarKey}`;
+      const key = `${match.type}|${game}|${activityName}|${completionDate}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
 
-      if (!seen.has(key)) {
-        seen.add(key);
-        anniversaries.push({
-          first: match.first,
-          type: match.type,
-          activityName,
-          year: completionYear,
-          yearsAgo,
-          game,
-          platform: (first as any).platform || this.selectedPlayers.find(p => p.membershipId === first.membershipId)?.platform,
-          completionDate,
-          instanceId
-        });
-      }
+      anniversaries.push({
+        first: match.first,
+        type: match.type,
+        activityName,
+        year: completionYear,
+        yearsAgo,
+        game,
+        platform,
+        completionDate,
+        instanceId
+      });
     }
 
     return anniversaries;
@@ -5762,38 +5789,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Split input by comma/newline, trim and dedupe */
   private parseUsernames(input: string): string[] {
-    const raw = (input || '').split(/[\n,]+/g).map(s => s.trim()).filter(Boolean);
-    return Array.from(new Set(raw));
+    return splitSearchUsernames(input);
   }
 
   /**
-   * If the full raw input is a single Bungie name, do not split it.
-   * This protects names that contain commas.
-   * 
-   * Simple approach: If input contains a comma, try it as a single username first.
-   * The main search will handle finding the user or showing an error.
+   * If the full raw input is a single Bungie Name, do not split it.
+   * Comma lists like "splashbear, puddlecubs" are two people.
+   * A name with a comma is only kept whole when it looks like Name#1234.
    */
   private async fullStringFallbackLooksLikeSingleUser(raw: string): Promise<boolean> {
-    const value = raw.trim();
-    if (!value) {
-      return false;
-    }
-
-    // If the input contains a comma, assume it might be a single username with a comma
-    // and let the main search handle it. This is simpler and more reliable than
-    // trying to pre-validate with API calls that may not handle commas well.
-    if (value.includes(',')) {
-      console.log('[FullStringFallback] Input contains comma, will try as single user:', value);
-      return true;
-    }
-
-    // For inputs without commas, check if it looks like a single Bungie Name (has #)
-    if (value.includes('#')) {
-      return true;
-    }
-
-    // For other inputs, let the normal flow handle it (will split if needed)
-    return false;
+    return shouldSearchAsSingleUsername(raw);
   }
 
   /**

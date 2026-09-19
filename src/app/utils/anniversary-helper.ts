@@ -93,3 +93,94 @@ export function getFirstsOnCalendarDate(
   
   return matches;
 }
+
+export interface FirstEverCandidate {
+  activity: ActivityHistory;
+  name: string;
+  game: 'D1' | 'D2';
+}
+
+function instanceIdOf(entry: ActivityFirstCompletion | ActivityHistory): string {
+  const first = entry as ActivityFirstCompletion & ActivityHistory;
+  return String(first.instanceId || first.activityDetails?.instanceId || '');
+}
+
+function displayNameOf(entry: ActivityFirstCompletion | ActivityHistory, fallbackName?: string): string {
+  const first = entry as ActivityFirstCompletion;
+  return (first.name || fallbackName || '').trim().toLowerCase();
+}
+
+function gameOf(entry: ActivityFirstCompletion | ActivityHistory, fallbackGame?: 'D1' | 'D2'): string {
+  return String((entry as ActivityFirstCompletion).game || fallbackGame || '');
+}
+
+function monthDayKey(iso: string | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** Same milestone on Firsts tab: story release, instance, or name+game+calendar day. */
+export function firstsTabMilestoneKey(
+  entry: ActivityFirstCompletion | ActivityHistory,
+  fallbackName?: string,
+  fallbackGame?: 'D1' | 'D2'
+): string {
+  const first = entry as ActivityFirstCompletion;
+  if (first.type === 'story' && first.storyReleaseId) {
+    return `${first.game}|story|${first.storyReleaseId}`;
+  }
+  const instanceId = instanceIdOf(entry);
+  if (instanceId) {
+    return `instance|${instanceId}`;
+  }
+  const name = displayNameOf(entry, fallbackName);
+  const game = gameOf(entry, fallbackGame);
+  const day = monthDayKey(first.completionDate || (entry as ActivityHistory).period);
+  return `${game}|${name}|${day}`;
+}
+
+function firstEverCoveredByFirsts(
+  firsts: ActivityFirstCompletion[],
+  candidate: FirstEverCandidate
+): boolean {
+  return firsts.some(existing => {
+    const idA = instanceIdOf(existing);
+    const idB = instanceIdOf(candidate.activity);
+    if (idA && idB && idA === idB) return true;
+
+    const refA = String(existing.referenceId || '');
+    const refB = String(candidate.activity.activityDetails?.referenceId || '');
+    if (refA && refB && refA === refB) return true;
+
+    const nameA = displayNameOf(existing);
+    const nameB = (candidate.name || '').trim().toLowerCase();
+    const gameOk = !existing.game || !candidate.game || existing.game === candidate.game;
+    if (nameA && nameB && nameA === nameB && gameOk) return true;
+
+    return false;
+  });
+}
+
+/**
+ * Celebration rows come from Firsts-tab milestones for the calendar date.
+ * First Ever is included only when it is not already a Firsts-tab activity
+ * (e.g. Homecoming as first activity on 9/6 vs story first on 9/20 → no extra 9/6 row).
+ */
+export function collectFirstsTabMilestonesOnDate(
+  firsts: ActivityFirstCompletion[],
+  targetDateStr: string,
+  firstEvers: FirstEverCandidate[] = []
+): FirstsOnDateMatch[] {
+  const fromFirsts = getFirstsOnCalendarDate(firsts, targetDateStr);
+  const extra: FirstsOnDateMatch[] = [];
+
+  for (const candidate of firstEvers) {
+    if (firstEverCoveredByFirsts(firsts, candidate)) continue;
+    const matches = getFirstsOnCalendarDate([], targetDateStr, candidate.activity);
+    extra.push(...matches);
+  }
+
+  return [...fromFirsts, ...extra];
+}

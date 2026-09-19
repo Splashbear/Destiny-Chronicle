@@ -22,7 +22,7 @@ test.describe('Splashbear PlayStation (Destiny 2) load', () => {
     await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: PAGE_NAV_TIMEOUT_MS });
 
     // Search: user "splashbear" (Bungie name)
-    const searchInput = page.getByPlaceholder(/Bungie name/i);
+    const searchInput = page.getByLabel(/Destiny username/i);
     await searchInput.fill('splashbear');
     await page.getByRole('button', { name: /Search/i }).click();
 

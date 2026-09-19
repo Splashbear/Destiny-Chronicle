@@ -45,7 +45,8 @@ const D2_STARTS: { start: Date; name: string }[] = [
   { start: new Date(2024, 5, 11), name: 'Episode: Echoes' },
   { start: new Date(2024, 9, 8), name: 'Episode: Revenant' },
   { start: new Date(2025, 1, 10), name: 'Episode: Heresy' },
-  { start: new Date(2025, 6, 15), name: 'The Edge of Fate' },
+  { start: new Date(2025, 6, 15), name: 'Season of Reclamation' },
+  { start: new Date(2025, 11, 2), name: 'Season of the Lawless' },
 ].sort((a, b) => b.start.getTime() - a.start.getTime());
 
 @Injectable({ providedIn: 'root' })
