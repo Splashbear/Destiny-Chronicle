@@ -6,15 +6,20 @@ import { ACTIVITY_RELEASE_DATES } from '../../models/activity-release-dates';
 import {
   activitySeconds,
   characterKey,
+  clipRangeToYear,
   filterHeatmapActivities,
   formatDaysHours,
+  heatmapHasActivity,
   HeatmapCharacterLookup,
   HeatmapCharacterOption,
   HeatmapPlatformOption,
+  HeatmapSeasonOption,
+  HeatmapYearOption,
   seasonOverlapsYear,
   uniqueCharacters,
   uniquePlatforms,
-  uniqueYears
+  uniqueYears,
+  weekMonthLabels
 } from '../../utils/heatmap-filters';
 
 interface DayCell {
@@ -27,12 +32,17 @@ interface DayCell {
   marker?: ContentMarker;
 }
 
+interface HeatmapWeek {
+  cells: DayCell[];
+  monthLabel: string | null;
+}
+
 interface SeasonColumn {
   name: string;
   game: 'D1' | 'D2';
   startDate: Date;
   endDate: Date;
-  weeks: DayCell[][];
+  weeks: HeatmapWeek[];
   totalTime: number;
   daysPlayed: number;
   totalActivities: number;
@@ -62,6 +72,7 @@ interface NamedRange {
         <div>
           <h2 class="text-xl font-bold text-white font-d2-headline">Activity Heatmap</h2>
           <p class="text-xs text-slate-400 mt-0.5">{{ timezone }} · {{ formatDaysHours(grandTotalSeconds, grandDaysPlayed) }}</p>
+          <p class="text-xs text-amber-200/90 mt-0.5">Showing {{ viewSummary }}</p>
         </div>
         <div class="flex flex-wrap items-center gap-2 text-xs">
           <label class="filter-field">
@@ -73,30 +84,30 @@ interface NamedRange {
           </label>
           <label class="filter-field">
             <span>Platform</span>
-            <select [(ngModel)]="platformFilter" (ngModelChange)="onPlatformChange()">
+            <select [(ngModel)]="platformFilter" (ngModelChange)="onPlatformChange()" [title]="selectedPlatformLabel()">
               <option value="all">All platforms</option>
-              <option *ngFor="let p of platforms" [value]="p.type">{{ p.name }}</option>
+              <option *ngFor="let p of platforms; trackBy: trackPlatform" [value]="p.type.toString()" [disabled]="p.disabled">{{ p.name }}</option>
             </select>
           </label>
-          <label class="filter-field">
+          <label class="filter-field filter-field-wide">
             <span>Character</span>
-            <select [(ngModel)]="characterFilter" (ngModelChange)="rebuild()">
+            <select [(ngModel)]="characterFilter" (ngModelChange)="onCharacterChange()" [title]="selectedCharacterLabel()">
               <option value="all">All characters</option>
-              <option *ngFor="let c of characters" [value]="c.key">{{ c.label }}</option>
+              <option *ngFor="let c of characters; trackBy: trackCharacter" [value]="c.key" [disabled]="c.disabled">{{ c.label }}</option>
             </select>
           </label>
           <label class="filter-field">
             <span>Year</span>
-            <select [(ngModel)]="yearFilter" (ngModelChange)="rebuild()">
+            <select [(ngModel)]="yearFilter" (ngModelChange)="onYearChange()" [title]="selectedYearLabel()">
               <option value="all">All years</option>
-              <option *ngFor="let y of years" [value]="y">{{ y }}</option>
+              <option *ngFor="let y of yearOptions; trackBy: trackYear" [value]="y.year.toString()" [disabled]="y.disabled">{{ y.year }}</option>
             </select>
           </label>
           <label class="filter-field" *ngIf="groupBy === 'season'">
             <span>Season</span>
             <select [(ngModel)]="seasonFilter" (ngModelChange)="rebuild()">
               <option value="all">All seasons</option>
-              <option *ngFor="let s of seasonNames" [value]="s">{{ s }}</option>
+              <option *ngFor="let s of seasonOptions; trackBy: trackSeason" [value]="s.name" [disabled]="s.disabled">{{ s.name }}</option>
             </select>
           </label>
         </div>
@@ -110,8 +121,9 @@ interface NamedRange {
               <p>{{ formatDaysHours(season.totalTime, season.daysPlayed) }}</p>
             </div>
             <div class="calendar-grid">
-              <div *ngFor="let week of season.weeks" class="week-row">
-                <button *ngFor="let cell of week"
+              <div *ngFor="let week of season.weeks" class="week-row" [class.month-start]="!!week.monthLabel">
+                <span class="month-label">{{ week.monthLabel || '' }}</span>
+                <button *ngFor="let cell of week.cells"
                         type="button"
                         class="day-cell"
                         [class.empty]="cell.isEmpty && !cell.marker"
@@ -133,7 +145,7 @@ interface NamedRange {
         </div>
       </div>
       <ng-template #emptyHeatmap>
-        <p class="text-sm text-slate-400 py-8 text-center">No activity in this view. Try All platforms or another year.</p>
+        <p class="text-sm text-slate-400 py-8 text-center">No activity for {{ viewSummary }}. Greyed-out dropdown options have no playtime in this view.</p>
       </ng-template>
 
       <div class="legend">
@@ -162,6 +174,10 @@ interface NamedRange {
       padding: 4px 8px;
       min-width: 9.5rem;
     }
+    .filter-field-wide select { min-width: 18rem; }
+    .filter-field select option:disabled {
+      color: #64748b;
+    }
     .heatmap-scroll {
       overflow-x: auto;
       overflow-y: hidden;
@@ -185,7 +201,8 @@ interface NamedRange {
       width: max-content;
       padding: 0 2px 4px;
     }
-    .season-column { width: 126px; flex-shrink: 0; }
+    .season-column { width: 140px; flex-shrink: 0; }
+    .season-header { padding-left: 23px; }
     .season-header h3 {
       font-size: 12px;
       font-weight: 600;
@@ -203,9 +220,29 @@ interface NamedRange {
     }
     .week-row {
       display: grid;
-      grid-template-columns: repeat(7, 16px);
+      grid-template-columns: 22px repeat(7, 16px);
       gap: 1px;
       margin-bottom: 1px;
+      align-items: center;
+    }
+    .week-row.month-start {
+      margin-top: 5px;
+      padding-top: 3px;
+      border-top: 1px solid rgba(251, 191, 36, 0.28);
+    }
+    .week-row.month-start:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+    .month-label {
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      color: #fbbf24;
+      text-transform: uppercase;
+      white-space: nowrap;
     }
     .day-cell {
       position: relative;
@@ -266,12 +303,18 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
   platforms: HeatmapPlatformOption[] = [];
   characters: HeatmapCharacterOption[] = [];
   years: number[] = [];
+  yearOptions: HeatmapYearOption[] = [];
   seasonNames: string[] = [];
+  seasonOptions: HeatmapSeasonOption[] = [];
   seasonColumns: SeasonColumn[] = [];
   grandTotalSeconds = 0;
   grandDaysPlayed = 0;
+  viewSummary = 'All characters · All platforms · All years';
 
   private allActivities: any[] = [];
+  private platformOptionSig = '';
+  private characterOptionSig = '';
+  private yearOptionSig = '';
 
   private readonly D1_SEASONS: NamedRange[] = [
     { name: 'Destiny', game: 'D1', start: new Date(2014, 8, 9), end: new Date(2014, 11, 9) },
@@ -353,16 +396,63 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
     const membershipChanged = changes['membershipIds'] && !changes['membershipIds'].firstChange;
     const metaChanged = changes['characterMeta'] && !changes['characterMeta'].firstChange;
-    if (membershipChanged || metaChanged) {
-      this.rebuild();
+    if (membershipChanged) {
+      await this.loadActivities();
+      return;
+    }
+    if (metaChanged) {
+      await this.loadActivities();
     }
   }
 
   formatDaysHours = formatDaysHours;
 
+  trackPlatform(_index: number, platform: HeatmapPlatformOption): number {
+    return platform.type;
+  }
+
+  trackCharacter(_index: number, character: HeatmapCharacterOption): string {
+    return character.key;
+  }
+
+  trackYear(_index: number, option: HeatmapYearOption): number {
+    return option.year;
+  }
+
+  trackSeason(_index: number, option: HeatmapSeasonOption): string {
+    return option.name;
+  }
+
   onPlatformChange(): void {
-    this.characterFilter = 'all';
+    this.syncIncompatibleFilters();
     this.rebuild();
+  }
+
+  onCharacterChange(): void {
+    this.rebuild();
+  }
+
+  onYearChange(): void {
+    this.syncIncompatibleFilters();
+    this.rebuild();
+  }
+
+  selectedPlatformLabel(): string {
+    if (this.platformFilter === 'all') {
+      return 'All platforms';
+    }
+    return this.platforms.find(platform => String(platform.type) === this.platformFilter)?.name || 'Selected platform';
+  }
+
+  selectedCharacterLabel(): string {
+    if (this.characterFilter === 'all') {
+      return 'All characters';
+    }
+    return this.characters.find(character => character.key === this.characterFilter)?.label || 'Selected character';
+  }
+
+  selectedYearLabel(): string {
+    return this.yearFilter === 'all' ? 'All years' : this.yearFilter;
   }
 
   async loadActivities(): Promise<void> {
@@ -372,71 +462,214 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
 
   private withCharacterMeta(activities: any[]): any[] {
     const meta = this.characterMeta || {};
-    if (!Object.keys(meta).length) {
-      return activities;
+    const typeByMembership = new Map<string, number>();
+    for (const [key, info] of Object.entries(meta)) {
+      const membershipId = key.split('|')[1];
+      if (membershipId && info?.membershipType) {
+        typeByMembership.set(membershipId, info.membershipType);
+      }
     }
     return activities.map(activity => {
       const info = meta[characterKey(activity)] || meta[activity.characterId];
-      if (!info) {
+      const membershipType = activity.membershipType
+        || info?.membershipType
+        || typeByMembership.get(activity.membershipId);
+      const hasClass = activity.characterClass && activity.characterClass !== 'Unknown';
+      if (!info && membershipType == null) {
         return activity;
       }
-      const hasClass = activity.characterClass && activity.characterClass !== 'Unknown';
       return {
         ...activity,
-        characterClass: hasClass ? activity.characterClass : (info.className || activity.characterClass),
-        membershipType: activity.membershipType || info.membershipType
+        characterClass: hasClass ? activity.characterClass : (info?.className || activity.characterClass),
+        membershipType
       };
     });
   }
 
   rebuild(): void {
     const decorated = this.withCharacterMeta(this.allActivities);
-    const scoped = filterHeatmapActivities(decorated, {
-      membershipIds: this.membershipIds?.length ? this.membershipIds : null,
-      membershipType: this.platformFilter === 'all' ? null : Number(this.platformFilter),
-      characterKey: this.characterFilter === 'all' ? null : this.characterFilter,
-      year: this.yearFilter === 'all' ? null : Number(this.yearFilter)
-    });
+    const membershipIds = this.membershipIds?.length ? this.membershipIds : null;
+    const accountScoped = filterHeatmapActivities(decorated, { membershipIds });
+    this.ensureFilterOptions(accountScoped);
+    this.dropStaleSelections();
 
-    const platformSource = filterHeatmapActivities(decorated, {
-      membershipIds: this.membershipIds?.length ? this.membershipIds : null
+    const yearNum = this.yearFilter === 'all' ? null : Number(this.yearFilter);
+    const platformType = this.platformFilter === 'all' ? null : Number(this.platformFilter);
+    const characterKeyFilter = this.characterFilter === 'all' ? null : this.characterFilter;
+    this.applyOptionAvailability(accountScoped, yearNum, platformType, characterKeyFilter);
+
+    const scoped = filterHeatmapActivities(accountScoped, {
+      membershipType: platformType,
+      characterKey: characterKeyFilter,
+      year: yearNum
     });
-    this.platforms = uniquePlatforms(platformSource);
-    this.characters = uniqueCharacters(filterHeatmapActivities(decorated, {
-      membershipIds: this.membershipIds?.length ? this.membershipIds : null,
-      membershipType: this.platformFilter === 'all' ? null : Number(this.platformFilter)
-    }), this.characterMeta);
-    this.years = uniqueYears(platformSource);
 
     const activityMap = this.buildActivityMap(scoped);
-    const yearNum = this.yearFilter === 'all' ? null : Number(this.yearFilter);
 
     if (this.groupBy === 'year') {
       this.seasonNames = [];
+      this.seasonOptions = [];
       this.seasonColumns = this.years
         .filter(year => yearNum == null || year === yearNum)
-        .map(year => this.buildColumn(
-          String(year),
-          'D2',
-          new Date(year, 0, 1),
-          new Date(year, 11, 31),
-          activityMap
-        ))
-        .filter(col => col.totalActivities > 0);
+        .map(year => {
+          const clipped = clipRangeToYear(new Date(year, 0, 1), new Date(year, 11, 31), yearNum);
+          if (!clipped) {
+            return null;
+          }
+          return this.buildColumn(String(year), 'D2', clipped.start, clipped.end, activityMap);
+        })
+        .filter((col): col is SeasonColumn => !!col && col.totalActivities > 0);
     } else {
       const ranges = [...this.D1_SEASONS, ...this.D2_SEASONS]
-        .filter(range => yearNum == null || seasonOverlapsYear(range.start, range.end, yearNum))
-        .filter(range => this.seasonFilter === 'all' || range.name === this.seasonFilter);
-      this.seasonNames = [...this.D1_SEASONS, ...this.D2_SEASONS]
-        .filter(range => yearNum == null || seasonOverlapsYear(range.start, range.end, yearNum))
-        .map(range => range.name);
+        .filter(range => yearNum == null || seasonOverlapsYear(range.start, range.end, yearNum));
+      this.seasonNames = ranges.map(range => range.name);
+      this.seasonOptions = ranges.map(range => {
+        const clipped = clipRangeToYear(range.start, range.end, yearNum);
+        if (!clipped) {
+          return { name: range.name, disabled: true };
+        }
+        const column = this.buildColumn(range.name, range.game, clipped.start, clipped.end, activityMap);
+        return { name: range.name, disabled: column.totalActivities === 0 };
+      });
+      if (this.seasonFilter !== 'all' && !this.seasonNames.includes(this.seasonFilter)) {
+        this.seasonFilter = 'all';
+      }
       this.seasonColumns = ranges
-        .map(range => this.buildColumn(range.name, range.game, range.start, range.end, activityMap))
-        .filter(col => col.totalActivities > 0);
+        .filter(range => this.seasonFilter === 'all' || range.name === this.seasonFilter)
+        .map(range => {
+          const clipped = clipRangeToYear(range.start, range.end, yearNum);
+          if (!clipped) {
+            return null;
+          }
+          return this.buildColumn(range.name, range.game, clipped.start, clipped.end, activityMap);
+        })
+        .filter((col): col is SeasonColumn => !!col && col.totalActivities > 0);
     }
 
     this.grandTotalSeconds = this.seasonColumns.reduce((sum, col) => sum + col.totalTime, 0);
     this.grandDaysPlayed = this.seasonColumns.reduce((sum, col) => sum + col.daysPlayed, 0);
+    this.viewSummary = this.buildViewSummary();
+  }
+
+  private ensureFilterOptions(accountScoped: any[]): void {
+    const platforms = uniquePlatforms(accountScoped);
+    const characters = uniqueCharacters(accountScoped, this.characterMeta);
+    const years = uniqueYears(accountScoped);
+    const platformSig = platforms.map(platform => platform.type).join(',');
+    const characterSig = [...characters.map(character => character.key)].sort().join(',');
+    const yearSig = years.join(',');
+
+    if (platformSig !== this.platformOptionSig) {
+      this.platformOptionSig = platformSig;
+      this.platforms = platforms;
+    } else {
+      const platformsByType = new Map(platforms.map(platform => [platform.type, platform]));
+      for (const existing of this.platforms) {
+        const fresh = platformsByType.get(existing.type);
+        if (fresh) {
+          existing.name = fresh.name;
+        }
+      }
+    }
+
+    if (characterSig !== this.characterOptionSig) {
+      this.characterOptionSig = characterSig;
+      this.characters = characters;
+    } else {
+      const charactersByKey = new Map(characters.map(character => [character.key, character]));
+      for (const existing of this.characters) {
+        const fresh = charactersByKey.get(existing.key);
+        if (fresh) {
+          existing.label = fresh.label;
+          existing.membershipType = fresh.membershipType;
+        }
+      }
+    }
+
+    if (yearSig !== this.yearOptionSig) {
+      this.yearOptionSig = yearSig;
+      this.years = years;
+      this.yearOptions = years.map(year => ({ year, disabled: false }));
+    }
+  }
+
+  private dropStaleSelections(): void {
+    if (this.platformFilter !== 'all' && !this.platforms.some(platform => String(platform.type) === this.platformFilter)) {
+      this.platformFilter = 'all';
+    }
+    if (this.characterFilter !== 'all' && !this.characters.some(character => character.key === this.characterFilter)) {
+      this.characterFilter = 'all';
+    }
+    if (this.yearFilter !== 'all' && !this.years.some(year => String(year) === this.yearFilter)) {
+      this.yearFilter = 'all';
+    }
+  }
+
+  private applyOptionAvailability(
+    accountScoped: any[],
+    yearNum: number | null,
+    platformType: number | null,
+    characterKeyFilter: string | null
+  ): void {
+    for (const platform of this.platforms) {
+      platform.disabled = !heatmapHasActivity(accountScoped, {
+        membershipType: platform.type,
+        characterKey: characterKeyFilter,
+        year: yearNum
+      });
+    }
+    for (const character of this.characters) {
+      character.disabled = !heatmapHasActivity(accountScoped, {
+        membershipType: platformType,
+        characterKey: character.key,
+        year: yearNum
+      });
+    }
+    for (const option of this.yearOptions) {
+      option.disabled = !heatmapHasActivity(accountScoped, {
+        membershipType: platformType,
+        characterKey: characterKeyFilter,
+        year: option.year
+      });
+    }
+  }
+
+  private syncIncompatibleFilters(): void {
+    const decorated = this.withCharacterMeta(this.allActivities);
+    const membershipIds = this.membershipIds?.length ? this.membershipIds : null;
+    const accountScoped = filterHeatmapActivities(decorated, { membershipIds });
+    const yearNum = this.yearFilter === 'all' ? null : Number(this.yearFilter);
+    let platformType = this.platformFilter === 'all' ? null : Number(this.platformFilter);
+
+    if (platformType != null && !heatmapHasActivity(accountScoped, { membershipType: platformType, year: yearNum })) {
+      this.platformFilter = 'all';
+      platformType = null;
+    }
+    if (
+      this.characterFilter !== 'all' &&
+      !heatmapHasActivity(accountScoped, {
+        membershipType: platformType,
+        characterKey: this.characterFilter,
+        year: yearNum
+      })
+    ) {
+      this.characterFilter = 'all';
+    }
+  }
+
+  private buildViewSummary(): string {
+    const parts: string[] = [];
+    if (this.characterFilter !== 'all') {
+      parts.push(this.selectedCharacterLabel());
+    } else {
+      parts.push('All characters');
+      parts.push(this.selectedPlatformLabel());
+    }
+    parts.push(this.selectedYearLabel());
+    if (this.groupBy === 'season' && this.seasonFilter !== 'all') {
+      parts.push(this.seasonFilter);
+    }
+    return parts.join(' · ');
   }
 
   getIntensityColor(intensity: number): string {
@@ -549,7 +782,13 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
       weeks.push(currentWeek);
     }
 
-    return { name, game, startDate: start, endDate: end, weeks, totalTime, daysPlayed, totalActivities };
+    const monthLabels = weekMonthLabels(weeks);
+    const labeledWeeks: HeatmapWeek[] = weeks.map((cells, index) => ({
+      cells,
+      monthLabel: monthLabels[index]
+    }));
+
+    return { name, game, startDate: start, endDate: end, weeks: labeledWeeks, totalTime, daysPlayed, totalActivities };
   }
 
   private padCell(): DayCell {

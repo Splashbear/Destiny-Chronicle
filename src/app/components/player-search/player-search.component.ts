@@ -670,12 +670,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           characterId
         })] = {
           className,
-          membershipType: player.membershipType
+          membershipType: player.membershipType,
+          displayName: (player.displayName || '').split('#')[0].trim()
         };
       }
     }
     const cacheKey = Object.keys(classes).sort()
-      .map(key => `${key}=${classes[key].className || ''}:${classes[key].membershipType || ''}`)
+      .map(key => `${key}=${classes[key].className || ''}:${classes[key].membershipType || ''}:${classes[key].displayName || ''}`)
       .join('|');
     if (cacheKey === this.heatmapClassCacheKey) {
       return this.heatmapClassCache;

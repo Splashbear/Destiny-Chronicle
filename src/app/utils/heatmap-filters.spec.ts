@@ -1,14 +1,19 @@
 import {
+  characterDisplayLabel,
   characterKey,
   classFromProfileCharacter,
+  clipRangeToYear,
   filterHeatmapActivities,
   formatDaysHours,
+  heatmapHasActivity,
+  monthAbbrev,
   platformName,
   platformShortName,
   seasonOverlapsYear,
   uniqueCharacters,
   uniquePlatforms,
-  uniqueYears
+  uniqueYears,
+  weekMonthLabels
 } from './heatmap-filters';
 
 const xboxTitan = {
@@ -71,9 +76,9 @@ describe('heatmap filters', () => {
     const all = [xboxTitan, steamHunter, d1Psn];
     expect(uniquePlatforms(all).map(p => p.name)).toEqual(['Xbox', 'PSN', 'Steam']);
     expect(uniqueCharacters(all).map(c => c.label)).toEqual([
-      'PSN Warlock',
-      'Steam Hunter',
-      'Xbox Titan'
+      'D1 PSN Warlock',
+      'D2 Steam Hunter',
+      'D2 Xbox Titan'
     ]);
     expect(uniqueYears(all)).toEqual([2015, 2021]);
   });
@@ -101,9 +106,9 @@ describe('heatmap filters', () => {
       [characterKey(unlabeled[1])]: { className: 'Titan', membershipType: 1 },
       [characterKey(unlabeled[2])]: { className: 'Warlock', membershipType: 2 }
     }).map(c => c.label)).toEqual([
-      'PSN Warlock',
-      'Xbox Hunter',
-      'Xbox Titan'
+      'D1 PSN Warlock',
+      'D2 Xbox Hunter',
+      'D2 Xbox Titan'
     ]);
   });
 
@@ -117,7 +122,7 @@ describe('heatmap filters', () => {
     };
     expect(uniqueCharacters([unlabeled], {
       [characterKey(unlabeled)]: { className: 'Hunter', membershipType: 1 }
-    }).map(c => c.label)).toEqual(['Xbox Hunter']);
+    }).map(c => c.label)).toEqual(['D1 Xbox Hunter']);
   });
 
   it('labels D2 characters as platform plus class for Xbox, PSN, Steam, Epic, and Stadia', () => {
@@ -131,17 +136,77 @@ describe('heatmap filters', () => {
     ];
     expect(uniquePlatforms(d2).map(p => p.name)).toEqual(['Xbox', 'PSN', 'Steam', 'Stadia', 'Epic']);
     expect(uniqueCharacters(d2, {
-      [characterKey(d2[0])]: { className: 'Hunter', membershipType: 1 },
-      [characterKey(d2[1])]: { className: 'Titan', membershipType: 2 },
-      [characterKey(d2[2])]: { className: 'Warlock', membershipType: 3 },
-      [characterKey(d2[3])]: { className: 'Hunter', membershipType: 5 },
-      [characterKey(d2[4])]: { className: 'Titan', membershipType: 6 }
+      [characterKey(d2[0])]: { className: 'Hunter', membershipType: 1, displayName: 'Splashbear' },
+      [characterKey(d2[1])]: { className: 'Titan', membershipType: 2, displayName: 'Splashbear' },
+      [characterKey(d2[2])]: { className: 'Warlock', membershipType: 3, displayName: 'Splashbear' },
+      [characterKey(d2[3])]: { className: 'Hunter', membershipType: 5, displayName: 'Splashbear' },
+      [characterKey(d2[4])]: { className: 'Titan', membershipType: 6, displayName: 'Splashbear' }
     }).map(c => c.label)).toEqual([
-      'Epic Titan',
-      'PSN Titan',
-      'Stadia Hunter',
-      'Steam Warlock',
-      'Xbox Hunter'
+      'D2 Splashbear Epic Titan',
+      'D2 Splashbear PSN Titan',
+      'D2 Splashbear Stadia Hunter',
+      'D2 Splashbear Steam Warlock',
+      'D2 Splashbear Xbox Hunter'
     ]);
+  });
+
+  it('builds character labels with game, account name, platform, and class', () => {
+    expect(characterDisplayLabel('D2', 'Splashbear', 'PSN', 'Hunter'))
+      .toBe('D2 Splashbear PSN Hunter');
+  });
+
+  it('clips a season range to a calendar year', () => {
+    const clipped = clipRangeToYear(new Date(2014, 11, 9), new Date(2015, 4, 19), 2014);
+    expect(clipped?.start.getFullYear()).toBe(2014);
+    expect(clipped?.end.getMonth()).toBe(11);
+    expect(clipped?.end.getDate()).toBe(31);
+  });
+
+  it('detects whether a year has playtime on a platform', () => {
+    const all = [xboxTitan, steamHunter, d1Psn];
+    expect(heatmapHasActivity(all, { year: 2015, membershipType: 2 })).toBe(true);
+    expect(heatmapHasActivity(all, { year: 2015, membershipType: 1 })).toBe(false);
+  });
+
+  it('shows 2014 activity across all platforms even when PSN has no 2014 playtime', () => {
+    const xbox2014 = {
+      period: '2014-10-15T12:00:00Z',
+      membershipId: '111',
+      membershipType: 1,
+      characterId: 'char-d1-xbox',
+      characterClass: 'Hunter',
+      game: 'D1' as const,
+      values: { timePlayedSeconds: { basic: { value: 900 } } }
+    };
+    const psnLater = {
+      period: '2018-04-01T12:00:00Z',
+      membershipId: '222',
+      membershipType: 2,
+      characterId: 'char-d2-psn',
+      characterClass: 'Hunter',
+      game: 'D2' as const,
+      values: { timePlayedSeconds: { basic: { value: 900 } } }
+    };
+    const all = [xbox2014, psnLater];
+    expect(heatmapHasActivity(all, { year: 2014 })).toBe(true);
+    expect(heatmapHasActivity(all, { year: 2014, membershipType: 1 })).toBe(true);
+    expect(heatmapHasActivity(all, { year: 2014, membershipType: 2 })).toBe(false);
+    expect(uniqueCharacters(all, {
+      [characterKey(psnLater)]: { className: 'Hunter', membershipType: 2, displayName: 'Splashbear' }
+    }).map(c => c.label)).toContain('D2 Splashbear PSN Hunter');
+  });
+
+  it('labels the first visible week and each week that contains the 1st of a month', () => {
+    expect(monthAbbrev(new Date(2014, 8, 9))).toBe('Sep');
+    const pad = { day: 0, date: new Date(0) };
+    const sep9 = { day: 9, date: new Date(2014, 8, 9) };
+    const sep10 = { day: 10, date: new Date(2014, 8, 10) };
+    const oct1 = { day: 1, date: new Date(2014, 9, 1) };
+    const oct2 = { day: 2, date: new Date(2014, 9, 2) };
+    expect(weekMonthLabels([
+      [pad, pad, sep9, sep10, { day: 11, date: new Date(2014, 8, 11) }, { day: 12, date: new Date(2014, 8, 12) }, { day: 13, date: new Date(2014, 8, 13) }],
+      [{ day: 28, date: new Date(2014, 8, 28) }, { day: 29, date: new Date(2014, 8, 29) }, { day: 30, date: new Date(2014, 8, 30) }, oct1, oct2, { day: 3, date: new Date(2014, 9, 3) }, { day: 4, date: new Date(2014, 9, 4) }],
+      [{ day: 5, date: new Date(2014, 9, 5) }, { day: 6, date: new Date(2014, 9, 6) }, { day: 7, date: new Date(2014, 9, 7) }, { day: 8, date: new Date(2014, 9, 8) }, { day: 9, date: new Date(2014, 9, 9) }, { day: 10, date: new Date(2014, 9, 10) }, { day: 11, date: new Date(2014, 9, 11) }]
+    ])).toEqual(['Sep', 'Oct', null]);
   });
 });

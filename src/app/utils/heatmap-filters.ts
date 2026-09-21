@@ -15,16 +15,29 @@ export interface HeatmapCharacterOption {
   characterId: string;
   game: 'D1' | 'D2';
   membershipType: number;
+  disabled?: boolean;
 }
 
 export interface HeatmapCharacterLookup {
   className?: string;
   membershipType?: number;
+  displayName?: string;
 }
 
 export interface HeatmapPlatformOption {
   type: number;
   name: string;
+  disabled?: boolean;
+}
+
+export interface HeatmapYearOption {
+  year: number;
+  disabled?: boolean;
+}
+
+export interface HeatmapSeasonOption {
+  name: string;
+  disabled?: boolean;
 }
 
 export function platformName(membershipType?: number): string {
@@ -90,6 +103,18 @@ export function classFromProfileCharacter(char: unknown): string | undefined {
   return classNameFromType(typeof type === 'number' ? type : undefined)
     || (typeof hash === 'number' ? CLASS_HASH_NAMES[hash] : undefined)
     || normalizeClassName(profile.className);
+}
+
+export function characterDisplayLabel(
+  game: string,
+  displayName: string | undefined,
+  platform: string,
+  className: string
+): string {
+  const name = displayName?.trim();
+  return name
+    ? `${game} ${name} ${platform} ${className}`
+    : `${game} ${platform} ${className}`;
 }
 
 export function characterKey(activity: HeatmapActivity): string {
@@ -209,10 +234,12 @@ export function uniqueCharacters(
     const membershipType = activity.membershipType || meta.membershipType || 0;
     const platform = platformShortName(membershipType);
     const game = activity.game || 'D2';
+    const displayName = meta.displayName?.trim() || '';
+    const label = characterDisplayLabel(game, displayName, platform, cls);
     if (!existing) {
       seen.set(key, {
         key,
-        label: `${platform} ${cls}`,
+        label,
         membershipId: activity.membershipId,
         characterId: activity.characterId,
         game,
@@ -225,7 +252,12 @@ export function uniqueCharacters(
       const bestClass = cls !== 'Guardian' || existing.label.endsWith('Guardian')
         ? cls
         : existing.label.split(' ').slice(-1)[0];
-      existing.label = `${platformShortName(existing.membershipType)} ${bestClass}`;
+      existing.label = characterDisplayLabel(
+        existing.game,
+        displayName,
+        platformShortName(existing.membershipType),
+        bestClass
+      );
     }
   }
   const options = [...seen.values()];
@@ -250,9 +282,80 @@ export function seasonOverlapsYear(start: Date, end: Date, year: number): boolea
   return start <= yearEnd && end >= yearStart;
 }
 
+export function clipRangeToYear(
+  start: Date,
+  end: Date,
+  year: number | null
+): { start: Date; end: Date } | null {
+  if (year == null) {
+    return { start, end };
+  }
+  const yearStart = new Date(year, 0, 1);
+  const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+  const clippedStart = start < yearStart ? yearStart : start;
+  const clippedEnd = end > yearEnd ? yearEnd : end;
+  if (clippedStart > clippedEnd) {
+    return null;
+  }
+  return { start: clippedStart, end: clippedEnd };
+}
+
+export function heatmapHasActivity(
+  activities: HeatmapActivity[],
+  opts: {
+    membershipIds?: string[] | null;
+    membershipType?: number | null;
+    characterKey?: string | null;
+    year?: number | null;
+  }
+): boolean {
+  return filterHeatmapActivities(activities, opts).length > 0;
+}
+
 export function formatDaysHours(totalSeconds: number, daysPlayed: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const dayLabel = daysPlayed === 1 ? '1 day' : `${daysPlayed} days`;
   const hourLabel = hours === 1 ? '1 hour' : `${hours} hours`;
   return `${dayLabel}, ${hourLabel}`;
+}
+
+export const MONTH_ABBREVS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+export function monthAbbrev(date: Date): string {
+  return MONTH_ABBREVS[date.getMonth()];
+}
+
+export interface HeatmapWeekDay {
+  day: number;
+  date: Date;
+}
+
+export function weekMonthLabel(
+  week: HeatmapWeekDay[],
+  options?: { isFirstVisibleWeek?: boolean }
+): string | null {
+  const realDays = week.filter(cell => cell.day > 0);
+  if (!realDays.length) {
+    return null;
+  }
+  const monthStart = realDays.find(cell => cell.day === 1);
+  if (monthStart) {
+    return monthAbbrev(monthStart.date);
+  }
+  if (options?.isFirstVisibleWeek) {
+    return monthAbbrev(realDays[0].date);
+  }
+  return null;
+}
+
+export function weekMonthLabels(weeks: HeatmapWeekDay[][]): (string | null)[] {
+  let seenVisible = false;
+  return weeks.map(week => {
+    const hasRealDays = week.some(cell => cell.day > 0);
+    const isFirstVisibleWeek = !seenVisible && hasRealDays;
+    if (hasRealDays) {
+      seenVisible = true;
+    }
+    return weekMonthLabel(week, { isFirstVisibleWeek });
+  });
 }
