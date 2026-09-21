@@ -14,11 +14,11 @@ export class BungieApiService {
   }
 
   /**
-   * Fetch a single PGCR from Bungie API and convert to lean format.
+   * Fetch a single PGCR from Bungie API (full response for DC compatibility).
    */
-  async getActivityByInstanceId(instanceId: string): Promise<LeanActivity | null> {
+  async getBungiePgcr(instanceId: string): Promise<unknown | null> {
     try {
-      logger.debug('Fetching PGCR from Bungie', { instanceId });
+      logger.debug('Fetching full PGCR from Bungie', { instanceId });
 
       const url = `${this.apiRoot}/Destiny2/Stats/PostGameCarnageReport/${instanceId}/`;
       const response = await fetch(url, {
@@ -36,11 +36,22 @@ export class BungieApiService {
       }
 
       const data = await response.json();
-      return this.convertPgcrToLean(instanceId, data);
+      return data;
     } catch (error) {
       logger.error('Failed to fetch PGCR from Bungie', { error, instanceId });
       throw error;
     }
+  }
+
+  /**
+   * Fetch a single PGCR from Bungie API and convert to lean format.
+   */
+  async getActivityByInstanceId(instanceId: string): Promise<LeanActivity | null> {
+    const pgcr = await this.getBungiePgcr(instanceId);
+    if (!pgcr) {
+      return null;
+    }
+    return this.convertPgcrToLean(instanceId, pgcr);
   }
 
   /**

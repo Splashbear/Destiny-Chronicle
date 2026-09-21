@@ -5,6 +5,7 @@ import { ArchiveService } from './services/archive.service';
 import { BungieApiService } from './services/bungie-api.service';
 import { WatermarkService } from './services/watermark.service';
 import { createPgcrRouter } from './routes/pgcr.routes';
+import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 
 async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -55,6 +56,10 @@ async function startServer(): Promise<void> {
   const watermarkService = new WatermarkService(config.watermarkPath);
   await watermarkService.load();
 
+  // DC-facing routes (PgcrLite format for Angular app)
+  app.use('/pgcr', createDcPgcrRouter(archiveService, bungieApiService, watermarkService));
+
+  // Admin/debug routes (lean format)
   app.use('/api/pgcr', createPgcrRouter(archiveService, bungieApiService, watermarkService));
 
   app.get('/health', (req: Request, res: Response) => {
@@ -72,9 +77,11 @@ async function startServer(): Promise<void> {
       version: '1.0.0',
       endpoints: {
         health: 'GET /health',
-        watermark: 'GET /api/pgcr/watermark',
-        activities: 'GET /api/pgcr/activities?membershipId=<membershipId>',
-        instance: 'GET /api/pgcr/:instanceId',
+        dc_instance: 'GET /pgcr/:instanceId?game=D2&format=lite',
+        dc_batch: 'POST /pgcr/batch',
+        admin_watermark: 'GET /api/pgcr/watermark',
+        admin_activities: 'GET /api/pgcr/activities?membershipId=<membershipId>',
+        admin_instance: 'GET /api/pgcr/:instanceId',
       },
     });
   });
@@ -88,11 +95,13 @@ async function startServer(): Promise<void> {
 
   app.listen(config.port, () => {
     logger.info(`Server listening on port ${config.port}`);
-    logger.info('API endpoints available:');
-    logger.info(`  GET http://localhost:${config.port}/health`);
-    logger.info(`  GET http://localhost:${config.port}/api/pgcr/watermark`);
-    logger.info(`  GET http://localhost:${config.port}/api/pgcr/activities?membershipId=<id>`);
-    logger.info(`  GET http://localhost:${config.port}/api/pgcr/:instanceId`);
+    logger.info('DC-facing endpoints (PgcrLite format):');
+    logger.info(`  GET  http://localhost:${config.port}/pgcr/:instanceId?game=D2&format=lite`);
+    logger.info(`  POST http://localhost:${config.port}/pgcr/batch`);
+    logger.info('Admin/debug endpoints (lean format):');
+    logger.info(`  GET  http://localhost:${config.port}/api/pgcr/watermark`);
+    logger.info(`  GET  http://localhost:${config.port}/api/pgcr/activities?membershipId=<id>`);
+    logger.info(`  GET  http://localhost:${config.port}/api/pgcr/:instanceId`);
   });
 }
 

@@ -112,15 +112,16 @@ export class ArchiveService {
   }
 
   /**
-   * Get a single activity by instance ID from the lean activities archive.
+   * Get ALL activities for an instance ID from the lean activities archive.
+   * Returns all player entries (multiple rows per instance).
    */
-  async getActivityByInstanceId(instanceId: string): Promise<LeanActivity | null> {
+  async getActivitiesByInstanceId(instanceId: string): Promise<LeanActivity[]> {
     if (!this.isAvailable() || !this.db) {
       throw new Error('Archive not available');
     }
 
     try {
-      logger.debug('Reading activity from archive', { instanceId });
+      logger.debug('Reading all activities for instance from archive', { instanceId });
 
       const sql = `
         SELECT 
@@ -146,21 +147,30 @@ export class ArchiveService {
           game
         FROM read_parquet(?)
         WHERE instance_id = ?
-        LIMIT 1
       `;
 
       const rows = await this.db.all(sql, this.leanActivitiesPath, instanceId);
+      const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
-      if (rows.length === 0) {
-        logger.debug('Activity not found in archive', { instanceId });
-        return null;
-      }
+      logger.debug('Found activity entries in archive', {
+        instanceId,
+        entryCount: activities.length,
+      });
 
-      return this.mapRowToActivity(rows[0]);
+      return activities;
     } catch (error) {
-      logger.error('Failed to read activity from archive', { error, instanceId });
+      logger.error('Failed to read activities from archive', { error, instanceId });
       throw error;
     }
+  }
+
+  /**
+   * Get a single activity by instance ID from the lean activities archive.
+   * Returns first entry only (for backward compatibility).
+   */
+  async getActivityByInstanceId(instanceId: string): Promise<LeanActivity | null> {
+    const activities = await this.getActivitiesByInstanceId(instanceId);
+    return activities.length > 0 ? activities[0] : null;
   }
 
   /**
