@@ -1,5 +1,5 @@
 /**
- * Lean activity structure from Travis-PC Parquet archives.
+ * Lean activity structure from Parquet archives.
  * Maps to columns in splashbear_activities.parquet and cl_by_mid_hash_v3.
  */
 export interface LeanActivity {

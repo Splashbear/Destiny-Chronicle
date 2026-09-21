@@ -26,9 +26,9 @@ See [`api-server/README.md`](./api-server/README.md) for full documentation.
    npm start
    ```
 
-### Travis-PC Paths
+### Archive Paths
 
-Point the API to Travis-PC Parquet files in your `.env`:
+Point the API to archive Parquet files in your `.env`:
 
 ```bash
 PGCR_LEAN_ACTIVITIES_PATH=D:\DestinyChronicleDB\lean\splashbear_activities.parquet

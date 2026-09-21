@@ -2,7 +2,7 @@
 
 /**
  * Smoke test for PGCR API server
- * Tests basic functionality without requiring Travis-PC files
+ * Tests basic functionality without requiring archive files
  */
 
 const http = require('http');

@@ -101,7 +101,7 @@ $ curl "http://localhost:3001/api/pgcr/activities?membershipId=46116860184881073
 ```
 
 **Result:** ✅ Returns empty array (archive not configured)
-**Note:** When connected to Travis-PC Parquet files, this would return archived activities
+**Note:** When connected to archive Parquet files, this would return archived activities
 
 ---
 
@@ -157,7 +157,7 @@ Testing server at: http://localhost:3001
 
 ### Next Steps for Full Testing:
 
-1. Configure `.env` with Travis-PC Parquet file paths
+1. Configure `.env` with archive Parquet file paths
 2. Test Splashbear membership lookup (~7387 activities expected)
 3. Verify watermark routing with instance IDs above/below threshold
 4. Test with actual coverage_watermark.json file

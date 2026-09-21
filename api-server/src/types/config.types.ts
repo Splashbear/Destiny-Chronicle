@@ -4,7 +4,7 @@
 export interface ApiConfig {
   port: number;
   
-  // Travis-PC paths (configurable via env vars)
+  // Archive paths (configurable via env vars)
   leanActivitiesPath: string;
   membershipPath: string;
   watermarkPath: string;

@@ -1,8 +1,8 @@
-# Travis-PC Bug Fixes - Summary
+# Bug Fixes from Smoke Testing - Summary
 
 ## Fixed Issues (commit 0276e68)
 
-All bugs identified during Travis-PC smoke testing have been resolved.
+All bugs identified during initial smoke testing have been resolved.
 
 ### 1. Route Ordering Bug ✅
 
@@ -27,7 +27,7 @@ All bugs identified during Travis-PC smoke testing have been resolved.
 
 **Problem:** `GET /api/pgcr/:instanceId` for archived IDs → `500 Invalid ENUM value`
 - Cause: `parquetjs` cannot read DuckDB-written ZSTD Parquet files
-- Travis files use ZSTD compression which parquetjs doesn't support
+- Archive files use ZSTD compression which parquetjs doesn't support
 
 **Fix:**
 - Replaced `parquetjs` with **DuckDB** (`duckdb-async`)
@@ -44,7 +44,7 @@ All bugs identified during Travis-PC smoke testing have been resolved.
   ```
 
 **Verification:**
-- Ready to read Travis Parquet files directly
+- Ready to read Parquet files directly
 - No more ENUM errors
 - SQL filtering improves performance
 
@@ -52,19 +52,11 @@ All bugs identified during Travis-PC smoke testing have been resolved.
 
 ### 3. Hardcoded API Key ✅
 
-**Problem:** Security issue - Bungie API key hardcoded in `src/utils/config.ts`
-```typescript
-// BAD - was in source
-bungieApiKey: process.env.BUNGIE_API_KEY || 'e55082388d014a79b9f5da4be0063d1c'
-```
+**Problem:** Security issue - Bungie API key hardcoded in source code
 
 **Fix:**
-- Removed hardcoded default
+- Removed hardcoded default completely
 - Now requires `BUNGIE_API_KEY` environment variable
-```typescript
-// GOOD - no secret in repo
-bungieApiKey: process.env.BUNGIE_API_KEY || ''
-```
 - Config validation enforces required env var
 
 **Verification:**
@@ -88,7 +80,7 @@ bungieApiKey: process.env.BUNGIE_API_KEY || ''
   WHERE membership_id = ?
   ORDER BY period DESC
   ```
-- Handle lowercase game values from Travis files:
+- Handle lowercase game values from archive files:
   ```typescript
   const gameStr = String(row.game || '').toLowerCase();
   if (gameStr === 'd1') game = 'D1';
@@ -167,7 +159,7 @@ Testing server at: http://localhost:3001
 
 ---
 
-## Ready for Travis-PC Testing
+## Ready for Production Testing
 
 The API is now ready to test with real Splashbear data:
 
@@ -218,7 +210,7 @@ The API is now ready to test with real Splashbear data:
 
 ---
 
-## Configuration for Travis-PC
+## Configuration for Archive Access
 
 Create `.env` file:
 
@@ -228,12 +220,12 @@ PGCR_API_PORT=3001
 PGCR_ENABLE_CORS=true
 PGCR_LOG_LEVEL=info
 
-# Travis-PC paths
+# Archive paths (adjust to your environment)
 PGCR_LEAN_ACTIVITIES_PATH=D:\DestinyChronicleDB\lean\splashbear_activities.parquet
 PGCR_MEMBERSHIP_PATH=D:\DestinyChronicleDB\by_membership\splashbear.parquet
 PGCR_WATERMARK_PATH=D:\DestinyChronicleDB\coverage_watermark.json
 
-# Bungie API (REQUIRED)
+# Bungie API (REQUIRED - must be provided via environment)
 BUNGIE_API_KEY=<your_bungie_api_key>
 BUNGIE_API_ROOT=https://www.bungie.net/Platform
 ```
@@ -262,7 +254,7 @@ BUNGIE_API_ROOT=https://www.bungie.net/Platform
 
 1. `a488313` - Initial PGCR API implementation
 2. `018857f` - Add smoke tests and demo output
-3. `0276e68` - **Fix critical bugs from Travis-PC smoke testing** ← Current
+3. `0276e68` - **Fix critical bugs from smoke testing** ← Current
 
 ---
 
@@ -276,4 +268,4 @@ All identified bugs have been fixed:
 - ✅ Error handling robust
 - ✅ All tests passing
 
-**Next:** Test with real Travis-PC Splashbear data
+**Next:** Test with real Splashbear archive data

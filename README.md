@@ -31,7 +31,7 @@ A lightweight Node.js API server for reading archived PGCR data with automatic f
 **Key Features:**
 - Watermark-based routing (archive for old activities, live Bungie API for recent)
 - Lean activity format optimized for "On this Day" queries
-- Configurable paths to Travis-PC Parquet archives
+- Configurable paths to Parquet archives
 - Membership and instance ID lookups
 
 ## Installation

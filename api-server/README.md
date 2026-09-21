@@ -8,7 +8,7 @@ A lightweight API server that provides read access to Destiny Chronicle's archiv
 - **Lean activity format**: Returns standardized, minimal activity data structure
 - **Membership lookup**: Query all activities for a specific membership ID
 - **Instance lookup**: Get individual activity details by instance ID
-- **Configurable paths**: Point to Travis-PC Parquet files via environment variables
+- **Configurable paths**: Point to Parquet archive files via environment variables
 
 ## API Endpoints
 
@@ -63,7 +63,7 @@ Get a specific activity by instance ID. Uses watermark routing:
 
 - Node.js 18+
 - TypeScript
-- Access to Travis-PC Parquet files (for archive functionality)
+- Access to Parquet archive files (for archive functionality)
 
 ### Installation
 
@@ -82,8 +82,8 @@ PGCR_API_PORT=3001
 PGCR_ENABLE_CORS=true
 PGCR_LOG_LEVEL=info
 
-# Travis-PC Parquet paths
-# Point these to your local paths or Travis-PC share
+# Archive Parquet paths
+# Point these to your local paths or network share
 PGCR_LEAN_ACTIVITIES_PATH=D:\DestinyChronicleDB\lean\splashbear_activities.parquet
 PGCR_MEMBERSHIP_PATH=D:\DestinyChronicleDB\by_membership\splashbear.parquet
 PGCR_WATERMARK_PATH=D:\DestinyChronicleDB\coverage_watermark.json
@@ -93,9 +93,9 @@ BUNGIE_API_KEY=your_bungie_api_key_here
 BUNGIE_API_ROOT=https://www.bungie.net/Platform
 ```
 
-### Pointing to Travis-PC Files
+### Pointing to Archive Files
 
-If running on a different machine with access to Travis-PC share:
+If running on a different machine with access to the archive host via network share:
 
 **Windows (mapped drive):**
 ```bash
@@ -106,16 +106,16 @@ PGCR_WATERMARK_PATH=Z:\DestinyChronicleDB\coverage_watermark.json
 
 **Windows (UNC path):**
 ```bash
-PGCR_LEAN_ACTIVITIES_PATH=\\TRAVIS-PC\DestinyChronicleDB\lean\splashbear_activities.parquet
-PGCR_MEMBERSHIP_PATH=\\TRAVIS-PC\DestinyChronicleDB\by_membership\splashbear.parquet
-PGCR_WATERMARK_PATH=\\TRAVIS-PC\DestinyChronicleDB\coverage_watermark.json
+PGCR_LEAN_ACTIVITIES_PATH=\\ARCHIVE-HOST\DestinyChronicleDB\lean\splashbear_activities.parquet
+PGCR_MEMBERSHIP_PATH=\\ARCHIVE-HOST\DestinyChronicleDB\by_membership\splashbear.parquet
+PGCR_WATERMARK_PATH=\\ARCHIVE-HOST\DestinyChronicleDB\coverage_watermark.json
 ```
 
 **Linux/Mac (mounted share):**
 ```bash
-PGCR_LEAN_ACTIVITIES_PATH=/mnt/travis-pc/DestinyChronicleDB/lean/splashbear_activities.parquet
-PGCR_MEMBERSHIP_PATH=/mnt/travis-pc/DestinyChronicleDB/by_membership/splashbear.parquet
-PGCR_WATERMARK_PATH=/mnt/travis-pc/DestinyChronicleDB/coverage_watermark.json
+PGCR_LEAN_ACTIVITIES_PATH=/mnt/archive-host/DestinyChronicleDB/lean/splashbear_activities.parquet
+PGCR_MEMBERSHIP_PATH=/mnt/archive-host/DestinyChronicleDB/by_membership/splashbear.parquet
+PGCR_WATERMARK_PATH=/mnt/archive-host/DestinyChronicleDB/coverage_watermark.json
 ```
 
 ### Running the Server
@@ -206,7 +206,7 @@ See `api-server/src/__tests__/fixtures/` for example test data.
 The server uses **DuckDB** (via `duckdb-async`) to read Parquet files instead of `parquetjs`. This is critical because:
 - DuckDB can read ZSTD-compressed Parquet files written by DuckDB
 - Supports efficient SQL filtering on large files
-- Works reliably with Travis-PC Parquet exports
+- Works reliably with Parquet exports
 
 ### Route Registration Order
 

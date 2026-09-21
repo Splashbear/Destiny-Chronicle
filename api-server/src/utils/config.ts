@@ -7,7 +7,7 @@ export function loadConfig(): ApiConfig {
   const config: ApiConfig = {
     port: parseInt(process.env[ENV_KEYS.PORT] || '3001', 10),
     
-    // Travis-PC paths - MUST be configured in production
+    // Archive paths - MUST be configured in production
     leanActivitiesPath: process.env[ENV_KEYS.LEAN_ACTIVITIES_PATH] || '',
     membershipPath: process.env[ENV_KEYS.MEMBERSHIP_PATH] || '',
     watermarkPath: process.env[ENV_KEYS.WATERMARK_PATH] || '',
