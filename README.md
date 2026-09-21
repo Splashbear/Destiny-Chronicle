@@ -24,6 +24,16 @@ Pantheon Events on **Guardian Firsts** (legacy Pantheon, Monument of Triumph Pan
 - "You should add X feature". I purposefully tried not to step on the toes of devs who've got similar sites, or have sites whose info would dovetail nicely with this app. DIM, Braytech, Destiny Heatmap, raid.report, dungeon.report, etc, all have similar and better applications of specific features. This app just aimed to bring the very specific info into one easier display, but it won't replace any of those sites. Maybe one day someone will add it as a feature to their site, but until Braytech or DIM decide it's worth the effort, Destiny Chronicle is here to fill that niche :). 
 
 
+## PGCR Read API
+
+A lightweight Node.js API server for reading archived PGCR data with automatic fallback to live Bungie API. See [`API_SERVER.md`](./API_SERVER.md) and [`api-server/README.md`](./api-server/README.md) for details.
+
+**Key Features:**
+- Watermark-based routing (archive for old activities, live Bungie API for recent)
+- Lean activity format optimized for "On this Day" queries
+- Configurable paths to Travis-PC Parquet archives
+- Membership and instance ID lookups
+
 ## Installation
 1. Clone the repository: `git clone https://github.com/your-username/destiny-chronicle.git`
 2. Install dependencies: `npm install`
