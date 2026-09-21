@@ -1,15 +1,17 @@
 import * as fs from 'fs/promises';
-import { ParquetReader } from 'parquetjs';
+import { Database } from 'duckdb-async';
 import { LeanActivity } from '../types/lean-activity.types';
 import { logger } from '../utils/logger';
 
 /**
- * Service for reading lean activities from Parquet archives.
+ * Service for reading lean activities from Parquet archives using DuckDB.
+ * DuckDB can read ZSTD-compressed Parquet files written by DuckDB or other tools.
  */
 export class ArchiveService {
   private leanActivitiesPath: string;
   private membershipPath: string;
   private archiveAvailable = false;
+  private db: Database | null = null;
 
   constructor(leanActivitiesPath: string, membershipPath: string) {
     this.leanActivitiesPath = leanActivitiesPath;
@@ -17,27 +19,29 @@ export class ArchiveService {
   }
 
   /**
-   * Initialize and verify archive paths.
+   * Initialize and verify archive paths. Sets up in-memory DuckDB.
    */
   async initialize(): Promise<void> {
-    if (!this.leanActivitiesPath || !this.membershipPath) {
-      logger.warn('Archive paths not configured - archive lookups disabled');
+    if (!this.leanActivitiesPath) {
+      logger.warn('Lean activities path not configured - archive lookups disabled');
       return;
     }
 
     try {
       await fs.access(this.leanActivitiesPath);
-      await fs.access(this.membershipPath);
+      
+      this.db = await Database.create(':memory:');
+      logger.info('DuckDB initialized for archive reading');
+      
       this.archiveAvailable = true;
       logger.info('Archive initialized', {
         leanActivitiesPath: this.leanActivitiesPath,
         membershipPath: this.membershipPath,
       });
     } catch (error) {
-      logger.warn('Archive files not accessible', {
+      logger.warn('Archive files not accessible or DuckDB init failed', {
         error,
         leanActivitiesPath: this.leanActivitiesPath,
-        membershipPath: this.membershipPath,
       });
       this.archiveAvailable = false;
     }
@@ -47,32 +51,51 @@ export class ArchiveService {
    * Check if archive is available.
    */
   isAvailable(): boolean {
-    return this.archiveAvailable;
+    return this.archiveAvailable && this.db !== null;
   }
 
   /**
-   * Get activities for a membership from the archive.
+   * Get activities for a membership from the lean activities archive.
+   * Filters by membership_id directly in the lean activities Parquet file.
    */
   async getActivitiesByMembership(membershipId: string): Promise<LeanActivity[]> {
-    if (!this.archiveAvailable) {
+    if (!this.isAvailable() || !this.db) {
       throw new Error('Archive not available');
     }
 
     try {
-      logger.debug('Reading membership activities from archive', { membershipId });
+      logger.debug('Reading membership activities from lean archive', { membershipId });
 
-      const reader = await ParquetReader.openFile(this.membershipPath);
-      const cursor = reader.getCursor();
-      const activities: LeanActivity[] = [];
+      const sql = `
+        SELECT 
+          instance_id,
+          period,
+          activity_hash,
+          director_activity_hash,
+          mode,
+          membership_id,
+          membership_type,
+          display_name,
+          character_id,
+          completed,
+          deaths,
+          kills,
+          assists,
+          duration_seconds,
+          standing,
+          starting_phase_index,
+          fireteam_id,
+          is_private,
+          dump_id,
+          game
+        FROM read_parquet(?)
+        WHERE membership_id = ?
+        ORDER BY period DESC
+      `;
 
-      let record: Record<string, unknown> | null = null;
-      while ((record = await cursor.next())) {
-        if (String(record.membership_id) === membershipId) {
-          activities.push(this.mapRowToActivity(record));
-        }
-      }
+      const rows = await this.db.all(sql, this.leanActivitiesPath, membershipId);
+      const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
-      await reader.close();
       logger.debug('Found activities in archive', {
         membershipId,
         count: activities.length,
@@ -89,30 +112,51 @@ export class ArchiveService {
   }
 
   /**
-   * Get a single activity by instance ID from the archive.
+   * Get a single activity by instance ID from the lean activities archive.
    */
   async getActivityByInstanceId(instanceId: string): Promise<LeanActivity | null> {
-    if (!this.archiveAvailable) {
+    if (!this.isAvailable() || !this.db) {
       throw new Error('Archive not available');
     }
 
     try {
       logger.debug('Reading activity from archive', { instanceId });
 
-      const reader = await ParquetReader.openFile(this.leanActivitiesPath);
-      const cursor = reader.getCursor();
+      const sql = `
+        SELECT 
+          instance_id,
+          period,
+          activity_hash,
+          director_activity_hash,
+          mode,
+          membership_id,
+          membership_type,
+          display_name,
+          character_id,
+          completed,
+          deaths,
+          kills,
+          assists,
+          duration_seconds,
+          standing,
+          starting_phase_index,
+          fireteam_id,
+          is_private,
+          dump_id,
+          game
+        FROM read_parquet(?)
+        WHERE instance_id = ?
+        LIMIT 1
+      `;
 
-      let record: Record<string, unknown> | null = null;
-      while ((record = await cursor.next())) {
-        if (String(record.instance_id) === instanceId) {
-          await reader.close();
-          return this.mapRowToActivity(record);
-        }
+      const rows = await this.db.all(sql, this.leanActivitiesPath, instanceId);
+
+      if (rows.length === 0) {
+        logger.debug('Activity not found in archive', { instanceId });
+        return null;
       }
 
-      await reader.close();
-      logger.debug('Activity not found in archive', { instanceId });
-      return null;
+      return this.mapRowToActivity(rows[0]);
     } catch (error) {
       logger.error('Failed to read activity from archive', { error, instanceId });
       throw error;
@@ -120,9 +164,18 @@ export class ArchiveService {
   }
 
   /**
-   * Map Parquet row to LeanActivity type.
+   * Map DuckDB row to LeanActivity type.
+   * Handles lowercase 'd2'/'d1' game values from Travis files.
    */
-  private mapRowToActivity(row: Record<string, unknown>): LeanActivity {
+  private mapRowToActivity(row: any): LeanActivity {
+    let game: 'D1' | 'D2' = 'D2';
+    const gameStr = String(row.game || '').toLowerCase();
+    if (gameStr === 'd1') {
+      game = 'D1';
+    } else if (gameStr === 'd2') {
+      game = 'D2';
+    }
+
     return {
       instance_id: String(row.instance_id ?? ''),
       period: String(row.period ?? ''),
@@ -143,7 +196,18 @@ export class ArchiveService {
       fireteam_id: String(row.fireteam_id ?? ''),
       is_private: Boolean(row.is_private),
       dump_id: String(row.dump_id ?? ''),
-      game: (row.game === 'D1' ? 'D1' : 'D2') as 'D1' | 'D2',
+      game,
     };
+  }
+
+  /**
+   * Close the DuckDB connection.
+   */
+  async close(): Promise<void> {
+    if (this.db) {
+      await this.db.close();
+      this.db = null;
+      logger.info('DuckDB connection closed');
+    }
   }
 }

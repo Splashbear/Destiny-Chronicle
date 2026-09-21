@@ -65,11 +65,13 @@ async function runTests() {
     console.log(`   API: ${body.name} v${body.version || '1.0.0'}`);
   });
 
-  await test('Watermark endpoint returns 404 when not configured', async () => {
+  await test('Watermark endpoint (route ordering test)', async () => {
     const { status } = await httpGet('/api/pgcr/watermark');
-    if (status !== 404) {
-      console.log(`   Note: Got ${status} - watermark may be configured`);
+    // Should be 404 (not configured) not 400 (treated as instance ID)
+    if (status === 400) {
+      throw new Error('Route ordering bug: /watermark matched by /:instanceId');
     }
+    console.log(`   Status ${status} - route correctly registered before /:instanceId`);
   });
 
   await test('Activities endpoint requires membershipId', async () => {

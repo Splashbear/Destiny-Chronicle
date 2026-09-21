@@ -30,12 +30,39 @@ export function createPgcrRouter(
   const router = Router();
 
   /**
+   * GET /api/pgcr/watermark
+   * 
+   * Get current watermark information.
+   * MUST be registered BEFORE /:instanceId param route.
+   */
+  router.get('/watermark', async (req: Request, res: Response) => {
+    try {
+      const watermark = watermarkService.getWatermark();
+
+      if (!watermark) {
+        return res.status(404).json({
+          error: 'Watermark not available',
+        });
+      }
+
+      res.json(watermark);
+    } catch (error) {
+      logger.error('Error in GET /api/pgcr/watermark', { error });
+      res.status(500).json({
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  /**
    * GET /api/pgcr/activities?membershipId=<membershipId>
    * 
    * Get all activities for a membership.
    * Returns archived activities if available, otherwise empty array.
    * Note: Live Bungie API doesn't have a direct membership→all-activities endpoint,
    * so we only return archived data here.
+   * MUST be registered BEFORE /:instanceId param route.
    */
   router.get('/activities', async (req: Request, res: Response) => {
     try {
@@ -83,6 +110,7 @@ export function createPgcrRouter(
    * 
    * Get a single activity by instance ID.
    * Uses watermark to route: archive if ≤ watermark, otherwise live Bungie API.
+   * MUST be registered AFTER static routes (/watermark, /activities).
    */
   router.get('/:instanceId', async (req: Request, res: Response) => {
     try {
@@ -103,9 +131,18 @@ export function createPgcrRouter(
       logger.debug('Watermark check', { instanceId, isCovered });
 
       if (isCovered && archiveService.isAvailable()) {
-        logger.debug('Attempting archive lookup');
-        activity = await archiveService.getActivityByInstanceId(instanceId);
-        source = 'archive';
+        try {
+          logger.debug('Attempting archive lookup');
+          activity = await archiveService.getActivityByInstanceId(instanceId);
+          if (activity) {
+            source = 'archive';
+          }
+        } catch (archiveError) {
+          logger.warn('Archive read failed for covered ID, will try live fallback', {
+            instanceId,
+            error: archiveError,
+          });
+        }
       }
 
       if (!activity) {
@@ -130,31 +167,6 @@ export function createPgcrRouter(
       res.json(response);
     } catch (error) {
       logger.error('Error in GET /api/pgcr/:instanceId', { error });
-      res.status(500).json({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  });
-
-  /**
-   * GET /api/pgcr/watermark
-   * 
-   * Get current watermark information.
-   */
-  router.get('/watermark', async (req: Request, res: Response) => {
-    try {
-      const watermark = watermarkService.getWatermark();
-
-      if (!watermark) {
-        return res.status(404).json({
-          error: 'Watermark not available',
-        });
-      }
-
-      res.json(watermark);
-    } catch (error) {
-      logger.error('Error in GET /api/pgcr/watermark', { error });
       res.status(500).json({
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',

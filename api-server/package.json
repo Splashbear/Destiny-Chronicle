@@ -11,12 +11,16 @@
     "test": "echo \"Note: Install Jest for comprehensive testing. Using TypeScript for type checking.\" && tsc --noEmit",
     "smoke-test": "node smoke-test.js"
   },
-  "keywords": ["destiny", "pgcr", "api"],
+  "keywords": [
+    "destiny",
+    "pgcr",
+    "api"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.2.1",
-    "parquetjs": "^0.11.2"
+    "duckdb-async": "^1.4.2",
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

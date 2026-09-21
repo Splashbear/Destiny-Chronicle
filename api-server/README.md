@@ -171,7 +171,7 @@ See `api-server/src/__tests__/fixtures/` for example test data.
          │
          ▼
 ┌─────────────────┐
-│  PGCR Router    │
+│  PGCR Router    │  (static routes BEFORE param routes)
 └────────┬────────┘
          │
          ▼
@@ -188,6 +188,7 @@ See `api-server/src/__tests__/fixtures/` for example test data.
 ┌─────────┐ ┌──────────────┐
 │ Archive │ │  Bungie API  │
 │ Service │ │   Service    │
+│ (DuckDB)│ │              │
 └─────────┘ └──────────────┘
     │              │
     └──────┬───────┘
@@ -197,6 +198,26 @@ See `api-server/src/__tests__/fixtures/` for example test data.
     │   Response  │
     └─────────────┘
 ```
+
+## Key Implementation Details
+
+### DuckDB for Parquet Reading
+
+The server uses **DuckDB** (via `duckdb-async`) to read Parquet files instead of `parquetjs`. This is critical because:
+- DuckDB can read ZSTD-compressed Parquet files written by DuckDB
+- Supports efficient SQL filtering on large files
+- Works reliably with Travis-PC Parquet exports
+
+### Route Registration Order
+
+Routes are registered in this specific order to avoid conflicts:
+1. `GET /api/pgcr/watermark` (static)
+2. `GET /api/pgcr/activities` (static with query params)
+3. `GET /api/pgcr/:instanceId` (parameterized - MUST be last)
+
+### Membership Query
+
+The `/activities` endpoint queries the **lean activities** Parquet file directly by `membership_id`, not the separate membership mapping file. This returns all activity entries (which may be multiple per instance if there are multiple players).
 
 ## Lean Activity Schema
 
@@ -233,9 +254,9 @@ interface LeanActivity {
 |----------|----------|---------|-------------|
 | `PGCR_API_PORT` | No | `3001` | Server port |
 | `PGCR_LEAN_ACTIVITIES_PATH` | No | - | Path to lean activities Parquet file |
-| `PGCR_MEMBERSHIP_PATH` | No | - | Path to membership Parquet file |
+| `PGCR_MEMBERSHIP_PATH` | No | - | Path to membership Parquet file (currently unused) |
 | `PGCR_WATERMARK_PATH` | No | - | Path to watermark JSON file |
-| `BUNGIE_API_KEY` | Yes | - | Bungie API key for live fallback |
+| `BUNGIE_API_KEY` | **Yes** | - | Bungie API key for live fallback (no default) |
 | `BUNGIE_API_ROOT` | No | `https://www.bungie.net/Platform` | Bungie API root URL |
 | `PGCR_ENABLE_CORS` | No | `false` | Enable CORS headers |
 | `PGCR_LOG_LEVEL` | No | `info` | Logging level: `debug`, `info`, `warn`, `error` |
@@ -246,23 +267,40 @@ interface LeanActivity {
 - Verify Parquet file paths are correct and accessible
 - Check file permissions
 - For network shares, ensure the share is mounted and accessible
+- DuckDB must be able to read the Parquet files (ZSTD compression is supported)
 
 ### "Watermark not available"
 - Verify `PGCR_WATERMARK_PATH` points to a valid JSON file
 - Check the watermark file format matches the expected schema
 
+### Route ordering issues
+- If `/api/pgcr/watermark` returns "Invalid instance ID", the routes are registered in the wrong order
+- Static routes MUST be registered before parameterized routes
+
 ### Slow queries
-- Parquet files are read sequentially - large files may take time
-- Consider using the hash-partitioned `cl_by_mid_hash` structure for better performance
-- Archive lookups are optimized for single-membership queries
+- DuckDB with SQL filtering is much faster than sequential scans
+- Large result sets (thousands of activities) may take a few seconds
+- Consider adding indexes if performance is critical
+
+### "Invalid ENUM value" or Parquet read errors
+- The server requires DuckDB-readable Parquet files
+- If you're using older Parquet exports, re-export with DuckDB or use SNAPPY/uncompressed format
+- `parquetjs` is not used and may not be compatible with all Parquet flavors
 
 ## Future Enhancements
 
-- [ ] Support hash-partitioned membership lookups (`cl_by_mid_hash_v3`)
+- [ ] Use hash-partitioned membership lookups for better performance
 - [ ] Batch instance ID queries
 - [ ] Response caching
 - [ ] Fireteam co-play queries (stretch goal)
-- [ ] DuckDB integration for faster queries
+- [ ] Connection pooling for DuckDB
+
+## Known Limitations
+
+- Membership query returns all activity entries (may be multiple rows per instance)
+- `PGCR_MEMBERSHIP_PATH` is currently unused (queries lean activities directly)
+- Large result sets may take a few seconds to return
+- Archive reads require DuckDB-compatible Parquet files
 
 ## License
 

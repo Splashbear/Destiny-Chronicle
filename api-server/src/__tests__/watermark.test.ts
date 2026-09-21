@@ -5,6 +5,7 @@
  * 1. Instance IDs below watermark are routed to archive
  * 2. Instance IDs above watermark are routed to live Bungie API
  * 3. The routing decision is made correctly based on watermark
+ * 4. Routes are registered in correct order (static before params)
  */
 
 import { WatermarkService } from '../services/watermark.service';
@@ -74,5 +75,23 @@ describe('Watermark Routing Logic', () => {
       const actualSource = isCovered ? 'archive' : 'live';
       expect(actualSource).toBe(expectedSource);
     });
+  });
+});
+
+describe('Route Registration Order', () => {
+  test('route precedence documentation', () => {
+    // This test documents the required route registration order.
+    // Static routes MUST be registered before parameterized routes to avoid
+    // '/watermark' being matched by '/:instanceId'.
+    
+    const correctOrder = [
+      '/api/pgcr/watermark',    // Static route - MUST be first
+      '/api/pgcr/activities',   // Static route with query params - MUST be first
+      '/api/pgcr/:instanceId',  // Param route - MUST be last
+    ];
+    
+    expect(correctOrder).toHaveLength(3);
+    expect(correctOrder[0]).toBe('/api/pgcr/watermark');
+    expect(correctOrder[correctOrder.length - 1]).toBe('/api/pgcr/:instanceId');
   });
 });

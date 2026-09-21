@@ -12,8 +12,8 @@ export function loadConfig(): ApiConfig {
     membershipPath: process.env[ENV_KEYS.MEMBERSHIP_PATH] || '',
     watermarkPath: process.env[ENV_KEYS.WATERMARK_PATH] || '',
     
-    // Bungie API - use existing key as default
-    bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || 'e55082388d014a79b9f5da4be0063d1c',
+    // Bungie API - REQUIRED via environment variable
+    bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',
     bungieApiRoot: process.env[ENV_KEYS.BUNGIE_API_ROOT] || 'https://www.bungie.net/Platform',
     
     // Server options
