@@ -46,10 +46,20 @@ export interface PlayerActivitiesResponse {
   providedIn: 'root'
 })
 export class PgcrApiService {
+  /** Dedupe concurrent cold-start character loads for the same mid+game. */
+  private playerActivitiesInflight = new Map<string, Promise<PlayerActivitiesResponse | null>>();
+  private playerActivitiesCache = new Map<string, PlayerActivitiesResponse | null>();
+
   constructor(private http: HttpClient) {}
 
   get enabled(): boolean {
     return environment.useExternalPgcr && !!environment.pgcrApiRoot?.trim();
+  }
+
+  /** Drop memoized player activity lists (e.g. after IDB wipe / new sync session). */
+  clearPlayerActivitiesCache(): void {
+    this.playerActivitiesCache.clear();
+    this.playerActivitiesInflight.clear();
   }
 
   private headers(): HttpHeaders {
@@ -164,29 +174,56 @@ export class PgcrApiService {
     if (!this.enabled) {
       return null;
     }
-    try {
-      const params: Record<string, string> = {};
-      if (options?.game) params['game'] = options.game;
-      if (options?.from) params['from'] = options.from;
-      if (options?.to) params['to'] = options.to;
-      if (options?.limit) params['limit'] = String(options.limit);
 
-      const response = await firstValueFrom(
-        this.http.get<PlayerActivitiesResponse>(
-          this.url(`/players/${membershipId}/activities`),
-          { headers: this.headers(), params }
-        )
-      );
-      return response;
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status;
-      if (status === 404) {
-        // No archived data for this player
-        return null;
-      }
-      console.warn(`[PgcrApiService] Failed to fetch player activities for ${membershipId}:`, err);
-      return null;
+    const cacheKey = [
+      membershipId,
+      options?.game ?? '',
+      options?.from ?? '',
+      options?.to ?? '',
+      String(options?.limit ?? '')
+    ].join('|');
+
+    if (this.playerActivitiesCache.has(cacheKey)) {
+      return this.playerActivitiesCache.get(cacheKey) ?? null;
     }
+    const inflight = this.playerActivitiesInflight.get(cacheKey);
+    if (inflight) {
+      return inflight;
+    }
+
+    const request = (async (): Promise<PlayerActivitiesResponse | null> => {
+      try {
+        const params: Record<string, string> = {};
+        if (options?.game) params['game'] = options.game;
+        if (options?.from) params['from'] = options.from;
+        if (options?.to) params['to'] = options.to;
+        // Default high enough for PSN-scale histories (~7.4k); callers may override.
+        params['limit'] = String(options?.limit ?? 10000);
+
+        const response = await firstValueFrom(
+          this.http.get<PlayerActivitiesResponse>(
+            this.url(`/players/${membershipId}/activities`),
+            { headers: this.headers(), params }
+          )
+        );
+        this.playerActivitiesCache.set(cacheKey, response);
+        return response;
+      } catch (err: unknown) {
+        const status = (err as { status?: number })?.status;
+        if (status === 404) {
+          this.playerActivitiesCache.set(cacheKey, null);
+          return null;
+        }
+        console.warn(`[Archive] fetchPlayerActivities failed for ${membershipId}:`, err);
+        // Do not cache hard failures — allow retry / Bungie fallback on next character.
+        return null;
+      } finally {
+        this.playerActivitiesInflight.delete(cacheKey);
+      }
+    })();
+
+    this.playerActivitiesInflight.set(cacheKey, request);
+    return request;
   }
 
   /**

@@ -3886,34 +3886,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       let newActivities: StoredActivity[] = [];
       
-      // Try loading from archive API first if enabled
+      // Try loading from archive API first if enabled (membership-level list; PGCR stays lazy).
       if (environment.useArchiveActivities && this.pgcrApiService.enabled) {
         try {
           const archiveData = await this.pgcrApiService.fetchPlayerActivities(
             character.membershipId,
-            { game: character.game }
+            { game: character.game, limit: 10000 }
           );
-          
+
           if (archiveData && archiveData.coverage && archiveData.coverage.rowCount > 0) {
-            if (environment.debug) {
-              console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
-                coverage: archiveData.coverage,
-                characterId: character.characterId
-              });
-            }
-            
-            // Filter activities for this specific character
+            console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
+              coverage: archiveData.coverage,
+              characterId: character.characterId
+            });
+
+            // Filter activities for this specific character (coerce ids - archive + Bungie both stringified).
             const characterActivities = archiveData.activities.filter(
-              a => a.characterId === character.characterId
+              a => String(a.characterId) === String(character.characterId)
             );
-            
+
             if (characterActivities.length > 0) {
-              // Convert light rows to ActivityHistory format
-              const convertedActivities = characterActivities.map(light => 
+              const convertedActivities = characterActivities.map(light =>
                 this.convertLightActivityToHistory(light)
               );
-              
-              // Convert to StoredActivity format
+
               const storedActivities: StoredActivity[] = convertedActivities.map(activity => ({
                 ...activity,
                 membershipId: character.membershipId,
@@ -3922,17 +3918,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 mode: activity.activityDetails?.mode,
                 game: character.game
               }));
-              
-              // Filter for new activities not already in DB
-              const uniqueNewActivities = storedActivities.filter(activity => 
+
+              const uniqueNewActivities = storedActivities.filter(activity =>
                 !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
               );
-              
+
               if (uniqueNewActivities.length > 0) {
                 await this.activityDb.addActivities(uniqueNewActivities);
                 newActivities.push(...uniqueNewActivities);
-                
-                // Report progress
+                this.activitiesCache.delete(character.membershipId);
+
                 if (accountKey && existingStatus) {
                   this.reportActivityCountDelta(
                     accountKey,
@@ -3944,20 +3939,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                     false
                   );
                 }
-                
+
                 this.overallActivitiesProcessed += uniqueNewActivities.length;
-                
-                if (environment.debug) {
-                  console.log(`[Archive] Stored ${uniqueNewActivities.length} new activities from archive for character ${character.characterId}`);
-                }
+                console.log(`[Archive] Stored ${uniqueNewActivities.length} new activities from archive for character ${character.characterId}`);
+              } else {
+                console.log(`[Archive] Character ${character.characterId} already in IDB (${storedActivities.length} archive rows, 0 new)`);
               }
-              
-              // Archive data loaded successfully - skip Bungie pagination for this character
-              // unless we need activities above the watermark (future enhancement)
+
+              // Membership archive hit - skip Bungie pagination for this character.
+              this.processAndGroupActivities();
               this.loadingActivities[loadingKey] = false;
               return;
             }
+
+            // Archive knows this membership but has no rows for this character - do not crawl Bungie.
+            console.log(`[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`);
+            this.loadingActivities[loadingKey] = false;
+            return;
           }
+
+          console.log(`[Archive] No archived activities for ${character.membershipId} (${character.game}); falling back to Bungie`);
         } catch (err) {
           console.warn(`[Archive] Failed to load from archive API for ${character.membershipId}, falling back to Bungie:`, err);
           // Fall through to Bungie API pagination
@@ -6061,6 +6062,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Clear player-specific caches before clearing player data
     this.clearPlayerSpecificCaches();
+    
+    // Clear archive API caches
+    this.pgcrApiService.clearPlayerActivitiesCache();
     
     // Clear core player data
     this.selectedPlayers = [];
@@ -8660,7 +8664,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             player.membershipId,
             charId,
             true,
-            true
+            false  // Archive cold-start fix: do not force full D1 crawl
           );
         } catch {}
       }
