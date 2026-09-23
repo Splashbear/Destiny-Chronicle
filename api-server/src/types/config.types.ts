@@ -8,6 +8,7 @@ export interface ApiConfig {
   leanActivitiesPath: string;
   membershipPath: string;
   watermarkPath: string;
+  playerActivitiesLitePath: string;
   
   // Bungie API
   bungieApiKey: string;
@@ -26,6 +27,7 @@ export const ENV_KEYS = {
   LEAN_ACTIVITIES_PATH: 'PGCR_LEAN_ACTIVITIES_PATH',
   MEMBERSHIP_PATH: 'PGCR_MEMBERSHIP_PATH',
   WATERMARK_PATH: 'PGCR_WATERMARK_PATH',
+  PLAYER_ACTIVITIES_LITE_PATH: 'PLAYER_ACTIVITIES_LITE_PATH',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   ENABLE_CORS: 'PGCR_ENABLE_CORS',

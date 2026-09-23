@@ -10,12 +10,18 @@ import { logger } from '../utils/logger';
 export class ArchiveService {
   private leanActivitiesPath: string;
   private membershipPath: string;
+  private playerActivitiesLitePath: string;
   private archiveAvailable = false;
   private db: Database | null = null;
 
-  constructor(leanActivitiesPath: string, membershipPath: string) {
+  constructor(
+    leanActivitiesPath: string,
+    membershipPath: string,
+    playerActivitiesLitePath: string
+  ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
+    this.playerActivitiesLitePath = playerActivitiesLitePath;
   }
 
   /**
@@ -208,6 +214,102 @@ export class ArchiveService {
       dump_id: String(row.dump_id ?? ''),
       game,
     };
+  }
+
+  /**
+   * Get player activities with filtering for player activities API.
+   * Reads from playerActivitiesLitePath with optional filters.
+   */
+  async getPlayerActivities(
+    membershipId: string,
+    options?: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    }
+  ): Promise<LeanActivity[]> {
+    if (!this.isAvailable() || !this.db) {
+      throw new Error('Archive not available');
+    }
+
+    try {
+      const { game, fromPeriod, toPeriod, limit = 10000 } = options || {};
+
+      logger.debug('Reading player activities from lite archive', {
+        membershipId,
+        game,
+        fromPeriod,
+        toPeriod,
+        limit,
+      });
+
+      const conditions: string[] = ['membership_id = ?'];
+      const params: any[] = [this.playerActivitiesLitePath, membershipId];
+
+      if (game) {
+        conditions.push('LOWER(game) = ?');
+        params.push(game.toLowerCase());
+      }
+
+      if (fromPeriod) {
+        conditions.push('period >= ?');
+        params.push(fromPeriod);
+      }
+
+      if (toPeriod) {
+        conditions.push('period <= ?');
+        params.push(toPeriod);
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      const sql = `
+        SELECT 
+          instance_id,
+          period,
+          activity_hash,
+          director_activity_hash,
+          mode,
+          membership_id,
+          membership_type,
+          display_name,
+          character_id,
+          completed,
+          deaths,
+          kills,
+          assists,
+          duration_seconds,
+          standing,
+          starting_phase_index,
+          fireteam_id,
+          is_private,
+          dump_id,
+          game
+        FROM read_parquet(?)
+        WHERE ${whereClause}
+        ORDER BY period DESC
+        LIMIT ?
+      `;
+
+      params.push(limit);
+
+      const rows = await this.db.all(sql, ...params);
+      const activities = rows.map((row: any) => this.mapRowToActivity(row));
+
+      logger.debug('Found player activities in lite archive', {
+        membershipId,
+        count: activities.length,
+      });
+
+      return activities;
+    } catch (error) {
+      logger.error('Failed to read player activities from archive', {
+        error,
+        membershipId,
+      });
+      throw error;
+    }
   }
 
   /**

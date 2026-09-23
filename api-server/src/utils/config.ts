@@ -4,13 +4,17 @@ import { ApiConfig, ENV_KEYS } from '../types/config.types';
  * Load configuration from environment variables with sensible defaults.
  */
 export function loadConfig(): ApiConfig {
+  const leanActivitiesPath = process.env[ENV_KEYS.LEAN_ACTIVITIES_PATH] || '';
+  const playerActivitiesLitePath = process.env[ENV_KEYS.PLAYER_ACTIVITIES_LITE_PATH] || '';
+  
   const config: ApiConfig = {
     port: parseInt(process.env[ENV_KEYS.PORT] || '3001', 10),
     
     // Archive paths - MUST be configured in production
-    leanActivitiesPath: process.env[ENV_KEYS.LEAN_ACTIVITIES_PATH] || '',
+    leanActivitiesPath,
     membershipPath: process.env[ENV_KEYS.MEMBERSHIP_PATH] || '',
     watermarkPath: process.env[ENV_KEYS.WATERMARK_PATH] || '',
+    playerActivitiesLitePath: playerActivitiesLitePath || leanActivitiesPath,
     
     // Bungie API - REQUIRED via environment variable
     bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',
@@ -30,8 +34,13 @@ export function loadConfig(): ApiConfig {
 export function validateConfig(config: ApiConfig): string[] {
   const errors: string[] = [];
   
-  if (!config.bungieApiKey) {
-    errors.push('BUNGIE_API_KEY is required');
+  const hasArchivePath = !!(config.leanActivitiesPath || config.playerActivitiesLitePath);
+  const hasValidApiKey = config.bungieApiKey && 
+    !config.bungieApiKey.includes('placeholder') && 
+    !config.bungieApiKey.includes('test_');
+  
+  if (!hasValidApiKey && !hasArchivePath) {
+    errors.push('BUNGIE_API_KEY is required when archive paths are not configured');
   }
   
   // Note: Archive paths are optional - server can work with live Bungie API only

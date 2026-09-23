@@ -6,6 +6,7 @@ import { BungieApiService } from './services/bungie-api.service';
 import { WatermarkService } from './services/watermark.service';
 import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
+import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
 
 async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -47,7 +48,8 @@ async function startServer(): Promise<void> {
 
   const archiveService = new ArchiveService(
     config.leanActivitiesPath,
-    config.membershipPath
+    config.membershipPath,
+    config.playerActivitiesLitePath
   );
   await archiveService.initialize();
 
@@ -58,6 +60,9 @@ async function startServer(): Promise<void> {
 
   // DC-facing routes (PgcrLite format for Angular app)
   app.use('/pgcr', createDcPgcrRouter(archiveService, bungieApiService, watermarkService));
+
+  // Player activities routes (light format for cold-start optimization)
+  app.use('/players', createPlayerActivitiesRouter(archiveService, watermarkService));
 
   // Admin/debug routes (lean format)
   app.use('/api/pgcr', createPgcrRouter(archiveService, bungieApiService, watermarkService));
@@ -79,6 +84,8 @@ async function startServer(): Promise<void> {
         health: 'GET /health',
         dc_instance: 'GET /pgcr/:instanceId?game=D2&format=lite',
         dc_batch: 'POST /pgcr/batch',
+        player_activities: 'GET /players/:membershipId/activities?game=D2&from=2021-01-01&to=2021-12-31&limit=1000',
+        player_activities_batch: 'POST /players/activities/batch',
         admin_watermark: 'GET /api/pgcr/watermark',
         admin_activities: 'GET /api/pgcr/activities?membershipId=<membershipId>',
         admin_instance: 'GET /api/pgcr/:instanceId',
@@ -98,6 +105,9 @@ async function startServer(): Promise<void> {
     logger.info('DC-facing endpoints (PgcrLite format):');
     logger.info(`  GET  http://localhost:${config.port}/pgcr/:instanceId?game=D2&format=lite`);
     logger.info(`  POST http://localhost:${config.port}/pgcr/batch`);
+    logger.info('Player activities endpoints (light format):');
+    logger.info(`  GET  http://localhost:${config.port}/players/:membershipId/activities`);
+    logger.info(`  POST http://localhost:${config.port}/players/activities/batch`);
     logger.info('Admin/debug endpoints (lean format):');
     logger.info(`  GET  http://localhost:${config.port}/api/pgcr/watermark`);
     logger.info(`  GET  http://localhost:${config.port}/api/pgcr/activities?membershipId=<id>`);
