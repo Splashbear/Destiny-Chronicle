@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
+import { PgcrApiService } from '../../services/pgcr-api.service';
 import { environment } from '../../../environments/environment';
 import { ArchiveService } from '../../services/archive.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
@@ -1706,7 +1707,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private archiveService: ArchiveService,
     public archiveRuntime: ArchiveRuntimeService,
     private archiveHtmlReportService: ArchiveHtmlReportService,
-    private assetUrl: AssetUrlService
+    private assetUrl: AssetUrlService,
+    private pgcrApiService: PgcrApiService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
@@ -3832,6 +3834,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Converts light activity rows from the archive API into the ActivityHistory format
+   * used by the rest of the application.
+   */
+  private convertLightActivityToHistory(light: any): ActivityHistory {
+    return {
+      period: light.period,
+      activityDetails: {
+        referenceId: String(light.activityHash),
+        instanceId: String(light.instanceId),
+        mode: light.mode
+      },
+      values: {
+        completed: { basic: { value: light.completed } },
+        deaths: { basic: { value: light.deaths } },
+        kills: { basic: { value: light.kills } },
+        assists: { basic: { value: light.assists } },
+        timePlayedSeconds: { basic: { value: light.durationSeconds } }
+      },
+      game: light.game,
+      membershipType: light.membershipType
+    };
+  }
+
   private async loadActivityHistoryForCharacter(character: CharacterWithGame): Promise<void> {
     const loadingKey = `${character.membershipId}-${character.characterId}`;
     this.loadingActivities[loadingKey] = true;
@@ -3859,6 +3885,84 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
 
       let newActivities: StoredActivity[] = [];
+      
+      // Try loading from archive API first if enabled
+      if (environment.useArchiveActivities && this.pgcrApiService.enabled) {
+        try {
+          const archiveData = await this.pgcrApiService.fetchPlayerActivities(
+            character.membershipId,
+            { game: character.game }
+          );
+          
+          if (archiveData && archiveData.coverage && archiveData.coverage.rowCount > 0) {
+            if (environment.debug) {
+              console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
+                coverage: archiveData.coverage,
+                characterId: character.characterId
+              });
+            }
+            
+            // Filter activities for this specific character
+            const characterActivities = archiveData.activities.filter(
+              a => a.characterId === character.characterId
+            );
+            
+            if (characterActivities.length > 0) {
+              // Convert light rows to ActivityHistory format
+              const convertedActivities = characterActivities.map(light => 
+                this.convertLightActivityToHistory(light)
+              );
+              
+              // Convert to StoredActivity format
+              const storedActivities: StoredActivity[] = convertedActivities.map(activity => ({
+                ...activity,
+                membershipId: character.membershipId,
+                characterId: character.characterId,
+                instanceId: activity.activityDetails?.instanceId,
+                mode: activity.activityDetails?.mode,
+                game: character.game
+              }));
+              
+              // Filter for new activities not already in DB
+              const uniqueNewActivities = storedActivities.filter(activity => 
+                !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
+              );
+              
+              if (uniqueNewActivities.length > 0) {
+                await this.activityDb.addActivities(uniqueNewActivities);
+                newActivities.push(...uniqueNewActivities);
+                
+                // Report progress
+                if (accountKey && existingStatus) {
+                  this.reportActivityCountDelta(
+                    accountKey,
+                    existingStatus.displayName,
+                    existingStatus.platform,
+                    character.game as 'D1' | 'D2',
+                    character.membershipType,
+                    uniqueNewActivities.length,
+                    false
+                  );
+                }
+                
+                this.overallActivitiesProcessed += uniqueNewActivities.length;
+                
+                if (environment.debug) {
+                  console.log(`[Archive] Stored ${uniqueNewActivities.length} new activities from archive for character ${character.characterId}`);
+                }
+              }
+              
+              // Archive data loaded successfully - skip Bungie pagination for this character
+              // unless we need activities above the watermark (future enhancement)
+              this.loadingActivities[loadingKey] = false;
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn(`[Archive] Failed to load from archive API for ${character.membershipId}, falling back to Bungie:`, err);
+          // Fall through to Bungie API pagination
+        }
+      }
       
       // Select mode list based on game.
       // Destiny 1 requires individual mode pagination; include Story (2) so

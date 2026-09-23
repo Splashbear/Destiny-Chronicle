@@ -19,9 +19,15 @@ export const environment = {
     cloudflareToken: ''       // e.g. 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
   },
   // External PGCR API integration (disabled by default until configured)
-  pgcrApiRoot: '',        // e.g. 'https://pgcr-api.example.com'
+  pgcrApiRoot: '',        // e.g. 'https://pgcr-api.example.com' or 'http://localhost:3001'
   pgcrApiKey: '',
   useExternalPgcr: false,  // set true to enable calling external PGCR API
+  /** 
+   * When true, use the external archive API to fetch pre-indexed player activities
+   * for faster cold-start loading. Falls back to Bungie API for memberships with
+   * no archived data or for activities above the archive watermark.
+   */
+  useArchiveActivities: false,
   offlineMode: false,
   archiveRoot: ''
 }; 
