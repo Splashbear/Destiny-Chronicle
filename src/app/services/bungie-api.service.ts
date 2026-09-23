@@ -7,6 +7,7 @@ import { BungieMembershipType } from 'bungie-api-ts/user';
 import { LocaleService } from './locale.service';
 import { unwrapD1PgcrBody } from '../utils/pgcr-prune';
 import { bungieRequestUrl } from '../utils/bungie-request-url';
+import { PgcrApiService } from './pgcr-api.service';
 
 export interface PlayerSearchResult {
   displayName: string;
@@ -82,7 +83,8 @@ export class BungieApiService {
 
   constructor(
     private http: HttpClient,
-    private locale: LocaleService
+    private locale: LocaleService,
+    private pgcrApi: PgcrApiService
   ) {}
 
   private buildUrl(url: string): string {

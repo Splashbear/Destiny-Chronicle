@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
+import { PgcrApiService } from '../../services/pgcr-api.service';
 import { environment } from '../../../environments/environment';
 import { ArchiveService } from '../../services/archive.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
@@ -1707,7 +1708,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private archiveService: ArchiveService,
     public archiveRuntime: ArchiveRuntimeService,
     private archiveHtmlReportService: ArchiveHtmlReportService,
-    private assetUrl: AssetUrlService
+    private assetUrl: AssetUrlService,
+    private pgcrApiService: PgcrApiService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
@@ -2482,8 +2484,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           this.runWithPlayerSyncLimit(async () => {
             try {
               await this.loadCharacterHistory(player);
-              await this.loadGuardianFirsts(player);
-              await this.loadDungeonSoloFirsts(player);
+              // Firsts/DungeonSolo after browse-ready (overlay clear).
+              this.scheduleAfterBrowseReady(() => {
+                void this.loadGuardianFirsts(player).catch(err => {
+                  console.warn('[Sync] Firsts skipped for', player.membershipId, err);
+                });
+                void this.loadDungeonSoloFirsts(player).catch(err => {
+                  console.warn('[Sync] DungeonSolo skipped for', player.membershipId, err);
+                });
+              });
             } catch (err) {
               console.warn('[LoadFavorites] Skipped due to error for', player.membershipId, err);
               const accountKey = this.getPlayerKey(player);
@@ -2503,21 +2512,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           })
         );
         
-        // Wasted time can load in parallel
-        loadPromises.push(
-          this.loadWastedTime(player).catch(err => {
-            console.warn('[LoadFavorites] WastedTime skipped for', player.membershipId, err);
-          })
-        );
+        // WastedTime off browse-ready critical path.
+        void this.loadWastedTime(player).catch(err => {
+          console.warn('[Sync] WastedTime skipped for', player.membershipId, err);
+        });
 
         // Proactively load titles in parallel so Account Summary has
         // accurate seal counts without requiring a Titles tab visit.
+        // Titles off browse-ready critical path.
         if (!this.isD1Player(player)) {
-          loadPromises.push(
-            this.loadTitlesForPlayer(player).catch((err: any) => {
-              console.warn('[LoadFavorites] Title load skipped for', player.membershipId, err);
-            })
-          );
+          void this.loadTitlesForPlayer(player).catch((err: any) => {
+            console.warn('[Sync] Title load skipped for', player.membershipId, err);
+          });
         }
       }
 
@@ -2618,8 +2624,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           this.runWithPlayerSyncLimit(async () => {
             try {
               await this.loadCharacterHistory(player);
-              await this.loadGuardianFirsts(player);
-              await this.loadDungeonSoloFirsts(player);
+              // Firsts/DungeonSolo after browse-ready (overlay clear).
+              this.scheduleAfterBrowseReady(() => {
+                void this.loadGuardianFirsts(player).catch(err => {
+                  console.warn('[Sync] Firsts skipped for', player.membershipId, err);
+                });
+                void this.loadDungeonSoloFirsts(player).catch(err => {
+                  console.warn('[Sync] DungeonSolo skipped for', player.membershipId, err);
+                });
+              });
             } catch (err) {
               console.warn('[LoadURLPlayers] Skipped due to error for', player.membershipId, err);
               // Update status to error
@@ -2640,21 +2653,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           })
         );
         
-        // Wasted time can load in parallel
-        loadPromises.push(
-          this.loadWastedTime(player).catch(err => {
-            console.warn('[LoadURLPlayers] WastedTime skipped for', player.membershipId, err);
-          })
-        );
+        // WastedTime off browse-ready critical path.
+        void this.loadWastedTime(player).catch(err => {
+          console.warn('[Sync] WastedTime skipped for', player.membershipId, err);
+        });
 
         // Proactively load titles so Account Summary has seals from
         // Bungie title data for permalink-loaded players.
+        // Titles off browse-ready critical path.
         if (!this.isD1Player(player)) {
-          loadPromises.push(
-            this.loadTitlesForPlayer(player).catch((err: any) => {
-              console.warn('[LoadURLPlayers] Title load skipped for', player.membershipId, err);
-            })
-          );
+          void this.loadTitlesForPlayer(player).catch((err: any) => {
+            console.warn('[Sync] Title load skipped for', player.membershipId, err);
+          });
         }
       }
 
@@ -3041,8 +3051,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           this.runWithPlayerSyncLimit(async () => {
             try {
               await this.loadCharacterHistory(pl);
-              await this.loadGuardianFirsts(pl);
-              await this.loadDungeonSoloFirsts(pl);
+              // Firsts/DungeonSolo after browse-ready (overlay clear).
+              this.scheduleAfterBrowseReady(() => {
+                void this.loadGuardianFirsts(pl).catch(err => {
+                  console.warn('[Sync] Firsts skipped for', pl.membershipId, err);
+                });
+                void this.loadDungeonSoloFirsts(pl).catch(err => {
+                  console.warn('[Sync] DungeonSolo skipped for', pl.membershipId, err);
+                });
+              });
               
               // Debug: Check what activities are actually in the database for this player
               await this.activityDb.debugPlayerActivities(pl.membershipId);
@@ -3051,21 +3068,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             }
           })
         );
-        // Wasted time can load in parallel
-        loadPromises.push(
-          this.loadWastedTime(pl).catch(err => {
-            console.warn('[LoadWastedTime] Skipped due to error for', pl.membershipId, err);
-          })
-        );
+        // WastedTime off browse-ready critical path.
+        void this.loadWastedTime(pl).catch(err => {
+          console.warn('[Sync] WastedTime skipped for', pl.membershipId, err);
+        });
 
         // Proactively load titles in parallel for all Destiny 2 accounts
         // when we run the character-history/firsts loader.
+        // Titles off browse-ready critical path.
         if (!this.isD1Player(pl)) {
-          loadPromises.push(
-            this.loadTitlesForPlayer(pl).catch((err: any) => {
-              console.warn('[LoadTitles] Skipped due to error for', pl.membershipId, err);
-            })
-          );
+          void this.loadTitlesForPlayer(pl).catch((err: any) => {
+            console.warn('[Sync] Title load skipped for', pl.membershipId, err);
+          });
         }
       }
       await Promise.all(loadPromises);
@@ -3134,18 +3148,27 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     try {
       await this.runWithPlayerSyncLimit(async () => {
         await this.loadCharacterHistory(displayPlayer);
-        await this.loadGuardianFirsts(displayPlayer);
-        await this.loadDungeonSoloFirsts(displayPlayer);
+        // Firsts/DungeonSolo after browse-ready (overlay clear).
+        this.scheduleAfterBrowseReady(() => {
+          void this.loadGuardianFirsts(displayPlayer).catch(err => {
+            console.warn('[Sync] Firsts skipped for', displayPlayer.membershipId, err);
+          });
+          void this.loadDungeonSoloFirsts(displayPlayer).catch(err => {
+            console.warn('[Sync] DungeonSolo skipped for', displayPlayer.membershipId, err);
+          });
+        });
       });
 
       // Wasted-on-Destiny can run in parallel and isn't bound to the
       // concurrency semaphore because it hits a different host.
-      this.loadWastedTime(displayPlayer).catch(err => console.warn('[appendPlayer] WastedTime skipped', err));
+      // WastedTime off browse-ready critical path.
+      void this.loadWastedTime(displayPlayer).catch(err => console.warn('[appendPlayer] WastedTime skipped', err));
 
       // Proactively load titles in the background for Account Summary accuracy
       // This ensures titles are available even if the Titles tab hasn't been clicked
+      // Titles off browse-ready critical path.
       if (!this.isD1Player(displayPlayer)) {
-        this.loadTitlesForPlayer(displayPlayer).catch((err: any) => 
+        void this.loadTitlesForPlayer(displayPlayer).catch((err: any) => 
           console.warn('[appendPlayer] Background title load skipped', err)
         );
       }
@@ -3833,6 +3856,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Converts light activity rows from the archive API into the ActivityHistory format
+   * used by the rest of the application.
+   */
+  private convertLightActivityToHistory(light: any): ActivityHistory {
+    return {
+      period: light.period,
+      activityDetails: {
+        referenceId: String(light.activityHash),
+        instanceId: String(light.instanceId),
+        mode: light.mode
+      },
+      values: {
+        completed: { basic: { value: light.completed } },
+        deaths: { basic: { value: light.deaths } },
+        kills: { basic: { value: light.kills } },
+        assists: { basic: { value: light.assists } },
+        timePlayedSeconds: { basic: { value: light.durationSeconds } }
+      },
+      game: light.game,
+      membershipType: light.membershipType
+    };
+  }
+
   private async loadActivityHistoryForCharacter(character: CharacterWithGame): Promise<void> {
     const loadingKey = `${character.membershipId}-${character.characterId}`;
     this.loadingActivities[loadingKey] = true;
@@ -3860,6 +3907,85 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
 
       let newActivities: StoredActivity[] = [];
+      
+      // Try loading from archive API first if enabled (membership-level list; PGCR stays lazy).
+      if (environment.useArchiveActivities && this.pgcrApiService.enabled) {
+        try {
+          const archiveData = await this.pgcrApiService.fetchPlayerActivities(
+            character.membershipId,
+            { game: character.game, limit: 10000 }
+          );
+
+          if (archiveData && archiveData.coverage && archiveData.coverage.rowCount > 0) {
+            console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
+              coverage: archiveData.coverage,
+              characterId: character.characterId
+            });
+
+            // Filter activities for this specific character (coerce ids - archive + Bungie both stringified).
+            const characterActivities = archiveData.activities.filter(
+              a => String(a.characterId) === String(character.characterId)
+            );
+
+            if (characterActivities.length > 0) {
+              const convertedActivities = characterActivities.map(light =>
+                this.convertLightActivityToHistory(light)
+              );
+
+              const storedActivities: StoredActivity[] = convertedActivities.map(activity => ({
+                ...activity,
+                membershipId: character.membershipId,
+                characterId: character.characterId,
+                instanceId: activity.activityDetails?.instanceId,
+                mode: activity.activityDetails?.mode,
+                game: character.game
+              }));
+
+              const uniqueNewActivities = storedActivities.filter(activity =>
+                !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
+              );
+
+              if (uniqueNewActivities.length > 0) {
+                await this.activityDb.addActivities(uniqueNewActivities);
+                newActivities.push(...uniqueNewActivities);
+                this.activitiesCache.delete(character.membershipId);
+
+                if (accountKey && existingStatus) {
+                  this.reportActivityCountDelta(
+                    accountKey,
+                    existingStatus.displayName,
+                    existingStatus.platform,
+                    character.game as 'D1' | 'D2',
+                    character.membershipType,
+                    uniqueNewActivities.length,
+                    false
+                  );
+                }
+
+                this.overallActivitiesProcessed += uniqueNewActivities.length;
+                console.log(`[Archive] Stored ${uniqueNewActivities.length} new activities from archive for character ${character.characterId}`);
+              } else {
+                console.log(`[Archive] Character ${character.characterId} already in IDB (${storedActivities.length} archive rows, 0 new)`);
+              }
+
+              // Membership archive hit - skip Bungie pagination for this character.
+              this.processAndGroupActivities();
+              this.loadingActivities[loadingKey] = false;
+              return;
+            }
+
+            // Archive knows this membership but has no rows for this character - do not crawl Bungie.
+            console.log(`[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`);
+            this.loadingActivities[loadingKey] = false;
+            return;
+          }
+
+          console.log(`[Archive] No archived activities for ${character.membershipId} (${character.game}); falling back to Bungie`);
+        } catch (err) {
+          console.warn(`[Archive] Failed to load from archive API for ${character.membershipId}, falling back to Bungie:`, err);
+          // Fall through to Bungie API pagination
+        }
+      }
       
       // Select mode list based on game.
       // Destiny 1 requires individual mode pagination; include Story (2) so
@@ -5958,6 +6084,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Clear player-specific caches before clearing player data
     this.clearPlayerSpecificCaches();
+    
+    // Clear archive API caches
+    this.pgcrApiService.clearPlayerActivitiesCache();
     
     // Clear core player data
     this.selectedPlayers = [];
@@ -8543,26 +8672,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.firstEverActivities[this.getPlayerKey(player)];
   }
 
+  /** Queue work until loading overlay / progress is cleared (browse-ready). */
+  private scheduleAfterBrowseReady(fn: () => void): void {
+    const tryRun = () => {
+      if (!this.showLoadingModal && !this.loadingProgress) {
+        fn();
+        return;
+      }
+      setTimeout(tryRun, 250);
+    };
+    setTimeout(tryRun, 0);
+  }
+
   /** Compute first-ever activity per player using centralized service */
   private async computeFirstEverActivityForPlayer(player: PlayerSearchDisplay): Promise<ActivityHistory | undefined> {
-    // Ensure D1 history is fully backfilled before computing earliest
-    if (player.game === 'D1') {
-    const charIds = (this.characters[this.getPlayerKey(player)] || [])
-      .map(getCharacterId)
-      .filter((id): id is string => !!id);
-    for (const charId of charIds) {
-        try {
-          await this.activityDb.fetchAndStoreActivities(
-            player.membershipType as any,
-            player.membershipId,
-            charId,
-            true,
-            true
-          );
-        } catch {}
-      }
-    }
-    // Force service refresh and scope to this player's characters to avoid stray rows
+    // Use IDB/archive rows only. Do NOT force a full Bungie D1 mode crawl here —
+    // that belonged on the cold-start path and blocked browse-ready for 6-account loads.
+    // If archive/IDB is empty, Firsts simply shows what is available; a manual refresh can backfill later.
     const scopedCharIds = (this.characters[this.getPlayerKey(player)] || [])
       .map(getCharacterId)
       .filter((id): id is string => !!id);
@@ -10385,8 +10511,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Shows a success message to the user
    */
   private showSuccessMessage(message: string) {
-    // For now, use a simple alert. In the future, this could be a toast notification
-    alert(message);
+    console.log("[Load] " + message);
+    try {
+      // Skip blocking alert under automation/headless (Playwright sets webdriver).
+      if (typeof navigator !== "undefined" && (navigator as any).webdriver) {
+        return;
+      }
+      alert(message);
+    } catch {
+      // ignore
+    }
   }
 
   // Account loading status tracking
