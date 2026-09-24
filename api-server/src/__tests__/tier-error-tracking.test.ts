@@ -128,8 +128,9 @@ describe('Tier Error Tracking', () => {
     expect(result.tier.source).toBe('extract');
     expect(result.activities.length).toBeGreaterThan(0);
     
-    // Should preserve error note from corrupt primary file
+    // Should preserve error note from corrupt primary file and fallback note
     expect(result.tier.notes).toBeDefined();
+    expect(result.tier.notes!.length).toBe(2); // Exactly 2 notes, not 4 (no duplicates)
     expect(result.tier.notes!.some(note => note.includes('light_api.parquet'))).toBe(true);
     expect(result.tier.notes!.some(note => note.includes('unreadable'))).toBe(true);
     // Should note that fallback was used

@@ -386,9 +386,10 @@ export class ArchiveService {
             membershipId,
             count: extractResult.activities.length,
           });
-          // Merge tier errors
+          // Merge tier errors and deduplicate
           if (tierErrors.length > 0) {
-            extractResult.tier.notes = [...(extractResult.tier.notes || []), ...tierErrors];
+            const allNotes = [...(extractResult.tier.notes || []), ...tierErrors];
+            extractResult.tier.notes = Array.from(new Set(allNotes));
           }
           return extractResult;
         }
