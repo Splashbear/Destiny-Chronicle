@@ -46,15 +46,17 @@ function toLightActivityRow(activity: LeanActivity): LightActivityRow {
 }
 
 /**
- * Build coverage information from activities
+ * Build coverage information from activities and tier info
  */
 function buildCoverage(
   activities: LeanActivity[],
-  watermarkService: WatermarkService
+  watermarkService: WatermarkService,
+  tier?: { level: 'full' | 'partial' | 'absent'; source: 'lite' | 'extract' | 'compact_ids' | 'none' }
 ): PlayerActivitiesCoverage {
   if (activities.length === 0) {
     return {
-      source: 'archive',
+      level: tier?.level || 'absent',
+      source: tier?.source || 'none',
       rowCount: 0,
       minPeriod: null,
       maxPeriod: null,
@@ -71,7 +73,8 @@ function buildCoverage(
     : undefined;
 
   return {
-    source: 'archive',
+    level: tier?.level || 'full',
+    source: tier?.source || 'lite',
     rowCount: activities.length,
     minPeriod,
     maxPeriod,
@@ -123,6 +126,7 @@ export function createPlayerActivitiesRouter(
         const response: PlayerActivitiesResponse = {
           membershipId,
           coverage: {
+            level: 'absent',
             source: 'none',
             rowCount: 0,
             minPeriod: null,
@@ -133,15 +137,15 @@ export function createPlayerActivitiesRouter(
         return res.json(response);
       }
 
-      const activities = await archiveService.getPlayerActivities(membershipId, {
+      const result = await archiveService.getPlayerActivitiesMultiTier(membershipId, {
         game,
         fromPeriod,
         toPeriod,
         limit,
       });
 
-      const coverage = buildCoverage(activities, watermarkService);
-      const lightRows = activities.map(toLightActivityRow);
+      const coverage = buildCoverage(result.activities, watermarkService, result.tier);
+      const lightRows = result.activities.map(toLightActivityRow);
 
       const response: PlayerActivitiesResponse = {
         membershipId,
@@ -199,6 +203,7 @@ export function createPlayerActivitiesRouter(
           result[membershipId] = {
             membershipId,
             coverage: {
+              level: 'absent',
               source: 'none',
               rowCount: 0,
               minPeriod: null,
@@ -217,15 +222,15 @@ export function createPlayerActivitiesRouter(
             continue;
           }
 
-          const activities = await archiveService.getPlayerActivities(membershipId, {
+          const activitiesResult = await archiveService.getPlayerActivitiesMultiTier(membershipId, {
             game,
             fromPeriod: from,
             toPeriod: to,
             limit,
           });
 
-          const coverage = buildCoverage(activities, watermarkService);
-          const lightRows = activities.map(toLightActivityRow);
+          const coverage = buildCoverage(activitiesResult.activities, watermarkService, activitiesResult.tier);
+          const lightRows = activitiesResult.activities.map(toLightActivityRow);
 
           result[membershipId] = {
             membershipId,
@@ -237,6 +242,7 @@ export function createPlayerActivitiesRouter(
           result[membershipId] = {
             membershipId,
             coverage: {
+              level: 'absent',
               source: 'none',
               rowCount: 0,
               minPeriod: null,

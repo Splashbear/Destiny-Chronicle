@@ -8,7 +8,7 @@
     "start": "node dist/server.js",
     "dev": "tsc && node dist/server.js",
     "watch": "tsc --watch",
-    "test": "echo \"Note: Install Jest for comprehensive testing. Using TypeScript for type checking.\" && tsc --noEmit",
+    "test": "jest",
     "smoke-test": "node smoke-test.js"
   },
   "keywords": [
@@ -24,7 +24,10 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^18.18.0",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.13",
     "typescript": "~5.7.2"
   }
 }

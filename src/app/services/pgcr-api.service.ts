@@ -29,7 +29,8 @@ export interface LightActivityRow {
 }
 
 export interface PlayerActivitiesCoverage {
-  source: string;
+  level: 'full' | 'partial' | 'absent';
+  source: 'lite' | 'extract' | 'compact_ids' | 'none';
   rowCount: number;
   minPeriod?: string;
   maxPeriod?: string;

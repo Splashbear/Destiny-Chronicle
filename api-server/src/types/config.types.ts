@@ -10,6 +10,10 @@ export interface ApiConfig {
   watermarkPath: string;
   playerActivitiesLitePath: string;
   
+  // Multi-tier archive paths
+  midLightExtractDir: string;
+  compactIndexRoot: string;
+  
   // Bungie API
   bungieApiKey: string;
   bungieApiRoot: string;
@@ -28,6 +32,8 @@ export const ENV_KEYS = {
   MEMBERSHIP_PATH: 'PGCR_MEMBERSHIP_PATH',
   WATERMARK_PATH: 'PGCR_WATERMARK_PATH',
   PLAYER_ACTIVITIES_LITE_PATH: 'PLAYER_ACTIVITIES_LITE_PATH',
+  MID_LIGHT_EXTRACT_DIR: 'MID_LIGHT_EXTRACT_DIR',
+  COMPACT_INDEX_ROOT: 'COMPACT_INDEX_ROOT',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   ENABLE_CORS: 'PGCR_ENABLE_CORS',

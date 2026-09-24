@@ -16,6 +16,10 @@ export function loadConfig(): ApiConfig {
     watermarkPath: process.env[ENV_KEYS.WATERMARK_PATH] || '',
     playerActivitiesLitePath: playerActivitiesLitePath || leanActivitiesPath,
     
+    // Multi-tier archive paths
+    midLightExtractDir: process.env[ENV_KEYS.MID_LIGHT_EXTRACT_DIR] || '',
+    compactIndexRoot: process.env[ENV_KEYS.COMPACT_INDEX_ROOT] || '',
+    
     // Bungie API - REQUIRED via environment variable
     bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',
     bungieApiRoot: process.env[ENV_KEYS.BUNGIE_API_ROOT] || 'https://www.bungie.net/Platform',

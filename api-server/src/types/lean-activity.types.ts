@@ -80,7 +80,8 @@ export interface LightActivityRow {
  * Coverage information for player activities response.
  */
 export interface PlayerActivitiesCoverage {
-  source: 'archive' | 'none';
+  level: 'full' | 'partial' | 'absent';
+  source: 'lite' | 'extract' | 'compact_ids' | 'none';
   rowCount: number;
   minPeriod: string | null;
   maxPeriod: string | null;
