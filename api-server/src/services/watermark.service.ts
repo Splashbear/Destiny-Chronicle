@@ -40,7 +40,7 @@ export class WatermarkService {
    * Check if an instance ID is covered by the archive.
    */
   isCovered(instanceId: string): boolean {
-    if (!this.watermark) {
+    if (!this.watermark || !instanceId || instanceId.trim() === '') {
       return false;
     }
 

@@ -30,11 +30,15 @@ export interface LightActivityRow {
 
 export interface PlayerActivitiesCoverage {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'none';
+  source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending' | 'archive';
   rowCount: number;
-  minPeriod?: string;
-  maxPeriod?: string;
+  distinctInstances?: number;
+  minPeriod?: string | null;
+  maxPeriod?: string | null;
   watermarkNote?: string;
+  indexComplete?: boolean;
+  filtersApplied?: boolean;
+  notes?: string[];
 }
 
 export interface PlayerActivitiesResponse {

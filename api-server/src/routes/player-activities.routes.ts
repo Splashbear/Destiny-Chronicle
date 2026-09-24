@@ -46,26 +46,45 @@ function toLightActivityRow(activity: LeanActivity): LightActivityRow {
 }
 
 /**
- * Build coverage information from activities and tier info
+ * Build coverage information from activities and tier info.
+ * Calculates distinct instance count for accuracy.
  */
 function buildCoverage(
   activities: LeanActivity[],
   watermarkService: WatermarkService,
-  tier?: { level: 'full' | 'partial' | 'absent'; source: 'lite' | 'extract' | 'compact_ids' | 'none' }
+  tierInfo: {
+    level: 'full' | 'partial' | 'absent';
+    source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending' | 'archive';
+    indexComplete?: boolean;
+    filtersApplied?: boolean;
+    notes?: string[];
+  }
 ): PlayerActivitiesCoverage {
+  const rowCount = activities.length;
+  const distinctInstances = new Set(activities.map(a => a.instance_id).filter(id => id)).size;
+
   if (activities.length === 0) {
     return {
-      level: tier?.level || 'absent',
-      source: tier?.source || 'none',
+      level: tierInfo.level,
+      source: tierInfo.source,
       rowCount: 0,
+      distinctInstances: 0,
       minPeriod: null,
       maxPeriod: null,
+      indexComplete: tierInfo.indexComplete,
+      filtersApplied: tierInfo.filtersApplied,
+      notes: tierInfo.notes,
     };
   }
 
-  const periods = activities.map((a) => a.period).sort();
-  const minPeriod = periods[0];
-  const maxPeriod = periods[periods.length - 1];
+  // For compact tier, periods are empty strings
+  const periodsWithValues = activities
+    .map((a) => a.period)
+    .filter(p => p && p !== '')
+    .sort();
+  
+  const minPeriod = periodsWithValues.length > 0 ? periodsWithValues[0] : null;
+  const maxPeriod = periodsWithValues.length > 0 ? periodsWithValues[periodsWithValues.length - 1] : null;
 
   const watermark = watermarkService.getWatermark();
   const watermarkNote = watermark
@@ -73,12 +92,16 @@ function buildCoverage(
     : undefined;
 
   return {
-    level: tier?.level || 'full',
-    source: tier?.source || 'lite',
-    rowCount: activities.length,
+    level: tierInfo.level,
+    source: tierInfo.source,
+    rowCount,
+    distinctInstances,
     minPeriod,
     maxPeriod,
     watermarkNote,
+    indexComplete: tierInfo.indexComplete,
+    filtersApplied: tierInfo.filtersApplied,
+    notes: tierInfo.notes,
   };
 }
 

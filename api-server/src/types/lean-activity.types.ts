@@ -81,11 +81,15 @@ export interface LightActivityRow {
  */
 export interface PlayerActivitiesCoverage {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'none';
+  source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending' | 'archive';
   rowCount: number;
+  distinctInstances?: number;
   minPeriod: string | null;
   maxPeriod: string | null;
   watermarkNote?: string;
+  indexComplete?: boolean;
+  filtersApplied?: boolean;
+  notes?: string[];
 }
 
 /**

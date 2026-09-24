@@ -8,7 +8,10 @@ import { logger } from '../utils/logger';
  */
 export interface TierInfo {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'none';
+  source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending';
+  indexComplete?: boolean;
+  filtersApplied?: boolean;
+  notes?: string[];
 }
 
 /**
@@ -17,6 +20,7 @@ export interface TierInfo {
 export interface PlayerActivitiesResult {
   activities: LeanActivity[];
   tier: TierInfo;
+  knownPlayer?: boolean;
 }
 
 /**
@@ -281,7 +285,7 @@ export class ArchiveService {
 
   /**
    * Map DuckDB row to LeanActivity type.
-   * Handles lowercase 'd2'/'d1' game values from Travis files.
+   * Handles lowercase 'd2'/'d1' game values.
    */
   private mapRowToActivity(row: any): LeanActivity {
     let game: 'D1' | 'D2' = 'D2';
@@ -319,6 +323,7 @@ export class ArchiveService {
   /**
    * Multi-tier lookup for player activities.
    * Tries: lite → per-mid extract → compact ids → absent.
+   * Never falls through if a tier knows the player (even if filters leave 0 rows).
    */
   async getPlayerActivitiesMultiTier(
     membershipId: string,
@@ -347,56 +352,48 @@ export class ArchiveService {
 
     // Tier 1: Try lite parquet
     try {
-      const liteActivities = await this.tryLiteLookup(membershipId, options);
-      if (liteActivities.length > 0) {
-        logger.debug('Found activities in lite tier', {
+      const liteResult = await this.tryLiteLookup(membershipId, options);
+      if (liteResult.knownPlayer) {
+        logger.debug('Lite tier knows player', {
           membershipId,
-          count: liteActivities.length,
+          count: liteResult.activities.length,
         });
-        return {
-          activities: liteActivities,
-          tier: { level: 'full', source: 'lite' },
-        };
+        return liteResult;
       }
     } catch (error) {
-      logger.debug('Lite lookup failed, trying next tier', { membershipId, error });
+      logger.warn('Lite lookup error, trying next tier', { membershipId, error });
     }
 
     // Tier 2: Try per-mid light extract
     if (this.midLightExtractDir) {
       try {
-        const extractActivities = await this.tryExtractLookup(membershipId, options);
-        if (extractActivities.length > 0) {
-          logger.debug('Found activities in extract tier', {
+        const extractResult = await this.tryExtractLookup(membershipId, options);
+        if (extractResult.knownPlayer) {
+          logger.debug('Extract tier knows player', {
             membershipId,
-            count: extractActivities.length,
+            count: extractResult.activities.length,
           });
-          return {
-            activities: extractActivities,
-            tier: { level: 'full', source: 'extract' },
-          };
+          return extractResult;
         }
       } catch (error) {
-        logger.debug('Extract lookup failed, trying next tier', { membershipId, error });
+        logger.warn('Extract lookup error, trying next tier', { membershipId, error });
       }
     }
 
     // Tier 3: Try compact index
     if (this.compactIndexRoot && this.bucketHashType) {
       try {
-        const compactActivities = await this.tryCompactIndexLookup(membershipId, options);
-        if (compactActivities.length > 0) {
-          logger.debug('Found activities in compact index tier', {
+        const compactResult = await this.tryCompactIndexLookup(membershipId, options);
+        if (compactResult.knownPlayer || compactResult.tier.source === 'pending') {
+          logger.debug('Compact tier result', {
             membershipId,
-            count: compactActivities.length,
+            count: compactResult.activities.length,
+            source: compactResult.tier.source,
           });
-          return {
-            activities: compactActivities,
-            tier: { level: 'partial', source: 'compact_ids' },
-          };
+          return compactResult;
         }
       } catch (error) {
-        logger.debug('Compact index lookup failed', { membershipId, error });
+        logger.warn('Compact index lookup error', { membershipId, error });
       }
     }
 
@@ -419,22 +416,40 @@ export class ArchiveService {
       toPeriod?: string;
       limit?: number;
     }
-  ): Promise<LeanActivity[]> {
+  ): Promise<PlayerActivitiesResult> {
     if (!this.playerActivitiesLitePath) {
-      return [];
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
     try {
       await fs.access(this.playerActivitiesLitePath);
     } catch {
-      return [];
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
-    return this.queryPlayerActivities(this.playerActivitiesLitePath, membershipId, options);
+    const result = await this.queryPlayerActivitiesSchema(
+      this.playerActivitiesLitePath,
+      membershipId,
+      options,
+      'lite'
+    );
+    
+    return {
+      activities: result.activities,
+      tier: {
+        level: 'full',
+        source: result.knownPlayer ? 'lite' : 'none',
+        filtersApplied: result.filtersApplied,
+        notes: result.notes,
+      },
+      knownPlayer: result.knownPlayer,
+    };
   }
 
   /**
    * Try tier 2: per-mid light extract lookup.
+   * Tries patterns: mid_{mid}_light_api.parquet (preferred), mid_{mid}_light.parquet,
+   * or parts layout: membership_id={mid}/ids.parquet + parts/YYYY-MM.parquet
    */
   private async tryExtractLookup(
     membershipId: string,
@@ -444,36 +459,54 @@ export class ArchiveService {
       toPeriod?: string;
       limit?: number;
     }
-  ): Promise<LeanActivity[]> {
+  ): Promise<PlayerActivitiesResult> {
     if (!this.midLightExtractDir) {
-      return [];
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
     const path = await import('path');
 
-    // Try multiple file naming patterns
+    // Try individual file patterns first (preferred)
     const patterns = [
-      `${membershipId}_api.parquet`,
-      `${membershipId}_light.parquet`,
-      `mid_${membershipId}_api.parquet`,
-      `mid_${membershipId}_light.parquet`,
+      `mid_${membershipId}_light_api.parquet`,  // 20-column API shape (preferred)
+      `mid_${membershipId}_light.parquet`,      // 16-column shape
     ];
 
     for (const pattern of patterns) {
       const filePath = path.join(this.midLightExtractDir, pattern);
       try {
         await fs.access(filePath);
-        return this.queryPlayerActivities(filePath, membershipId, options);
+        const result = await this.queryPlayerActivitiesSchema(
+          filePath,
+          membershipId,
+          options,
+          'extract'
+        );
+        return {
+          activities: result.activities,
+          tier: {
+            level: 'full',
+            source: result.knownPlayer ? 'extract' : 'none',
+            filtersApplied: result.filtersApplied,
+            notes: result.notes,
+          },
+          knownPlayer: result.knownPlayer,
+        };
       } catch {
         continue;
       }
     }
 
-    return [];
+    // Try parts layout: membership_id={mid}/ids.parquet + parts/*.parquet
+    // TODO: Implement parts-based lookup if needed
+    // For now, just return not found
+    
+    return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
   }
 
   /**
    * Try tier 3: compact index lookup (instance IDs only).
+   * Returns distinct instance IDs, sorted numerically, with no fabricated dates/modes.
    */
   private async tryCompactIndexLookup(
     membershipId: string,
@@ -483,14 +516,14 @@ export class ArchiveService {
       toPeriod?: string;
       limit?: number;
     }
-  ): Promise<LeanActivity[]> {
+  ): Promise<PlayerActivitiesResult> {
     if (!this.compactIndexRoot || !this.db) {
-      return [];
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
     const bucket = await this.calculateBucket(membershipId);
     if (bucket === null) {
-      return [];
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
     const path = await import('path');
@@ -499,39 +532,65 @@ export class ArchiveService {
     const markerPath = path.join(bucketDir, '_COMPLETE.json');
 
     // Check for completion marker
+    let markerExists = false;
     try {
       await fs.access(markerPath);
+      markerExists = true;
     } catch {
+      // Bucket exists but incomplete
       logger.debug('Compact index bucket not complete', { bucket, membershipId });
-      return [];
     }
 
     // Check for instances file
+    let fileExists = false;
     try {
       await fs.access(instancesPath);
+      fileExists = true;
     } catch {
       logger.debug('Compact index instances file not found', { bucket, membershipId });
-      return [];
     }
 
-    // Query for instance IDs
+    // If bucket/file missing, report as pending
+    if (!fileExists) {
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: markerExists ? 'none' : 'pending',
+          indexComplete: markerExists,
+        },
+        knownPlayer: false,
+      };
+    }
+
+    // Query for distinct instance IDs, sorted numerically
     try {
+      // Ignore filters for compact tier (no dates available)
+      const hasFilters = !!(options?.game || options?.fromPeriod || options?.toPeriod);
+      
       const sql = `
-        SELECT 
-          activity_instance_id,
-          character_id
+        SELECT DISTINCT
+          CAST(activity_instance_id AS VARCHAR) AS instance_id,
+          CAST(character_id AS VARCHAR) AS character_id
         FROM read_parquet(?)
         WHERE membership_id = ?
-        ORDER BY activity_instance_id DESC
+          AND activity_instance_id IS NOT NULL
+          AND activity_instance_id != ''
+          AND CAST(activity_instance_id AS UBIGINT) > 0
+        ORDER BY CAST(activity_instance_id AS UBIGINT) DESC
         LIMIT ?
       `;
 
       const limit = options?.limit || 10000;
       const rows = await this.db.all(sql, instancesPath, membershipId, limit);
 
-      // Convert to minimal LeanActivity objects (IDs only)
-      return rows.map((row: any) => ({
-        instance_id: String(row.activity_instance_id ?? ''),
+      const notes: string[] = [];
+      if (hasFilters) {
+        notes.push('Filters (game, from, to) ignored for compact tier (no dates available)');
+      }
+
+      const activities: LeanActivity[] = rows.map((row: any) => ({
+        instance_id: String(row.instance_id ?? ''),
         character_id: String(row.character_id ?? ''),
         period: '',
         activity_hash: 0,
@@ -550,85 +609,156 @@ export class ArchiveService {
         fireteam_id: '',
         is_private: false,
         dump_id: '',
-        game: 'D2',
+        game: 'D2' as 'D1' | 'D2',  // Assumed D2, not actually known from compact tier
       }));
+
+      return {
+        activities,
+        tier: {
+          level: activities.length > 0 ? 'partial' : 'absent',
+          source: activities.length > 0 ? 'compact_ids' : (markerExists ? 'none' : 'pending'),
+          indexComplete: markerExists,
+          filtersApplied: false,
+          notes: notes.length > 0 ? notes : undefined,
+        },
+        knownPlayer: activities.length > 0,
+      };
     } catch (error) {
       logger.error('Failed to read compact index', { error, bucket, membershipId });
-      return [];
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: markerExists ? 'none' : 'pending',
+          indexComplete: markerExists,
+          notes: ['Error reading compact index'],
+        },
+        knownPlayer: false,
+      };
     }
   }
 
   /**
-   * Query player activities from a parquet file with filtering.
+   * Schema-tolerant query for player activities.
+   * First DESCRIBEs the table to see what columns exist, then selects only available ones.
    */
-  private async queryPlayerActivities(
+  private async queryPlayerActivitiesSchema(
     parquetPath: string,
     membershipId: string,
-    options?: {
+    options: {
       game?: 'D1' | 'D2';
       fromPeriod?: string;
       toPeriod?: string;
       limit?: number;
-    }
-  ): Promise<LeanActivity[]> {
+    } | undefined,
+    tierName: string
+  ): Promise<{
+    activities: LeanActivity[];
+    knownPlayer: boolean;
+    filtersApplied: boolean;
+    notes?: string[];
+  }> {
     if (!this.db) {
-      return [];
+      return { activities: [], knownPlayer: false, filtersApplied: false };
     }
 
-    const { game, fromPeriod, toPeriod, limit = 10000 } = options || {};
+    try {
+      // First, check schema
+      const schemaResult = await this.db.all(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);
+      const availableColumns = new Set(schemaResult.map((col: any) => col.column_name));
 
-    const conditions: string[] = ['membership_id = ?'];
-    const params: any[] = [parquetPath, membershipId];
+      // Required columns
+      const requiredCols = [
+        'instance_id', 'period', 'activity_hash', 'mode', 'membership_id',
+        'character_id', 'completed', 'deaths', 'duration_seconds', 'game'
+      ];
 
-    if (game) {
-      conditions.push('LOWER(game) = ?');
-      params.push(game.toLowerCase());
+      // Optional columns (provide defaults if missing)
+      const optionalCols = {
+        director_activity_hash: 0,
+        membership_type: 0,
+        display_name: "''",
+        kills: 0,
+        assists: 0,
+        standing: 0,
+        starting_phase_index: 0,
+        fireteam_id: "''",
+        is_private: 'false',
+        dump_id: "''",
+      };
+
+      // Build select clause with available or defaulted columns
+      const selectCols = requiredCols.map(col => 
+        availableColumns.has(col) ? col : `NULL AS ${col}`
+      );
+      
+      for (const [col, defaultVal] of Object.entries(optionalCols)) {
+        if (availableColumns.has(col)) {
+          selectCols.push(col);
+        } else {
+          selectCols.push(`${defaultVal} AS ${col}`);
+        }
+      }
+
+      // Check if player exists (without filters)
+      const countSql = `
+        SELECT COUNT(*) as cnt
+        FROM read_parquet(?)
+        WHERE membership_id = ?
+      `;
+      const countResult = await this.db.all(countSql, parquetPath, membershipId);
+      const knownPlayer = (countResult[0]?.cnt || 0) > 0;
+
+      if (!knownPlayer) {
+        return { activities: [], knownPlayer: false, filtersApplied: false };
+      }
+
+      // Build filtered query
+      const { game, fromPeriod, toPeriod, limit = 10000 } = options || {};
+
+      const conditions: string[] = ['membership_id = ?'];
+      const params: any[] = [parquetPath, membershipId];
+
+      if (game && availableColumns.has('game')) {
+        conditions.push('LOWER(game) = ?');
+        params.push(game.toLowerCase());
+      }
+
+      if (fromPeriod && availableColumns.has('period')) {
+        conditions.push('period >= ?');
+        params.push(fromPeriod);
+      }
+
+      if (toPeriod && availableColumns.has('period')) {
+        conditions.push('period <= ?');
+        params.push(toPeriod);
+      }
+
+      const whereClause = conditions.join(' AND ');
+      const orderBy = availableColumns.has('period') ? 'ORDER BY period DESC' : '';
+
+      const sql = `
+        SELECT ${selectCols.join(', ')}
+        FROM read_parquet(?)
+        WHERE ${whereClause}
+        ${orderBy}
+        LIMIT ?
+      `;
+
+      params.push(limit);
+
+      const rows = await this.db.all(sql, ...params);
+      const activities = rows.map((row: any) => this.mapRowToActivity(row));
+
+      return {
+        activities,
+        knownPlayer: true,
+        filtersApplied: true,
+      };
+    } catch (error) {
+      logger.error(`Schema-tolerant query failed for ${tierName} tier`, { error, parquetPath, membershipId });
+      throw error;
     }
-
-    if (fromPeriod) {
-      conditions.push('period >= ?');
-      params.push(fromPeriod);
-    }
-
-    if (toPeriod) {
-      conditions.push('period <= ?');
-      params.push(toPeriod);
-    }
-
-    const whereClause = conditions.join(' AND ');
-
-    const sql = `
-      SELECT 
-        instance_id,
-        period,
-        activity_hash,
-        director_activity_hash,
-        mode,
-        membership_id,
-        membership_type,
-        display_name,
-        character_id,
-        completed,
-        deaths,
-        kills,
-        assists,
-        duration_seconds,
-        standing,
-        starting_phase_index,
-        fireteam_id,
-        is_private,
-        dump_id,
-        game
-      FROM read_parquet(?)
-      WHERE ${whereClause}
-      ORDER BY period DESC
-      LIMIT ?
-    `;
-
-    params.push(limit);
-
-    const rows = await this.db.all(sql, ...params);
-    return rows.map((row: any) => this.mapRowToActivity(row));
   }
 
   /**

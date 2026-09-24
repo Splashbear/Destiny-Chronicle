@@ -10,9 +10,10 @@ This guide provides curl examples for testing each tier of the multi-tier archiv
 ## Test Membership IDs
 
 - **Tier 1 (Lite)**: Use a membership ID that exists in `PLAYER_ACTIVITIES_LITE_PATH`
-- **Tier 2 (Extract)**: Use a membership ID that has a file in `MID_LIGHT_EXTRACT_DIR`
+- **Tier 2 (Extract)**: Use a membership ID that has a `mid_{membershipId}_light_api.parquet` or `mid_{membershipId}_light.parquet` file in `MID_LIGHT_EXTRACT_DIR`
 - **Tier 3 (Compact)**: Use a membership ID in the compact index (e.g., `4611686018443970323`)
-- **Tier 4 (Absent)**: Use any membership ID not in the above tiers (e.g., `9999999999999`)
+- **Tier 4 (Pending)**: Use a membership ID whose bucket hasn't been built yet (no `_COMPLETE.json` marker)
+- **Tier 5 (Absent)**: Use any membership ID not in the above tiers
 
 ## Curl Examples
 
@@ -90,7 +91,30 @@ Expected response:
 
 Note: `period`, `activityHash`, and `mode` are empty/zero because tier 3 only has instance IDs.
 
-### Tier 4: Absent Coverage
+### Tier 4: Pending Coverage (Unbuilt Bucket)
+
+```bash
+# Example with a membership ID whose bucket hasn't been built yet
+curl -s "http://localhost:3001/players/{PENDING_MID}/activities?game=D2&limit=10" | jq '.coverage'
+```
+
+Expected response:
+```json
+{
+  "level": "absent",
+  "source": "pending",
+  "rowCount": 0,
+  "distinctInstances": 0,
+  "minPeriod": null,
+  "maxPeriod": null,
+  "watermarkNote": "Archive contains activities up to instance ID 15999999999",
+  "indexComplete": false
+}
+```
+
+Note: `source: 'pending'` indicates the bucket exists but lacks a `_COMPLETE.json` marker, meaning the index build is incomplete.
+
+### Tier 5: Absent Coverage
 
 ```bash
 # Example with a non-existent membership ID
