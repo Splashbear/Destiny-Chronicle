@@ -90,4 +90,49 @@ describe('Tier Error Tracking', () => {
     expect(result.tier.level).toBe('absent');
     expect(result.tier.notes).toBeUndefined();
   });
+
+  test('corrupt primary file with valid fallback should preserve error note', async () => {
+    const testMid = '2000000000004';
+    
+    // Create corrupt _light_api.parquet
+    const corruptFile = path.join(extractDir, `mid_${testMid}_light_api.parquet`);
+    await fs.writeFile(corruptFile, 'corrupt data');
+    
+    // Create valid _light.parquet (16-column version)
+    const validFile = path.join(extractDir, `mid_${testMid}_light.parquet`);
+    await db.all(`
+      COPY (
+        SELECT
+          '12345678999' AS instance_id,
+          '2021-07-01T12:00:00Z' AS period,
+          456789 AS activity_hash,
+          5 AS mode,
+          '${testMid}' AS membership_id,
+          '2305843009504575200' AS character_id,
+          true AS completed,
+          3 AS deaths,
+          1800 AS duration_seconds,
+          'D2' AS game
+      ) TO '${validFile}' (FORMAT PARQUET, COMPRESSION ZSTD)
+    `);
+
+    const archiveService = new ArchiveService('', '', '', extractDir, '');
+    archiveService['db'] = db;
+    archiveService['archiveAvailable'] = true;
+    archiveService['midLightExtractDir'] = extractDir;
+
+    const result = await archiveService.getPlayerActivitiesMultiTier(testMid);
+
+    // Should succeed with data from fallback file
+    expect(result.tier.level).toBe('full');
+    expect(result.tier.source).toBe('extract');
+    expect(result.activities.length).toBeGreaterThan(0);
+    
+    // Should preserve error note from corrupt primary file
+    expect(result.tier.notes).toBeDefined();
+    expect(result.tier.notes!.some(note => note.includes('light_api.parquet'))).toBe(true);
+    expect(result.tier.notes!.some(note => note.includes('unreadable'))).toBe(true);
+    // Should note that fallback was used
+    expect(result.tier.notes!.some(note => note.includes('fallback'))).toBe(true);
+  });
 });

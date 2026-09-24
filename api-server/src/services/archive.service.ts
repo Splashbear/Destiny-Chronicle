@@ -505,7 +505,8 @@ export class ArchiveService {
       `mid_${membershipId}_light.parquet`,      // 16-column shape
     ];
 
-    for (const pattern of patterns) {
+    for (const i in patterns) {
+      const pattern = patterns[i];
       const filePath = path.join(this.midLightExtractDir, pattern);
       try {
         await fs.access(filePath);
@@ -515,13 +516,19 @@ export class ArchiveService {
           options,
           'extract'
         );
+        
+        // If this is a fallback pattern after errors, note which file was used
+        if (notes.length > 0 && i !== '0') {
+          notes.push(`extract: using fallback ${pattern}`);
+        }
+        
         return {
           activities: result.activities,
           tier: {
             level: 'full',
             source: result.knownPlayer ? 'extract' : 'none',
             filtersApplied: result.filtersApplied,
-            notes: result.notes,
+            notes: notes.length > 0 ? [...notes, ...(result.notes || [])] : result.notes,
           },
           knownPlayer: result.knownPlayer,
         };
