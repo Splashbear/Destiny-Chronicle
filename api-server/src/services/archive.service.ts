@@ -377,6 +377,10 @@ export class ArchiveService {
     if (this.midLightExtractDir) {
       try {
         const extractResult = await this.tryExtractLookup(membershipId, options);
+        // Collect extract tier notes even if player not found
+        if (extractResult.tier.notes && extractResult.tier.notes.length > 0) {
+          tierErrors.push(...extractResult.tier.notes);
+        }
         if (extractResult.knownPlayer) {
           logger.debug('Extract tier knows player', {
             membershipId,
@@ -399,16 +403,19 @@ export class ArchiveService {
     if (this.compactIndexRoot && this.bucketHashType) {
       try {
         const compactResult = await this.tryCompactIndexLookup(membershipId, options);
-        if (compactResult.knownPlayer || compactResult.tier.source === 'pending') {
+        // Always merge tier errors first
+        if (tierErrors.length > 0) {
+          compactResult.tier.notes = [...(compactResult.tier.notes || []), ...tierErrors];
+        }
+        
+        // Return compact result even if player not known - preserves indexComplete, notes, etc.
+        if (compactResult.knownPlayer || compactResult.tier.source === 'pending' || compactResult.tier.source === 'none') {
           logger.debug('Compact tier result', {
             membershipId,
             count: compactResult.activities.length,
             source: compactResult.tier.source,
+            indexComplete: compactResult.tier.indexComplete,
           });
-          // Merge tier errors
-          if (tierErrors.length > 0) {
-            compactResult.tier.notes = [...(compactResult.tier.notes || []), ...tierErrors];
-          }
           return compactResult;
         }
       } catch (error) {
@@ -490,6 +497,7 @@ export class ArchiveService {
     }
 
     const path = await import('path');
+    const notes: string[] = [];
 
     // Try individual file patterns first (preferred)
     const patterns = [
@@ -517,7 +525,13 @@ export class ArchiveService {
           },
           knownPlayer: result.knownPlayer,
         };
-      } catch {
+      } catch (error) {
+        // File exists but unreadable - record error
+        if (error && (error as any).code !== 'ENOENT') {
+          const errorMsg = `extract: ${pattern} unreadable`;
+          logger.warn(errorMsg, { membershipId, error });
+          notes.push(errorMsg);
+        }
         continue;
       }
     }
@@ -526,7 +540,15 @@ export class ArchiveService {
     // TODO: Implement parts-based lookup if needed
     // For now, just return not found
     
-    return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+    return {
+      activities: [],
+      tier: {
+        level: 'absent',
+        source: 'none',
+        notes: notes.length > 0 ? notes : undefined,
+      },
+      knownPlayer: false,
+    };
   }
 
   /**

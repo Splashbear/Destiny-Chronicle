@@ -179,15 +179,20 @@ export function createPlayerActivitiesRouter(
       
       if (result.tier.level === 'partial') {
         if (includePartial) {
-          // Caller opted in, return IDs in separate field
-          partialInstanceIds = result.activities
-            .map(a => a.instance_id)
-            .filter(id => id && id !== '');
+          // Caller opted in, return unique IDs in separate field
+          const uniqueIds = new Set(
+            result.activities
+              .map(a => a.instance_id)
+              .filter(id => id && id !== '')
+          );
+          partialInstanceIds = Array.from(uniqueIds);
         }
         // Keep activities empty for old clients
         lightRows = [];
         // Override rowCount to 0 for backward compatibility
+        // Omit distinctInstances on partial responses
         coverage.rowCount = 0;
+        delete coverage.distinctInstances;
       } else {
         lightRows = result.activities.map(toLightActivityRow);
       }
@@ -217,7 +222,7 @@ export function createPlayerActivitiesRouter(
    */
   router.post('/activities/batch', async (req: Request, res: Response) => {
     try {
-      const { membershipIds, game, from, to, limit: requestLimit } = req.body;
+      const { membershipIds, game, from, to, limit: requestLimit, includePartial } = req.body;
 
       if (!Array.isArray(membershipIds) || membershipIds.length === 0) {
         return res.status(400).json({
@@ -232,6 +237,7 @@ export function createPlayerActivitiesRouter(
       }
 
       const limit = requestLimit ? Math.min(parseInt(requestLimit, 10), 10000) : 1000;
+      const includePartialFlag = includePartial === true || includePartial === 1 || includePartial === '1';
 
       logger.info('POST /players/activities/batch', {
         count: membershipIds.length,
@@ -276,12 +282,33 @@ export function createPlayerActivitiesRouter(
           });
 
           const coverage = buildCoverage(activitiesResult.activities, watermarkService, activitiesResult.tier);
-          const lightRows = activitiesResult.activities.map(toLightActivityRow);
+          
+          // Apply same partial protection as GET endpoint
+          let lightRows: LightActivityRow[] = [];
+          let partialInstanceIds: string[] | undefined;
+          
+          if (activitiesResult.tier.level === 'partial') {
+            if (includePartialFlag) {
+              // Return unique IDs
+              const uniqueIds = new Set(
+                activitiesResult.activities
+                  .map(a => a.instance_id)
+                  .filter(id => id && id !== '')
+              );
+              partialInstanceIds = Array.from(uniqueIds);
+            }
+            lightRows = [];
+            coverage.rowCount = 0;
+            delete coverage.distinctInstances;
+          } else {
+            lightRows = activitiesResult.activities.map(toLightActivityRow);
+          }
 
           result[membershipId] = {
             membershipId,
             coverage,
             activities: lightRows,
+            partialInstanceIds,
           };
         } catch (error) {
           logger.warn('Failed to fetch activities in batch', { membershipId, error });
