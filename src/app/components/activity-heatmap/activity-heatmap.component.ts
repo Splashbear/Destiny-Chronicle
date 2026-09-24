@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivityDbService } from '../../services/activity-db.service';
@@ -387,7 +387,10 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
     'Season of Reclamation': 'edge-of-fate.png',
   };
 
-  constructor(private activityDb: ActivityDbService) {}
+  constructor(
+    private activityDb: ActivityDbService,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   async ngOnInit(): Promise<void> {
     await this.loadActivities();
@@ -458,6 +461,10 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
   async loadActivities(): Promise<void> {
     this.allActivities = await this.activityDb.activities.toArray();
     this.rebuild();
+    // Dexie/IndexedDB resolves outside the Angular zone, and this component
+    // lives under an OnPush parent. Refresh the view so the first paint
+    // shows data without waiting for a dropdown change.
+    this.cdr.detectChanges();
   }
 
   private withCharacterMeta(activities: any[]): any[] {

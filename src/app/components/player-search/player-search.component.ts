@@ -9719,6 +9719,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap') {
     this.activeTab = tab;
+    if (tab === 'heatmap') {
+      this.cdr.markForCheck();
+    }
     if (tab === 'firsts' && this.selectedPlayers.length > 0) {
       this.syncActiveFirstsGameWithPlayers();
       this.updatePlatformTabs();
