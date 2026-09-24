@@ -324,6 +324,7 @@ export class ArchiveService {
    * Multi-tier lookup for player activities.
    * Tries: lite → per-mid extract → compact ids → absent.
    * Never falls through if a tier knows the player (even if filters leave 0 rows).
+   * Tracks all tier errors in coverage.notes.
    */
   async getPlayerActivitiesMultiTier(
     membershipId: string,
@@ -334,6 +335,8 @@ export class ArchiveService {
       limit?: number;
     }
   ): Promise<PlayerActivitiesResult> {
+    const tierErrors: string[] = [];
+    
     if (!this.isAvailable() || !this.db) {
       return {
         activities: [],
@@ -358,10 +361,16 @@ export class ArchiveService {
           membershipId,
           count: liteResult.activities.length,
         });
+        // Merge any tier errors collected
+        if (tierErrors.length > 0) {
+          liteResult.tier.notes = [...(liteResult.tier.notes || []), ...tierErrors];
+        }
         return liteResult;
       }
     } catch (error) {
-      logger.warn('Lite lookup error, trying next tier', { membershipId, error });
+      const errorMsg = `Lite tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+      logger.warn(errorMsg, { membershipId, error });
+      tierErrors.push(errorMsg);
     }
 
     // Tier 2: Try per-mid light extract
@@ -373,10 +382,16 @@ export class ArchiveService {
             membershipId,
             count: extractResult.activities.length,
           });
+          // Merge tier errors
+          if (tierErrors.length > 0) {
+            extractResult.tier.notes = [...(extractResult.tier.notes || []), ...tierErrors];
+          }
           return extractResult;
         }
       } catch (error) {
-        logger.warn('Extract lookup error, trying next tier', { membershipId, error });
+        const errorMsg = `Extract tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+        logger.warn(errorMsg, { membershipId, error });
+        tierErrors.push(errorMsg);
       }
     }
 
@@ -390,18 +405,28 @@ export class ArchiveService {
             count: compactResult.activities.length,
             source: compactResult.tier.source,
           });
+          // Merge tier errors
+          if (tierErrors.length > 0) {
+            compactResult.tier.notes = [...(compactResult.tier.notes || []), ...tierErrors];
+          }
           return compactResult;
         }
       } catch (error) {
-        logger.warn('Compact index lookup error', { membershipId, error });
+        const errorMsg = `Compact tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+        logger.warn(errorMsg, { membershipId, error });
+        tierErrors.push(errorMsg);
       }
     }
 
-    // Tier 4: Nothing found
+    // Tier 4: Nothing found - include any tier errors
     logger.debug('No archive data found for membership', { membershipId });
     return {
       activities: [],
-      tier: { level: 'absent', source: 'none' },
+      tier: {
+        level: 'absent',
+        source: 'none',
+        notes: tierErrors.length > 0 ? tierErrors : undefined,
+      },
     };
   }
 
@@ -531,17 +556,26 @@ export class ArchiveService {
     const instancesPath = path.join(bucketDir, 'instances.parquet');
     const markerPath = path.join(bucketDir, '_COMPLETE.json');
 
-    // Check for completion marker
+    // Check for completion marker FIRST
     let markerExists = false;
     try {
       await fs.access(markerPath);
       markerExists = true;
     } catch {
-      // Bucket exists but incomplete
-      logger.debug('Compact index bucket not complete', { bucket, membershipId });
+      // No marker = index build in progress, don't open the file
+      logger.debug('Compact index bucket not complete, skipping query', { bucket, membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'pending',
+          indexComplete: false,
+        },
+        knownPlayer: false,
+      };
     }
 
-    // Check for instances file
+    // Marker exists, now check for instances file
     let fileExists = false;
     try {
       await fs.access(instancesPath);
@@ -550,14 +584,14 @@ export class ArchiveService {
       logger.debug('Compact index instances file not found', { bucket, membershipId });
     }
 
-    // If bucket/file missing, report as pending
+    // If file missing but marker exists, it's a definite absent
     if (!fileExists) {
       return {
         activities: [],
         tier: {
           level: 'absent',
-          source: markerExists ? 'none' : 'pending',
-          indexComplete: markerExists,
+          source: 'none',
+          indexComplete: true,  // Marker exists, build is complete
         },
         knownPlayer: false,
       };
@@ -576,8 +610,9 @@ export class ArchiveService {
         WHERE membership_id = ?
           AND activity_instance_id IS NOT NULL
           AND activity_instance_id != ''
-          AND CAST(activity_instance_id AS UBIGINT) > 0
-        ORDER BY CAST(activity_instance_id AS UBIGINT) DESC
+          AND TRY_CAST(activity_instance_id AS UBIGINT) IS NOT NULL
+          AND TRY_CAST(activity_instance_id AS UBIGINT) > 0
+        ORDER BY TRY_CAST(activity_instance_id AS UBIGINT) DESC
         LIMIT ?
       `;
 

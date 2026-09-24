@@ -180,10 +180,11 @@ describe('ArchiveService Multi-Tier Lookup', () => {
 
       const result = await archiveService.getPlayerActivitiesMultiTier(testMid);
 
-      // When bucket exists but has no _COMPLETE marker, it's 'pending' not 'none'
-      expect(result.tier.level).toBe('partial');  // Has data but incomplete
-      expect(result.tier.source).toBe('compact_ids');
+      // When no _COMPLETE marker, we don't open the file (safety: index build in progress)
+      expect(result.tier.level).toBe('absent');
+      expect(result.tier.source).toBe('pending');
       expect(result.tier.indexComplete).toBe(false);
+      expect(result.activities).toHaveLength(0);
     });
 
     test('should handle missing bucket directory', async () => {

@@ -99,6 +99,7 @@ export interface PlayerActivitiesResponse {
   membershipId: string;
   coverage: PlayerActivitiesCoverage;
   activities: LightActivityRow[];
+  partialInstanceIds?: string[];
 }
 
 /**

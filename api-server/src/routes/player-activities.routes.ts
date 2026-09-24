@@ -135,6 +135,7 @@ export function createPlayerActivitiesRouter(
       const toPeriod = getStringParam(req.query.to) || undefined;
       const limitStr = getStringParam(req.query.limit);
       const limit = limitStr ? Math.min(parseInt(limitStr, 10), 10000) : 1000;
+      const includePartial = getStringParam(req.query.includePartial) === '1';
 
       logger.info('GET /players/:membershipId/activities', {
         membershipId,
@@ -168,12 +169,34 @@ export function createPlayerActivitiesRouter(
       });
 
       const coverage = buildCoverage(result.activities, watermarkService, result.tier);
-      const lightRows = result.activities.map(toLightActivityRow);
+      
+      // For partial coverage (compact IDs only), protect old clients:
+      // - Don't return IDs in activities[] unless caller opts in
+      // - Keep rowCount: 0 for backward compatibility
+      // - Put IDs in separate field when requested
+      let lightRows: LightActivityRow[] = [];
+      let partialInstanceIds: string[] | undefined;
+      
+      if (result.tier.level === 'partial') {
+        if (includePartial) {
+          // Caller opted in, return IDs in separate field
+          partialInstanceIds = result.activities
+            .map(a => a.instance_id)
+            .filter(id => id && id !== '');
+        }
+        // Keep activities empty for old clients
+        lightRows = [];
+        // Override rowCount to 0 for backward compatibility
+        coverage.rowCount = 0;
+      } else {
+        lightRows = result.activities.map(toLightActivityRow);
+      }
 
       const response: PlayerActivitiesResponse = {
         membershipId,
         coverage,
         activities: lightRows,
+        partialInstanceIds,
       };
 
       res.json(response);

@@ -9,11 +9,11 @@ module.exports = {
     '!src/__tests__/**',
   ],
   moduleFileExtensions: ['ts', 'js', 'json'],
-  globals: {
-    'ts-jest': {
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
       tsconfig: {
         esModuleInterop: true,
       },
-    },
+    }],
   },
 };
