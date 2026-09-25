@@ -46,24 +46,45 @@ function toLightActivityRow(activity: LeanActivity): LightActivityRow {
 }
 
 /**
- * Build coverage information from activities
+ * Build coverage information from activities and tier info.
+ * Calculates distinct instance count for accuracy.
  */
 function buildCoverage(
   activities: LeanActivity[],
-  watermarkService: WatermarkService
+  watermarkService: WatermarkService,
+  tierInfo: {
+    level: 'full' | 'partial' | 'absent';
+    source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending' | 'archive';
+    indexComplete?: boolean;
+    filtersApplied?: boolean;
+    notes?: string[];
+  }
 ): PlayerActivitiesCoverage {
+  const rowCount = activities.length;
+  const distinctInstances = new Set(activities.map(a => a.instance_id).filter(id => id)).size;
+
   if (activities.length === 0) {
     return {
-      source: 'archive',
+      level: tierInfo.level,
+      source: tierInfo.source,
       rowCount: 0,
+      distinctInstances: 0,
       minPeriod: null,
       maxPeriod: null,
+      indexComplete: tierInfo.indexComplete,
+      filtersApplied: tierInfo.filtersApplied,
+      notes: tierInfo.notes,
     };
   }
 
-  const periods = activities.map((a) => a.period).sort();
-  const minPeriod = periods[0];
-  const maxPeriod = periods[periods.length - 1];
+  // For compact tier, periods are empty strings
+  const periodsWithValues = activities
+    .map((a) => a.period)
+    .filter(p => p && p !== '')
+    .sort();
+  
+  const minPeriod = periodsWithValues.length > 0 ? periodsWithValues[0] : null;
+  const maxPeriod = periodsWithValues.length > 0 ? periodsWithValues[periodsWithValues.length - 1] : null;
 
   const watermark = watermarkService.getWatermark();
   const watermarkNote = watermark
@@ -71,11 +92,16 @@ function buildCoverage(
     : undefined;
 
   return {
-    source: 'archive',
-    rowCount: activities.length,
+    level: tierInfo.level,
+    source: tierInfo.source,
+    rowCount,
+    distinctInstances,
     minPeriod,
     maxPeriod,
     watermarkNote,
+    indexComplete: tierInfo.indexComplete,
+    filtersApplied: tierInfo.filtersApplied,
+    notes: tierInfo.notes,
   };
 }
 
@@ -109,6 +135,7 @@ export function createPlayerActivitiesRouter(
       const toPeriod = getStringParam(req.query.to) || undefined;
       const limitStr = getStringParam(req.query.limit);
       const limit = limitStr ? Math.min(parseInt(limitStr, 10), 10000) : 1000;
+      const includePartial = getStringParam(req.query.includePartial) === '1';
 
       logger.info('GET /players/:membershipId/activities', {
         membershipId,
@@ -123,6 +150,7 @@ export function createPlayerActivitiesRouter(
         const response: PlayerActivitiesResponse = {
           membershipId,
           coverage: {
+            level: 'absent',
             source: 'none',
             rowCount: 0,
             minPeriod: null,
@@ -133,20 +161,47 @@ export function createPlayerActivitiesRouter(
         return res.json(response);
       }
 
-      const activities = await archiveService.getPlayerActivities(membershipId, {
+      const result = await archiveService.getPlayerActivitiesMultiTier(membershipId, {
         game,
         fromPeriod,
         toPeriod,
         limit,
       });
 
-      const coverage = buildCoverage(activities, watermarkService);
-      const lightRows = activities.map(toLightActivityRow);
+      const coverage = buildCoverage(result.activities, watermarkService, result.tier);
+      
+      // For partial coverage (compact IDs only), protect old clients:
+      // - Don't return IDs in activities[] unless caller opts in
+      // - Keep rowCount: 0 for backward compatibility
+      // - Put IDs in separate field when requested
+      let lightRows: LightActivityRow[] = [];
+      let partialInstanceIds: string[] | undefined;
+      
+      if (result.tier.level === 'partial') {
+        if (includePartial) {
+          // Caller opted in, return unique IDs in separate field
+          const uniqueIds = new Set(
+            result.activities
+              .map(a => a.instance_id)
+              .filter(id => id && id !== '')
+          );
+          partialInstanceIds = Array.from(uniqueIds);
+        }
+        // Keep activities empty for old clients
+        lightRows = [];
+        // Override rowCount to 0 for backward compatibility
+        // Omit distinctInstances on partial responses
+        coverage.rowCount = 0;
+        delete coverage.distinctInstances;
+      } else {
+        lightRows = result.activities.map(toLightActivityRow);
+      }
 
       const response: PlayerActivitiesResponse = {
         membershipId,
         coverage,
         activities: lightRows,
+        partialInstanceIds,
       };
 
       res.json(response);
@@ -167,7 +222,7 @@ export function createPlayerActivitiesRouter(
    */
   router.post('/activities/batch', async (req: Request, res: Response) => {
     try {
-      const { membershipIds, game, from, to, limit: requestLimit } = req.body;
+      const { membershipIds, game, from, to, limit: requestLimit, includePartial } = req.body;
 
       if (!Array.isArray(membershipIds) || membershipIds.length === 0) {
         return res.status(400).json({
@@ -182,6 +237,7 @@ export function createPlayerActivitiesRouter(
       }
 
       const limit = requestLimit ? Math.min(parseInt(requestLimit, 10), 10000) : 1000;
+      const includePartialFlag = includePartial === true || includePartial === 1 || includePartial === '1';
 
       logger.info('POST /players/activities/batch', {
         count: membershipIds.length,
@@ -199,6 +255,7 @@ export function createPlayerActivitiesRouter(
           result[membershipId] = {
             membershipId,
             coverage: {
+              level: 'absent',
               source: 'none',
               rowCount: 0,
               minPeriod: null,
@@ -217,26 +274,48 @@ export function createPlayerActivitiesRouter(
             continue;
           }
 
-          const activities = await archiveService.getPlayerActivities(membershipId, {
+          const activitiesResult = await archiveService.getPlayerActivitiesMultiTier(membershipId, {
             game,
             fromPeriod: from,
             toPeriod: to,
             limit,
           });
 
-          const coverage = buildCoverage(activities, watermarkService);
-          const lightRows = activities.map(toLightActivityRow);
+          const coverage = buildCoverage(activitiesResult.activities, watermarkService, activitiesResult.tier);
+          
+          // Apply same partial protection as GET endpoint
+          let lightRows: LightActivityRow[] = [];
+          let partialInstanceIds: string[] | undefined;
+          
+          if (activitiesResult.tier.level === 'partial') {
+            if (includePartialFlag) {
+              // Return unique IDs
+              const uniqueIds = new Set(
+                activitiesResult.activities
+                  .map(a => a.instance_id)
+                  .filter(id => id && id !== '')
+              );
+              partialInstanceIds = Array.from(uniqueIds);
+            }
+            lightRows = [];
+            coverage.rowCount = 0;
+            delete coverage.distinctInstances;
+          } else {
+            lightRows = activitiesResult.activities.map(toLightActivityRow);
+          }
 
           result[membershipId] = {
             membershipId,
             coverage,
             activities: lightRows,
+            partialInstanceIds,
           };
         } catch (error) {
           logger.warn('Failed to fetch activities in batch', { membershipId, error });
           result[membershipId] = {
             membershipId,
             coverage: {
+              level: 'absent',
               source: 'none',
               rowCount: 0,
               minPeriod: null,

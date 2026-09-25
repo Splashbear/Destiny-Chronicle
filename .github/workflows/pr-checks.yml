@@ -1,0 +1,59 @@
+name: PR Type Checks and Tests
+
+on:
+  pull_request:
+    branches: [ master, main ]
+    paths:
+      - 'src/**'
+      - 'api-server/**'
+      - 'tsconfig*.json'
+      - 'package*.json'
+      - '.github/workflows/pr-checks.yml'
+
+jobs:
+  angular-typecheck:
+    name: Angular Type Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Type check Angular app
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+  api-server-tests:
+    name: API Server Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: api-server
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: api-server/package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build TypeScript
+        run: npm run build
+      
+      - name: Run tests
+        run: npm test

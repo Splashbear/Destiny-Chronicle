@@ -342,7 +342,9 @@ interface LeanActivity {
 |----------|----------|---------|-------------|
 | `PGCR_API_PORT` | No | `3001` | Server port |
 | `PGCR_LEAN_ACTIVITIES_PATH` | No | - | Path to lean activities Parquet file |
-| `PLAYER_ACTIVITIES_LITE_PATH` | No | Falls back to `PGCR_LEAN_ACTIVITIES_PATH` | Path to lite activities Parquet (optimized for cold-start) |
+| `PLAYER_ACTIVITIES_LITE_PATH` | No | Falls back to `PGCR_LEAN_ACTIVITIES_PATH` | Path to lite activities Parquet (tier 1, optimized for cold-start) |
+| `MID_LIGHT_EXTRACT_DIR` | No | - | Directory containing per-player light extract parquet files (tier 2) |
+| `COMPACT_INDEX_ROOT` | No | - | Root directory for bucketed compact instance ID index (tier 3) |
 | `PGCR_MEMBERSHIP_PATH` | No | - | Path to membership Parquet file (currently unused) |
 | `PGCR_WATERMARK_PATH` | No | - | Path to watermark JSON file |
 | `BUNGIE_API_KEY` | **Yes** (unless archive configured) | - | Bungie API key for live fallback |
@@ -376,11 +378,75 @@ interface LeanActivity {
 - If you're using older Parquet exports, re-export with DuckDB or use SNAPPY/uncompressed format
 - `parquetjs` is not used and may not be compatible with all Parquet flavors
 
+## Multi-Tier Archive Lookup
+
+The `/players/:membershipId/activities` endpoint implements a multi-tier archive lookup system that provides the best available data for any Destiny 2 membership ID:
+
+### Resolution Order
+
+1. **Tier 1: Lite Parquet** (`PLAYER_ACTIVITIES_LITE_PATH`)
+   - Pre-built lightweight parquet with full activity rows for a handful of accounts
+   - Coverage level: **full** (includes dates, modes, all fields)
+   - Fastest tier, sub-second queries
+   
+2. **Tier 2: Per-MID Light Extracts** (`MID_LIGHT_EXTRACT_DIR`)
+   - Directory containing individual player parquet files
+   - File naming patterns tried: `{mid}_api.parquet`, `{mid}_light.parquet`, `mid_{mid}_api.parquet`, `mid_{mid}_light.parquet`
+   - Coverage level: **full** (complete activity data)
+   - Columns (C0 set): `instance_id`, `period`, `activity_hash`, `mode`, `membership_id`, `character_id`, `completed`, `deaths`, `duration_seconds`, `game`
+   - Additional optional columns: `kills`, `assists`, `director_activity_hash`, `membership_type`, `display_name`
+
+3. **Tier 3: Compact MID Index** (`COMPACT_INDEX_ROOT`)
+   - Bucketed instance ID index: `mid_bucket=N/instances.parquet` for N in 0..255
+   - Only returns instance IDs and character IDs (no dates/modes/stats)
+   - Coverage level: **partial** (client must hydrate via Bungie PGCR API)
+   - Columns: `activity_instance_id`, `membership_id`, `character_id`
+   - Bucket assignment via `hash(membership_id) % 256` (using VARCHAR cast)
+   - Requires `_COMPLETE.json` marker per bucket to indicate completeness
+   - Test vector: membership ID `4611686018443970323` maps to bucket `115`
+   - Query performance: ~15ms per bucket lookup
+
+4. **Tier 4: Absent**
+   - Coverage level: **absent** (no archive data)
+   - Client falls back to Bungie API history
+
+### Coverage Response
+
+Each response includes a `coverage` object with:
+
+```typescript
+{
+  level: 'full' | 'partial' | 'absent',  // Data completeness
+  source: 'lite' | 'extract' | 'compact_ids' | 'none',  // Which tier provided data
+  rowCount: number,
+  minPeriod: string | null,
+  maxPeriod: string | null,
+  watermarkNote?: string
+}
+```
+
+- **full**: Complete activity data with dates, modes, stats (tiers 1-2)
+- **partial**: Instance IDs only; client must fetch PGCRs from Bungie (tier 3)
+- **absent**: No archive data; client uses Bungie history API (tier 4)
+
+### Client Behavior
+
+The Angular client checks `coverage.level`:
+- `full` → Use activities as-is
+- `partial` or `absent` → Fall back to Bungie history API
+
+### Performance Targets
+
+- Tier 1 (lite): < 100ms
+- Tier 2 (extract): < 250ms
+- Tier 3 (compact): < 250ms
+- All tiers reuse DuckDB connection for efficiency
+
 ## Cold-Start Optimization
 
 The `/players/:membershipId/activities` endpoints are designed for fast cold-start queries to support the ≤60-second cold-load goal for ~6 accounts:
 
-1. **Lite Parquet Files**: Use `PLAYER_ACTIVITIES_LITE_PATH` to point to a lightweight parquet file with only essential columns
+1. **Multi-Tier Archive**: Automatic fallback from lite → extract → compact index → absent
 2. **DuckDB SQL Filtering**: Efficient filtering by membership_id, game, and date range
 3. **Batch Support**: Fetch up to 20 players in one request to minimize round trips
 4. **Sensible Limits**: Default 1000 activities per player (max 10000) to balance completeness and speed

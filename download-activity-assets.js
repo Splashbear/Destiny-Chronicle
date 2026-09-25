@@ -11,7 +11,7 @@ const MANIFEST_URL = 'https://www.bungie.net/Platform/Destiny2/Manifest/';
 const ASSET_DIR = path.join(__dirname, 'src/assets/activity-images');
 const ACTIVITY_MODE_MAP_PATH = path.join(__dirname, 'src/app/models/activity-types.ts');
 const ACTIVITY_TYPES_PATH = path.join(__dirname, 'src/app/models/activity-types.ts');
-const ACTIVITY_JSONS_PATH = 'C:/Users/travis.volle/Documents/Activity JSONs.txt';
+const ACTIVITY_JSONS_PATH = process.env.ACTIVITY_JSONS_PATH || './Activity JSONs.txt';
 
 async function getManifestIndex() {
   const res = await fetch(MANIFEST_URL, { headers: { 'X-API-Key': API_KEY } });

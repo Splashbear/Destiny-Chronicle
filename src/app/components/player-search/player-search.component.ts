@@ -3916,7 +3916,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             { game: character.game, limit: 10000 }
           );
 
-          if (archiveData && archiveData.coverage && archiveData.coverage.rowCount > 0) {
+          // Only use archive data if coverage level is 'full' (has dates/modes).
+          // 'partial' coverage (compact_ids only) requires PGCR hydration, so fall back to Bungie.
+          // Backward compat: treat missing level as 'full' when source='archive' and rowCount > 0 (old server)
+          const cov = archiveData?.coverage;
+          const effectiveLevel = cov?.level ?? (cov?.source === 'archive' && (cov?.rowCount ?? 0) > 0 ? 'full' : undefined);
+          if (archiveData && cov && effectiveLevel === 'full' && (cov.rowCount ?? 0) > 0) {
             console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
               coverage: archiveData.coverage,
               characterId: character.characterId

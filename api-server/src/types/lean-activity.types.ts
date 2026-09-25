@@ -80,11 +80,16 @@ export interface LightActivityRow {
  * Coverage information for player activities response.
  */
 export interface PlayerActivitiesCoverage {
-  source: 'archive' | 'none';
+  level: 'full' | 'partial' | 'absent';
+  source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending' | 'archive';
   rowCount: number;
+  distinctInstances?: number;
   minPeriod: string | null;
   maxPeriod: string | null;
   watermarkNote?: string;
+  indexComplete?: boolean;
+  filtersApplied?: boolean;
+  notes?: string[];
 }
 
 /**
@@ -94,6 +99,7 @@ export interface PlayerActivitiesResponse {
   membershipId: string;
   coverage: PlayerActivitiesCoverage;
   activities: LightActivityRow[];
+  partialInstanceIds?: string[];
 }
 
 /**

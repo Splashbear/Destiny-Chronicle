@@ -49,7 +49,9 @@ async function startServer(): Promise<void> {
   const archiveService = new ArchiveService(
     config.leanActivitiesPath,
     config.membershipPath,
-    config.playerActivitiesLitePath
+    config.playerActivitiesLitePath,
+    config.midLightExtractDir,
+    config.compactIndexRoot
   );
   await archiveService.initialize();
 
