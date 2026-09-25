@@ -288,8 +288,34 @@ export class ArchiveService {
   }
 
   /**
+   * Normalize a period timestamp to ISO 8601 with Z suffix.
+   * Archive periods are UTC but lack zone info (e.g. "2025-03-16 21:43:05"),
+   * which browsers parse as local time. Normalize to "2025-03-16T21:43:05Z".
+   */
+  private normalizeArchivePeriod(period: unknown): string {
+    const raw = String(period ?? '').trim();
+    if (!raw) {
+      return '';
+    }
+    // Already ISO 8601 with Z? Return as-is.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(raw)) {
+      return raw;
+    }
+    // UTC timestamp without zone: "2025-03-16 21:43:05" -> parse as UTC
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw)) {
+      return raw.replace(' ', 'T') + 'Z';
+    }
+    // ISO 8601 without Z: "2025-03-16T21:43:05" -> append Z
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(raw)) {
+      return raw + 'Z';
+    }
+    // Return as-is if format not recognized (fallback)
+    return raw;
+  }
+
+  /**
    * Map DuckDB row to LeanActivity type.
-   * Handles lowercase 'd2'/'d1' game values.
+   * Handles lowercase 'd2'/'d1' game values and normalizes periods to ISO 8601 with Z.
    */
   private mapRowToActivity(row: any): LeanActivity {
     let game: 'D1' | 'D2' = 'D2';
@@ -302,7 +328,7 @@ export class ArchiveService {
 
     return {
       instance_id: String(row.instance_id ?? ''),
-      period: String(row.period ?? ''),
+      period: this.normalizeArchivePeriod(row.period),
       activity_hash: Number(row.activity_hash ?? 0),
       director_activity_hash: Number(row.director_activity_hash ?? 0),
       mode: Number(row.mode ?? 0),
