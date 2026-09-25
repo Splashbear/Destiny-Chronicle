@@ -75,7 +75,9 @@ export class BungieApiService {
   getPgcrUrl(instanceId: string, game: Game): string {
     return game === 'D1'
       ? `${this.d1ApiRoot}/Destiny/Stats/PostGameCarnageReport/${instanceId}/`
-      : `${this.apiRoot}/Destiny2/Stats/PostGameCarnageReport/${instanceId}/`;
+      // www.bungie.net/Platform 301s D2 PGCRs to http://stats.bungie.net (plain HTTP, API key in headers).
+      // Hit the HTTPS stats host directly to skip that hop (~550ms).
+      : `https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${instanceId}/`;
   }
 
   /**
