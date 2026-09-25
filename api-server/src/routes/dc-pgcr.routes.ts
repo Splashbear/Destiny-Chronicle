@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ArchiveService } from '../services/archive.service';
-import { BungieApiService } from '../services/bungie-api.service';
+import { BungieApiError, BungieApiService, Game, parseGame, resolvePgcrPeriod, unwrapPgcrBody } from '../services/bungie-api.service';
 import { WatermarkService } from '../services/watermark.service';
 import { PgcrLite, leanToPgcrLite } from '../types/pgcr-lite.types';
 import { logger } from '../utils/logger';
@@ -19,36 +19,53 @@ function getStringParam(value: unknown): string {
 }
 
 /**
- * Prune full Bungie PGCR to PgcrLite format.
+ * Prune full Bungie PGCR (D1 or D2 envelope) to PgcrLite format.
+ * - D1 reports live under Response.data; D2 under Response.
+ * - `period` is read from the report body (Bungie puts it next to activityDetails, not inside it).
+ *   Missing period stays null; it is never replaced with the current time.
+ * - Rejects a body whose instanceId differs from the one requested.
  */
-function pruneBungiePgcr(bungiePgcr: any): PgcrLite | null {
+export function pruneBungiePgcr(bungiePgcr: any, game: Game, requestedInstanceId: string): PgcrLite | null {
   try {
-    const response = bungiePgcr.Response || bungiePgcr;
-    const activityDetails = response.activityDetails || {};
-    const entries = response.entries || [];
+    const body = unwrapPgcrBody(bungiePgcr, game);
+    const activityDetails = body?.activityDetails;
+    const entries = body?.entries || [];
 
-    if (!activityDetails.instanceId) {
+    if (!activityDetails) {
       return null;
     }
 
+    const bodyInstanceId = activityDetails.instanceId != null ? String(activityDetails.instanceId) : requestedInstanceId;
+    if (bodyInstanceId !== requestedInstanceId) {
+      logger.warn('Bungie PGCR instanceId mismatch', { requestedInstanceId, bodyInstanceId, game });
+      return null;
+    }
+
+    const period = resolvePgcrPeriod(body);
+    if (!period) {
+      logger.warn('Bungie PGCR has no period; returning null period', { instanceId: requestedInstanceId, game });
+    }
+
     return {
+      game,
+      _source: 'live',
       activityDetails: {
-        period: activityDetails.period || new Date().toISOString(),
-        instanceId: String(activityDetails.instanceId),
-        referenceId: activityDetails.referenceId || 0,
-        directorActivityHash: activityDetails.directorActivityHash || 0,
-        mode: activityDetails.mode || activityDetails.modes?.[0] || 0,
+        period,
+        instanceId: bodyInstanceId,
+        referenceId: activityDetails.referenceId ?? 0,
+        directorActivityHash: activityDetails.directorActivityHash ?? 0,
+        mode: activityDetails.mode ?? activityDetails.modes?.[0] ?? 0,
         isPrivate: activityDetails.isPrivate || false,
       },
       entries: entries.map((entry: any) => ({
         player: {
           destinyUserInfo: {
-            membershipId: entry.player?.destinyUserInfo?.membershipId || '',
+            membershipId: String(entry.player?.destinyUserInfo?.membershipId ?? ''),
             membershipType: entry.player?.destinyUserInfo?.membershipType || 0,
             displayName: entry.player?.destinyUserInfo?.displayName || '',
           },
         },
-        characterId: entry.characterId || '',
+        characterId: String(entry.characterId ?? ''),
         values: {
           deaths: { basic: { value: entry.values?.deaths?.basic?.value || 0 } },
           kills: { basic: { value: entry.values?.kills?.basic?.value || 0 } },
@@ -68,6 +85,34 @@ function pruneBungiePgcr(bungiePgcr: any): PgcrLite | null {
 }
 
 /**
+ * Resolve one PGCR for a specific game: archive first (filtered by game), then the
+ * game-correct Bungie endpoint. The coverage watermark is a D2 instance-ID watermark,
+ * so it only gates D2 archive lookups.
+ */
+async function resolvePgcr(
+  instanceId: string,
+  game: Game,
+  archiveService: ArchiveService,
+  bungieApiService: BungieApiService,
+  watermarkService: WatermarkService
+): Promise<PgcrLite | null> {
+  const tryArchive = archiveService.isAvailable() && (game !== 'D2' || watermarkService.isCovered(instanceId));
+  if (tryArchive) {
+    try {
+      const activities = await archiveService.getActivitiesByInstanceId(instanceId, game);
+      if (activities.length > 0) {
+        return leanToPgcrLite(activities);
+      }
+    } catch (archiveError) {
+      logger.warn('Archive read failed, will try live fallback', { instanceId, game, error: archiveError });
+    }
+  }
+
+  const bungiePgcr = await bungieApiService.getBungiePgcr(instanceId, game);
+  return bungiePgcr ? pruneBungiePgcr(bungiePgcr, game, instanceId) : null;
+}
+
+/**
  * Create DC-facing PGCR router (returns PgcrLite format).
  * Mounted at /pgcr for Destiny Chronicle Angular app compatibility.
  */
@@ -80,14 +125,14 @@ export function createDcPgcrRouter(
 
   /**
    * GET /pgcr/:instanceId?game=D2&format=lite
-   * 
+   *
    * DC-compatible endpoint returning PgcrLite format.
    * Loads ALL entries for the instance from archive.
    */
   router.get('/:instanceId', async (req: Request, res: Response) => {
+    const instanceId = String(req.params.instanceId || '');
+    const game = parseGame(getStringParam(req.query.game) || 'D2');
     try {
-      const instanceId = String(req.params.instanceId || '');
-      const game = getStringParam(req.query.game) || 'D2';
       const format = getStringParam(req.query.format) || 'lite';
 
       if (!instanceId || !/^\d+$/.test(instanceId)) {
@@ -95,47 +140,33 @@ export function createDcPgcrRouter(
           error: 'Invalid instance ID',
         });
       }
+      if (!game) {
+        return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
+      }
 
       logger.info('GET /pgcr/:instanceId', { instanceId, game, format });
 
-      let pgcrLite: PgcrLite | null = null;
-
-      const isCovered = watermarkService.isCovered(instanceId);
-      logger.debug('Watermark check', { instanceId, isCovered });
-
-      if (isCovered && archiveService.isAvailable()) {
-        try {
-          logger.debug('Attempting archive lookup for all entries');
-          const activities = await archiveService.getActivitiesByInstanceId(instanceId);
-          if (activities.length > 0) {
-            pgcrLite = leanToPgcrLite(activities);
-            logger.debug('Converted lean to PgcrLite', { entryCount: activities.length });
-          }
-        } catch (archiveError) {
-          logger.warn('Archive read failed, will try live fallback', {
-            instanceId,
-            error: archiveError,
-          });
-        }
-      }
-
-      if (!pgcrLite) {
-        logger.debug('Attempting live Bungie API lookup');
-        const bungiePgcr = await bungieApiService.getBungiePgcr(instanceId);
-        if (bungiePgcr) {
-          pgcrLite = pruneBungiePgcr(bungiePgcr);
-        }
-      }
+      const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService);
 
       if (!pgcrLite) {
         return res.status(404).json({
           error: 'Activity not found',
           instanceId,
+          game,
         });
       }
 
       res.json(pgcrLite);
     } catch (error) {
+      if (error instanceof BungieApiError) {
+        return res.status(502).json({
+          error: 'Upstream Bungie API error',
+          instanceId,
+          game,
+          errorCode: error.errorCode,
+          errorStatus: error.errorStatus,
+        });
+      }
       logger.error('Error in GET /pgcr/:instanceId', { error });
       res.status(500).json({
         error: 'Internal server error',
@@ -146,54 +177,41 @@ export function createDcPgcrRouter(
 
   /**
    * POST /pgcr/batch
-   * 
+   *
    * DC-compatible batch endpoint.
    * Body: { instanceIds: string[], game: 'D1' | 'D2' }
    * Returns: { [instanceId]: PgcrLite }
    */
   router.post('/batch', async (req: Request, res: Response) => {
     try {
-      const { instanceIds, game } = req.body;
+      const { instanceIds } = req.body;
+      const game = parseGame(req.body?.game ?? 'D2');
 
       if (!Array.isArray(instanceIds) || instanceIds.length === 0) {
         return res.status(400).json({
           error: 'instanceIds array is required',
         });
       }
+      if (!game) {
+        return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
+      }
 
       logger.info('POST /pgcr/batch', { count: instanceIds.length, game });
 
       const result: Record<string, PgcrLite> = {};
 
-      for (const instanceId of instanceIds) {
+      for (const rawId of instanceIds) {
+        const instanceId = String(rawId);
+        if (!/^\d+$/.test(instanceId)) {
+          continue;
+        }
         try {
-          const isCovered = watermarkService.isCovered(instanceId);
-
-          let pgcrLite: PgcrLite | null = null;
-
-          if (isCovered && archiveService.isAvailable()) {
-            try {
-              const activities = await archiveService.getActivitiesByInstanceId(instanceId);
-              if (activities.length > 0) {
-                pgcrLite = leanToPgcrLite(activities);
-              }
-            } catch {
-              // Fall through to live
-            }
-          }
-
-          if (!pgcrLite) {
-            const bungiePgcr = await bungieApiService.getBungiePgcr(instanceId);
-            if (bungiePgcr) {
-              pgcrLite = pruneBungiePgcr(bungiePgcr);
-            }
-          }
-
+          const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService);
           if (pgcrLite) {
             result[instanceId] = pgcrLite;
           }
         } catch (error) {
-          logger.warn('Failed to fetch PGCR in batch', { instanceId, error });
+          logger.warn('Failed to fetch PGCR in batch', { instanceId, game, error });
         }
       }
 

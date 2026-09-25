@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { ArchiveService } from '../services/archive.service';
-import { BungieApiService } from '../services/bungie-api.service';
+import { BungieApiError, BungieApiService, parseGame } from '../services/bungie-api.service';
 import { WatermarkService } from '../services/watermark.service';
 import {
   LeanActivity,
@@ -113,27 +113,30 @@ export function createPgcrRouter(
    * MUST be registered AFTER static routes (/watermark, /activities).
    */
   router.get('/:instanceId', async (req: Request, res: Response) => {
+    const instanceId = String(req.params.instanceId || '');
+    const game = parseGame(getStringParam(req.query.game) || 'D2');
     try {
-      const instanceId = String(req.params.instanceId || '');
-
       if (!instanceId || !/^\d+$/.test(instanceId)) {
         return res.status(400).json({
           error: 'Invalid instance ID',
         });
       }
+      if (!game) {
+        return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
+      }
 
-      logger.info('GET /api/pgcr/:instanceId', { instanceId });
+      logger.info('GET /api/pgcr/:instanceId', { instanceId, game });
 
       let activity: LeanActivity | null = null;
       let source: 'archive' | 'live' = 'live';
 
-      const isCovered = watermarkService.isCovered(instanceId);
-      logger.debug('Watermark check', { instanceId, isCovered });
+      // The watermark is a D2 instance-ID watermark; it only gates D2 archive lookups.
+      const tryArchive = archiveService.isAvailable() && (game !== 'D2' || watermarkService.isCovered(instanceId));
 
-      if (isCovered && archiveService.isAvailable()) {
+      if (tryArchive) {
         try {
           logger.debug('Attempting archive lookup');
-          activity = await archiveService.getActivityByInstanceId(instanceId);
+          activity = await archiveService.getActivityByInstanceId(instanceId, game);
           if (activity) {
             source = 'archive';
           }
@@ -147,7 +150,7 @@ export function createPgcrRouter(
 
       if (!activity) {
         logger.debug('Attempting live Bungie API lookup');
-        activity = await bungieApiService.getActivityByInstanceId(instanceId);
+        activity = await bungieApiService.getActivityByInstanceId(instanceId, game);
         source = 'live';
       }
 
@@ -155,6 +158,7 @@ export function createPgcrRouter(
         return res.status(404).json({
           error: 'Activity not found',
           instance_id: instanceId,
+          game,
         });
       }
 
@@ -166,6 +170,15 @@ export function createPgcrRouter(
 
       res.json(response);
     } catch (error) {
+      if (error instanceof BungieApiError) {
+        return res.status(502).json({
+          error: 'Upstream Bungie API error',
+          instance_id: instanceId,
+          game,
+          errorCode: error.errorCode,
+          errorStatus: error.errorStatus,
+        });
+      }
       logger.error('Error in GET /api/pgcr/:instanceId', { error });
       res.status(500).json({
         error: 'Internal server error',

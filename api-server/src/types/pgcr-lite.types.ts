@@ -4,8 +4,13 @@ import { LeanActivity } from '../types/lean-activity.types';
  * PgcrLite format - Bungie-compatible shape expected by Destiny Chronicle Angular app.
  */
 export interface PgcrLite {
+  /** Which game's PGCR this is (D1 and D2 instance IDs overlap numerically). */
+  game?: 'D1' | 'D2';
+  /** Where the report came from. */
+  _source?: 'archive' | 'live';
   activityDetails: {
-    period: string;
+    /** ISO/archive timestamp of the activity; null when the source has no period (never "now"). */
+    period: string | null;
     instanceId: string;
     referenceId: number;
     directorActivityHash: number;
@@ -47,8 +52,10 @@ export function leanToPgcrLite(activities: LeanActivity[]): PgcrLite | null {
   const first = activities[0];
 
   return {
+    game: first.game,
+    _source: 'archive',
     activityDetails: {
-      period: first.period,
+      period: first.period ? first.period : null,
       instanceId: first.instance_id,
       referenceId: first.activity_hash,
       directorActivityHash: first.director_activity_hash,
