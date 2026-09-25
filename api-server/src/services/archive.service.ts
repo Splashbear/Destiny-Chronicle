@@ -224,8 +224,10 @@ export class ArchiveService {
   /**
    * Get ALL activities for an instance ID from the lean activities archive.
    * Returns all player entries (multiple rows per instance).
+   * When `game` is given, only rows for that game are returned: D1 and D2 instance IDs
+   * overlap numerically, so an unfiltered lookup could return the other game's activity.
    */
-  async getActivitiesByInstanceId(instanceId: string): Promise<LeanActivity[]> {
+  async getActivitiesByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<LeanActivity[]> {
     if (!this.isAvailable() || !this.db) {
       throw new Error('Archive not available');
     }
@@ -257,9 +259,11 @@ export class ArchiveService {
           game
         FROM read_parquet(?)
         WHERE instance_id = ?
+          AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
       `;
 
-      const rows = await this.db.all(sql, this.leanActivitiesPath, instanceId);
+      const gameParam = game ?? null;
+      const rows = await this.db.all(sql, this.leanActivitiesPath, instanceId, gameParam, gameParam);
       const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
       logger.debug('Found activity entries in archive', {
@@ -278,8 +282,8 @@ export class ArchiveService {
    * Get a single activity by instance ID from the lean activities archive.
    * Returns first entry only (for backward compatibility).
    */
-  async getActivityByInstanceId(instanceId: string): Promise<LeanActivity | null> {
-    const activities = await this.getActivitiesByInstanceId(instanceId);
+  async getActivityByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<LeanActivity | null> {
+    const activities = await this.getActivitiesByInstanceId(instanceId, game);
     return activities.length > 0 ? activities[0] : null;
   }
 
