@@ -171,6 +171,22 @@ describe('GET /api/pgcr/:id game routing', () => {
   });
 });
 
+describe('BungieApiService.getPgcrUrl', () => {
+  const svc = new BungieApiService('k', 'https://www.bungie.net/Platform', 'https://www.bungie.net/d1/Platform');
+
+  it('sends D2 PGCRs to https://stats.bungie.net to skip the www 301 hop', () => {
+    expect(svc.getPgcrUrl(ID, 'D2')).toBe(
+      `https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${ID}/`
+    );
+  });
+
+  it('leaves the D1 URL on the configured d1ApiRoot', () => {
+    expect(svc.getPgcrUrl(ID, 'D1')).toBe(
+      `https://www.bungie.net/d1/Platform/Destiny/Stats/PostGameCarnageReport/${ID}/`
+    );
+  });
+});
+
 describe('BungieApiService.getBungiePgcr', () => {
   const realFetch = global.fetch;
   afterEach(() => { global.fetch = realFetch; });
@@ -183,7 +199,7 @@ describe('BungieApiService.getBungiePgcr', () => {
     expect((global.fetch as any).mock.calls[0][0]).toBe(`https://example.test/d1/Platform/Destiny/Stats/PostGameCarnageReport/${ID}/`);
     global.fetch = reply(200, d2Envelope);
     await svc.getBungiePgcr(ID, 'D2');
-    expect((global.fetch as any).mock.calls[0][0]).toBe(`https://example.test/Platform/Destiny2/Stats/PostGameCarnageReport/${ID}/`);
+    expect((global.fetch as any).mock.calls[0][0]).toBe(`https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${ID}/`);
   });
 
   it('throws on ErrorCode != 1 (HTTP 200 SystemDisabled) and returns null for PGCR not found', async () => {
