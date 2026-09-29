@@ -88,10 +88,23 @@
   min-height: 160px;
   border: 1px solid rgba(212, 175, 55, 0.2);
   cursor: grab;
+  // Let CDK own the gesture; native HTML5 image-drag and touch pan steal it otherwise.
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 
   &:hover {
     background-color: rgba(42, 42, 42, 0.8);
     border-color: rgba(212, 175, 55, 0.4);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  img {
+    -webkit-user-drag: none;
+    pointer-events: none;
   }
 }
 

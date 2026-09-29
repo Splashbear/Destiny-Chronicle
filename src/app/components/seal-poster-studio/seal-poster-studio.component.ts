@@ -184,8 +184,11 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
       return;
     }
     moveItemInArray(this.displaySeals, event.previousIndex, event.currentIndex);
+    // Reassign so change detection always refreshes the grid after a mixed-orientation drop.
+    this.displaySeals = [...this.displaySeals];
     this.useManualOrder = true;
     this.saveManualOrder();
+    this.cdr.detectChanges();
   }
 
   hideSeal(seal: SealDisplayItem, event: Event) {

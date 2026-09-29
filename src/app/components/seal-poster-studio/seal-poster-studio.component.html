@@ -149,13 +149,15 @@
          [src]="platformIconUrl(h.platform)"
          class="seal-platform-icon"
          [title]="h.displayName"
-         alt="" />
+         alt=""
+         draggable="false" />
   </div>
   <div class="seal-icon-wrap">
     <img *ngIf="getSealIcon(seal)"
          [src]="getSealIcon(seal)"
          class="seal-icon"
-         alt="{{ seal.name }}" />
+         alt="{{ seal.name }}"
+         draggable="false" />
     <sup *ngIf="getGildCount(seal) as gildCount" class="gild-super">{{ gildCount }}</sup>
   </div>
   <div class="seal-info">
