@@ -85,8 +85,37 @@
               </button>
             </div>
             <!-- API Unavailable Message -->
-            <div *ngIf="!apiAvailable" class="bg-red-900 text-red-200 p-2 rounded mb-4">
-              Bungie API is currently unavailable. Showing cached data for favorite accounts only.
+            <div *ngIf="!apiAvailable && !d1ApiIssue && !d2ApiIssue" class="bg-red-900 text-red-200 p-2 rounded mb-4 text-sm">
+              Bungie API is currently unavailable. Showing cached data where possible.
+            </div>
+            <div *ngIf="d1ApiIssue" class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm">
+              <p class="font-medium text-amber-200 mb-0.5">Destiny 1 API issue</p>
+              <p>{{ d1ApiIssue }}</p>
+            </div>
+            <div *ngIf="d2ApiIssue" class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm">
+              <p class="font-medium text-amber-200 mb-0.5">Destiny 2 API issue</p>
+              <p>{{ d2ApiIssue }}</p>
+            </div>
+            <!-- Favorites: opt-in so a fresh search is not blocked -->
+            <div *ngIf="showFavoritesLoadPrompt && selectedPlayers.length === 0"
+                 class="destiny-banner-info mb-4 text-sm flex flex-col sm:flex-row sm:items-center gap-3">
+              <div class="flex-1 min-w-0">
+                <p class="font-medium mb-0.5" style="color: var(--destiny-gold)">Load your favorites?</p>
+                <p class="text-slate-300">
+                  You have {{ favoriteAccounts.length }} saved favorite{{ favoriteAccounts.length === 1 ? '' : 's' }}.
+                  Load them now, or search for someone else first.
+                </p>
+              </div>
+              <div class="flex gap-2 shrink-0">
+                <button type="button" (click)="confirmLoadFavorites()"
+                        class="chronicle-toolbar-btn chronicle-toolbar-btn--primary text-xs px-3 py-1.5">
+                  Load favorites
+                </button>
+                <button type="button" (click)="dismissFavoritesPrompt()"
+                        class="chronicle-toolbar-btn text-xs px-3 py-1.5">
+                  Not now
+                </button>
+              </div>
             </div>
             <!-- User guidance: how to use the app (dismissible) -->
             <div *ngIf="selectedPlayers.length === 0 && !hideGetStartedBanner" class="destiny-banner-info mb-4 text-sm relative">
@@ -189,9 +218,10 @@
       <div *ngIf="errorMessage" class="mt-2 text-sm text-red-400">
         {{ errorMessage }}
       </div>
-      <div *ngIf="bungieUnavailable" class="mt-2 text-xs text-amber-300 bg-amber-900/40 border border-amber-600/60 rounded px-3 py-2">
-        Bungie API returned an error for this search. If you are using a non-localhost URL (such as a LAN IP),
-        make sure that origin is added to your Bungie API application, then try again.
+      <div *ngIf="bungieUnavailable && !d1ApiIssue && !d2ApiIssue" class="mt-2 text-xs text-amber-300 bg-amber-900/40 border border-amber-600/60 rounded px-3 py-2">
+        Bungie returned an error for this search. If you are using a non-localhost URL (such as a LAN IP),
+        make sure that origin is added to your Bungie API application, then try again. Otherwise this is
+        usually a temporary Bungie outage — try again later.
       </div>
           </div>
         </div>
@@ -239,6 +269,13 @@
                   class="chronicle-toolbar-btn px-2 py-1 text-xs shrink-0"
                   [attr.aria-expanded]="loadingPanelExpanded">
             {{ loadingPanelExpanded ? 'Less' : 'Details' }}
+          </button>
+          <button *ngIf="!isLoadingComplete"
+                  type="button"
+                  (click)="stopProfileLoading()"
+                  class="chronicle-toolbar-btn px-2 py-1 text-xs shrink-0 text-amber-200 border border-amber-600/40"
+                  title="Stop loading and search for someone else">
+            Stop
           </button>
           <button type="button" (click)="closeLoadingModal()" class="text-slate-500 hover:text-white p-1 shrink-0" aria-label="Dismiss">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>

@@ -854,6 +854,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   readonly guardianGames: ('D1' | 'D2')[] = ['D1', 'D2'];
   favoriteAccounts: FavoriteAccount[] = [];
   apiAvailable: boolean = true;
+  /** User-visible notice when Destiny 1 Bungie endpoints are down or disabled. */
+  d1ApiIssue: string | null = null;
+  /** User-visible notice when Destiny 2 Bungie endpoints are down or disabled. */
+  d2ApiIssue: string | null = null;
+  /** Offer to load saved favorites without blocking a fresh search. */
+  showFavoritesLoadPrompt = false;
+  /** True while favorites (or any multi-profile sync) is still running. */
+  profileLoadInProgress = false;
   dbReady: boolean = false;
   activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' = 'activities';
   
@@ -2266,17 +2274,45 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Automatically load and display favorite profiles on app startup.
-   * Uses the full load path (same as "Load All Favorites" button) so the process
-   * actually runs with proper loading UI - no fake or misleading loading states.
+   * Load the favorites list on startup, but do not auto-fetch history.
+   * Auto-loading blocked searching for someone else until favorites finished.
    */
   async loadAndDisplayFavorites() {
     await this.loadFavorites();
-    
-    // If we have favorites and no currently selected players, load them automatically
-    if (this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0) {
-      await this.loadMultipleFavorites(this.favoriteAccounts);
+    this.showFavoritesLoadPrompt =
+      this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0;
+    this.cdr.detectChanges();
+  }
+
+  /** User chose Load from the favorites prompt. */
+  async confirmLoadFavorites(): Promise<void> {
+    this.showFavoritesLoadPrompt = false;
+    if (this.favoriteAccounts.length === 0) {
+      return;
     }
+    await this.loadMultipleFavorites(this.favoriteAccounts);
+  }
+
+  /** User chose Not now — keep favorites available via the Favorites button. */
+  dismissFavoritesPrompt(): void {
+    this.showFavoritesLoadPrompt = false;
+    this.cdr.detectChanges();
+  }
+
+  /**
+   * Stop an in-progress favorites/profile load so the user can search someone else.
+   */
+  stopProfileLoading(): void {
+    console.log('[LOAD] User stopped profile loading');
+    this.profileLoadInProgress = false;
+    this.showLoadingModal = false;
+    this.isLoadingComplete = false;
+    this.loadingProgress = null;
+    this.clearAllPlayers();
+    if (this.favoriteAccounts.length > 0) {
+      this.showFavoritesLoadPrompt = true;
+    }
+    this.cdr.detectChanges();
   }
   /**
    * Optimized loading for favorite accounts with instant cached display
@@ -2413,6 +2449,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       favorites = favorites.slice(0, 10);
     }
 
+    this.showFavoritesLoadPrompt = false;
+    this.profileLoadInProgress = true;
+    const loadToken = this.currentLoadToken;
+
     // Show immediate feedback - non-blocking progress UI
     this.showLoadingModal = true;
     this.accountLoadingStatuses = [];
@@ -2482,8 +2522,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       for (const player of playersToLoad) {
         loadPromises.push(
           this.runWithPlayerSyncLimit(async () => {
+            if (loadToken !== this.currentLoadToken) {
+              return;
+            }
             try {
               await this.loadCharacterHistory(player);
+              if (loadToken !== this.currentLoadToken) {
+                return;
+              }
               // Firsts/DungeonSolo after browse-ready (overlay clear).
               this.scheduleAfterBrowseReady(() => {
                 void this.loadGuardianFirsts(player).catch(err => {
@@ -2494,7 +2540,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 });
               });
             } catch (err) {
+              if (loadToken !== this.currentLoadToken) {
+                return;
+              }
               console.warn('[LoadFavorites] Skipped due to error for', player.membershipId, err);
+              this.noteBungieApiIssue(this.isD1Player(player) ? 'D1' : 'D2', err);
               const accountKey = this.getPlayerKey(player);
               const existingStatus = this.accountLoadingStatus.get(accountKey);
               if (existingStatus) {
@@ -2528,6 +2578,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
 
       await Promise.all(loadPromises);
+      if (loadToken !== this.currentLoadToken) {
+        return;
+      }
       
       // Load activities for the selected date
       if (this.selectedDate) {
@@ -2537,7 +2590,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.statsDebounce$.next();
     } catch (error) {
       console.error('[LoadFavorites] Error loading favorites:', error);
+      this.noteBungieApiIssue('both', error);
     } finally {
+      this.profileLoadInProgress = false;
       this.loadingActivities[this.selectedDate] = false;
       this.cdr.detectChanges();
       // Ensure account summary recomputes once character history sync finishes
@@ -2722,10 +2777,47 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   // On API error, set apiAvailable = false and show cached favorites
   async handleApiError(error: any) {
-    if (error.status === 503 || error.status === 0) {
+    this.noteBungieApiIssue('both', error);
+    if (error?.status === 503 || error?.status === 0) {
       this.apiAvailable = false;
       await this.loadFavorites();
     }
+  }
+
+  /**
+   * Record a user-visible notice when Bungie D1/D2 endpoints are down or disabled.
+   * SystemDisabled (ErrorCode 5) is common for Destiny 1 stats right now.
+   */
+  private noteBungieApiIssue(game: 'D1' | 'D2' | 'both', error: unknown): void {
+    const err = error as { message?: string; status?: number; errorStatus?: string; ErrorStatus?: string } | null;
+    const message = String(err?.message ?? error ?? '');
+    const statusText = String(err?.errorStatus ?? err?.ErrorStatus ?? '');
+    const combined = `${message} ${statusText}`;
+    const httpStatus = err?.status;
+
+    const isSystemDisabled = /SystemDisabled|temporarily disabled|maintenance/i.test(combined);
+    const isServiceDown =
+      isSystemDisabled ||
+      httpStatus === 503 ||
+      httpStatus === 0 ||
+      /DestinyServiceOffline|ServiceUnavailable|ThrottleExceeded/i.test(combined);
+
+    if (!isServiceDown) {
+      return;
+    }
+
+    if (game === 'D1' || game === 'both') {
+      this.d1ApiIssue = isSystemDisabled
+        ? 'Destiny 1 stats are temporarily disabled by Bungie (SystemDisabled). D1 activity history and character stats cannot be loaded until Bungie restores that service.'
+        : 'Destiny 1 API is unreachable or returning errors. D1 activity history may be missing until Bungie recovers.';
+    }
+    if (game === 'D2' || game === 'both') {
+      this.d2ApiIssue = isSystemDisabled
+        ? 'Destiny 2 stats are temporarily disabled by Bungie (SystemDisabled). D2 activity history cannot be loaded until Bungie restores that service.'
+        : 'Destiny 2 API is unreachable or returning errors. D2 activity history may be missing until Bungie recovers.';
+    }
+    this.apiAvailable = false;
+    this.cdr.detectChanges();
   }
 
   get hasD1Players(): boolean {
@@ -2857,6 +2949,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const message = prefixResp?.Message || 'No additional details.';
         this.errorMessage = `Bungie API error while searching. Status: ${status}. ${message}`;
         this.bungieUnavailable = true;
+        this.noteBungieApiIssue('both', {
+          message: `${status} - ${message}`,
+          errorStatus: status
+        });
         return;
       }
       if (!results || results.length === 0) {
@@ -3420,6 +3516,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       
     } catch (error: any) {
       console.error('Error loading character history:', error);
+      this.noteBungieApiIssue(game, error);
       
       // Update status: error
       this.updateAccountLoadingStatus(
@@ -3432,8 +3529,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         `Error loading ${game} data for ${player.displayName}`
       );
       
-      if (error.status === 503) {
-        this.error[key] = 'Bungie API is temporarily unavailable. Please try again in a few minutes.';
+      if (error.status === 503 || /SystemDisabled|temporarily disabled/i.test(String(error?.message ?? ''))) {
+        this.error[key] = `${game} data is temporarily unavailable from Bungie. Please try again later.`;
       } else {
         this.error[key] = 'Error loading character history';
       }
@@ -3734,7 +3831,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       } catch (error) {
         console.error(`Activity fetch error (attempt ${retries + 1}/${maxRetries}):`, error);
         retries++;
-        if (retries === maxRetries) throw error;
+        if (retries === maxRetries) {
+          this.noteBungieApiIssue(character.game === 'D1' ? 'D1' : 'D2', error);
+          throw error;
+        }
         await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
       }
     }
@@ -4099,6 +4199,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.processAndGroupActivities();
     } catch (error) {
       console.error('Error loading activity history for character:', error);
+      this.noteBungieApiIssue(character.game === 'D1' ? 'D1' : 'D2', error);
       this.error[loadingKey] = 'Failed to load activity history';
     } finally {
       this.loadingActivities[loadingKey] = false;
@@ -5533,6 +5634,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.errorMessage = this.uiI18n.t('archive.offlineSearchDisabled');
       return;
     }
+    // Do not make a new search wait on an in-progress favorites load.
+    if (this.profileLoadInProgress || this.showLoadingModal) {
+      this.stopProfileLoading();
+    }
+    this.showFavoritesLoadPrompt = false;
     console.log('addPlayer called with searchUsername:', this.searchUsername);
     
     const pending = (this.searchUsername || '').trim();
