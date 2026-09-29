@@ -48,6 +48,7 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
   intrepid: seasonal(),
   slayerbaron: seasonal(),
   heretic: seasonal(),
+  blacksmith: seasonal(),
 
   // Moments of Triumph
   mmxix: mot(),
@@ -69,7 +70,6 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
 
   // Raid
   rivensbane: raid(),
-  blacksmith: raid(),
   shadow: raid(),
   enlightened: raid(),
   descendant: raid(),
