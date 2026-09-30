@@ -49,6 +49,7 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
   slayerbaron: seasonal(),
   heretic: seasonal(),
   blacksmith: seasonal(),
+  shadow: seasonal(),
 
   // Moments of Triumph
   mmxix: mot(),
@@ -70,7 +71,6 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
 
   // Raid
   rivensbane: raid(),
-  shadow: raid(),
   enlightened: raid(),
   descendant: raid(),
   fatebreaker: raid(),
@@ -110,7 +110,6 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
   cursebreaker: expansion(),
   wayfarer: expansion(),
   chronicler: expansion(),
-  reckoner: expansion(),
   harbinger: expansion(),
   splintered: expansion(),
   gumshoe: expansion(),
@@ -121,6 +120,7 @@ export const TITLE_CATEGORY_MAP: { [normalized: string]: TitleCategoryInfo } = {
 
   // Competitive
   dredgen: competitive(),
+  reckoner: competitive(),
   conqueror: competitive(),
   conquerorworthy: competitive(),
   conquerorrhunt: competitive(),
