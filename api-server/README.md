@@ -345,6 +345,8 @@ interface LeanActivity {
 | `PLAYER_ACTIVITIES_LITE_PATH` | No | Falls back to `PGCR_LEAN_ACTIVITIES_PATH` | Path to lite activities Parquet (tier 1, optimized for cold-start) |
 | `MID_LIGHT_EXTRACT_DIR` | No | - | Directory containing per-player light extract parquet files (tier 2) |
 | `COMPACT_INDEX_ROOT` | No | - | Root directory for bucketed compact instance ID index (tier 3) |
+| `GAP_INDEX_ROOT` | No | - | Brief 5 Option A: gap-fill `ready/` root (20-col lean). Staging only. |
+| `ENABLE_GAP_LEAN` | No | `false` | When `true`, merge `GAP_INDEX_ROOT` into player-activity lookups. Keep off on live `:3001`. |
 | `PGCR_MEMBERSHIP_PATH` | No | - | Path to membership Parquet file (currently unused) |
 | `PGCR_WATERMARK_PATH` | No | - | Path to watermark JSON file |
 | `BUNGIE_API_KEY` | **Yes** (unless archive configured) | - | Bungie API key for live fallback |

@@ -2,70 +2,54 @@
 
 > **Grokbot / handoff read this section first.** Older tick log is below.
 
-## Current state (2026-10-01 ~13:40 ET)
+## Current state (2026-10-01 ~16:25 ET)
 
 ### Website (solo finishes UI)
-- **Fix committed + pushed to `master`** (deploys via `.github/workflows/deploy.yml` ? GitHub Pages).
-- Root cause: `b754b2f` deferred `loadDungeonSoloFirsts` behind `scheduleAfterBrowseReady`, while Firsts UI only reads `dungeonSoloFirsts` (not `first.isSolo`). Loaders also reopened overlay via `organizing-pgcrs`.
-- Fix in `src/app/components/player-search/player-search.component.ts`:
-  - Firsts / dungeon solos no longer touch account loading overlay
-  - PGCR class enrich is fire-and-forget (does not block browse-ready)
-  - Standard ? Normal + family-name matching for Solo links
-- **Not included in that deploy:** local D1 “hide Open on Bungie” / Eververse export tweaks (`pgcr-lite`, `export.service`) — still uncommitted.
+- **Shipped on `master`:** commit `a4789dc` (GitHub Pages deploy).
+- Firsts/DungeonSolo no longer reopen overlay; PGCR class enrich off browse-ready path; Standard?Normal matching.
 
 ### Gap-fill finish (Brief 5 compact ? `ready/`)
-- Extract **DONE** (`GAP_FILL_DONE`); ~25.46B rows in pieces.
-- Compacting: **solo worker**, DuckDB `threads=8` / `memory=16GB`, **`--compact-only`**.
-- **Deletes piece dirs after each bucket** (leftover ~25k tiny files/bucket were thrashing NTFS — main slowdown).
-- Progress at last restart: **~105/256** ready; live compact on D: **untouched**.
+- Extract **DONE**; compacting solo `threads=8` / `16GB` / **`--compact-only`** + delete pieces after each bucket.
+- Progress: **~117/256** ready (live compact on D: untouched).
 - Logs: `D:\DestinyChronicleDB\logs\gap_fill_finish_solo.out.log`
-- Watcher: `gap_fill_finish_watch.py` ? **`validate_gap_fill_light.py` only** when 256/256.
+- Watch ? `validate_gap_fill_light.py` only (no full DISTINCT). Report: `D:\DestinyChronicleDB\logs\gap_fill_validate_light.json`
 
-### Validation defused (#1 / #2)
-- **#1 Heavy validate:** removed default full-scan `count(DISTINCT instance_id)` / global duplicate GROUP BY over ~25B rows.
-- **#2 Double validate:** finish runs **`--compact-only`** (no end validate); watcher runs **light** validate once.
-- Light script: `C:\Users\knigh\agent-tools\pgcr-proof\validate_gap_fill_light.py`  
-  (per-bucket counts, schema, blank IDs, sampled dups on buckets 0/128/255).
-- Heavy optional only: `validate_gap_fill_brief5.py` (now warned in docstring — do **not** run unless explicitly needed).
-- Report path (light): `D:\DestinyChronicleDB\logs\gap_fill_validate_light.json`
+### Option A dual-root API (draft — separate port)
+- **Branch:** `cursor/brief5-option-a-gap-dual-root`
+- **Design:** `api-server/docs/BRIEF5_MERGE_DESIGN.md`
+- **Env:** `GAP_INDEX_ROOT` + `ENABLE_GAP_LEAN` (default **off**)
+- **Staging running locally:** `http://127.0.0.1:3002/health` ? `gap_lean_enabled: true`, root `E:\...\cl_mid_index_gap\ready`
+- Start script: `api-server/scripts/start-api-gap-staging.cmd` (also `agent-tools\pgcr-api-server\_start_api_gap_staging.cmd`)
+- **Live `:3001` unchanged** (`ENABLE_GAP_LEAN` not set)
+- Merge: union gap lean with lite/extract/compact; dedupe `(instance_id, membership_id, character_id)`; prefer richer lean; incomplete gap buckets skipped (`pending` note)
+- Draft PR: open/push this branch (do not merge until 256/256 + light validate + Splashear go)
 
-### Brief 5 remaining (Bot / Cursor)
-1. Wait for **256/256** + light `GAP_FILL_READY_LIGHT`.
-2. Confirm light validate report `passed: true`.
-3. Write merge design (Option A dual-root preferred) + **draft API PR on separate port** — **do not** deploy to live `:3001` / Pages archive flags until Splashear go.
-4. Log results here; stop for Bot checklist.
-5. Briefs 2/4/6–7 still pending separately.
+### Brief 5 remaining
+1. Wait **256/256** + light `GAP_FILL_READY_LIGHT` / `passed: true`
+2. Smoke Splashbear/Kaiser on **:3002 only**
+3. Keep draft PR; **do not** point Pages / prod at 3002 or enable gap on 3001
+4. Briefs 2/4/6–7 still separate
 
 ### Do not
-- Rewrite/replace `D:\DestinyChronicleDB\cl_mid_index_compact` in place.
-- Re-run 3 parallel finish workers (disk thrash).
-- Run heavy brief5 validate as the default gate.
-- Point prod API at incomplete `ready/`.
+- Touch live `:3001` start script or enable `ENABLE_GAP_LEAN` there
+- Rewrite `D:\DestinyChronicleDB\cl_mid_index_compact` in place
+- Run heavy `validate_gap_fill_brief5.py` as default gate
+- Re-run 3 parallel finish workers
 
 ### Paths
 | What | Where |
 |------|--------|
-| Pieces (shrinking) | `E:\DestinyChronicleDB\cl_mid_index_gap\pieces\` |
-| Ready compact | `E:\DestinyChronicleDB\cl_mid_index_gap\ready\` |
-| Scripts | `C:\Users\knigh\agent-tools\pgcr-proof\` |
-| Manifest | `D:\DestinyChronicleDB\logs\gap_fill_manifest.json` |
+| Pieces | `E:\DestinyChronicleDB\cl_mid_index_gap\pieces\` |
+| Ready | `E:\DestinyChronicleDB\cl_mid_index_gap\ready\` |
+| Finish scripts | `C:\Users\knigh\agent-tools\pgcr-proof\` |
+| Staging API log | `D:\DestinyChronicleDB\logs\pgcr_api_gap_staging.out.log` |
 
 ---
 
 ## Tick log (historical)
 
-### 2026-10-01 06:02 ET — Cursor finish tick
-- Finish: **31/256** ready (~497 min in). Pace ~0.06/min ? ETA **Sat Oct 3 ~6:05 PM ET**. Process alive.
+### 2026-10-01 16:25 ET — Option A staging + draft PR work
+- Dual-root code + `:3002` staging up; STATUS refreshed for Grokbot.
 
-### 2026-10-01 08:00 ET — Cursor parallel finish restart
-- 3 workers thrashed E:; optimistic ETA was wrong (first-bucket only).
-
-### 2026-10-01 11:36 ET — Cursor solo finish restart (contention fix)
-- 1 worker `threads=8` / `16GB`.
-
-### 2026-10-01 12:15 ET — piece cleanup
-- Delete piece dirs after compact to stop NTFS metadata thrash.
-
-### 2026-10-01 13:40 ET — validate defuse + website solo deploy
-- Finish restarted `--compact-only`; watch ? light validate only.
-- Solo finishes UI fix pushed to master for GitHub Pages deploy.
+### Earlier today
+- Solo finishes UI fix `a4789dc`; validate defused; piece-cleanup finish; parallel thrash lesson learned.

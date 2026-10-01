@@ -19,6 +19,9 @@ export function loadConfig(): ApiConfig {
     // Multi-tier archive paths
     midLightExtractDir: process.env[ENV_KEYS.MID_LIGHT_EXTRACT_DIR] || '',
     compactIndexRoot: process.env[ENV_KEYS.COMPACT_INDEX_ROOT] || '',
+    gapIndexRoot: process.env[ENV_KEYS.GAP_INDEX_ROOT] || '',
+    // Default OFF — staging on :3002 sets ENABLE_GAP_LEAN=true; live :3001 must not.
+    enableGapLean: process.env[ENV_KEYS.ENABLE_GAP_LEAN] === 'true',
     
     // Bungie API - REQUIRED via environment variable
     bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',

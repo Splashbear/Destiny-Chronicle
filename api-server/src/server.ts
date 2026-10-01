@@ -17,6 +17,8 @@ async function startServer(): Promise<void> {
     port: config.port,
     archiveConfigured: !!(config.leanActivitiesPath && config.membershipPath),
     watermarkConfigured: !!config.watermarkPath,
+    enableGapLean: config.enableGapLean,
+    gapIndexRoot: config.gapIndexRoot || '(none)',
   });
 
   const configErrors = validateConfig(config);
@@ -51,7 +53,9 @@ async function startServer(): Promise<void> {
     config.membershipPath,
     config.playerActivitiesLitePath,
     config.midLightExtractDir,
-    config.compactIndexRoot
+    config.compactIndexRoot,
+    config.gapIndexRoot,
+    config.enableGapLean
   );
   await archiveService.initialize();
 
@@ -75,6 +79,9 @@ async function startServer(): Promise<void> {
       timestamp: new Date().toISOString(),
       archive_available: archiveService.isAvailable(),
       watermark_loaded: watermarkService.getWatermark() !== null,
+      gap_lean_enabled: archiveService.isGapLeanEnabled(),
+      gap_index_root: archiveService.getGapIndexRoot() || null,
+      port: config.port,
     });
   });
 

@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
  */
 export interface TierInfo {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending';
+  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending';
   indexComplete?: boolean;
   filtersApplied?: boolean;
   notes?: string[];
@@ -33,6 +33,8 @@ export class ArchiveService {
   private playerActivitiesLitePath: string;
   private midLightExtractDir: string;
   private compactIndexRoot: string;
+  private gapIndexRoot: string;
+  private enableGapLean: boolean;
   private archiveAvailable = false;
   private db: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
@@ -42,13 +44,26 @@ export class ArchiveService {
     membershipPath: string,
     playerActivitiesLitePath: string,
     midLightExtractDir: string,
-    compactIndexRoot: string
+    compactIndexRoot: string,
+    gapIndexRoot: string = '',
+    enableGapLean: boolean = false
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
     this.playerActivitiesLitePath = playerActivitiesLitePath;
     this.midLightExtractDir = midLightExtractDir;
     this.compactIndexRoot = compactIndexRoot;
+    this.gapIndexRoot = gapIndexRoot;
+    this.enableGapLean = enableGapLean && !!gapIndexRoot;
+  }
+
+  /** Brief 5 Option A: whether gap ready/ merge is active. */
+  isGapLeanEnabled(): boolean {
+    return this.enableGapLean;
+  }
+
+  getGapIndexRoot(): string {
+    return this.gapIndexRoot;
   }
 
   /**
@@ -75,6 +90,8 @@ export class ArchiveService {
         membershipPath: this.membershipPath,
         midLightExtractDir: this.midLightExtractDir,
         compactIndexRoot: this.compactIndexRoot,
+        gapIndexRoot: this.gapIndexRoot || '(none)',
+        enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
       });
     } catch (error) {
@@ -391,11 +408,10 @@ export class ArchiveService {
           membershipId,
           count: liteResult.activities.length,
         });
-        // Merge any tier errors collected
         if (tierErrors.length > 0) {
           liteResult.tier.notes = [...(liteResult.tier.notes || []), ...tierErrors];
         }
-        return liteResult;
+        return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
       }
     } catch (error) {
       const errorMsg = `Lite tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -407,7 +423,6 @@ export class ArchiveService {
     if (this.midLightExtractDir) {
       try {
         const extractResult = await this.tryExtractLookup(membershipId, options);
-        // Collect extract tier notes even if player not found
         if (extractResult.tier.notes && extractResult.tier.notes.length > 0) {
           tierErrors.push(...extractResult.tier.notes);
         }
@@ -416,12 +431,11 @@ export class ArchiveService {
             membershipId,
             count: extractResult.activities.length,
           });
-          // Merge tier errors and deduplicate
           if (tierErrors.length > 0) {
             const allNotes = [...(extractResult.tier.notes || []), ...tierErrors];
             extractResult.tier.notes = Array.from(new Set(allNotes));
           }
-          return extractResult;
+          return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
         }
       } catch (error) {
         const errorMsg = `Extract tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -434,12 +448,10 @@ export class ArchiveService {
     if (this.compactIndexRoot && this.bucketHashType) {
       try {
         const compactResult = await this.tryCompactIndexLookup(membershipId, options);
-        // Always merge tier errors first
         if (tierErrors.length > 0) {
           compactResult.tier.notes = [...(compactResult.tier.notes || []), ...tierErrors];
         }
         
-        // Return compact result even if player not known - preserves indexComplete, notes, etc.
         if (compactResult.knownPlayer || compactResult.tier.source === 'pending' || compactResult.tier.source === 'none') {
           logger.debug('Compact tier result', {
             membershipId,
@@ -447,7 +459,7 @@ export class ArchiveService {
             source: compactResult.tier.source,
             indexComplete: compactResult.tier.indexComplete,
           });
-          return compactResult;
+          return this.mergeGapLeanIfEnabled(compactResult, membershipId, options, tierErrors);
         }
       } catch (error) {
         const errorMsg = `Compact tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -456,7 +468,26 @@ export class ArchiveService {
       }
     }
 
-    // Tier 4: Nothing found - include any tier errors
+    // Tier 3b / 4: gap-only when prior tiers miss (Option A hole fill)
+    if (this.enableGapLean) {
+      try {
+        const gapOnly = await this.tryGapLeanLookup(membershipId, options);
+        if (gapOnly.knownPlayer) {
+          if (tierErrors.length > 0) {
+            gapOnly.tier.notes = [...(gapOnly.tier.notes || []), ...tierErrors];
+          }
+          return gapOnly;
+        }
+        if (gapOnly.tier.notes?.length) {
+          tierErrors.push(...gapOnly.tier.notes);
+        }
+      } catch (error) {
+        const errorMsg = `Gap lean tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+        logger.warn(errorMsg, { membershipId, error });
+        tierErrors.push(errorMsg);
+      }
+    }
+
     logger.debug('No archive data found for membership', { membershipId });
     return {
       activities: [],
@@ -587,6 +618,193 @@ export class ArchiveService {
       },
       knownPlayer: false,
     };
+  }
+
+  private activityDedupeKey(a: LeanActivity): string {
+    return `${a.instance_id}|${a.membership_id}|${a.character_id}`;
+  }
+
+  /** Prefer rows with real lean fields over compact_ids stubs. */
+  private leanRichness(a: LeanActivity): number {
+    let score = 0;
+    if (a.period) score += 4;
+    if (a.activity_hash) score += 2;
+    if (a.mode) score += 1;
+    if (a.display_name) score += 1;
+    return score;
+  }
+
+  /**
+   * Option A: union gap ready/ lean rows into a prior tier result.
+   * Dedupe by (instance_id, membership_id, character_id); prefer richer lean rows.
+   */
+  private async mergeGapLeanIfEnabled(
+    base: PlayerActivitiesResult,
+    membershipId: string,
+    options: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    } | undefined,
+    tierErrors: string[]
+  ): Promise<PlayerActivitiesResult> {
+    if (!this.enableGapLean) {
+      return base;
+    }
+    try {
+      const gap = await this.tryGapLeanLookup(membershipId, options);
+      if (!gap.knownPlayer || gap.activities.length === 0) {
+        if (gap.tier.notes?.length) {
+          base.tier.notes = [...(base.tier.notes || []), ...gap.tier.notes];
+        }
+        return base;
+      }
+
+      const map = new Map<string, LeanActivity>();
+      for (const a of base.activities) {
+        map.set(this.activityDedupeKey(a), a);
+      }
+      let gapAdded = 0;
+      let gapReplaced = 0;
+      for (const g of gap.activities) {
+        const key = this.activityDedupeKey(g);
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, g);
+          gapAdded++;
+        } else if (this.leanRichness(g) > this.leanRichness(existing)) {
+          map.set(key, g);
+          gapReplaced++;
+        }
+      }
+
+      const merged = Array.from(map.values());
+      const limit = options?.limit || 10000;
+      // Keep period-desc when possible
+      merged.sort((a, b) => {
+        if (a.period && b.period) return b.period.localeCompare(a.period);
+        if (a.period) return -1;
+        if (b.period) return 1;
+        return String(b.instance_id).localeCompare(String(a.instance_id), undefined, { numeric: true });
+      });
+      const activities = merged.slice(0, limit);
+
+      const notes = [
+        ...(base.tier.notes || []),
+        ...(gap.tier.notes || []),
+        ...tierErrors,
+        `gap_lean merge: +${gapAdded} new, ${gapReplaced} richer replacements from GAP_INDEX_ROOT`,
+      ];
+
+      const hasLean = activities.some(a => !!a.period || !!a.activity_hash);
+      return {
+        activities,
+        knownPlayer: activities.length > 0 || base.knownPlayer,
+        tier: {
+          level: hasLean ? 'full' : base.tier.level,
+          source: gapAdded + gapReplaced > 0 ? 'merged' : base.tier.source,
+          indexComplete: base.tier.indexComplete ?? gap.tier.indexComplete,
+          filtersApplied: base.tier.filtersApplied || gap.tier.filtersApplied,
+          notes: Array.from(new Set(notes)),
+        },
+      };
+    } catch (error) {
+      const errorMsg = `Gap lean merge error: ${error instanceof Error ? error.message : 'unknown'}`;
+      logger.warn(errorMsg, { membershipId, error });
+      base.tier.notes = [...(base.tier.notes || []), errorMsg];
+      return base;
+    }
+  }
+
+  /**
+   * Option A: read 20-col lean rows from gap ready/ mid_bucket=N.
+   * Skips incomplete buckets (_COMPLETE.json missing) without failing the request.
+   */
+  private async tryGapLeanLookup(
+    membershipId: string,
+    options?: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    }
+  ): Promise<PlayerActivitiesResult> {
+    if (!this.enableGapLean || !this.gapIndexRoot || !this.db || !this.bucketHashType) {
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+    }
+
+    const bucket = await this.calculateBucket(membershipId);
+    if (bucket === null) {
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+    }
+
+    const pathMod = await import('path');
+    const bucketDir = pathMod.join(this.gapIndexRoot, `mid_bucket=${bucket}`);
+    const instancesPath = pathMod.join(bucketDir, 'instances.parquet');
+    const markerPath = pathMod.join(bucketDir, '_COMPLETE.json');
+
+    try {
+      await fs.access(markerPath);
+    } catch {
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'pending',
+          indexComplete: false,
+          notes: [`Gap ready bucket ${bucket} not complete yet`],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    try {
+      await fs.access(instancesPath);
+    } catch {
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'none',
+          indexComplete: true,
+          notes: [`Gap ready bucket ${bucket} marker present but instances.parquet missing`],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    try {
+      const result = await this.queryPlayerActivitiesSchema(
+        instancesPath,
+        membershipId,
+        options,
+        'gap_lean'
+      );
+      return {
+        activities: result.activities,
+        knownPlayer: result.knownPlayer,
+        tier: {
+          level: result.activities.length > 0 ? 'full' : 'absent',
+          source: result.activities.length > 0 ? 'gap_lean' : 'none',
+          indexComplete: true,
+          filtersApplied: result.filtersApplied,
+          notes: result.notes,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to read gap ready index', { error, bucket, membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'none',
+          indexComplete: true,
+          notes: ['Error reading gap ready index'],
+        },
+        knownPlayer: false,
+      };
+    }
   }
 
   /**
