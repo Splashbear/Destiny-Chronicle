@@ -53,3 +53,10 @@
 
 ### Earlier today
 - Solo finishes UI fix `a4789dc`; validate defused; piece-cleanup finish; parallel thrash lesson learned.
+
+### 2026-10-01 16:28 ET — Option A draft branch pushed
+- Branch: `cursor/brief5-option-a-gap-dual-root` @ `69f869c`
+- Open draft PR: https://github.com/Splashbear/Destiny-Chronicle/compare/master...cursor/brief5-option-a-gap-dual-root?expand=1&title=Brief%205%20Option%20A%3A%20dual-root%20gap%20lean%20API%20(%3A3002%20staging)
+- Staging `:3002` health OK (`gap_lean_enabled: true`). Live `:3001` untouched.
+- Finish progress now: **117/256** ready.
+- `gh` installed but not authenticated here — mark PR as Draft in the UI after opening.
