@@ -4497,11 +4497,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         ? 'No reports for selected date. Organizing and displaying….'
         : `Total number of reports for ${reportSummary} is ${totalReports}. Organizing and displaying….`;
       this.updateLoadingProgress('pgcr', 0, 1, organizeMessage);
-      // Ensure class icons can render by enriching activities with character class from PGCRs
-      await this.enrichActivitiesWithCharacterClass(activities);
-      if (environment.debug) {
-        console.log('[Load] PGCR enrich done');
-      }
+      // Class-icon PGCR enrich is best-effort and MUST NOT block browse-ready / overlay clear.
+      void this.enrichActivitiesWithCharacterClass(activities).then(() => {
+        if (environment.debug) {
+          console.log('[Load] PGCR enrich done (background)');
+        }
+        this.cdr.detectChanges();
+      }).catch(() => { /* non-fatal */ });
       if (loadToken !== this.currentLoadToken) {
         this.loadingProgress = null;
         this.cdr.detectChanges();
@@ -6785,20 +6787,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async loadGuardianFirsts(player: PlayerSearchDisplay): Promise<void> {
     this.loadingGuardianFirsts = true;
-    const accountKey = this.getPlayerKey(player);
     const isD1 = this.isD1Player(player);
     const game = isD1 ? 'D1' : 'D2';
-    const platform = this.getPlatformName(player.membershipType);
-    this.updateAccountLoadingStatus(
-      accountKey,
-      player.displayName,
-      platform,
-      game,
-      player.membershipType,
-      'organizing-pgcrs',
-      `Loading Guardian Firsts for ${player.displayName}…`
-    );
-    this.cdr.detectChanges();
+    // Do not update accountLoadingStatus here — Firsts are off the browse-ready critical path.
     try {
       const charIds = (this.characters[this.getPlayerKey(player)] || [])
         .map(getCharacterId)
@@ -7838,20 +7829,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Loads first solo / solo-flawless completions for all dungeons for the given player. */
   private async loadDungeonSoloFirsts(player: PlayerSearchDisplay): Promise<void> {
     this.loadingDungeonSoloFirsts[player.membershipId] = true;
-    if (!this.isD1Player(player)) {
-      const accountKey = this.getPlayerKey(player);
-      const platform = this.getPlatformName(player.membershipType);
-      this.updateAccountLoadingStatus(
-        accountKey,
-        player.displayName,
-        platform,
-        'D2',
-        player.membershipType,
-        'organizing-pgcrs',
-        `Loading Dungeon Solo Firsts for ${player.displayName}…`
-      );
-      this.cdr.detectChanges();
-    }
+    // Dungeon solos are off browse-ready critical path — do not touch accountLoadingStatus/overlay.
     try {
       const data = await this.activityDb.getDungeonSoloFirsts(player.membershipId);
       this.dungeonSoloFirsts[player.membershipId] = data;
@@ -8616,6 +8594,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         result = list.find(d => d.fullName === mappedName);
       }
     }
+
+    // Standard ↔ Normal are used interchangeably across Firsts labels vs solo fullName keys.
+    if (!result) {
+      let alt = label;
+      if (label.endsWith(': Normal')) {
+        alt = `${label.slice(0, -': Normal'.length)}: Standard`;
+      } else if (label.endsWith(': Standard')) {
+        alt = `${label.slice(0, -': Standard'.length)}: Normal`;
+      }
+      if (alt !== label) {
+        result = list.find(d => d.fullName === alt);
+      }
+    }
     
     // If still no match and this looks like a dungeon name, try to find by base name
     if (!result && this.isDungeonName(label)) {
@@ -8629,6 +8620,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           if (!current.firstSolo) return earliest;
           return new Date(current.firstSolo.period) < new Date(earliest.firstSolo.period) ? current : earliest;
         });
+      }
+    }
+
+    // Versioned Firsts label ("Ghosts of the Deep: Normal") → match by family base name.
+    if (!result && label.includes(': ')) {
+      const base = label.split(': ')[0];
+      if (this.isDungeonName(base)) {
+        const matchingVersions = list.filter(d => d.family === base && (d.firstSolo || d.firstFlawless));
+        if (matchingVersions.length > 0) {
+          result = matchingVersions.reduce((earliest, current) => {
+            const a = earliest.firstSolo || earliest.firstFlawless;
+            const b = current.firstSolo || current.firstFlawless;
+            if (!a) return current;
+            if (!b) return earliest;
+            return new Date(b.period) < new Date(a.period) ? current : earliest;
+          });
+        }
       }
     }
     
