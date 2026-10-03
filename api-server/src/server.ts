@@ -30,12 +30,23 @@ async function startServer(): Promise<void> {
   const app: Express = express();
 
   if (config.enableCors) {
+    const allowed = config.corsOrigin
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     app.use((req: Request, res: Response, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
+      const origin = req.headers.origin;
+      if (allowed.length === 0) {
+        res.header('Access-Control-Allow-Origin', '*');
+      } else if (origin && allowed.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+        res.header('Vary', 'Origin');
+      }
+      // If Origin is present but not allowlisted, omit ACAO (browser blocks).
       res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
       if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
+        return res.sendStatus(origin && allowed.length && !allowed.includes(origin) ? 403 : 200);
       }
       next();
     });

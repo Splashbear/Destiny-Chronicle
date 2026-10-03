@@ -159,6 +159,10 @@ export class PgcrApiService {
   }
 
   async fetchPlayedWithStats(membershipIds: string[]): Promise<ExternalPgcrPartner[] | null> {
+    // W19: keep Played With off at launch until index is wired.
+    if (!environment.enablePlayedWith) {
+      return null;
+    }
     if (!this.enabled || !membershipIds.length) {
       return null;
     }

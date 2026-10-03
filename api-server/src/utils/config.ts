@@ -30,6 +30,7 @@ export function loadConfig(): ApiConfig {
     
     // Server options
     enableCors: process.env[ENV_KEYS.ENABLE_CORS] === 'true',
+    corsOrigin: process.env[ENV_KEYS.CORS_ORIGIN] || '',
     logLevel: (process.env[ENV_KEYS.LOG_LEVEL] as ApiConfig['logLevel']) || 'info',
   };
   
