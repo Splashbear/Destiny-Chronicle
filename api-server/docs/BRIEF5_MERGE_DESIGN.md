@@ -13,6 +13,18 @@ Status: draft PR implementation (Option A). Do not enable on live `:3001` / Page
 
 **How:** When `ENABLE_GAP_LEAN=true` and `GAP_INDEX_ROOT` is set, archive lookup unions gap lean rows with lite/extract/compact results. Dedupe by `(instance_id, membership_id, character_id)`; prefer richer lean rows. Incomplete gap buckets (`_COMPLETE.json` missing) are skipped with a note.
 
+### W7 — gap `game` column untrusted (must fix before merge)
+
+Extract used `iconPath` heuristic (`"destiny2" in icon` → D2 else D1), so ~20% of gap rows are labeled `game='D1'` but are real D2 PGCRs on Bungie. Raw archive is D2-only.
+
+**API behavior (Option A):**
+- Never SQL-filter gap rows on `game`
+- Force `game='D2'` on all gap lean rows returned
+- Skip gap entirely when caller asks for `game=D1`
+- Column rebuild optional later; do not block on rewriting 25B rows
+
+**Also:** mode 40 / mode-0 social hub rows remain in gap data — W6 filter still applies.
+
 **Env (staging `:3002` only)**
 
 ```

@@ -15,6 +15,8 @@ export interface ApiConfig {
   compactIndexRoot: string;
   /** Brief 5 Option A: gap-fill ready/ root (20-col lean). Empty = disabled. */
   gapIndexRoot: string;
+  /** W11: membership_id-sorted gap root; preferred per-bucket when complete. */
+  gapIndexSortedRoot: string;
   /** When true, merge GAP_INDEX_ROOT lean rows with compact/lite results. */
   enableGapLean: boolean;
   
@@ -39,6 +41,7 @@ export const ENV_KEYS = {
   MID_LIGHT_EXTRACT_DIR: 'MID_LIGHT_EXTRACT_DIR',
   COMPACT_INDEX_ROOT: 'COMPACT_INDEX_ROOT',
   GAP_INDEX_ROOT: 'GAP_INDEX_ROOT',
+  GAP_INDEX_SORTED_ROOT: 'GAP_INDEX_SORTED_ROOT',
   ENABLE_GAP_LEAN: 'ENABLE_GAP_LEAN',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',

@@ -28,6 +28,11 @@ export const environment = {
    * no archived data or for activities above the archive watermark.
    */
   useArchiveActivities: false,
+  /**
+   * W2: After archive `full`, Bungie newest-first stop at archive max instance ID.
+   * Default OFF until Splashear enables for go-live.
+   */
+  archiveBungieDeltaFill: false,
   offlineMode: false,
   archiveRoot: ''
 }; 

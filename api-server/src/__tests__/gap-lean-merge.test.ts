@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { ArchiveService } from '../services/archive.service';
+import { ArchiveService, forceGapLeanGame } from '../services/archive.service';
 
 const FIXTURES_DIR = path.join(__dirname, 'fixtures', 'gap-lean');
 
@@ -35,5 +35,10 @@ describe('Option A gap lean dual-root', () => {
   it('does not enable when flag true but root empty', () => {
     const svc = new ArchiveService('', '', '', '', compactRoot, '', true);
     expect(svc.isGapLeanEnabled()).toBe(false);
+  });
+
+  it('W7: forceGapLeanGame treats every gap row as D2', () => {
+    expect(forceGapLeanGame({ game: 'D1' } as any).game).toBe('D2');
+    expect(forceGapLeanGame({ game: 'D2' } as any).game).toBe('D2');
   });
 });

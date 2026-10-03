@@ -24,6 +24,13 @@ export interface PlayerActivitiesResult {
 }
 
 /**
+ * W7: gap parquet `game` is untrusted (iconPath heuristic). Always expose as D2.
+ */
+export function forceGapLeanGame(activity: LeanActivity): LeanActivity {
+  return { ...activity, game: 'D2' };
+}
+
+/**
  * Service for reading lean activities from Parquet archives using DuckDB.
  * DuckDB can read ZSTD-compressed Parquet files written by DuckDB or other tools.
  */
@@ -34,10 +41,16 @@ export class ArchiveService {
   private midLightExtractDir: string;
   private compactIndexRoot: string;
   private gapIndexRoot: string;
+  /** W11: optional membership_id-sorted gap root (parquet RG pruning). Prefer when complete. */
+  private gapIndexSortedRoot: string;
   private enableGapLean: boolean;
   private archiveAvailable = false;
   private db: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
+  /** W11: cache DESCRIBE results so each request does not reopen parquet metadata. */
+  private parquetSchemaCache = new Map<string, Set<string>>();
+  /** W11: cache hash(mid)%256. */
+  private bucketCache = new Map<string, number>();
 
   constructor(
     leanActivitiesPath: string,
@@ -46,7 +59,8 @@ export class ArchiveService {
     midLightExtractDir: string,
     compactIndexRoot: string,
     gapIndexRoot: string = '',
-    enableGapLean: boolean = false
+    enableGapLean: boolean = false,
+    gapIndexSortedRoot: string = ''
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
@@ -54,6 +68,7 @@ export class ArchiveService {
     this.midLightExtractDir = midLightExtractDir;
     this.compactIndexRoot = compactIndexRoot;
     this.gapIndexRoot = gapIndexRoot;
+    this.gapIndexSortedRoot = gapIndexSortedRoot;
     this.enableGapLean = enableGapLean && !!gapIndexRoot;
   }
 
@@ -79,7 +94,12 @@ export class ArchiveService {
       await fs.access(this.leanActivitiesPath);
       
       this.db = await Database.create(':memory:');
-      logger.info('DuckDB initialized for archive reading');
+      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2× (profiled).
+      const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
+      const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
+      await this.db.all(`SET threads=${threads}`);
+      await this.db.all(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
+      logger.info('DuckDB initialized for archive reading', { threads, memLimit });
       
       // Determine bucket hash type using test vector
       await this.initializeBucketHashType();
@@ -91,6 +111,7 @@ export class ArchiveService {
         midLightExtractDir: this.midLightExtractDir,
         compactIndexRoot: this.compactIndexRoot,
         gapIndexRoot: this.gapIndexRoot || '(none)',
+        gapIndexSortedRoot: this.gapIndexSortedRoot || '(none)',
         enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
       });
@@ -160,6 +181,8 @@ export class ArchiveService {
     if (!this.db || !this.bucketHashType) {
       return null;
     }
+    const cached = this.bucketCache.get(membershipId);
+    if (cached !== undefined) return cached;
 
     try {
       const castType = this.bucketHashType === 'BIGINT' ? 'BIGINT' : 'VARCHAR';
@@ -167,7 +190,10 @@ export class ArchiveService {
         `SELECT (hash(CAST(? AS ${castType})) % 256) AS bucket`,
         membershipId
       );
-      return Number(result[0]?.bucket) ?? null;
+      const bucket = Number(result[0]?.bucket);
+      if (!Number.isFinite(bucket)) return null;
+      this.bucketCache.set(membershipId, bucket);
+      return bucket;
     } catch (error) {
       logger.error('Error calculating bucket:', { error, membershipId });
       return null;
@@ -720,6 +746,11 @@ export class ArchiveService {
   /**
    * Option A: read 20-col lean rows from gap ready/ mid_bucket=N.
    * Skips incomplete buckets (_COMPLETE.json missing) without failing the request.
+   *
+   * W7 (2026-10-02): gap `game` is untrusted — extract used iconPath heuristic
+   * (`"destiny2" in iconPath` → D2 else D1), mislabeling ~20% of D2 PGCRs as D1.
+   * Raw gap source is D2-only. Never SQL-filter on gap.game; force game='D2' on
+   * returned rows. Skip entirely when caller asks for game=D1.
    */
   private async tryGapLeanLookup(
     membershipId: string,
@@ -734,62 +765,111 @@ export class ArchiveService {
       return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
+    // Gap lean is D2-only (W7). Do not surface mislabeled rows as D1.
+    if (options?.game === 'D1') {
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'none',
+          notes: ['Gap lean skipped for game=D1 (W7: gap rows are D2; game column untrusted)'],
+        },
+        knownPlayer: false,
+      };
+    }
+
     const bucket = await this.calculateBucket(membershipId);
     if (bucket === null) {
       return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
     }
 
     const pathMod = await import('path');
-    const bucketDir = pathMod.join(this.gapIndexRoot, `mid_bucket=${bucket}`);
-    const instancesPath = pathMod.join(bucketDir, 'instances.parquet');
-    const markerPath = pathMod.join(bucketDir, '_COMPLETE.json');
+    // W11: prefer membership_id-sorted bucket when present (RG pruning ~0.1s vs ~3s).
+    const candidates: Array<{ root: string; label: string }> = [];
+    if (this.gapIndexSortedRoot) {
+      candidates.push({ root: this.gapIndexSortedRoot, label: 'gap_sorted' });
+    }
+    candidates.push({ root: this.gapIndexRoot, label: 'gap_ready' });
 
-    try {
-      await fs.access(markerPath);
-    } catch {
+    let instancesPath = '';
+    let usedLabel = '';
+    let anyPending = false;
+    for (const c of candidates) {
+      const bucketDir = pathMod.join(c.root, `mid_bucket=${bucket}`);
+      const markerPath = pathMod.join(bucketDir, '_COMPLETE.json');
+      const parquetPath = pathMod.join(bucketDir, 'instances.parquet');
+      try {
+        await fs.access(markerPath);
+        await fs.access(parquetPath);
+        instancesPath = parquetPath;
+        usedLabel = c.label;
+        break;
+      } catch {
+        if (c.label === 'gap_ready') {
+          try {
+            await fs.access(markerPath);
+            anyPending = false;
+          } catch {
+            anyPending = true;
+          }
+        }
+      }
+    }
+
+    if (!instancesPath) {
       return {
         activities: [],
         tier: {
           level: 'absent',
-          source: 'pending',
-          indexComplete: false,
-          notes: [`Gap ready bucket ${bucket} not complete yet`],
+          source: anyPending ? 'pending' : 'none',
+          indexComplete: !anyPending,
+          notes: [
+            anyPending
+              ? `Gap ready bucket ${bucket} not complete yet`
+              : `Gap ready bucket ${bucket} marker present but instances.parquet missing`,
+          ],
         },
         knownPlayer: false,
       };
     }
 
     try {
-      await fs.access(instancesPath);
-    } catch {
-      return {
-        activities: [],
-        tier: {
-          level: 'absent',
-          source: 'none',
-          indexComplete: true,
-          notes: [`Gap ready bucket ${bucket} marker present but instances.parquet missing`],
-        },
-        knownPlayer: false,
-      };
-    }
-
-    try {
+      // Ignore stored game column when querying (W7) — filtering on it drops ~20% of real D2 rows.
+      // W8: ~245k rows have membership_id='0' (unreachable); never query as mid '0'.
+      if (membershipId === '0' || membershipId === '') {
+        return {
+          activities: [],
+          tier: {
+            level: 'absent',
+            source: 'none',
+            notes: ['Gap lean skipped for membership_id=0 (W8)'],
+          },
+          knownPlayer: false,
+        };
+      }
       const result = await this.queryPlayerActivitiesSchema(
         instancesPath,
         membershipId,
-        options,
+        { ...options, game: undefined },
         'gap_lean'
       );
+      const activities = result.activities.map(forceGapLeanGame);
+      const notes = [
+        ...(result.notes || []),
+        'Gap lean: forced game=D2 (W7; ignore stored game column)',
+        usedLabel === 'gap_sorted'
+          ? `W11: gap bucket ${bucket} from membership_id-sorted root`
+          : `W11: gap bucket ${bucket} from unsorted ready root`,
+      ];
       return {
-        activities: result.activities,
+        activities,
         knownPlayer: result.knownPlayer,
         tier: {
-          level: result.activities.length > 0 ? 'full' : 'absent',
-          source: result.activities.length > 0 ? 'gap_lean' : 'none',
+          level: activities.length > 0 ? 'full' : 'absent',
+          source: activities.length > 0 ? 'gap_lean' : 'none',
           indexComplete: true,
           filtersApplied: result.filtersApplied,
-          notes: result.notes,
+          notes,
         },
       };
     } catch (error) {
@@ -976,9 +1056,13 @@ export class ArchiveService {
     }
 
     try {
-      // First, check schema
-      const schemaResult = await this.db.all(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);
-      const availableColumns = new Set(schemaResult.map((col: any) => col.column_name));
+      // W11: cache schema — DESCRIBE was a full parquet open per request.
+      let availableColumns = this.parquetSchemaCache.get(parquetPath);
+      if (!availableColumns) {
+        const schemaResult = await this.db.all(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);
+        availableColumns = new Set(schemaResult.map((col: any) => col.column_name as string));
+        this.parquetSchemaCache.set(parquetPath, availableColumns);
+      }
 
       // Required columns
       const requiredCols = [
@@ -1002,53 +1086,41 @@ export class ArchiveService {
 
       // Build select clause with available or defaulted columns
       const selectCols = requiredCols.map(col => 
-        availableColumns.has(col) ? col : `NULL AS ${col}`
+        availableColumns!.has(col) ? col : `NULL AS ${col}`
       );
       
       for (const [col, defaultVal] of Object.entries(optionalCols)) {
-        if (availableColumns.has(col)) {
+        if (availableColumns!.has(col)) {
           selectCols.push(col);
         } else {
           selectCols.push(`${defaultVal} AS ${col}`);
         }
       }
 
-      // Check if player exists (without filters)
-      const countSql = `
-        SELECT COUNT(*) as cnt
-        FROM read_parquet(?)
-        WHERE membership_id = ?
-      `;
-      const countResult = await this.db.all(countSql, parquetPath, membershipId);
-      const knownPlayer = (countResult[0]?.cnt || 0) > 0;
-
-      if (!knownPlayer) {
-        return { activities: [], knownPlayer: false, filtersApplied: false };
-      }
-
-      // Build filtered query
+      // W11: one SELECT only (removed pre-query COUNT(*) full-bucket scan).
       const { game, fromPeriod, toPeriod, limit = 10000 } = options || {};
+      const hasFilters = !!(game || fromPeriod || toPeriod);
 
       const conditions: string[] = ['membership_id = ?'];
       const params: any[] = [parquetPath, membershipId];
 
-      if (game && availableColumns.has('game')) {
+      if (game && availableColumns!.has('game')) {
         conditions.push('LOWER(game) = ?');
         params.push(game.toLowerCase());
       }
 
-      if (fromPeriod && availableColumns.has('period')) {
+      if (fromPeriod && availableColumns!.has('period')) {
         conditions.push('period >= ?');
         params.push(fromPeriod);
       }
 
-      if (toPeriod && availableColumns.has('period')) {
+      if (toPeriod && availableColumns!.has('period')) {
         conditions.push('period <= ?');
         params.push(toPeriod);
       }
 
       const whereClause = conditions.join(' AND ');
-      const orderBy = availableColumns.has('period') ? 'ORDER BY period DESC' : '';
+      const orderBy = availableColumns!.has('period') ? 'ORDER BY period DESC' : '';
 
       const sql = `
         SELECT ${selectCols.join(', ')}
@@ -1063,11 +1135,27 @@ export class ArchiveService {
       const rows = await this.db.all(sql, ...params);
       const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
-      return {
-        activities,
-        knownPlayer: true,
-        filtersApplied: true,
-      };
+      if (activities.length > 0) {
+        return {
+          activities,
+          knownPlayer: true,
+          filtersApplied: hasFilters,
+        };
+      }
+
+      // Empty filtered result: cheap EXISTS to distinguish unknown mid vs no rows in window.
+      if (hasFilters) {
+        const exists = await this.db.all(
+          `SELECT 1 AS ok FROM read_parquet(?) WHERE membership_id = ? LIMIT 1`,
+          parquetPath,
+          membershipId
+        );
+        if (exists.length > 0) {
+          return { activities: [], knownPlayer: true, filtersApplied: true };
+        }
+      }
+
+      return { activities: [], knownPlayer: false, filtersApplied: hasFilters };
     } catch (error) {
       logger.error(`Schema-tolerant query failed for ${tierName} tier`, { error, parquetPath, membershipId });
       throw error;

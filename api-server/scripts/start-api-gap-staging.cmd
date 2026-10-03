@@ -13,7 +13,13 @@ set PLAYER_ACTIVITIES_LITE_PATH=D:\DestinyChronicleDB\lean\player_activities_lit
 set MID_LIGHT_EXTRACT_DIR=D:\DestinyChronicleDB\lean
 set COMPACT_INDEX_ROOT=D:\DestinyChronicleDB\cl_mid_index_compact
 set GAP_INDEX_ROOT=E:\DestinyChronicleDB\cl_mid_index_gap\ready
+set GAP_INDEX_SORTED_ROOT=E:\DestinyChronicleDB\cl_mid_index_gap\ready_by_mid
 set ENABLE_GAP_LEAN=true
+REM W11 speed: DuckDB threads + one-shot full player lists + concurrent batch
+set PGCR_DUCKDB_THREADS=8
+set PGCR_DUCKDB_MEMORY=8GB
+set PGCR_MAX_ACTIVITIES_LIMIT=100000
+set PGCR_BATCH_CONCURRENCY=4
 
 if not exist "dist\server.js" (
   echo Building api-server...

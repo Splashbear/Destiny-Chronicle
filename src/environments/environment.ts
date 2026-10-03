@@ -28,6 +28,12 @@ export const environment = {
    * Archive API should be running at pgcrApiRoot (e.g., http://localhost:3001)
    */
   useArchiveActivities: true,
+  /**
+   * W2: After an archive hit with coverage `full`, still fetch Bungie history
+   * newest-first and stop at the archive's highest instance ID (post-watermark
+   * / recent games only). Default OFF until Splashear enables for go-live.
+   */
+  archiveBungieDeltaFill: false,
   /** When true, app runs from an imported offline archive (no Bungie API). */
   offlineMode: false,
   archiveRoot: ''

@@ -55,7 +55,8 @@ async function startServer(): Promise<void> {
     config.midLightExtractDir,
     config.compactIndexRoot,
     config.gapIndexRoot,
-    config.enableGapLean
+    config.enableGapLean,
+    config.gapIndexSortedRoot
   );
   await archiveService.initialize();
 

@@ -4007,25 +4007,48 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
 
       let newActivities: StoredActivity[] = [];
+      // W2: when archive answered `full` and archiveBungieDeltaFill is on, Bungie
+      // pagination stops once instance IDs are at/below this watermark.
+      let archiveMaxInstanceId: number | null = null;
+      let bungieDeltaOnly = false;
+      let archiveAnswered = false;
       
       // Try loading from archive API first if enabled (membership-level list; PGCR stays lazy).
       if (environment.useArchiveActivities && this.pgcrApiService.enabled) {
         try {
           const archiveData = await this.pgcrApiService.fetchPlayerActivities(
             character.membershipId,
-            { game: character.game, limit: 10000 }
+            { game: character.game, limit: 100000 }
           );
 
-          // Only use archive data if coverage level is 'full' (has dates/modes).
-          // 'partial' coverage (compact_ids only) requires PGCR hydration, so fall back to Bungie.
+          // Use archive rows when 'full', or when 'partial' still has lean rows (merged/gap/lite/extract).
+          // compact_ids-only partials have empty activities[] — fall through to Bungie.
+          // W10: partial+rows → store archive rows, then still fetch Bungie to fill holes.
           // Backward compat: treat missing level as 'full' when source='archive' and rowCount > 0 (old server)
           const cov = archiveData?.coverage;
           const effectiveLevel = cov?.level ?? (cov?.source === 'archive' && (cov?.rowCount ?? 0) > 0 ? 'full' : undefined);
-          if (archiveData && cov && effectiveLevel === 'full' && (cov.rowCount ?? 0) > 0) {
+          const leanPartial =
+            effectiveLevel === 'partial' &&
+            (cov?.rowCount ?? 0) > 0 &&
+            (archiveData?.activities?.length ?? 0) > 0 &&
+            cov?.source !== 'compact_ids' &&
+            cov?.source !== 'none';
+          if (archiveData && cov && (effectiveLevel === 'full' || leanPartial) && (cov.rowCount ?? 0) > 0) {
+            archiveAnswered = true;
             console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
               coverage: archiveData.coverage,
               characterId: character.characterId
             });
+
+            // Membership-level max iid = stop watermark for W2 delta fill.
+            let maxIid = 0;
+            for (const a of archiveData.activities) {
+              const n = Number(a.instanceId);
+              if (Number.isFinite(n) && n > maxIid) maxIid = n;
+            }
+            if (maxIid > 0) {
+              archiveMaxInstanceId = maxIid;
+            }
 
             // Filter activities for this specific character (coerce ids - archive + Bungie both stringified).
             const characterActivities = archiveData.activities.filter(
@@ -4073,19 +4096,45 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 console.log(`[Archive] Character ${character.characterId} already in IDB (${storedActivities.length} archive rows, 0 new)`);
               }
 
-              // Membership archive hit - skip Bungie pagination for this character.
-              this.processAndGroupActivities();
-              this.loadingActivities[loadingKey] = false;
-              return;
+              // Full coverage: skip Bungie unless W2 delta-fill is enabled.
+              // Partial lean: keep rows and fill holes from Bungie (W10).
+              if (effectiveLevel === 'full') {
+                if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
+                  bungieDeltaOnly = true;
+                  console.log(
+                    `[Archive] W2 delta fill for ${character.membershipId}: Bungie newest-first until iid <= ${archiveMaxInstanceId}`
+                  );
+                  this.processAndGroupActivities();
+                  // fall through to Bungie pagination (delta only)
+                } else {
+                  this.processAndGroupActivities();
+                  this.loadingActivities[loadingKey] = false;
+                  return;
+                }
+              } else {
+                console.log(`[Archive] Partial lean coverage for ${character.membershipId}; continuing to Bungie for holes`);
+                this.processAndGroupActivities();
+                // fall through to Bungie pagination (full crawl for holes)
+              }
+            } else if (effectiveLevel === 'full') {
+              // Membership hit but 0 rows for this character.
+              if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
+                bungieDeltaOnly = true;
+                console.log(
+                  `[Archive] W2 delta fill (0 archive rows for char ${character.characterId}); stop at iid ${archiveMaxInstanceId}`
+                );
+                // fall through
+              } else {
+                console.log(`[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`);
+                this.loadingActivities[loadingKey] = false;
+                return;
+              }
             }
-
-            // Archive knows this membership but has no rows for this character - do not crawl Bungie.
-            console.log(`[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`);
-            this.loadingActivities[loadingKey] = false;
-            return;
           }
 
-          console.log(`[Archive] No archived activities for ${character.membershipId} (${character.game}); falling back to Bungie`);
+          if (!archiveAnswered) {
+            console.log(`[Archive] No archived activities for ${character.membershipId} (${character.game}); falling back to Bungie`);
+          }
         } catch (err) {
           console.warn(`[Archive] Failed to load from archive API for ${character.membershipId}, falling back to Bungie:`, err);
           // Fall through to Bungie API pagination
@@ -4117,7 +4166,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             continue;
           }
 
-          const storedActivities: StoredActivity[] = activities.map(activity => ({
+          let storedActivities: StoredActivity[] = activities.map(activity => ({
             ...activity,
             membershipId: character.membershipId,
             characterId: character.characterId,
@@ -4126,10 +4175,31 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             game: character.game // ensure we persist which game this activity belongs to
           }));
 
+          // W2: Bungie returns newest-first — keep only iids above archive max, then stop.
+          if (bungieDeltaOnly && archiveMaxInstanceId != null) {
+            const pageIids = storedActivities
+              .map(a => Number(a.instanceId))
+              .filter(n => Number.isFinite(n) && n > 0);
+            const pageMinIid = pageIids.length ? Math.min(...pageIids) : 0;
+            storedActivities = storedActivities.filter(a => {
+              const n = Number(a.instanceId);
+              return Number.isFinite(n) && n > archiveMaxInstanceId!;
+            });
+            if (pageMinIid > 0 && pageMinIid <= archiveMaxInstanceId) {
+              hasMore = false;
+            } else {
+              hasMore = activities.length === 250;
+              page++;
+            }
+          } else {
+            hasMore = activities.length === 250; // Assume 250 is page size
+            page++;
+          }
+
           modeActivities.push(...storedActivities);
 
           // Running total: report as reports are found so user sees progress
-          if (accountKey && existingStatus) {
+          if (accountKey && existingStatus && storedActivities.length > 0) {
             this.reportActivityCountDelta(
               accountKey,
               existingStatus.displayName,
@@ -4143,9 +4213,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
           // Legacy overall count for any other UI
           this.overallActivitiesProcessed += storedActivities.length;
-          
-          hasMore = activities.length === 250; // Assume 250 is page size
-          page++;
         }
         
         return modeActivities;
