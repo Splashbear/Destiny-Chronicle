@@ -75,7 +75,7 @@ interface LitePlayerRow {
         <button type="button" mat-dialog-close class="px-3 py-1.5 text-sm text-slate-300 hover:text-white rounded">
           {{ i18n.t('pgcr.close') }}
         </button>
-        <button *ngIf="!isOfflineMode" type="button"
+        <button *ngIf="!isOfflineMode && !data.isD1" type="button"
                 (click)="openOnBungie()"
                 class="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 rounded">
           {{ i18n.t('pgcr.bungie') }}
@@ -319,6 +319,10 @@ export class PgcrLiteComponent implements OnInit {
   }
 
   openOnBungie(): void {
+    // Bungie has no public D1 PGCR viewer; D1 uses Eververse via openFullPgcr().
+    if (this.data.isD1) {
+      return;
+    }
     window.open(`https://www.bungie.net/en/PGCR/${this.data.instanceId}`, '_blank', 'noopener');
     this.dialogRef.close();
   }

@@ -63,6 +63,18 @@ export class ExportService {
     return `${f.game}|${f.type}|${f.name}`;
   }
 
+  /** D1 has no public Bungie PGCR page; use Eververse. D2 stays on Bungie. */
+  private pgcrLink(instanceId: string | number | undefined | null, game: string): string {
+    if (instanceId == null || instanceId === '') {
+      return '';
+    }
+    const id = String(instanceId);
+    if (game === 'D1') {
+      return `https://pgcr.eververse.trade/destiny1/${id}`;
+    }
+    return `https://www.bungie.net/en/PGCR/${id}`;
+  }
+
   /**
    * Builds an object containing whichever slices were requested.
    */
@@ -282,7 +294,7 @@ export class ExportService {
               Deaths: deaths,
               Assists: assists,
               Completed: completed,
-              PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
+              PGCR: this.pgcrLink(activity.activityDetails?.instanceId, game),
             });
           }
         }
@@ -337,7 +349,7 @@ export class ExportService {
               Deaths: deaths,
               Assists: assists,
               Completed: completed,
-              PGCR: activity.activityDetails?.instanceId ? `https://www.bungie.net/en/PGCR/${activity.activityDetails.instanceId}` : '',
+              PGCR: this.pgcrLink(activity.activityDetails?.instanceId, game),
             });
           }
         }
@@ -399,7 +411,7 @@ export class ExportService {
             IsSoloFlawless: first.isSoloFlawless ?? false,
             IsFlawless: first.isFlawless ?? false,
             FireteamSize: first.fireteamSize ?? '',
-            PGCR: first.instanceId ? `https://www.bungie.net/en/PGCR/${first.instanceId}` : '',
+            PGCR: this.pgcrLink(first.instanceId, first.game),
           });
         }
       }

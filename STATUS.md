@@ -1,71 +1,41 @@
-# Destiny Chronicle — Cursor ? Bot STATUS
+# Destiny Chronicle - Cursor <-> Bot STATUS
 
-> **Grokbot / handoff read this section first.** Older tick log is below.
+> **Grokbot / handoff read this section first.**
+> Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
-## Current state (2026-10-01 ~13:40 ET)
+## Current state (2026-10-03)
 
-### Website (solo finishes UI)
-- **Fix committed + pushed to `master`** (deploys via `.github/workflows/deploy.yml` ? GitHub Pages).
-- Root cause: `b754b2f` deferred `loadDungeonSoloFirsts` behind `scheduleAfterBrowseReady`, while Firsts UI only reads `dungeonSoloFirsts` (not `first.isSolo`). Loaders also reopened overlay via `organizing-pgcrs`.
-- Fix in `src/app/components/player-search/player-search.component.ts`:
-  - Firsts / dungeon solos no longer touch account loading overlay
-  - PGCR class enrich is fire-and-forget (does not block browse-ready)
-  - Standard ? Normal + family-name matching for Solo links
-- **Not included in that deploy:** local D1 “hide Open on Bungie” / Eververse export tweaks (`pgcr-lite`, `export.service`) — still uncommitted.
+### Website
+- **Shipped on `master`:** `a4789dc` (solo finishes UI). Live site stays on **Bungie** for now ? no archive cutover / no `ENABLE_GAP_LEAN` on `:3001`.
+- D1: keep live Bungie until raw D1 PGCRs exist (D1 DECISION Oct 2).
 
-### Gap-fill finish (Brief 5 compact ? `ready/`)
-- Extract **DONE** (`GAP_FILL_DONE`); ~25.46B rows in pieces.
-- Compacting: **solo worker**, DuckDB `threads=8` / `memory=16GB`, **`--compact-only`**.
-- **Deletes piece dirs after each bucket** (leftover ~25k tiny files/bucket were thrashing NTFS — main slowdown).
-- Progress at last restart: **~105/256** ready; live compact on D: **untouched**.
-- Logs: `D:\DestinyChronicleDB\logs\gap_fill_finish_solo.out.log`
-- Watcher: `gap_fill_finish_watch.py` ? **`validate_gap_fill_light.py` only** when 256/256.
+### Gap-fill (Brief 5) - COMPLETE + light validate PASSED
+- Extract + finish **DONE:** **256/256** ready, pieces empty. Live compact on D: **untouched**.
+- Light validate **`passed: true`** ? 25,458,831,283 rows.
 
-### Validation defused (#1 / #2)
-- **#1 Heavy validate:** removed default full-scan `count(DISTINCT instance_id)` / global duplicate GROUP BY over ~25B rows.
-- **#2 Double validate:** finish runs **`--compact-only`** (no end validate); watcher runs **light** validate once.
-- Light script: `C:\Users\knigh\agent-tools\pgcr-proof\validate_gap_fill_light.py`  
-  (per-bucket counts, schema, blank IDs, sampled dups on buckets 0/128/255).
-- Heavy optional only: `validate_gap_fill_brief5.py` (now warned in docstring — do **not** run unless explicitly needed).
-- Report path (light): `D:\DestinyChronicleDB\logs\gap_fill_validate_light.json`
+### Launch order (Splashear) ? from BOT_DECISIONS
+1. ~~**W11** speed~~ **DONE**
+2. ~~**W6** social hubs~~ **DONE** (incl. W13 blank social `1202765834`)
+3. ~~**W2** / **W12** client delta fill~~ **DONE** (flag **OFF**)
+4. **W13** report ready ? `api-server/docs/W13_MODE0_EXTRAS.md` (awaiting Splashear)
+5. **W14** note only ? not a blocker
+6. ~~**W15** size study~~ **DONE** ? `~/agent-tools/pgcr-proof/size_reduction/REPORT.md`
+7. **W1 PARKED** ? new 16B?17B dump incoming
+8. No merge / no `:3001` gap without Splashear yes
 
-### Brief 5 remaining (Bot / Cursor)
-1. Wait for **256/256** + light `GAP_FILL_READY_LIGHT`.
-2. Confirm light validate report `passed: true`.
-3. Write merge design (Option A dual-root preferred) + **draft API PR on separate port** — **do not** deploy to live `:3001` / Pages archive flags until Splashear go.
-4. Log results here; stop for Bot checklist.
-5. Briefs 2/4/6–7 still pending separately.
+### W15 headline (estimate only; no deletes)
+- Report: `~/agent-tools/pgcr-proof/size_reduction/REPORT.md` (+ `metrics.json`)
+- Sample buckets 50 + 115 in scratch; live `ready/` untouched
+- Best serve option: **typed light + sort (+ optional drop mid=0 / force D2)** ? **~14.3 B/row ? ~340 GiB** projected gap (vs ~664)
+- With compact (~69 GiB): ~**409 GiB** total ? fits 1 TB comfortably
+- Query cold: typed/sorted Splash **~0.05?0.10s** vs unsorted source **~2.9s**
+
+### Option A dual-root API
+- **Branch:** `cursor/brief5-option-a-gap-dual-root`
+- Pushed tip: `6bbba5f` ? local has W12/W13 (+ STATUS) uncommitted
+- Staging `:3002` gap lean on; live `:3001` unchanged
 
 ### Do not
-- Rewrite/replace `D:\DestinyChronicleDB\cl_mid_index_compact` in place.
-- Re-run 3 parallel finish workers (disk thrash).
-- Run heavy brief5 validate as the default gate.
-- Point prod API at incomplete `ready/`.
-
-### Paths
-| What | Where |
-|------|--------|
-| Pieces (shrinking) | `E:\DestinyChronicleDB\cl_mid_index_gap\pieces\` |
-| Ready compact | `E:\DestinyChronicleDB\cl_mid_index_gap\ready\` |
-| Scripts | `C:\Users\knigh\agent-tools\pgcr-proof\` |
-| Manifest | `D:\DestinyChronicleDB\logs\gap_fill_manifest.json` |
-
----
-
-## Tick log (historical)
-
-### 2026-10-01 06:02 ET — Cursor finish tick
-- Finish: **31/256** ready (~497 min in). Pace ~0.06/min ? ETA **Sat Oct 3 ~6:05 PM ET**. Process alive.
-
-### 2026-10-01 08:00 ET — Cursor parallel finish restart
-- 3 workers thrashed E:; optimistic ETA was wrong (first-bucket only).
-
-### 2026-10-01 11:36 ET — Cursor solo finish restart (contention fix)
-- 1 worker `threads=8` / `16GB`.
-
-### 2026-10-01 12:15 ET — piece cleanup
-- Delete piece dirs after compact to stop NTFS metadata thrash.
-
-### 2026-10-01 13:40 ET — validate defuse + website solo deploy
-- Finish restarted `--compact-only`; watch ? light validate only.
-- Solo finishes UI fix pushed to master for GitHub Pages deploy.
+- Touch live `:3001` / enable `ENABLE_GAP_LEAN` there
+- Rewrite compact or ready in place
+- Overwrite `BOT_DECISIONS.md`

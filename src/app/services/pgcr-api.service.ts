@@ -30,7 +30,15 @@ export interface LightActivityRow {
 
 export interface PlayerActivitiesCoverage {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'none' | 'pending' | 'archive';
+  source:
+    | 'lite'
+    | 'extract'
+    | 'compact_ids'
+    | 'gap_lean'
+    | 'merged'
+    | 'none'
+    | 'pending'
+    | 'archive';
   rowCount: number;
   distinctInstances?: number;
   minPeriod?: string | null;
