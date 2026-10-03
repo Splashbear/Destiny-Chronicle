@@ -14,7 +14,12 @@ describe('W6 social hub filter', () => {
   });
 
   test('mode 0 with non-hub hash is kept', () => {
+    // Arena: Breach Executable (Expert) — real activity, not a hub (W13)
     expect(isSocialHubActivity({ mode: 0, activity_hash: 1148989311 })).toBe(false);
+  });
+
+  test('W13 blank social-mode hash is a hub when mode 0', () => {
+    expect(isSocialHubActivity({ mode: 0, activity_hash: 1202765834 })).toBe(true);
   });
 
   test('raid/strike modes are kept', () => {

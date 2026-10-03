@@ -29,8 +29,8 @@ export const environment = {
    */
   useArchiveActivities: false,
   /**
-   * W2: After archive `full`, Bungie newest-first stop at archive max instance ID.
-   * Default OFF until Splashear enables for go-live.
+   * W2/W12: After archive `full` or lean `partial`, Bungie newest-first stop
+   * at archive max instance ID. Default OFF until Splashear enables for go-live.
    */
   archiveBungieDeltaFill: false,
   offlineMode: false,

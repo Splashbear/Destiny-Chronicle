@@ -4007,8 +4007,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
 
       let newActivities: StoredActivity[] = [];
-      // W2: when archive answered `full` and archiveBungieDeltaFill is on, Bungie
-      // pagination stops once instance IDs are at/below this watermark.
+      // W2/W12: when archive answered with rows and archiveBungieDeltaFill is on,
+      // Bungie pagination stops once instance IDs are at/below this watermark
+      // (applies to both `full` and lean `partial` — holes are not full-crawled).
       let archiveMaxInstanceId: number | null = null;
       let bungieDeltaOnly = false;
       let archiveAnswered = false;
@@ -4023,7 +4024,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
           // Use archive rows when 'full', or when 'partial' still has lean rows (merged/gap/lite/extract).
           // compact_ids-only partials have empty activities[] — fall through to Bungie.
-          // W10: partial+rows → store archive rows, then still fetch Bungie to fill holes.
           // Backward compat: treat missing level as 'full' when source='archive' and rowCount > 0 (old server)
           const cov = archiveData?.coverage;
           const effectiveLevel = cov?.level ?? (cov?.source === 'archive' && (cov?.rowCount ?? 0) > 0 ? 'full' : undefined);
@@ -4040,7 +4040,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               characterId: character.characterId
             });
 
-            // Membership-level max iid = stop watermark for W2 delta fill.
+            // Membership-level max iid = stop watermark for W2/W12 delta fill.
             let maxIid = 0;
             for (const a of archiveData.activities) {
               const n = Number(a.instanceId);
@@ -4096,39 +4096,41 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 console.log(`[Archive] Character ${character.characterId} already in IDB (${storedActivities.length} archive rows, 0 new)`);
               }
 
-              // Full coverage: skip Bungie unless W2 delta-fill is enabled.
-              // Partial lean: keep rows and fill holes from Bungie (W10).
-              if (effectiveLevel === 'full') {
-                if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
-                  bungieDeltaOnly = true;
-                  console.log(
-                    `[Archive] W2 delta fill for ${character.membershipId}: Bungie newest-first until iid <= ${archiveMaxInstanceId}`
-                  );
-                  this.processAndGroupActivities();
-                  // fall through to Bungie pagination (delta only)
-                } else {
-                  this.processAndGroupActivities();
-                  this.loadingActivities[loadingKey] = false;
-                  return;
-                }
-              } else {
-                console.log(`[Archive] Partial lean coverage for ${character.membershipId}; continuing to Bungie for holes`);
+              // W12: with delta-fill ON, both full and lean-partial use newest-first stop
+              // at archive max iid (known holes / D1 / W8 do not force a full crawl).
+              // Flag OFF: full → skip Bungie; lean-partial → full crawl (legacy W10).
+              // Absent (no archive rows) still full-crawls below.
+              if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
+                bungieDeltaOnly = true;
+                console.log(
+                  `[Archive] W12 delta fill (${effectiveLevel}) for ${character.membershipId}: ` +
+                    `Bungie newest-first until iid <= ${archiveMaxInstanceId}`
+                );
                 this.processAndGroupActivities();
-                // fall through to Bungie pagination (full crawl for holes)
+                // fall through to Bungie pagination (delta only)
+              } else if (effectiveLevel === 'full') {
+                this.processAndGroupActivities();
+                this.loadingActivities[loadingKey] = false;
+                return;
+              } else {
+                console.log(`[Archive] Partial lean coverage for ${character.membershipId}; continuing to Bungie for holes (delta fill OFF)`);
+                this.processAndGroupActivities();
+                // fall through to Bungie pagination (full crawl)
               }
-            } else if (effectiveLevel === 'full') {
+            } else if (effectiveLevel === 'full' || leanPartial) {
               // Membership hit but 0 rows for this character.
               if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
                 bungieDeltaOnly = true;
                 console.log(
-                  `[Archive] W2 delta fill (0 archive rows for char ${character.characterId}); stop at iid ${archiveMaxInstanceId}`
+                  `[Archive] W12 delta fill (0 archive rows for char ${character.characterId}); stop at iid ${archiveMaxInstanceId}`
                 );
                 // fall through
-              } else {
+              } else if (effectiveLevel === 'full') {
                 console.log(`[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`);
                 this.loadingActivities[loadingKey] = false;
                 return;
               }
+              // leanPartial + flag OFF: fall through to full Bungie
             }
           }
 

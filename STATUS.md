@@ -11,52 +11,31 @@
 
 ### Gap-fill (Brief 5) - COMPLETE + light validate PASSED
 - Extract + finish **DONE:** **256/256** ready, pieces empty. Live compact on D: **untouched**.
-- Light validate **`passed: true`** ? 25,458,831,283 rows. Report: `D:\DestinyChronicleDB\logs\gap_fill_validate_light.json`
-- Do **not** restart extract.
+- Light validate **`passed: true`** ? 25,458,831,283 rows.
 
 ### Launch order (Splashear) ? from BOT_DECISIONS
-1. ~~**W11** speed~~ **DONE** ? Splash **0.58s** / Kaiser **0.44s** full list; batch6 **9.45s**. Sorted gap `ready_by_mid` (buckets 50+115) + DuckDB threads + limit=100k + concurrent batch.
-2. ~~**W6** social hubs~~ **DONE** on `:3002` ? default excludes mode 40 + mode-0 hub hashes. Smoke: Splash **16,683** / Kaiser **12,249** distinct; `includeSocialHubs=1` restores **21,767** / **17,534**.
-3. ~~**W2** client delta fill~~ **DONE** (flag **OFF**) ? `environment.archiveBungieDeltaFill`. When ON + archive `full`: Bungie newest-first, stop at archive max iid. Partial lean still full-crawls for holes (W10).
-4. **W1 PARKED** ? new 16B?17B dump incoming; do not build refresh job
-5. No merge / no `:3001` gap without Splashear yes ? Bot reverify against pushed commit
+1. ~~**W11** speed~~ **DONE**
+2. ~~**W6** social hubs~~ **DONE** (incl. W13 blank social `1202765834`)
+3. ~~**W2** / **W12** client delta fill~~ **DONE** (flag **OFF**)
+4. **W13** report ready ? `api-server/docs/W13_MODE0_EXTRAS.md` (awaiting Splashear)
+5. **W14** note only ? not a blocker
+6. ~~**W15** size study~~ **DONE** ? `~/agent-tools/pgcr-proof/size_reduction/REPORT.md`
+7. **W1 PARKED** ? new 16B?17B dump incoming
+8. No merge / no `:3001` gap without Splashear yes
 
-### Closed blockers (this branch)
-- **W3** coverage.level honesty (`full` only when D2, under limit, no W9 hole overlap/abut; D1 never full)
-- **W7** force gap lean `game=D2`; skip gap when request `game=D1`
-- **W8** mid=`0` documented / skipped (~245k rows in raw)
-- **W9** 77,660 missing IIDs ? hole runs ? coverage partial (`api-server/data/gap_missing_iid_runs.json`)
-- **W10** strip activities only for `compact_ids` partials; merged/gap keep rows labelled partial
-- **W11 / W6 / W2** as above
+### W15 headline (estimate only; no deletes)
+- Report: `~/agent-tools/pgcr-proof/size_reduction/REPORT.md` (+ `metrics.json`)
+- Sample buckets 50 + 115 in scratch; live `ready/` untouched
+- Best serve option: **typed light + sort (+ optional drop mid=0 / force D2)** ? **~14.3 B/row ? ~340 GiB** projected gap (vs ~664)
+- With compact (~69 GiB): ~**409 GiB** total ? fits 1 TB comfortably
+- Query cold: typed/sorted Splash **~0.05?0.10s** vs unsorted source **~2.9s**
 
-### Option A dual-root API (draft - separate port)
+### Option A dual-root API
 - **Branch:** `cursor/brief5-option-a-gap-dual-root`
-- **Staging:** `http://127.0.0.1:3002/health` ? gap lean on + `GAP_INDEX_SORTED_ROOT=...\ready_by_mid`
-- Live `:3001` unchanged (`ENABLE_GAP_LEAN` off)
+- Pushed tip: `6bbba5f` ? local has W12/W13 (+ STATUS) uncommitted
+- Staging `:3002` gap lean on; live `:3001` unchanged
 
 ### Do not
 - Touch live `:3001` / enable `ENABLE_GAP_LEAN` there
-- Rewrite `D:\DestinyChronicleDB\cl_mid_index_compact` in place
-- Run heavy `validate_gap_fill_brief5.py` as default gate
-- Restart extract / parallel finish workers
-- Overwrite `BOT_DECISIONS.md` (Bot appends; Cursor reads only)
-
-### Paths
-| What | Where |
-|------|--------|
-| Ready (gap lean) | `E:\DestinyChronicleDB\cl_mid_index_gap\ready\` |
-| Sorted gap (W11) | `E:\DestinyChronicleDB\cl_mid_index_gap\ready_by_mid\` |
-| Live compact (do not rewrite) | `D:\DestinyChronicleDB\cl_mid_index_compact\` |
-| Light validate report | `D:\DestinyChronicleDB\logs\gap_fill_validate_light.json` |
-| Finish / validate scripts | `~/agent-tools/pgcr-proof/` |
-| Bot decisions | `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` |
-
-### Verification numbers (staging `:3002`)
-| Check | Result |
-|-------|--------|
-| Windowed distinct (pre-W6 hubs) | Kaiser **17,534** / Splashbear **21,767** |
-| After W6 hub filter | Kaiser **12,249** / Splashbear **16,683** |
-| W11 full list cold | Kaiser **0.44s** / Splashbear **0.58s** |
-| W11 batch 6 hole players | **9.45s** |
-| Splash D1 | **736** rows, `partial` |
-| Hole abut iid `2090141791` | `partial` + W9 note |
+- Rewrite compact or ready in place
+- Overwrite `BOT_DECISIONS.md`

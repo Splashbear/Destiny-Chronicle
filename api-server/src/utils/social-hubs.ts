@@ -16,6 +16,8 @@ export const SOCIAL_HUB_ACTIVITY_HASHES: ReadonlySet<number> = new Set([
   2565561509, // Xur's Treasure Hoard
   330545737, // The Farm
   3053411168, // Last City: Eliksni Quarter
+  // W13: blank-named def with directActivityModeType=40 / Social mode hash (often stored as mode 0)
+  1202765834,
 ]);
 
 export interface SocialHubLike {
