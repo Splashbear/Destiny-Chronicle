@@ -96,6 +96,17 @@
               <p class="font-medium text-amber-200 mb-0.5">Destiny 2 API issue</p>
               <p>{{ d2ApiIssue }}</p>
             </div>
+            <div *ngIf="dcApiFallbackNotice"
+                 class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm relative pr-9">
+              <button type="button"
+                      (click)="dismissDcApiFallbackNotice()"
+                      class="absolute top-2 right-2 p-1 rounded text-amber-300/80 hover:text-white hover:bg-white/10"
+                      aria-label="Dismiss">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+              <p class="font-medium text-amber-200 mb-0.5">Using Bungie API (slower)</p>
+              <p>{{ dcApiFallbackNotice }}</p>
+            </div>
             <!-- Favorites: opt-in so a fresh search is not blocked -->
             <div *ngIf="showFavoritesLoadPrompt && selectedPlayers.length === 0"
                  class="destiny-banner-info mb-4 text-sm flex flex-col sm:flex-row sm:items-center gap-3">

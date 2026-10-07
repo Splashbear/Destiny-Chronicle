@@ -183,7 +183,8 @@ export class PgcrApiService {
   /**
    * Fetch archived activity history for a single player from the local PGCR archive API.
    * Returns light activity rows (without full PGCR bodies) for fast cold-start loading.
-   * Falls back to null if the API is disabled or the player has no archived data.
+   * Returns null if the API is disabled or the player has no archived data (404).
+   * Throws on hard failures (5xx / network) so callers can surface a Bungie-fallback notice.
    */
   async fetchPlayerActivities(
     membershipId: string,
@@ -229,12 +230,14 @@ export class PgcrApiService {
       } catch (err: unknown) {
         const status = (err as { status?: number })?.status;
         if (status === 404) {
+          // Player not in archive — expected miss; caller falls back without treating as outage.
           this.playerActivitiesCache.set(cacheKey, null);
           return null;
         }
         console.warn(`[Archive] fetchPlayerActivities failed for ${membershipId}:`, err);
-        // Do not cache hard failures — allow retry / Bungie fallback on next character.
-        return null;
+        // Hard failure (5xx / network / etc.): rethrow so the UI can show Bungie-fallback notice.
+        // Do not cache — allow retry on next character / sync.
+        throw err;
       } finally {
         this.playerActivitiesInflight.delete(cacheKey);
       }
