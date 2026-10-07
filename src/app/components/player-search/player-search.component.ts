@@ -27,6 +27,7 @@ import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
 import { getStoryAnchorSortOrder } from '../../config/story-first-missions';
+import { pickFirstEverFromFirsts } from '../../utils/first-ever-from-firsts';
 import {
   PantheonEventId,
   getPantheonConfig,
@@ -7047,9 +7048,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Aggregate guardian firsts computation completed
       // Default existing property points to aggregate so legacy helpers keep working
       this.guardianFirsts = this.aggregateGuardianFirsts;
-      // Compute first-ever activity for this specific player once firsts are loaded
-      this.firstEverActivities[pKey] = await this.computeFirstEverActivityForPlayer(player);
-      // New object so Angular change detection sees First Ever updates in the aggregate view
+      // First Ever = earliest of the firsts we already computed (tutorial story preferred).
+      // Do not rely on a second IDB scan — that broke after cold-start removed the D1 backfill.
+      this.firstEverActivities[pKey] =
+        this.deriveFirstEverFromLoadedFirsts(player, sorted) ??
+        (await this.computeFirstEverActivityForPlayer(player));
       this.firstEverActivities = { ...this.firstEverActivities };
     } catch (error) {
       console.error('[Firsts] Error loading guardian firsts:', error);
@@ -8933,9 +8936,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.getClassIconUrl(this.resolveCharacterClassForFirst(first));
   }
 
-  /** Returns cached first ever activity for player */
+  /** Returns First Ever for a player — cached, or derived live from loaded Guardian Firsts. */
   getFirstEverForPlayer(player: PlayerSearchDisplay): ActivityHistory | undefined {
-    return this.firstEverActivities[this.getPlayerKey(player)];
+    const key = this.getPlayerKey(player);
+    const cached = this.firstEverActivities[key];
+    if (cached) return cached;
+    const derived = this.deriveFirstEverFromLoadedFirsts(player);
+    if (derived) {
+      this.firstEverActivities[key] = derived;
+      this.firstEverActivities = { ...this.firstEverActivities };
+    }
+    return derived;
   }
 
   /** Queue work until loading overlay / progress is cleared (browse-ready). */
@@ -8950,18 +8961,45 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     setTimeout(tryRun, 0);
   }
 
-  /** Compute first-ever activity per player using centralized service */
+  private firstCompletionToActivityHistory(f: ActivityFirstCompletion): ActivityHistory {
+    return {
+      period: f.completionDate || f.period,
+      activityDetails: {
+        referenceId: String(f.referenceId ?? ''),
+        instanceId: String(f.instanceId ?? ''),
+        mode: f.mode ?? 0
+      },
+      values: {
+        completed: { basic: { value: f.completed ? 1 : 0 } }
+      },
+      game: f.game,
+      membershipType: f.membershipType,
+      characterClass: f.characterClass
+    };
+  }
+
+  /**
+   * Build First Ever from Guardian Firsts already loaded for this account.
+   * Prefers A Guardian Rises (D1) / Homecoming (D2 Red War), then any story milestone,
+   * then the chronologically earliest first of any type.
+   */
+  private deriveFirstEverFromLoadedFirsts(
+    player: PlayerSearchDisplay,
+    loadedFirsts?: ActivityFirstCompletion[]
+  ): ActivityHistory | undefined {
+    const game = this.isD1Player(player) ? 'D1' : 'D2';
+    const list = loadedFirsts ?? this.guardianFirstsMap[this.getPlayerKey(player)] ?? [];
+    const earliest = pickFirstEverFromFirsts(list, game);
+    return earliest ? this.firstCompletionToActivityHistory(earliest) : undefined;
+  }
+
+  /** Legacy IDB scan fallback when no Guardian Firsts rows are available yet. */
   private async computeFirstEverActivityForPlayer(player: PlayerSearchDisplay): Promise<ActivityHistory | undefined> {
-    // Use IDB/archive rows only. Do NOT force a full Bungie D1 mode crawl here —
-    // that belonged on the cold-start path and blocked browse-ready for 6-account loads.
-    // If archive/IDB is empty, Firsts simply shows what is available; a manual refresh can backfill later.
     const game = this.isD1Player(player) ? 'D1' : 'D2';
     const scopedCharIds = (this.characters[this.getPlayerKey(player)] || [])
       .map(getCharacterId)
       .filter((id): id is string => !!id)
       .map(String);
-    // Prefer scoped characters; if that yields nothing, retry membership-wide for the game
-    // so aggregate First Ever is not blank while raid/dungeon Firsts already rendered.
     let first = await this.firstActivityService.getFirstEverActivity(
       { membershipId: player.membershipId, game, characterIds: scopedCharIds },
       true
