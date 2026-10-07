@@ -2116,8 +2116,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.updateLoadingProgress('fetch', 0, 100, message);
     }
     
-    // Check if all accounts are complete
-    const allComplete = this.accountLoadingStatuses.every(s => s.status === 'complete');
+    // Terminal = complete OR error (skipped/failed must not leave the modal stuck)
+    const allComplete = this.accountLoadingStatuses.every(
+      s => s.status === 'complete' || s.status === 'error'
+    );
     if (allComplete && this.accountLoadingStatuses.length > 0) {
       this.isLoadingComplete = true;
       // Auto-hide modal after 3 seconds
@@ -2145,6 +2147,32 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
     
     this.cdr.detectChanges();
+  }
+
+  /**
+   * Mark a profile as failed/skipped when a multi-load is cancelled (load token changed).
+   * Keeps the loading modal honest so it never sits forever on "Fetching Profile".
+   */
+  private markAccountLoadCancelled(
+    player: PlayerSearchDisplay | PlayerSearchResult,
+    reason: string
+  ): void {
+    const accountKey = this.getPlayerKey(player);
+    const game = this.isD1Player(player) ? 'D1' : 'D2';
+    const platform = this.getPlatformName(player.membershipType);
+    const existing = this.accountLoadingStatus.get(accountKey);
+    console.warn(
+      `[Load] Account cancelled (${reason}): ${player.displayName} ${game} ${player.membershipId}`
+    );
+    this.updateAccountLoadingStatus(
+      accountKey,
+      player.displayName,
+      existing?.platform || platform,
+      existing?.game || game,
+      existing?.membershipType ?? player.membershipType,
+      'error',
+      `Load cancelled for ${game} ${player.displayName}`
+    );
   }
 
   /**
@@ -2479,9 +2507,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Add all players to selectedPlayers
     this.selectedPlayers.push(...playersToLoad);
     
-    // Set up character IDs
+    // Set up character IDs (keyed by game|membershipId so D1/D2 never collide)
     for (const player of playersToLoad) {
-      this.selectedCharacterIds[player.membershipId] = undefined;
+      this.selectedCharacterIds[this.getPlayerKey(player)] = undefined;
     }
 
     // Ensure a date is selected (use full YYYY-MM-DD format for better date handling)
@@ -2522,11 +2550,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         loadPromises.push(
           this.runWithPlayerSyncLimit(async () => {
             if (loadToken !== this.currentLoadToken) {
+              this.markAccountLoadCancelled(player, 'cancelled before start');
               return;
             }
             try {
               await this.loadCharacterHistory(player);
               if (loadToken !== this.currentLoadToken) {
+                this.markAccountLoadCancelled(player, 'cancelled after history');
                 return;
               }
               // Firsts/DungeonSolo after browse-ready (overlay clear).
@@ -2540,6 +2570,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               });
             } catch (err) {
               if (loadToken !== this.currentLoadToken) {
+                this.markAccountLoadCancelled(player, 'cancelled after error');
                 return;
               }
               console.warn('[LoadFavorites] Skipped due to error for', player.membershipId, err);
@@ -2637,9 +2668,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Add all players to selectedPlayers
     this.selectedPlayers.push(...playersToLoad);
     
-    // Set up character IDs
+    // Set up character IDs (keyed by game|membershipId so D1/D2 never collide)
     for (const player of playersToLoad) {
-      this.selectedCharacterIds[player.membershipId] = undefined;
+      this.selectedCharacterIds[this.getPlayerKey(player)] = undefined;
     }
 
     // Set loading state
@@ -3085,7 +3116,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       isPrimary: true
     };
     this.selectedPlayers = [displayPlayer];
-    this.selectedCharacterIds[player.membershipId] = undefined;
+    this.selectedCharacterIds[this.getPlayerKey(displayPlayer)] = undefined;
 
     // Sync selected account for multi-account consumers
     const acc: PlatformAccount = {
@@ -3192,7 +3223,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Note: Accounts will be marked as complete after rendering is finished in loadAllFilteredActivities
     } catch (error) {
       this.selectedPlayers = [];
-      delete this.selectedCharacterIds[player.membershipId];
+      delete this.selectedCharacterIds[this.getPlayerKey(displayPlayer)];
       throw error;
     } finally {
       this.loadingActivities[this.selectedDate] = false;
@@ -3225,7 +3256,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     } as any;
 
     this.selectedPlayers.push(displayPlayer);
-    this.selectedCharacterIds[displayPlayer.membershipId] = undefined;
+    this.selectedCharacterIds[this.getPlayerKey(displayPlayer)] = undefined;
 
     // Update URL for permalink sharing
     this.updateUrlForPermalink();
@@ -3406,8 +3437,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         );
         // Set the first character as selected if we have characters
         if (this.characters[this.getPlayerKey(player)].length > 0) {
-          // D1: characterBase.characterId
-          this.selectedCharacterIds[player.membershipId] = getCharacterId(this.characters[this.getPlayerKey(player)][0]) || '';
+          // D1: characterBase.characterId — key includes game so D1/D2 share ids safely
+          this.selectedCharacterIds[this.getPlayerKey(player)] =
+            getCharacterId(this.characters[this.getPlayerKey(player)][0]) || '';
         }
         
         // Update status: fetching activities
@@ -3464,7 +3496,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.characters[this.getPlayerKey(player)] = characters;
         // Set the first character as selected if we have characters
         if (characters.length > 0) {
-          this.selectedCharacterIds[player.membershipId] = getCharacterId(characters[0]) || '';
+          this.selectedCharacterIds[this.getPlayerKey(player)] = getCharacterId(characters[0]) || '';
         }
         
         // Update status: fetching activities
@@ -4511,10 +4543,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    *   called from incremental refresh during sync so the progress modal stays until the full sync finishes).
    */
   public async loadAllFilteredActivities(forceRefresh: boolean = false, markAccountsComplete: boolean = true) {
-    const loadToken = ++this.currentLoadToken;
+    // W26: Incremental mid-sync refreshes (markAccountsComplete=false) must NOT bump
+    // currentLoadToken. Favorites load captures the token and aborts queued accounts when
+    // it changes — that was cancelling D1 + later D2 profiles after the first 1–2 finished.
+    // Final / user-facing loads still mint a new token so stale renders abort correctly.
+    const loadToken = markAccountsComplete ? ++this.currentLoadToken : this.currentLoadToken;
     const playerNames = (this.selectedPlayers || []).map(p => p.displayName).join(', ');
     if (environment.debug) {
-      console.log('[Load] Start', { forceRefresh, players: playerNames });
+      console.log('[Load] Start', { forceRefresh, markAccountsComplete, players: playerNames });
     }
 
     // Update status for all accounts to show activities are being displayed (skip when incremental refresh)
@@ -4667,7 +4703,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             const isD1 = this.isD1Player(player);
             const game = isD1 ? 'D1' : 'D2';
             const platform = this.getPlatformName(player.membershipType);
-            
+            const existing = this.accountLoadingStatus.get(accountKey);
+
+            // Never overwrite a real error, and never mark never-started loads as success.
+            if (existing?.status === 'error') {
+              return;
+            }
+            if (
+              existing?.status === 'fetching-profile' ||
+              existing?.status === 'loading-characters'
+            ) {
+              this.updateAccountLoadingStatus(
+                accountKey,
+                player.displayName,
+                platform,
+                game,
+                player.membershipType,
+                'error',
+                `Skipped or failed to load ${game} profile for ${player.displayName}`
+              );
+              return;
+            }
+
             this.updateAccountLoadingStatus(
               accountKey,
               player.displayName,
@@ -4697,7 +4754,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const players = (this.selectedPlayers || []).filter(Boolean);
       let totalBatches = 0;
       for (const player of players) {
-        const actsForPlayer = activities.filter(a => !a.characterClass && (a as any).membershipId === player.membershipId);
+        const actsForPlayer = activities.filter(a =>
+          !a.characterClass &&
+          (a as any).membershipId === player.membershipId &&
+          (!(a as any).game || (a as any).game === player.game)
+        );
         if (actsForPlayer.length > 0) {
           totalBatches += Math.ceil(actsForPlayer.length / this.PGCR_BATCH_SIZE);
         }
@@ -4708,11 +4769,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       let currentBatch = 0;
 
       for (const player of players) {
-        const actsForPlayer = activities.filter(a => !a.characterClass && (a as any).membershipId === player.membershipId);
+        const actsForPlayer = activities.filter(a =>
+          !a.characterClass &&
+          (a as any).membershipId === player.membershipId &&
+          (!(a as any).game || (a as any).game === player.game)
+        );
         if (actsForPlayer.length === 0) continue;
 
         const character: CharacterWithGame = {
-          characterId: this.selectedCharacterIds[player.membershipId] || '',
+          characterId: this.selectedCharacterIds[this.getPlayerKey(player)] || '',
           membershipType: player.membershipType,
           membershipId: player.membershipId,
           game: (player as any).game === 'D1' ? 'D1' : 'D2'
@@ -6556,14 +6621,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         activitiesForOtherPlayers.map(a => a.membershipId));
     }
 
-    // Deduplicate by membershipId + instanceId (per-account dedupe)
+    // Deduplicate by game + membershipId + instanceId (D1/D2 can share membershipId)
     const dedupedMap = new Map<string, ActivityWithMembership>();
     
     for (const activity of allFilteredActivities) {
       const instanceId = activity.activityDetails?.instanceId;
       const membershipId = (activity as any).membershipId as string | undefined;
+      const game = ((activity as any).game as string | undefined) || 'D2';
       if (instanceId && membershipId) {
-        const key = `${membershipId}|${instanceId}`;
+        const key = `${game}|${membershipId}|${instanceId}`;
         if (!dedupedMap.has(key)) {
           dedupedMap.set(key, activity);
         }
@@ -6983,12 +7049,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.guardianFirsts = this.aggregateGuardianFirsts;
       // Compute first-ever activity for this specific player once firsts are loaded
       this.firstEverActivities[pKey] = await this.computeFirstEverActivityForPlayer(player);
+      // New object so Angular change detection sees First Ever updates in the aggregate view
+      this.firstEverActivities = { ...this.firstEverActivities };
     } catch (error) {
       console.error('[Firsts] Error loading guardian firsts:', error);
       this.guardianFirstsMap[this.getPlayerKey(player)] = [];
-      this.aggregateGuardianFirsts = [];
-      this.guardianFirsts = [];
       this.firstEverActivities[this.getPlayerKey(player)] = undefined;
+      this.firstEverActivities = { ...this.firstEverActivities };
+      // Rebuild aggregate from remaining players — do not wipe everyone else's Firsts
+      this.rebuildAggregateGuardianFirstsFromMap();
     } finally {
       this.loadingGuardianFirsts = false;
       this.updatePlatformTabs();
@@ -6996,6 +7065,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.checkAndShowAnniversaryBanner();
       this.cdr.detectChanges();
     }
+  }
+
+  /** Rebuild cross-account earliest Firsts from per-player maps (keeps solo/flawless flags). */
+  private rebuildAggregateGuardianFirstsFromMap(): void {
+    const aggregate: ActivityFirstCompletion[] = [];
+    Object.values(this.guardianFirstsMap).forEach(list => {
+      for (const f of list || []) {
+        const key = this.guardianFirstsDedupKey(f);
+        const existing = aggregate.find(x => this.guardianFirstsDedupKey(x) === key);
+        if (!existing || new Date(f.completionDate) < new Date(existing.completionDate)) {
+          if (existing) {
+            const idx = aggregate.indexOf(existing);
+            f.isSolo = f.isSolo || existing.isSolo;
+            f.isSoloFlawless = f.isSoloFlawless || existing.isSoloFlawless;
+            aggregate[idx] = f;
+          } else {
+            aggregate.push(f);
+          }
+        } else {
+          if (f.isSolo && !existing.isSolo) existing.isSolo = true;
+          if (f.isSoloFlawless && !existing.isSoloFlawless) existing.isSoloFlawless = true;
+        }
+      }
+    });
+    this.aggregateGuardianFirsts = aggregate.sort(
+      (a, b) => new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime()
+    );
+    this.guardianFirsts = this.aggregateGuardianFirsts;
   }
 
   /** Per-player helper variants (platform-specific) */
@@ -8858,10 +8955,24 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Use IDB/archive rows only. Do NOT force a full Bungie D1 mode crawl here —
     // that belonged on the cold-start path and blocked browse-ready for 6-account loads.
     // If archive/IDB is empty, Firsts simply shows what is available; a manual refresh can backfill later.
+    const game = this.isD1Player(player) ? 'D1' : 'D2';
     const scopedCharIds = (this.characters[this.getPlayerKey(player)] || [])
       .map(getCharacterId)
-      .filter((id): id is string => !!id);
-    return this.firstActivityService.getFirstEverActivity({ membershipId: player.membershipId, game: player.game, characterIds: scopedCharIds }, true);
+      .filter((id): id is string => !!id)
+      .map(String);
+    // Prefer scoped characters; if that yields nothing, retry membership-wide for the game
+    // so aggregate First Ever is not blank while raid/dungeon Firsts already rendered.
+    let first = await this.firstActivityService.getFirstEverActivity(
+      { membershipId: player.membershipId, game, characterIds: scopedCharIds },
+      true
+    );
+    if (!first && scopedCharIds.length > 0) {
+      first = await this.firstActivityService.getFirstEverActivity(
+        { membershipId: player.membershipId, game },
+        true
+      );
+    }
+    return first;
   }
 
   /** Called on every keystroke in the username box */
@@ -8904,11 +9015,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Handler for toggling the "Include linked accounts" checkbox */
   // Removed onIncludeLinkedChange method - users explicitly select accounts from search modal
 
-  /** Returns earliest (first ever) activity across all selected players for the specified game. */
+  /**
+   * Earliest First Ever across all selected accounts for the game (no banner selected).
+   * Uses isD1Player so missing/legacy game tags still match the Firsts tab filter.
+   */
   getAggregateFirstEver(game: 'D1' | 'D2'): ActivityHistory | undefined {
     const firsts: ActivityHistory[] = [];
     for (const pl of this.selectedPlayers) {
-      if (pl.game !== game) continue;
+      const isD1 = this.isD1Player(pl);
+      if ((game === 'D1' && !isD1) || (game === 'D2' && isD1)) continue;
       const first = this.getFirstEverForPlayer(pl);
       if (first) firsts.push(first);
     }
@@ -9221,11 +9336,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     let earliest: ActivityHistory | undefined;
     for (const player of this.selectedPlayers) {
       if (player.platform !== platform) continue;
-      if ((game === 'D1' && this.isD1Player(player)) || (game === 'D2' && !this.isD1Player(player))) {
-        const first = this.getFirstEverForPlayer(player);
-        if (first && (!earliest || new Date(first.period) < new Date(earliest.period))) {
-          earliest = first;
-        }
+      const isD1 = this.isD1Player(player);
+      if ((game === 'D1' && !isD1) || (game === 'D2' && isD1)) continue;
+      const first = this.getFirstEverForPlayer(player);
+      if (first && (!earliest || new Date(first.period) < new Date(earliest.period))) {
+        earliest = first;
       }
     }
     return earliest;

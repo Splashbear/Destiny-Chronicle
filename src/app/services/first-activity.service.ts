@@ -67,10 +67,10 @@ export class FirstActivityService {
         })
         .sortBy('period');
 
-      // Optional: restrict to specific characterIds if provided
+      // Optional: restrict to specific characterIds if provided (stringify — IDB/Bungie type drift)
       if (player.characterIds && player.characterIds.length) {
-        const charSet = new Set(player.characterIds);
-        acts = acts.filter(a => charSet.has((a as any).characterId));
+        const charSet = new Set(player.characterIds.map(String));
+        acts = acts.filter(a => charSet.has(String((a as any).characterId ?? '')));
       }
 
       // Only consider completed activities for "first ever" to avoid partial/patrol noise

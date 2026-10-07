@@ -6,9 +6,14 @@
 ## Current state (2026-10-03)
 
 ### Website
-- **Shipped on `master`:** `a4789dc` / PR #16 (`656e864`). Live site stays on **Bungie** for now ? no archive cutover / no `ENABLE_GAP_LEAN` on `:3001`.
+- **Shipped on `master`:** see latest merge (W26 favorites/First Ever fix shipping). Live site stays on **Bungie** for now — no archive cutover / no `ENABLE_GAP_LEAN` on `:3001`.
 - D1: keep live Bungie until raw D1 PGCRs exist (D1 DECISION Oct 2).
 - **Played With UI:** `enablePlayedWith: false` (dev+prod). Not routed. Do not show at launch.
+
+### W26 headline (6-account favorites + First Ever)
+- **Root cause:** `0a69190` load-token guards + mid-sync `loadAllFilteredActivities` bumping `currentLoadToken` cancelled queued favorites (D1 + later D2/Steam) after the first 1–2 finished. Aggregate First Ever empty when per-player Firsts never ran.
+- **Fix:** incremental refreshes no longer bump the load token; cancelled/skipped profiles mark `error`; `selectedCharacterIds` keyed by `game|membershipId`; First Ever aggregate hardened (isD1Player match, charId coerce, membership fallback, don't wipe all Firsts on one failure).
+- **Deploy:** user approved ship to live GitHub Pages.
 
 ### Gap-fill (Brief 5) - COMPLETE + light validate PASSED
 - Extract + finish **DONE:** **256/256** ready, pieces empty. Live compact on D: **untouched**.
@@ -53,3 +58,9 @@
 - Overwrite `BOT_DECISIONS.md`
 - Start W21 slim rebuild without user go
 - Wire Played With into API/site before validation
+
+### W21 headline (slim serve copy — variant E)
+- **RUNNING** `E_typed_light_sorted` → `E:\DestinyChronicleDB\ready_slim_E`
+- Progress: **130/256** buckets, **174.0 GiB**, ETA ~11.7 h
+- Source `ready/` untouched. Details: `C:\Users\knigh\agent-tools\pgcr-proof\size_reduction\W21_PROGRESS.md`
+
