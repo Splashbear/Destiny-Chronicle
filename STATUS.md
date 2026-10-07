@@ -11,8 +11,9 @@
 - **Played With UI:** `enablePlayedWith: false` (dev+prod). Not routed. Do not show at launch.
 
 ### W26 headline (6-account favorites + First Ever)
-- **Root cause:** `0a69190` load-token guards + mid-sync `loadAllFilteredActivities` bumping `currentLoadToken` cancelled queued favorites (D1 + later D2/Steam) after the first 1–2 finished. Aggregate First Ever empty when per-player Firsts never ran.
-- **Fix:** incremental refreshes no longer bump the load token; cancelled/skipped profiles mark `error`; `selectedCharacterIds` keyed by `game|membershipId`; First Ever aggregate hardened (isD1Player match, charId coerce, membership fallback, don't wipe all Firsts on one failure).
+- **Root cause (accounts):** `0a69190` load-token guards + mid-sync `loadAllFilteredActivities` bumping `currentLoadToken` cancelled queued favorites after the first 1–2 finished.
+- **Root cause (First Ever empty while story firsts show):** cold-start (`b754b2f`) removed D1 force-backfill and left First Ever on a separate IDB scan; story milestones still populate from `getFirstCompletions`.
+- **Fix:** derive First Ever from already-loaded Guardian Firsts (prefer A Guardian Rises / Homecoming), with IDB scan as fallback only. Also: load-token / game-scoped character keys from prior W26 ship.
 - **Deploy:** user approved ship to live GitHub Pages.
 
 ### Gap-fill (Brief 5) - COMPLETE + light validate PASSED
@@ -61,6 +62,6 @@
 
 ### W21 headline (slim serve copy — variant E)
 - **RUNNING** `E_typed_light_sorted` → `E:\DestinyChronicleDB\ready_slim_E`
-- Progress: **130/256** buckets, **174.0 GiB**, ETA ~11.7 h
+- Progress: **155/256** buckets, **207.4 GiB**, ETA ~6.8 h
 - Source `ready/` untouched. Details: `C:\Users\knigh\agent-tools\pgcr-proof\size_reduction\W21_PROGRESS.md`
 
