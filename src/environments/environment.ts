@@ -36,6 +36,11 @@ export const environment = {
    * is absent. Default OFF until Splashear enables for go-live.
    */
   archiveBungieDeltaFill: false,
+  /**
+   * W19: Played With UI / API client. Keep OFF at launch until W18 index is
+   * validated and wired. Component is not routed; this guards future entry points.
+   */
+  enablePlayedWith: false,
   /** When true, app runs from an imported offline archive (no Bungie API). */
   offlineMode: false,
   archiveRoot: ''

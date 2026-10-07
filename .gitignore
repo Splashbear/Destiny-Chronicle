@@ -42,3 +42,17 @@ testem.log
 .DS_Store
 Thumbs.db
 inkscape-1.4.2_2025-05-13_f4327f4-x64.msi
+
+# Scratch / one-off probes (W17 housekeeping — keep out of git add -A)
+/tmp_*
+/_probe_*
+/_smoke_*
+/smoke_*.cjs
+/smoke_*.mjs
+/smoke_*.js
+*.pre_*.bak
+*.bak
+
+# Home PC local env (paths)
+api-server/scripts/home-pc.env
+api-server/scripts/home-pc.env.cmd

@@ -26,6 +26,8 @@ export interface ApiConfig {
   
   // Server options
   enableCors: boolean;
+  /** Comma-separated allowlist when CORS is on. Empty = reflect request Origin if present, else *. */
+  corsOrigin: string;
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -46,5 +48,6 @@ export const ENV_KEYS = {
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   ENABLE_CORS: 'PGCR_ENABLE_CORS',
+  CORS_ORIGIN: 'PGCR_CORS_ORIGIN',
   LOG_LEVEL: 'PGCR_LOG_LEVEL',
 } as const;

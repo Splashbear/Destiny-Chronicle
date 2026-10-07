@@ -49,8 +49,6 @@ import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
 import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
-import { WastedOnDestinyService } from '../../services/wasted-on-destiny.service';
-import { PlaytimeService } from '../../services/playtime.service';
 import { TitleService } from '../../services/title.service';
 import { compareTitlesByCategory } from '../../config/title-categories';
 import { SelectedAccountsService } from '../../services/selected-accounts.service';
@@ -858,6 +856,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   d1ApiIssue: string | null = null;
   /** User-visible notice when Destiny 2 Bungie endpoints are down or disabled. */
   d2ApiIssue: string | null = null;
+  /**
+   * Shown only when Chronicle archive API was attempted and hard-failed,
+   * so the session falls back to slower live Bungie history calls.
+   * Not set for expected archive misses (404 / no rows) or intentional delta-fill.
+   */
+  dcApiFallbackNotice: string | null = null;
   /** Offer to load saved favorites without blocking a fresh search. */
   showFavoritesLoadPrompt = false;
   /** True while favorites (or any multi-profile sync) is still running. */
@@ -1506,9 +1510,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   aggregateGuardianFirsts: ActivityFirstCompletion[] = [];
   // Removed includeLinkedAccounts - users explicitly select accounts from search modal
   addMode: boolean = false; // NEW: Track whether we're adding profiles or replacing them
-  /** Play-time + seal counts fetched from WastedOnDestiny keyed by "game|membershipId" */
-  private wastedTimes: { [playerKey: string]: number } = {};
-  private wastedSeals: { [playerKey: string]: number } = {};
   /** Pending player data from URL parameters to load after favorites */
   private pendingPlayerData: any[] | null = null;
   /** First-ever activity cache keyed by playerKey so D1 and D2 don't collide. */
@@ -1698,8 +1699,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private timezoneService: TimezoneService,
     private activityIconService: ActivityIconService,
     private statsService: StatsService,
-    private wastedService: WastedOnDestinyService,
-    private playtimeService: PlaytimeService,
     private titleService: TitleService,
     private selectedAccounts: SelectedAccountsService,
     private exportService: ExportService,
@@ -2562,11 +2561,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           })
         );
         
-        // WastedTime off browse-ready critical path.
-        void this.loadWastedTime(player).catch(err => {
-          console.warn('[Sync] WastedTime skipped for', player.membershipId, err);
-        });
-
         // Proactively load titles in parallel so Account Summary has
         // accurate seal counts without requiring a Titles tab visit.
         // Titles off browse-ready critical path.
@@ -2708,11 +2702,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           })
         );
         
-        // WastedTime off browse-ready critical path.
-        void this.loadWastedTime(player).catch(err => {
-          console.warn('[Sync] WastedTime skipped for', player.membershipId, err);
-        });
-
         // Proactively load titles so Account Summary has seals from
         // Bungie title data for permalink-loaded players.
         // Titles off browse-ready critical path.
@@ -2782,6 +2771,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.apiAvailable = false;
       await this.loadFavorites();
     }
+  }
+
+  /**
+   * Chronicle archive API hard-failed; history is coming from live Bungie (slower).
+   * Cleared automatically if a later archive request succeeds.
+   */
+  private noteDcApiFallback(): void {
+    this.dcApiFallbackNotice =
+      'Destiny Chronicle archive is temporarily unavailable. Loading activity history from Bungie API instead — this can take longer than usual.';
+    this.cdr.detectChanges();
+  }
+
+  /** Clear archive-fallback notice after a successful archive response (or user dismiss). */
+  dismissDcApiFallbackNotice(): void {
+    this.dcApiFallbackNotice = null;
+    this.cdr.detectChanges();
   }
 
   /**
@@ -3164,11 +3169,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             }
           })
         );
-        // WastedTime off browse-ready critical path.
-        void this.loadWastedTime(pl).catch(err => {
-          console.warn('[Sync] WastedTime skipped for', pl.membershipId, err);
-        });
-
         // Proactively load titles in parallel for all Destiny 2 accounts
         // when we run the character-history/firsts loader.
         // Titles off browse-ready critical path.
@@ -3254,11 +3254,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           });
         });
       });
-
-      // Wasted-on-Destiny can run in parallel and isn't bound to the
-      // concurrency semaphore because it hits a different host.
-      // WastedTime off browse-ready critical path.
-      void this.loadWastedTime(displayPlayer).catch(err => console.warn('[appendPlayer] WastedTime skipped', err));
 
       // Proactively load titles in the background for Account Summary accuracy
       // This ensures titles are available even if the Titles tab hasn't been clicked
@@ -4035,6 +4030,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             cov?.source !== 'none';
           if (archiveData && cov && (effectiveLevel === 'full' || leanPartial) && (cov.rowCount ?? 0) > 0) {
             archiveAnswered = true;
+            // Archive is healthy again — drop any prior outage fallback banner.
+            if (this.dcApiFallbackNotice) {
+              this.dcApiFallbackNotice = null;
+            }
             console.log(`[Archive] Found ${archiveData.coverage.rowCount} archived activities for ${character.membershipId} (${character.game}):`, {
               coverage: archiveData.coverage,
               characterId: character.characterId
@@ -4135,10 +4134,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           }
 
           if (!archiveAnswered) {
+            // Expected miss (404 / empty coverage) — silent Bungie fallback, no outage banner.
             console.log(`[Archive] No archived activities for ${character.membershipId} (${character.game}); falling back to Bungie`);
           }
         } catch (err) {
           console.warn(`[Archive] Failed to load from archive API for ${character.membershipId}, falling back to Bungie:`, err);
+          this.noteDcApiFallback();
           // Fall through to Bungie API pagination
         }
       }
@@ -5156,7 +5157,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Pull total playtime (seconds) from Bungie character data only.
       // We sum `minutesPlayedTotal` / `minutesPlayed` (or D1 equivalents) across all characters
-      // for all selected players – no WastedOnDestiny fallback.
+      // for all selected players.
       for (const pl of this.selectedPlayers) {
         const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
         if (!chars || chars.length === 0) continue;
@@ -5183,7 +5184,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Aggregate total seals / titles from Bungie title data only.
       // Count earned titles only – i.e. completed/unlocked titles – so
-      // Account Summary matches the Titles tab. No WastedOnDestiny fallback.
+      // Account Summary matches the Titles tab.
       let totalSeals = 0;
       if (this.aggregatedTitles && this.aggregatedTitles.length > 0) {
         totalSeals = this.unlockedTitlesDisplay.length;
@@ -5196,7 +5197,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         // Use game as part of the key so Destiny 1 and Destiny 2 accounts on the same platform don't overwrite each other
         // Also include membershipId so each account gets its own card in the summary
         const key = `${pl.game}-${platformName}-${pl.membershipId}`;
-        // Compute playtime from character profiles only (no WastedOnDestiny).
+        // Compute playtime from character profiles only.
         let time = 0;
         const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
         if (chars && chars.length > 0) {
@@ -8773,26 +8774,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   getPlatformNameForFirst(first: { membershipId?: string }): string {
     const pl = first && first.membershipId ? this.selectedPlayers.find(p => p.membershipId === first.membershipId) : undefined;
     return pl?.platform || '';
-  }
-
-  /**
-   * Loads playtime from WastedOnDestiny (or falls back to Bungie profile minutes) and caches it.
-   */
-  private async loadWastedTime(player: PlayerSearchDisplay): Promise<void> {
-    const key = this.getPlayerKey(player);
-    if (this.wastedTimes[key] !== undefined) return; // cached
-
-    try {
-      const res = await this.playtimeService.getPlaytime(player);
-      this.wastedTimes[key] = res.seconds;
-      this.wastedSeals[key] = res.seals;
-    } catch (err) {
-      console.warn('[loadWastedTime] playtime service failed', err);
-      this.wastedTimes[key] = 0;
-      this.wastedSeals[key] = 0;
-    } finally {
-      this.statsDebounce$.next();
-    }
   }
 
   /** Map a platform string (Xbox, PlayStation, Steam, etc.) to Bungie membershipType so we can reuse getPlatformIcon */

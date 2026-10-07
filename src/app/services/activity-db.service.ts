@@ -118,8 +118,6 @@ export class ActivityDbService extends Dexie {
   private activitiesCache: LRUCache<StoredActivity[]> = { maxSize: 200, data: new Map() };
   private filteredActivitiesCache: LRUCache<StoredActivity[]> = { maxSize: 100, data: new Map() };
   private firstEverActivities: LRUCache<ActivityFirstCompletion> = { maxSize: 50, data: new Map() };
-  private wastedTimes: LRUCache<any[]> = { maxSize: 50, data: new Map() };
-  private wastedSeals: LRUCache<any[]> = { maxSize: 50, data: new Map() };
   private guardianFirstsCache: LRUCache<ActivityFirstCompletion[]> = { maxSize: 100, data: new Map() };
   private dungeonFirstsCache: LRUCache<DungeonSoloFirst[]> = { maxSize: 100, data: new Map() };
   
@@ -3337,7 +3335,7 @@ export class ActivityDbService extends Dexie {
     const now = Date.now();
     
     // Clean up expired entries from all caches
-    [this.activitiesCache, this.filteredActivitiesCache, this.firstEverActivities, this.wastedTimes, this.wastedSeals]
+    [this.activitiesCache, this.filteredActivitiesCache, this.firstEverActivities]
       .forEach(cache => {
         for (const [key, entry] of cache.data.entries()) {
           if (now - entry.timestamp > this.CACHE_TTL.activities) {
@@ -3380,8 +3378,6 @@ export class ActivityDbService extends Dexie {
     this.activitiesCache.data.clear();
     this.filteredActivitiesCache.data.clear();
     this.firstEverActivities.data.clear();
-    this.wastedTimes.data.clear();
-    this.wastedSeals.data.clear();
     this.guardianFirstsCache.data.clear();
     this.dungeonFirstsCache.data.clear();
     
@@ -3415,14 +3411,6 @@ export class ActivityDbService extends Dexie {
       firstEverActivities: {
         size: this.firstEverActivities.data.size,
         maxSize: this.firstEverActivities.maxSize
-      },
-      wastedTimes: {
-        size: this.wastedTimes.data.size,
-        maxSize: this.wastedTimes.maxSize
-      },
-      wastedSeals: {
-        size: this.wastedSeals.data.size,
-        maxSize: this.wastedSeals.maxSize
       },
       lastCleanup: this.lastCleanup,
       memoryUsage: (performance as any).memory ? {

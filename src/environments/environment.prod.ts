@@ -33,6 +33,8 @@ export const environment = {
    * at archive max instance ID. Default OFF until Splashear enables for go-live.
    */
   archiveBungieDeltaFill: false,
+  /** W19: hide Played With at launch until index is ready. */
+  enablePlayedWith: false,
   offlineMode: false,
   archiveRoot: ''
 }; 
