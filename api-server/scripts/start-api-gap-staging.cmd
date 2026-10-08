@@ -12,9 +12,11 @@ set PGCR_WATERMARK_PATH=D:\DestinyChronicleDB\coverage_watermark.json
 set PLAYER_ACTIVITIES_LITE_PATH=D:\DestinyChronicleDB\lean\player_activities_lite.parquet
 set MID_LIGHT_EXTRACT_DIR=D:\DestinyChronicleDB\lean
 set COMPACT_INDEX_ROOT=D:\DestinyChronicleDB\cl_mid_index_compact
-set GAP_INDEX_ROOT=E:\DestinyChronicleDB\cl_mid_index_gap\ready
-set GAP_INDEX_SORTED_ROOT=E:\DestinyChronicleDB\cl_mid_index_gap\ready_by_mid
+REM W27: slim serve copy. No _COMPLETE.json markers, so relax the marker check.
+set GAP_INDEX_ROOT=E:\DestinyChronicleDB\ready_slim_E
+set GAP_INDEX_SORTED_ROOT=E:\DestinyChronicleDB\ready_slim_E
 set ENABLE_GAP_LEAN=true
+set GAP_RELAX_COMPLETE=true
 REM W11 speed: DuckDB threads + one-shot full player lists + concurrent batch
 set PGCR_DUCKDB_THREADS=8
 set PGCR_DUCKDB_MEMORY=8GB

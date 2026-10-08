@@ -19,6 +19,11 @@ export interface ApiConfig {
   gapIndexSortedRoot: string;
   /** When true, merge GAP_INDEX_ROOT lean rows with compact/lite results. */
   enableGapLean: boolean;
+  /**
+   * Staging only. Slim copies have instances.parquet and no _COMPLETE.json.
+   * When true, an existing parquet is readable without the marker.
+   */
+  gapRelaxComplete: boolean;
   
   // Bungie API
   bungieApiKey: string;
@@ -45,6 +50,7 @@ export const ENV_KEYS = {
   GAP_INDEX_ROOT: 'GAP_INDEX_ROOT',
   GAP_INDEX_SORTED_ROOT: 'GAP_INDEX_SORTED_ROOT',
   ENABLE_GAP_LEAN: 'ENABLE_GAP_LEAN',
+  GAP_RELAX_COMPLETE: 'GAP_RELAX_COMPLETE',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   ENABLE_CORS: 'PGCR_ENABLE_CORS',

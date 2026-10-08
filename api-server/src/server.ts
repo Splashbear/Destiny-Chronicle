@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from 'express';
+import fs from 'fs';
 import { loadConfig, validateConfig } from './utils/config';
 import { logger } from './utils/logger';
 import { ArchiveService } from './services/archive.service';
@@ -7,6 +8,15 @@ import { WatermarkService } from './services/watermark.service';
 import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
+import { freeGiB, installApiGuard, serverStartedAt } from './usage/usage';
+
+function fsExists(p: string): boolean {
+  try {
+    return fs.existsSync(p);
+  } catch {
+    return false;
+  }
+}
 
 async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -53,6 +63,7 @@ async function startServer(): Promise<void> {
   }
 
   app.use(express.json());
+  installApiGuard(app);
 
   app.use((req: Request, res: Response, next) => {
     logger.debug(`${req.method} ${req.path}`, { query: req.query });
@@ -67,7 +78,8 @@ async function startServer(): Promise<void> {
     config.compactIndexRoot,
     config.gapIndexRoot,
     config.enableGapLean,
-    config.gapIndexSortedRoot
+    config.gapIndexSortedRoot,
+    config.gapRelaxComplete
   );
   await archiveService.initialize();
 
@@ -86,15 +98,36 @@ async function startServer(): Promise<void> {
   app.use('/api/pgcr', createPgcrRouter(archiveService, bungieApiService, watermarkService));
 
   app.get('/health', (req: Request, res: Response) => {
+    const dataRoot = config.compactIndexRoot || config.gapIndexRoot || config.leanActivitiesPath;
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
       archive_available: archiveService.isAvailable(),
       watermark_loaded: watermarkService.getWatermark() !== null,
       gap_lean_enabled: archiveService.isGapLeanEnabled(),
-      gap_index_root: archiveService.getGapIndexRoot() || null,
+      gap_index_configured: !!archiveService.getGapIndexRoot(),
+      data_root_readable: dataRoot ? fsExists(dataRoot) : false,
+      free_gib: freeGiB(dataRoot),
+      started_at: serverStartedAt(),
+      version: '1.0.0',
       port: config.port,
     });
+  });
+
+  app.get('/admin/usage', (req: Request, res: Response) => {
+    if (process.env.USAGE_ADMIN !== 'true') {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const host = req.socket.remoteAddress || '';
+    const local = host === '127.0.0.1' || host === '::1' || host === '::ffff:127.0.0.1';
+    if (!local) {
+      return res.status(403).json({ error: 'localhost only' });
+    }
+    const summary = process.env.USAGE_SUMMARY_PATH || '';
+    if (!summary || !fsExists(summary)) {
+      return res.json({ status: 'no-summary-yet' });
+    }
+    return res.type('text/markdown').send(fs.readFileSync(summary, 'utf8'));
   });
 
   app.get('/', (req: Request, res: Response) => {
