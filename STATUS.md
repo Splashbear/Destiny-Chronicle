@@ -3,7 +3,7 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
-## Current state (2026-10-03)
+## Current state (2026-10-08 ~00:10 ET)
 
 ### Website
 - **Shipped on `master`:** see latest merge (W26 favorites/First Ever fix shipping). Live site stays on **Bungie** for now — no archive cutover / no `ENABLE_GAP_LEAN` on `:3001`.
@@ -23,19 +23,16 @@
 ### Launch order / work items
 1. ~~**W11?W17**~~ mostly **DONE** (see headlines below)
 2. ~~**W12** partial delta fill~~ **DONE** in client (`archiveBungieDeltaFill`, default OFF) ? lean `partial` uses newest-first stop at archive max iid when flag ON
-3. **W18** Played With extract ? **RUNNING** in background (main PC)
+3. **W18** Played With raw extract — **STOPPED** (Oct 3). Replaced by W22, then deferred to W1 by W23. Feature stays off.
 4. **W19** ship prep without Played With ? **DONE** (docs/scripts; no `:3001` deploy)
 5. **W20** hardware note ? **DONE** (in launch_prep REPORT)
-6. **W21** slim rebuild ? **NOT STARTED** (wait for user go)
+6. **W21** slim rebuild — buckets **COMPLETE**; range coverage **partial** (see W21 headline). Not fully verified until Splashbear/Kaiser spot checks.
 7. **W1 PARKED** ? 16B?17B dump incoming
 8. No merge / no `:3001` gap without Splashear yes
 
-### W18 headline (Played With extract ? background)
-- Space: C 168 / D 432 / **E 1001** / F 24 GiB free ? out on **`E:\DestinyChronicleDB\played_with_index\`**
-- Space report: `~/agent-tools/pgcr-proof/played_with/SPACE_REPORT.md`
-- Extract: idle-priority, 1 shard at a time, resume via `status.json` + `.parquet.partial`
-- Progress: see `E:\DestinyChronicleDB\played_with_index\status.json` and `~/agent-tools/pgcr-proof/played_with/EXTRACT_PROGRESS.md`
-- Not wired to `:3001`/`:3002`/site. 10B+ out of scope until W1 dump.
+### W18 headline (Played With raw extract)
+- **STOPPED** Oct 3 when W22 replaced the raw re-scan. W23 (Oct 5) then deferred the long-term Played With build to W1. `enablePlayedWith` stays false.
+- Do not treat `played_with_index` as a live job.
 
 ### W19 / W20 headline (home PC ship prep)
 - Report: `~/agent-tools/pgcr-proof/launch_prep/REPORT.md`
@@ -61,7 +58,16 @@
 - Wire Played With into API/site before validation
 
 ### W21 headline (slim serve copy — variant E)
-- **RUNNING** `E_typed_light_sorted` → `E:\DestinyChronicleDB\ready_slim_E`
-- Progress: **155/256** buckets, **207.4 GiB**, ETA ~6.8 h
-- Source `ready/` untouched. Details: `C:\Users\knigh\agent-tools\pgcr-proof\size_reduction\W21_PROGRESS.md`
+- Build **COMPLETE** `E_typed_light_sorted` → `<data-drive>\DestinyChronicleDB\ready_slim_E` (finished 2026-10-08 00:07 ET)
+- **256/256** buckets, validate ok/fail **256/0**, **25,458,831,283** rows, **342.69 GiB**, ~14.45 B/row
+- Range **11.79M..10B is partial**: **77,660** missing instance IDs in **2,313** runs. Same hole set as the 2026-10-02 source scan (row total matches; slim was not DISTINCT-scanned again). The 40 largest runs cover 75,387 of those IDs; the other 2,273 runs are single IDs. Sampled holes are absent in raw and Bungie 404 (never existed or purged).
+- List: `%USERPROFILE%\agent-tools\pgcr-proof\size_reduction\W21_COVERAGE.md`
+- Splashbear/Kaiser spot checks against the slim files are still open. Source `ready/` untouched. Not wired to `:3001`.
+
+### W25 headline (D1 PGCR backup)
+- **DONE** 2026-10-06. Out: `<data-drive>\DestinyChronicleDB\d1_pgcr_raw`
+- **8,344 / 8,344** files, validate `passed: true`, missing 0, parse fails 0, ~12.7 MiB
+- Source list: `<data-drive>\DestinyChronicleDB\lean\cl_patch_d1_activity_history_w25.parquet`
+- Log: `%USERPROFILE%\agent-tools\pgcr-proof\d1_backup\w25_pgcr_backup.log`
+- This is the dumped-account D1 PGCR backup only. Live site D1 still comes from Bungie (D1 DECISION Oct 2).
 

@@ -44,6 +44,7 @@ export class ArchiveService {
   /** W11: optional membership_id-sorted gap root (parquet RG pruning). Prefer when complete. */
   private gapIndexSortedRoot: string;
   private enableGapLean: boolean;
+  private gapRelaxComplete: boolean;
   private archiveAvailable = false;
   private db: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
@@ -60,7 +61,8 @@ export class ArchiveService {
     compactIndexRoot: string,
     gapIndexRoot: string = '',
     enableGapLean: boolean = false,
-    gapIndexSortedRoot: string = ''
+    gapIndexSortedRoot: string = '',
+    gapRelaxComplete: boolean = false
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
@@ -69,6 +71,7 @@ export class ArchiveService {
     this.compactIndexRoot = compactIndexRoot;
     this.gapIndexRoot = gapIndexRoot;
     this.gapIndexSortedRoot = gapIndexSortedRoot;
+    this.gapRelaxComplete = gapRelaxComplete;
     this.enableGapLean = enableGapLean && !!gapIndexRoot;
   }
 
@@ -799,8 +802,10 @@ export class ArchiveService {
       const markerPath = pathMod.join(bucketDir, '_COMPLETE.json');
       const parquetPath = pathMod.join(bucketDir, 'instances.parquet');
       try {
-        await fs.access(markerPath);
         await fs.access(parquetPath);
+        if (!this.gapRelaxComplete) {
+          await fs.access(markerPath);
+        }
         instancesPath = parquetPath;
         usedLabel = c.label;
         break;
@@ -810,7 +815,7 @@ export class ArchiveService {
             await fs.access(markerPath);
             anyPending = false;
           } catch {
-            anyPending = true;
+            anyPending = !this.gapRelaxComplete;
           }
         }
       }
