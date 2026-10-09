@@ -58,16 +58,16 @@
 - Wire Played With into API/site before validation
 
 ### W21 headline (slim serve copy — variant E)
-- Build **COMPLETE** `E_typed_light_sorted` → `E:\DestinyChronicleDB\ready_slim_E` (finished 2026-10-08 00:07 ET)
+- Build **COMPLETE** `E_typed_light_sorted` → `<data-drive>\DestinyChronicleDB\ready_slim_E` (finished 2026-10-08 00:07 ET)
 - **256/256** buckets, validate ok/fail **256/0**, **25,458,831,283** rows, **342.69 GiB**, ~14.45 B/row
 - Range **11.79M..10B is partial**: **77,660** missing instance IDs in **2,313** runs. Same hole set as the 2026-10-02 source scan (row total matches; slim was not DISTINCT-scanned again). The 40 largest runs cover 75,387 of those IDs; the other 2,273 runs are single IDs. Sampled holes are absent in raw and Bungie 404 (never existed or purged).
-- List: `C:\Users\knigh\agent-tools\pgcr-proof\size_reduction\W21_COVERAGE.md`
+- List: `%USERPROFILE%\agent-tools\pgcr-proof\size_reduction\W21_COVERAGE.md`
 - Splashbear/Kaiser spot checks against the slim files are still open. Source `ready/` untouched. Not wired to `:3001`.
 
 ### W25 headline (D1 PGCR backup)
-- **DONE** 2026-10-06. Out: `E:\DestinyChronicleDB\d1_pgcr_raw`
+- **DONE** 2026-10-06. Out: `<data-drive>\DestinyChronicleDB\d1_pgcr_raw`
 - **8,344 / 8,344** files, validate `passed: true`, missing 0, parse fails 0, ~12.7 MiB
-- Source list: `D:\DestinyChronicleDB\lean\cl_patch_d1_activity_history_w25.parquet`
-- Log: `C:\Users\knigh\agent-tools\pgcr-proof\d1_backup\w25_pgcr_backup.log`
+- Source list: `<data-drive>\DestinyChronicleDB\lean\cl_patch_d1_activity_history_w25.parquet`
+- Log: `%USERPROFILE%\agent-tools\pgcr-proof\d1_backup\w25_pgcr_backup.log`
 - This is the dumped-account D1 PGCR backup only. Live site D1 still comes from Bungie (D1 DECISION Oct 2).
 
