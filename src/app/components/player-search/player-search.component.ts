@@ -4035,10 +4035,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
 
       let newActivities: StoredActivity[] = [];
-      // W2/W12: when archive answered with rows and archiveBungieDeltaFill is on,
-      // Bungie pagination stops once instance IDs are at/below this watermark
-      // (applies to both `full` and lean `partial` — holes are not full-crawled).
-      let archiveMaxInstanceId: number | null = null;
+      // W31: D2 catch-up stops at the archive-complete line (10B), not the
+      // player's newest archived instance id. Compact holes from 10B–16B sit
+      // below that newest id and were being skipped.
+      let bungieStopAtIid: number | null = null;
       let bungieDeltaOnly = false;
       let archiveAnswered = false;
       
@@ -4072,14 +4072,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               characterId: character.characterId
             });
 
-            // Membership-level max iid = stop watermark for W2/W12 delta fill.
-            let maxIid = 0;
-            for (const a of archiveData.activities) {
-              const n = Number(a.instanceId);
-              if (Number.isFinite(n) && n > maxIid) maxIid = n;
-            }
-            if (maxIid > 0) {
-              archiveMaxInstanceId = maxIid;
+            const completeBelow = Number(cov.archiveCompleteBelowIid ?? 10_000_000_000);
+            if (character.game === 'D2' && Number.isFinite(completeBelow) && completeBelow > 0) {
+              bungieStopAtIid = completeBelow;
             }
 
             // Filter activities for this specific character (coerce ids - archive + Bungie both stringified).
@@ -4128,15 +4123,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 console.log(`[Archive] Character ${character.characterId} already in IDB (${storedActivities.length} archive rows, 0 new)`);
               }
 
-              // W12: with delta-fill ON, both full and lean-partial use newest-first stop
-              // at archive max iid (known holes / D1 / W8 do not force a full crawl).
-              // Flag OFF: full → skip Bungie; lean-partial → full crawl (legacy W10).
-              // Absent (no archive rows) still full-crawls below.
-              if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
+              // W31: D2 + flag ON stops at complete-below (10B). D1 full-crawls so a
+              // partial D1 dump cannot hide games. Flag OFF: full skips Bungie;
+              // lean-partial full-crawls.
+              if (environment.archiveBungieDeltaFill && character.game === 'D2' && bungieStopAtIid != null) {
                 bungieDeltaOnly = true;
                 console.log(
-                  `[Archive] W12 delta fill (${effectiveLevel}) for ${character.membershipId}: ` +
-                    `Bungie newest-first until iid <= ${archiveMaxInstanceId}`
+                  `[Archive] W31 D2 catch-up (${effectiveLevel}) for ${character.membershipId}: ` +
+                    `Bungie newest-first until iid <= ${bungieStopAtIid}`
                 );
                 this.processAndGroupActivities();
                 // fall through to Bungie pagination (delta only)
@@ -4151,10 +4145,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               }
             } else if (effectiveLevel === 'full' || leanPartial) {
               // Membership hit but 0 rows for this character.
-              if (environment.archiveBungieDeltaFill && archiveMaxInstanceId != null) {
+              if (environment.archiveBungieDeltaFill && character.game === 'D2' && bungieStopAtIid != null) {
                 bungieDeltaOnly = true;
                 console.log(
-                  `[Archive] W12 delta fill (0 archive rows for char ${character.characterId}); stop at iid ${archiveMaxInstanceId}`
+                  `[Archive] W31 D2 catch-up (0 archive rows for char ${character.characterId}); stop at iid ${bungieStopAtIid}`
                 );
                 // fall through
               } else if (effectiveLevel === 'full') {
@@ -4211,17 +4205,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             game: character.game // ensure we persist which game this activity belongs to
           }));
 
-          // W2: Bungie returns newest-first — keep only iids above archive max, then stop.
-          if (bungieDeltaOnly && archiveMaxInstanceId != null) {
+          // W31: Bungie returns newest-first. Keep rows above the complete-below
+          // line (10B). Archive rows already stored cover that line and below.
+          if (bungieDeltaOnly && bungieStopAtIid != null) {
             const pageIids = storedActivities
               .map(a => Number(a.instanceId))
               .filter(n => Number.isFinite(n) && n > 0);
             const pageMinIid = pageIids.length ? Math.min(...pageIids) : 0;
             storedActivities = storedActivities.filter(a => {
               const n = Number(a.instanceId);
-              return Number.isFinite(n) && n > archiveMaxInstanceId!;
+              return Number.isFinite(n) && n > bungieStopAtIid!;
             });
-            if (pageMinIid > 0 && pageMinIid <= archiveMaxInstanceId) {
+            if (pageMinIid > 0 && pageMinIid <= bungieStopAtIid) {
               hasMore = false;
             } else {
               hasMore = activities.length === 250;

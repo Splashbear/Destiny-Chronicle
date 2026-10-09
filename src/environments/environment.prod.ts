@@ -29,10 +29,11 @@ export const environment = {
    */
   useArchiveActivities: false,
   /**
-   * W2/W12: After archive `full` or lean `partial`, Bungie newest-first stop
-   * at archive max instance ID. Default OFF until Splashear enables for go-live.
+   * W2/W12/W31: D2 Bungie catch-up stops at archiveCompleteBelowIid (10B),
+   * not the player's newest archived game, so 10B–16B holes are not skipped.
+   * D1 still full-crawls. Off only if this flag is set false.
    */
-  archiveBungieDeltaFill: false,
+  archiveBungieDeltaFill: true,
   /** W19: hide Played With at launch until index is ready. */
   enablePlayedWith: false,
   offlineMode: false,

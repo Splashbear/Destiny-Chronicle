@@ -60,4 +60,17 @@ export class WatermarkService {
   getWatermark(): CoverageWatermark | null {
     return this.watermark;
   }
+
+  /**
+   * Gap lean is complete below 10B. Compact above that has holes, so Bungie
+   * catch-up must not stop at a player's newest archived instance id.
+   * max_instance_id stays the high-water mark of rows that exist.
+   */
+  completeBelowIid(): string {
+    const fromFile = this.watermark?.archive_complete_below_iid;
+    if (fromFile && /^\d+$/.test(String(fromFile))) return String(fromFile);
+    const fromEnv = process.env.ARCHIVE_COMPLETE_BELOW_IID || '';
+    if (/^\d+$/.test(fromEnv)) return fromEnv;
+    return '10000000000';
+  }
 }

@@ -47,6 +47,7 @@ export interface PlayerActivitiesCoverage {
   indexComplete?: boolean;
   filtersApplied?: boolean;
   notes?: string[];
+  archiveCompleteBelowIid?: string;
 }
 
 export interface PlayerActivitiesResponse {

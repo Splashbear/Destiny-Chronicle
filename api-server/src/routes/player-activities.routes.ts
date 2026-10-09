@@ -159,6 +159,7 @@ function buildCoverage(
     indexComplete: tierInfo.indexComplete,
     filtersApplied: tierInfo.filtersApplied,
     notes: notes.length ? notes : undefined,
+    archiveCompleteBelowIid: watermarkService.completeBelowIid(),
   };
 }
 
