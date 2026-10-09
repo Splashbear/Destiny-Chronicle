@@ -45,7 +45,10 @@ export function createPgcrRouter(
         });
       }
 
-      res.json(watermark);
+      res.json({
+        ...watermark,
+        archive_complete_below_iid: watermarkService.completeBelowIid(),
+      });
     } catch (error) {
       logger.error('Error in GET /api/pgcr/watermark', { error });
       res.status(500).json({

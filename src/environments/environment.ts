@@ -29,13 +29,13 @@ export const environment = {
    */
   useArchiveActivities: true,
   /**
-   * W2/W12: After an archive hit with lean rows (`full` or `partial`), still
-   * fetch Bungie history newest-first and stop at the archive's highest
-   * instance ID (post-watermark / recent games only). Known holes are not
-   * full-crawled; fetch those PGCRs on demand. Full crawl only when archive
-   * is absent. Default OFF until Splashear enables for go-live.
+   * W2/W12/W31: After a D2 archive hit, fetch Bungie history newest-first and
+   * stop at archiveCompleteBelowIid (10B), not the player's newest archived
+   * game. That fills compact holes in 10B–16B and games newer than the
+   * watermark. D1 still full-crawls. Known sub-10B holes stay on-demand.
+   * Full crawl only when the archive is absent.
    */
-  archiveBungieDeltaFill: false,
+  archiveBungieDeltaFill: true,
   /**
    * W19: Played With UI / API client. Keep OFF at launch until W18 index is
    * validated and wired. Component is not routed; this guards future entry points.
