@@ -9,6 +9,7 @@ import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
 import { freeGiB, installApiGuard, serverStartedAt } from './usage/usage';
+import { installUsageAdminRoute } from './usage/usage-admin';
 
 function fsExists(p: string): boolean {
   try {
@@ -114,21 +115,7 @@ async function startServer(): Promise<void> {
     });
   });
 
-  app.get('/admin/usage', (req: Request, res: Response) => {
-    if (process.env.USAGE_ADMIN !== 'true') {
-      return res.status(404).json({ error: 'Not found' });
-    }
-    const host = req.socket.remoteAddress || '';
-    const local = host === '127.0.0.1' || host === '::1' || host === '::ffff:127.0.0.1';
-    if (!local) {
-      return res.status(403).json({ error: 'localhost only' });
-    }
-    const summary = process.env.USAGE_SUMMARY_PATH || '';
-    if (!summary || !fsExists(summary)) {
-      return res.json({ status: 'no-summary-yet' });
-    }
-    return res.type('text/markdown').send(fs.readFileSync(summary, 'utf8'));
-  });
+  installUsageAdminRoute(app);
 
   app.get('/', (req: Request, res: Response) => {
     res.json({

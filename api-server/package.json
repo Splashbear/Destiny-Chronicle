@@ -20,7 +20,8 @@
   "license": "ISC",
   "dependencies": {
     "duckdb-async": "^1.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
