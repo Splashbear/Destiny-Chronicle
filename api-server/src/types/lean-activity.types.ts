@@ -34,6 +34,12 @@ export interface CoverageWatermark {
   max_instance_id: string;
   as_of: string;
   dump_id: string;
+  /**
+   * Instance IDs at or below this value are treated as a complete archive
+   * range. Compact holes above it (10B–16B) must still be filled from Bungie.
+   * Does not replace max_instance_id.
+   */
+  archive_complete_below_iid?: string;
 }
 
 /**
@@ -90,6 +96,8 @@ export interface PlayerActivitiesCoverage {
   indexComplete?: boolean;
   filtersApplied?: boolean;
   notes?: string[];
+  /** D2 catch-up pages Bungie newest-first until instance ids pass this line. */
+  archiveCompleteBelowIid?: string;
 }
 
 /**
