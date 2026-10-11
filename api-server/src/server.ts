@@ -8,6 +8,8 @@ import { WatermarkService } from './services/watermark.service';
 import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
+import { createPlayedWithRouter } from './routes/played-with.routes';
+import { loadPlayedWithConfig, PlayedWithService } from './services/played-with.service';
 import { freeGiB, installApiGuard, serverStartedAt } from './usage/usage';
 import { installUsageAdminRoute } from './usage/usage-admin';
 
@@ -94,6 +96,22 @@ async function startServer(): Promise<void> {
 
   // Player activities routes (light format for cold-start optimization)
   app.use('/players', createPlayerActivitiesRouter(archiveService, watermarkService));
+
+  // Played With (optional): legacy 0-10B + compact 10-16B band indexes, routed by instance id.
+  const playedWithConfig = loadPlayedWithConfig();
+  if (playedWithConfig) {
+    const playedWith = new PlayedWithService(playedWithConfig, async (instanceId, membershipId) => {
+      const rows = await archiveService.getActivitiesByInstanceId(instanceId, 'D2');
+      const hit = rows.find((r) => String(r.membership_id) === membershipId && r.display_name);
+      return hit ? hit.display_name : null;
+    });
+    app.use('/played-with', createPlayedWithRouter(archiveService, playedWith));
+    logger.info('Played With enabled', {
+      legacy: !!playedWithConfig.legacyRoot,
+      compact: !!playedWithConfig.compactRoot,
+      splitIid: playedWithConfig.splitIid,
+    });
+  }
 
   // Admin/debug routes (lean format)
   app.use('/api/pgcr', createPgcrRouter(archiveService, bungieApiService, watermarkService));
