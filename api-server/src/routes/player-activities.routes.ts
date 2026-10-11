@@ -11,6 +11,7 @@ import {
 import { logger } from '../utils/logger';
 import { resolveCoverageLevel, shouldStripPartialActivities } from '../utils/coverage-level';
 import { filterSocialHubs } from '../utils/social-hubs';
+import { dedupeActivitiesByInstance } from '../utils/dedupe-activities';
 
 /** W6: exclude social hubs unless explicitly requested or EXCLUDE_SOCIAL_HUBS=false. */
 function shouldIncludeSocialHubs(req: Request): boolean {
@@ -36,6 +37,9 @@ function applySocialHubFilter(
   includeHubs: boolean
 ): { activities: LeanActivity[]; notes: string[] } {
   const notes = [...(tierNotes || [])];
+  const { kept: unique, removed } = dedupeActivitiesByInstance(activities);
+  if (removed > 0) notes.push(`removed ${removed} duplicate rows (same instance_id)`);
+  activities = unique;
   if (includeHubs) {
     return { activities: activities.slice(0, limit), notes };
   }
