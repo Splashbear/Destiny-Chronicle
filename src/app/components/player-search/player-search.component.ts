@@ -59,6 +59,8 @@ import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
+import { buildBreakdownCategoryOptions, selectBreakdownChartItems } from '../../utils/breakdown-chart';
+import { D1_HISTORY_MODES, dedupeByInstanceId, isSocialActivity } from '../../utils/activity-history-filters';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
@@ -1020,21 +1022,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     'Relic': 'Relic'
   };
 
-  /** Category options: All, or each unique category (Raid, Dungeon, Strike, etc.) */
+  /** Category options: All, or each unique category (Raid, Dungeon, Strike, etc.).
+   *  Built from ALL groups (not tile-filtered) so selecting a tile does not shrink the list. */
   get breakdownChartCategoryOptions(): { value: string; label: string }[] {
-    const base = [{ value: 'all', label: 'All activity types' }];
-    const groups = this.filteredActivityBreakdownGroups;
-    if (!groups?.length) return base;
-    const seen = new Set<string>();
-    for (const g of groups) {
-      const cat = this.getBreakdownCategoryFromLabel(g.label) || g.label;
-      if (cat && !seen.has(cat)) {
-        seen.add(cat);
-        const displayLabel = this.categoryDisplayNames[cat] ?? (cat.endsWith('s') ? cat : cat + 's');
-        base.push({ value: cat, label: displayLabel });
-      }
-    }
-    return base;
+    return buildBreakdownCategoryOptions(this.activityBreakdownGroups || [], this.categoryDisplayNames);
   }
 
   /** Game filter options */
@@ -1049,78 +1040,32 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.breakdownChartDataState;
   }
 
-  /** Normalize group label to category (e.g. "Raid – D1" → "Raid") for chart filtering. Handles en-dash, hyphen, and spacing. */
-  private getBreakdownCategoryFromLabel(label: string): string {
-    if (!label) return '';
-    const parts = label.split(/\s*[–-]\s*/);
-    return (parts[0] ?? label).trim();
-  }
-
   /** Recompute chart data based on current breakdown groups, filters, and chart type. */
   private recomputeBreakdownChartData(): void {
-    const groups = this.filteredActivityBreakdownGroups;
-    const hasTileSelection = this.selectedBreakdownCardLabels.size > 0;
-
-    // When tiles are selected, always show drill-down (individual activities) even if chart dropdown is "All"
-    if (hasTileSelection && groups.length > 0) {
-      const allRows: ActivityCountRow[] = [];
-      for (const g of groups) allRows.push(...g.rows);
-      if (!allRows.length) {
-        this.breakdownChartDataState = { labels: [], datasets: [] };
-        return;
-      }
-      const items = allRows.map(r => ({
-        label: r.variantName ? `${r.baseName} (${r.variantName})` : r.baseName,
-        timeSeconds: r.timeSeconds
-      }));
-      this.breakdownChartDataState = this.buildChartDataFromItems(items);
-      return;
-    }
-
-    // When "All" and no tiles selected: show summary (each group as a slice), respecting game filter
-    if (this.breakdownChartCategory === 'all') {
-      let cards = this.filteredActivityBreakdownSummaryCards;
-      if (this.breakdownChartGame !== 'all') {
-        const gameSuffix = ' – ' + this.breakdownChartGame;
-        const gameSuffixAlt = ' - ' + this.breakdownChartGame;
-        cards = cards.filter(c => c.label.endsWith(gameSuffix) || c.label.endsWith(gameSuffixAlt));
-      }
-      this.breakdownChartDataState = cards.length ? this.buildChartDataFromCards(cards) : { labels: [], datasets: [] };
-      return;
-    }
-
-    // When specific category selected in dropdown: drill-down to individual activities in that category
-    const matchingGroups = this.filteredActivityBreakdownGroups.filter(g => {
-      const cat = this.getBreakdownCategoryFromLabel(g.label);
-      if (cat !== this.breakdownChartCategory) return false;
-      if (this.breakdownChartGame === 'all') return true;
-      return g.game === this.breakdownChartGame;
+    const sel = selectBreakdownChartItems(this.filteredActivityBreakdownGroups, {
+      tilesSelected: this.selectedBreakdownCardLabels.size > 0,
+      category: this.breakdownChartCategory,
+      game: this.breakdownChartGame as 'all' | 'D1' | 'D2',
     });
-
-    const allRows: ActivityCountRow[] = [];
-    for (const g of matchingGroups) allRows.push(...g.rows);
-
-    if (!allRows.length) {
+    if (!sel.items.length) {
       this.breakdownChartDataState = { labels: [], datasets: [] };
       return;
     }
-
-    const items = allRows.map(r => ({
-      label: r.variantName ? `${r.baseName} (${r.variantName})` : r.baseName,
-      timeSeconds: r.timeSeconds
-    }));
-    this.breakdownChartDataState = this.buildChartDataFromItems(items);
+    this.breakdownChartDataState = sel.summary
+      ? this.buildChartDataFromCards(sel.items)
+      : this.buildChartDataFromItems(sel.items);
   }
 
   private buildChartDataFromCards(cards: { label: string; timeSeconds: number }[]): ChartData<'pie' | 'bar'> {
     const colors = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16', '#f97316', '#6366f1', '#14b8a6', '#a855f7', '#eab308', '#22c55e', '#0ea5e9'];
+    const sortedAll = [...cards].sort((a, b) => b.timeSeconds - a.timeSeconds);
     if (this.breakdownChartType === 'pie') {
       return {
-        labels: cards.map(c => c.label),
-        datasets: [{ data: cards.map(c => c.timeSeconds), backgroundColor: colors }]
+        labels: sortedAll.map(c => c.label),
+        datasets: [{ data: sortedAll.map(c => c.timeSeconds), backgroundColor: colors }]
       };
     }
-    const sorted = [...cards].sort((a, b) => b.timeSeconds - a.timeSeconds).slice(0, 30);
+    const sorted = sortedAll.slice(0, 30);
     return {
       labels: sorted.map(c => c.label),
       datasets: [{ label: 'Time Spent', data: sorted.map(c => c.timeSeconds), backgroundColor: '#10b981' }]
@@ -4175,9 +4120,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Destiny 1 requires individual mode pagination; include Story (2) so
       // campaign first missions are ingested for Guardian Firsts.
       // Destiny 2 can use a single aggregated request (mode undefined).
+      // D1: mode 0 (None) returns every activity in one request. The old
+      // [2, 6, 4] list was Story/Patrol/Raid only and dropped strikes, PvP, etc.
+      // D2: a single request with no mode gets all modes.
       const modes: (number | undefined)[] = character.game === 'D1'
-        ? [2, 6, 4]       // Story, PvE, PvP
-        : [undefined];     // D2: single request gets all modes
+        ? [...D1_HISTORY_MODES]
+        : [undefined];
 
       // Process modes in parallel for faster loading
       const modePromises = modes.map(async (mode) => {
@@ -4251,7 +4199,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Wait for all modes to complete
       const allModeActivities = await Promise.all(modePromises);
-      const allActivities = allModeActivities.flat();
+      // One row per instance id; drop social spaces (mode/manifest based, not names).
+      const allActivities = dedupeByInstanceId(allModeActivities.flat()).filter(
+        a => !isSocialActivity(a.activityDetails?.mode, character.game === 'D2'
+          ? this.manifest.getActivityDefinitionRaw(a.activityDetails?.referenceId)
+          : null)
+      );
 
       // Filter for unique new activities
       const uniqueNewActivities = allActivities.filter(activity => 
