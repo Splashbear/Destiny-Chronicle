@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { PGCRCacheService } from './pgcr-cache.service';
-import { isSrlActivity } from '../config/srl.config';
+import { isSrlActivity, srlGroupingMode } from '../config/srl.config';
 
 export interface ActivityCountRow {
   referenceId: string;
@@ -441,8 +441,10 @@ export class ActivityBreakdownService {
       }
       const seconds = this.getActivityDurationSeconds(a);
       existing.timeSeconds += seconds;
-      if (existing.mode === undefined && a.activityDetails?.mode !== undefined) {
-        existing.mode = a.activityDetails.mode;
+      // SRL races are often reported as mode 32 (private match) or 5; group them as SRL.
+      const rowMode = srlGroupingMode(a, game);
+      if (rowMode !== undefined && (existing.mode === undefined || (rowMode !== existing.mode && (rowMode === 94 || rowMode === 29)))) {
+        existing.mode = rowMode;
       }
       const instanceId = a.activityDetails?.instanceId != null ? String(a.activityDetails.instanceId) : undefined;
       const period = a.period;

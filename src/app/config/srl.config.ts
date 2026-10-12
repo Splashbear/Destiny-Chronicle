@@ -112,3 +112,44 @@ export function getSrlDisplayBaseName(activityName: string): string {
   }
   return trimmed;
 }
+
+/**
+ * Bungie history row fields used to detect D2 SRL. Since the Oct 2026 SRL
+ * return, Bungie reports many SRL games as mode 32 (PrivateMatchesAll) with
+ * directorActivityHash = the SRL playlist node, instead of mode 94.
+ */
+export interface SrlHistoryRowLike {
+  activityDetails?: {
+    referenceId?: string | number | null;
+    directorActivityHash?: string | number | null;
+    mode?: number | null;
+    modes?: number[] | null;
+  } | null;
+}
+
+/** True when a Bungie / stored history row is an SRL race (track, playlist node, or mode list). */
+export function isSrlHistoryRow(row: SrlHistoryRowLike | null | undefined, name?: string): boolean {
+  const d = row?.activityDetails;
+  if (!d) return false;
+  if (Array.isArray(d.modes) && d.modes.some(m => (SRL_ACTIVITY_MODES as readonly number[]).includes(Number(m)))) {
+    return true;
+  }
+  if (d.directorActivityHash != null && D2_SRL_HASHES.includes(String(d.directorActivityHash))) {
+    return true;
+  }
+  return isSrlActivity(d.referenceId ?? '', name, d.mode ?? undefined);
+}
+
+/**
+ * Mode to use for grouping. SRL rows reported as mode 32 / 5 get the SRL mode
+ * for their game so every race of a track lands in one Breakdown row.
+ */
+export function srlGroupingMode(
+  row: SrlHistoryRowLike | null | undefined,
+  game: 'D1' | 'D2',
+  name?: string
+): number | undefined {
+  const mode = row?.activityDetails?.mode ?? undefined;
+  if (!isSrlHistoryRow(row, name)) return mode;
+  return game === 'D1' ? SRL_ACTIVITY_MODE_D1 : SRL_ACTIVITY_MODE_D2;
+}
