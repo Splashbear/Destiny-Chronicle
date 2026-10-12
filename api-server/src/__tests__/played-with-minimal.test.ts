@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Database } from 'duckdb-async';
-import { loadPlayedWithConfig, planBands, PlayedWithService, PRIVATE_GUARDIAN } from '../services/played-with.service';
+import { loadPlayedWithConfig, nameTableGroups, planBands, PlayedWithService, PRIVATE_GUARDIAN } from '../services/played-with.service';
 
 const q = (p: string) => p.replace(/\\/g, '/');
 
@@ -74,5 +74,22 @@ describe('Played With minimal index + name table', () => {
     expect(na['2']).toMatchObject({ activitiesTogether: 3, timeTogetherSeconds: 600 });
     expect(na['4']).toMatchObject({ displayName: PRIVATE_GUARDIAN }); // 10-16B only, not in table
     expect(all.coverage).toMatchObject({ complete: true, minimalBands: 2 });
+  });
+
+  test('bucketed name table directory: only the partner\'s bucket is read, same names as the single file', async () => {
+    const dir = path.join(M, 'names_b'); fs.mkdirSync(dir, { recursive: true });
+    const db = await Database.create(':memory:');
+    for (let b = 0; b < 4; b++) await db.all(`COPY (SELECT * FROM read_parquet('${q(names)}') WHERE mid % 4 = ${b} ORDER BY mid) TO '${q(path.join(dir, `b=${String(b).padStart(2, '0')}.parquet`))}' (FORMAT parquet)`);
+    await db.close();
+    const g = nameTableGroups(dir, ['2', '3', '6']);
+    expect(g.map(([f, ids]) => [path.basename(f.replace(/'/g, '')), ids])).toEqual([['b=02.parquet', ['2', '6']], ['b=03.parquet', ['3']]]);
+    expect(nameTableGroups(names, ['2'])).toHaveLength(1);
+    const base = { compactDoneDir: '', splitIid: 1e10, compactMaxIid: 1.6e10, threads: 1, memoryLimit: '512MB', tempDir: path.join(tmp, 't2') };
+    const F = new PlayedWithService({ ...base, legacyRoot: '', compactRoot: '', minRoot: M, nameTable: names }, async () => null);
+    const D = new PlayedWithService({ ...base, legacyRoot: '', compactRoot: '', minRoot: M, nameTable: dir }, async () => null);
+    const rf = await F.getPartners(['1'], inst); await F.close();
+    const rd = await D.getPartners(['1'], inst); await D.close();
+    expect(rd.partners).toEqual(rf.partners);
+    expect(rd.partners.find((p) => p.membershipId === '2')).toMatchObject({ displayName: 'FriendNew', nameSource: 'name_table' });
   });
 });

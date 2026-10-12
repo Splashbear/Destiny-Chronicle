@@ -37,6 +37,30 @@ export interface PlayedWithConfig {
   nameTable?: string;
 }
 
+/**
+ * Name-table sources for a set of membership ids. A directory holding b=NN.parquet files is treated as
+ * bucketed by mid % (number of buckets): each id maps to its one bucket file. Anything else (file or glob)
+ * is read as-is for every id. Returns [read_parquet argument, ids] pairs.
+ */
+export function nameTableGroups(nameTable: string, mids: string[]): Array<[string, string[]]> {
+  const lit = (p: string) => `'${p.replace(/\\/g, '/').replace(/'/g, "''")}'`;
+  let buckets: string[] = [];
+  try {
+    if (fs.statSync(nameTable).isDirectory()) buckets = fs.readdirSync(nameTable).filter((f) => /^b=\d+\.parquet$/.test(f));
+  } catch { /* glob or missing: not a directory */ }
+  if (!buckets.length) return [[lit(nameTable), mids]];
+  const n = BigInt(buckets.length);
+  const out = new Map<string, string[]>();
+  for (const id of mids) {
+    const b = Number(BigInt(id) % n);
+    const f = path.join(nameTable, `b=${String(b).padStart(2, '0')}.parquet`);
+    if (!fs.existsSync(f)) continue;
+    if (!out.has(f)) out.set(f, []);
+    out.get(f)!.push(id);
+  }
+  return [...out].map(([f, ids]) => [lit(f), ids]);
+}
+
 export const PRIVATE_GUARDIAN = 'Private Guardian';
 
 export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): PlayedWithConfig | null {
@@ -386,16 +410,19 @@ export class PlayedWithService {
     if (!this.cfg.nameTable) return;
     const todo = partners.filter((p) => !p.displayName && /^\d+$/.test(p.membershipId));
     if (!todo.length) return;
-    const src = this.cfg.nameTable.replace(/\\/g, '/').replace(/'/g, "''");
     const byId = new Map(todo.map((p) => [p.membershipId, p]));
-    for (let i = 0; i < todo.length; i += 2000) {
-      const chunk = todo.slice(i, i + 2000);
+    // Bucketed table (directory of b=NN.parquet, bucket = mid % N, each sorted by mid): read only the buckets
+    // these partners fall in, so row groups are skipped by mid. A glob over unbucketed parts reads every file.
+    const groups = nameTableGroups(this.cfg.nameTable, todo.map((p) => p.membershipId));
+    for (const [src, members] of groups)
+    for (let i = 0; i < members.length; i += 2000) {
+      const chunk = members.slice(i, i + 2000).map((id) => byId.get(id)!);
       const vals = chunk.map((p) => `(${BigInt(p.membershipId)}, ${p.lastPlayedTogether ? sqlStr(p.lastPlayedTogether.replace('T', ' ').replace('Z', '')) : 'NULL'})`).join(',');
       const ids = chunk.map((p) => String(BigInt(p.membershipId))).join(',');
       const rows = (await db.all(`
         WITH q(mid, t) AS (SELECT * FROM (VALUES ${vals})),
         h AS (SELECT CAST(mid AS BIGINT) AS mid, name, CAST(first_seen AS TIMESTAMP) AS fs, CAST(last_seen AS TIMESTAMP) AS ls
-              FROM read_parquet('${src}') WHERE mid IN (${ids}))
+              FROM read_parquet(${src}) WHERE mid IN (${ids}))
         SELECT CAST(q.mid AS VARCHAR) AS mid,
                arg_max(h.name, (CASE WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) AND h.ls >= CAST(q.t AS TIMESTAMP) THEN 2
                                      WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) THEN 1 ELSE 0 END) * 10000000000000 + epoch(h.fs)) AS name
