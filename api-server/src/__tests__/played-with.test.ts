@@ -5,7 +5,7 @@ import { Database } from 'duckdb-async';
 import express from 'express';
 import { AddressInfo } from 'net';
 import { createPlayedWithRouter } from '../routes/played-with.routes';
-import { loadPlayedWithConfig, planBands, PlayedWithService, sourceStemForBand } from '../services/played-with.service';
+import { KNOWN_BOT_IDS, loadPlayedWithConfig, planBands, PlayedWithService, sourceStemForBand } from '../services/played-with.service';
 
 describe('Played With band planning', () => {
   const cfg = { legacyRoot: 'L', compactRoot: 'C', splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000 };
@@ -138,5 +138,54 @@ describe('Played With route (background job + polling)', () => {
     const r = await fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"membershipIds":["x"]}' });
     expect(r.status).toBe(400);
     srv.close();
+  });
+});
+
+describe('Played With roster caps + bots', () => {
+  let tmp: string;
+  beforeAll(async () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'pwcap-'));
+    const L = path.join(tmp, 'legacy', 'by_iid_1m', 'iid_band=8100');
+    fs.mkdirSync(L, { recursive: true });
+    const db = await Database.create(':memory:');
+    const q = (p: string) => p.replace(/\\/g, '/');
+    // 8100000001: raid outside window, 19 rows (6 players x 3 chars + 1) -> dropped
+    // 8100000002: raid outside window, 18 rows -> kept
+    // 8100000003: glitch-window raid, 30 rows -> kept; 8100000004: glitch-window raid, 37 rows -> dropped
+    // 8100000005: strike with a bot -> dropped; 8100000006: 25-row non-raid -> kept (no cap)
+    await db.all(`COPY (
+      SELECT 8100000001::BIGINT AS instance_id, CAST(CASE WHEN i=0 THEN 1 ELSE 100+i END AS VARCHAR) AS membership_id, 'n' AS display_name, '2022-01-01T00:00:00Z' AS period, 4::SMALLINT AS mode, 1::UINTEGER AS activity_hash FROM range(19) t(i)
+      UNION ALL SELECT 8100000002, CAST(CASE WHEN i=0 THEN 1 ELSE 200+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 4, 1 FROM range(18) t(i)
+      UNION ALL SELECT 8100000003, CAST(CASE WHEN i=0 THEN 1 ELSE 300+i END AS VARCHAR), 'n', '2021-03-01T00:00:00Z', 4, 1 FROM range(30) t(i)
+      UNION ALL SELECT 8100000004, CAST(CASE WHEN i=0 THEN 1 ELSE 400+i END AS VARCHAR), 'n', '2021-03-02T00:00:00Z', 4, 1 FROM range(37) t(i)
+      UNION ALL SELECT 8100000005, CAST(CASE WHEN i=0 THEN 1 WHEN i=1 THEN 999 ELSE 500+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 3, 1 FROM range(3) t(i)
+      UNION ALL SELECT 8100000006, CAST(CASE WHEN i=0 THEN 1 ELSE 600+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 5, 1 FROM range(25) t(i)
+    ) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
+    await db.close();
+  });
+  afterAll(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* handles */ } });
+
+  test('drops >18-row raids, keeps glitch raids up to 36 rows, skips bot games, no cap on other modes', async () => {
+    const svc = new PlayedWithService({
+      legacyRoot: path.join(tmp, 'legacy', 'by_iid_1m'), compactRoot: '', compactDoneDir: '',
+      splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000, threads: 1, memoryLimit: '512MB', excludeIds: ['999'],
+    });
+    const ids = ['8100000001', '8100000002', '8100000003', '8100000004', '8100000005', '8100000006'];
+    const r = await svc.getPartners(['1'], ids.map((instanceId) => ({ instanceId, durationSeconds: 60 })), 100000);
+    await svc.close();
+    const has = (lo: number) => r.partners.some((p) => Number(p.membershipId) > lo && Number(p.membershipId) < lo + 100);
+    expect(has(100)).toBe(false); // 19-row raid
+    expect(has(200)).toBe(true);  // 18-row raid
+    expect(has(300)).toBe(true);  // glitch raid, 30 rows
+    expect(has(400)).toBe(false); // glitch raid, 37 rows
+    expect(has(500)).toBe(false); // bot game
+    expect(r.partners.some((p) => p.membershipId === '999')).toBe(false);
+    expect(has(600)).toBe(true);  // non-raid, uncapped
+  });
+
+  test('config always includes the known bot ids', () => {
+    const cfg = loadPlayedWithConfig({ PLAYED_WITH_LEGACY_ROOT: 'x', PLAYED_WITH_EXCLUDE_IDS: '123, abc' } as any)!;
+    expect(cfg.excludeIds).toEqual(expect.arrayContaining([...KNOWN_BOT_IDS, '123']));
+    expect(cfg.excludeIds).not.toContain('abc');
   });
 });

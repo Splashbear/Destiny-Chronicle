@@ -23,6 +23,8 @@ export interface PlayedWithConfig {
   compactMaxIid: number;
   threads: number;
   memoryLimit: string;
+  /** games containing any of these membership ids are skipped (bots). */
+  excludeIds?: string[];
 }
 
 export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): PlayedWithConfig | null {
@@ -39,6 +41,7 @@ export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): Play
     compactMaxIid: Number(env.PLAYED_WITH_COMPACT_MAX_IID || 16_000_000_000),
     threads: Math.max(1, parseInt(env.PLAYED_WITH_DUCKDB_THREADS || '2', 10) || 2),
     memoryLimit: (env.PLAYED_WITH_DUCKDB_MEMORY || '2GB').replace(/'/g, ''),
+    excludeIds: [...new Set([...KNOWN_BOT_IDS, ...(env.PLAYED_WITH_EXCLUDE_IDS || '').split(',').map((x) => x.trim()).filter((x) => /^\d+$/.test(x))])],
   };
 }
 
@@ -141,6 +144,26 @@ const PERIOD_COMPACT = `strftime(CAST(period AS TIMESTAMP), '%Y-%m-%dT%H:%M:%SZ'
  */
 export const HUB_CLAUSE = ` AND NOT (COALESCE(mode, -1) = 40 OR (COALESCE(mode, -1) = 0 AND activity_hash IN (${[...SOCIAL_HUB_ACTIVITY_HASHES].join(',')})))`;
 
+/**
+ * Oversized games (checkpoint-bot lobbies, Bungie mega-PGCRs) are dropped from Played With only.
+ * Raids are 6-player; roster rows are per character, so up to 6 players x 3 characters = 18 rows.
+ * The 12-person raid glitch (2021-02-26 .. 2021-03-16 UTC) is kept: cap 36 (12 x 3) in that window.
+ * Other activity types are not capped here (they only lose games that contain an excluded bot).
+ */
+export const RAID_MODE = 4;
+export const RAID_ROW_CAP = 18;
+export const GLITCH_RAID_ROW_CAP = 36;
+export const GLITCH_FROM = '2021-02-26';
+export const GLITCH_TO_EXCL = '2021-03-17';
+const ROSTER_OK = `NOT (COALESCE(md, -1) = ${RAID_MODE} AND nrows > CASE WHEN per >= '${GLITCH_FROM}' AND per < '${GLITCH_TO_EXCL}' THEN ${GLITCH_RAID_ROW_CAP} ELSE ${RAID_ROW_CAP} END)`;
+
+/** Known checkpoint/carry bot accounts (public accounts named by the site owner); games containing them are skipped. */
+export const KNOWN_BOT_IDS: readonly string[] = [
+  '4611686018518440725', // LuckBot9
+  '4611686018540181977', // destinycheckpoints
+  '4611686018536692735', // TravelersChosenTeam
+];
+
 const sqlStr = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 export class PlayedWithService {
@@ -219,13 +242,21 @@ export class PlayedWithService {
       await db.all(`INSERT INTO pw_mine VALUES ${chunk.join(',')}`);
     }
     const self = selfIds.length ? selfIds.map((s) => sqlStr(String(s))).join(',') : "''";
+    const bots = this.cfg.excludeIds && this.cfg.excludeIds.length
+      ? this.cfg.excludeIds.map((s) => sqlStr(String(s))).join(',') : "''";
     const one = (r: BandRead) => {
       const src = `read_parquet([${r.files.map(sqlStr).join(',')}], union_by_name=true)`;
       const inList = r.ids.map((id) => String(BigInt(id))).join(',');
-      const where = `WHERE instance_id IN (${inList}) AND CAST(membership_id AS VARCHAR) NOT IN (${self})${HUB_CLAUSE}`;
-      return r.kind === 'legacy'
-        ? `SELECT CAST(instance_id AS BIGINT), CAST(membership_id AS VARCHAR), NULLIF(display_name, ''), ${PERIOD_LEGACY} FROM ${src} ${where}`
-        : `SELECT CAST(instance_id AS BIGINT), CAST(membership_id AS VARCHAR), CAST(NULL AS VARCHAR), ${PERIOD_COMPACT} FROM ${src} ${where}`;
+      const legacy = r.kind === 'legacy';
+      const per = legacy ? PERIOD_LEGACY : PERIOD_COMPACT;
+      const name = legacy ? `NULLIF(display_name, '')` : 'CAST(NULL AS VARCHAR)';
+      // Roster rows are one per character (PGCR entries). Window over the whole roster (self included).
+      return `SELECT iid, mid, nm, per FROM (
+          SELECT CAST(instance_id AS BIGINT) AS iid, CAST(membership_id AS VARCHAR) AS mid, ${name} AS nm, ${per} AS per,
+                 mode AS md, count(*) OVER (PARTITION BY instance_id) AS nrows,
+                 bool_or(CAST(membership_id AS VARCHAR) IN (${bots})) OVER (PARTITION BY instance_id) AS hasbot
+          FROM ${src} WHERE instance_id IN (${inList})${HUB_CLAUSE}
+        ) WHERE mid NOT IN (${self}) AND NOT hasbot AND ${ROSTER_OK}`;
     };
     // Small batches on parallel connections: one big UNION ALL plans every read_parquet serially.
     const batches: BandRead[][] = [];
