@@ -75,8 +75,11 @@ async function main(): Promise<void> {
     try { await processOne(store, svc, it); }
     catch (e) {
       const q2 = store.readQueue(); const c = q2.items[it.key];
-      if (c) { c.error = String(e); c.attempts += 1; c.status = c.attempts >= 3 ? 'failed' : 'pending'; c.checkedAt = new Date().toISOString(); store.writeQueue(q2); }
-      log('item error', { key: it.key, error: String(e) }); await sleep(IDLE_MS);
+      // API down (e.g. after a reboot) is not the account's fault: keep it pending, don't burn attempts.
+      const apiDown = /fetch failed|ECONNREFUSED|ECONNRESET|HTTP 5\d\d/.test(String(e));
+      if (c) { c.error = String(e); if (!apiDown) c.attempts += 1; c.status = c.attempts >= 3 ? 'failed' : 'pending'; c.checkedAt = new Date().toISOString(); store.writeQueue(q2); }
+      log(apiDown ? 'archive API unreachable, waiting' : 'item error', { key: it.key, error: String(e) });
+      await sleep(apiDown ? Math.max(IDLE_MS, 60_000) : IDLE_MS);
     } finally { await svc.close(); }
   }
 }
