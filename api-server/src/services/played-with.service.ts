@@ -27,12 +27,22 @@ export interface PlayedWithConfig {
   tempDir?: string;
   /** games containing any of these membership ids are skipped (bots). */
   excludeIds?: string[];
+  /**
+   * Minimal index (instance_id, membership_id, period, activity_hash, mode) converted from both ranges.
+   * Layout: <minRoot>/{legacy,compact}/by_iid_1m/iid_band=N/*.parquet, done markers <minRoot>/markers/{legacy,compact}/N.json.
+   * A band with a marker is read from here; other bands fall back to the original roots.
+   */
+  minRoot?: string;
+  /** Name-range table (mid BIGINT, name, first_seen, last_seen) parquet file(s) or glob; fills names for every partner. */
+  nameTable?: string;
 }
+
+export const PRIVATE_GUARDIAN = 'Private Guardian';
 
 export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): PlayedWithConfig | null {
   const legacyRoot = (env.PLAYED_WITH_LEGACY_ROOT || env.PLAYED_WITH_ROOT || '').trim();
   const compactRoot = (env.PLAYED_WITH_COMPACT_ROOT || '').trim();
-  if (!legacyRoot && !compactRoot) return null;
+  if (!legacyRoot && !compactRoot && !(env.PLAYED_WITH_MIN_ROOT || '').trim()) return null;
   const compactDoneDir = (env.PLAYED_WITH_COMPACT_DONE_DIR || '').trim()
     || (compactRoot ? path.join(path.dirname(compactRoot), '_w38_state', 'done') : '');
   return {
@@ -43,8 +53,10 @@ export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): Play
     compactMaxIid: Number(env.PLAYED_WITH_COMPACT_MAX_IID || 16_000_000_000),
     threads: Math.max(1, parseInt(env.PLAYED_WITH_DUCKDB_THREADS || '2', 10) || 2),
     memoryLimit: (env.PLAYED_WITH_DUCKDB_MEMORY || '2GB').replace(/'/g, ''),
-    tempDir: (env.PLAYED_WITH_DUCKDB_TEMP_DIR || '').trim() || defaultTempDir(compactRoot || legacyRoot),
+    tempDir: (env.PLAYED_WITH_DUCKDB_TEMP_DIR || '').trim() || defaultTempDir(compactRoot || legacyRoot || path.join((env.PLAYED_WITH_MIN_ROOT || '').trim(), 'x')),
     excludeIds: [...new Set([...KNOWN_BOT_IDS, ...(env.PLAYED_WITH_EXCLUDE_IDS || '').split(',').map((x) => x.trim()).filter((x) => /^\d+$/.test(x))])],
+    minRoot: (env.PLAYED_WITH_MIN_ROOT || '').trim() || undefined,
+    nameTable: (env.PLAYED_WITH_NAME_TABLE || '').trim() || undefined,
   };
 }
 
@@ -62,6 +74,8 @@ export function sourceStemForBand(band: number): string {
 export interface BandPlan {
   legacy: Map<number, string[]>;
   compact: Map<number, string[]>;
+  /** bands served from the minimal index (either range). */
+  minimal: Map<number, string[]>;
   /** instance ids we cannot answer from the index (unfinished band, above range, no root). */
   uncovered: string[];
   uncoveredReasons: Record<string, number>;
@@ -70,9 +84,10 @@ export interface BandPlan {
 export function planBands(
   instanceIds: Iterable<string>,
   cfg: Pick<PlayedWithConfig, 'legacyRoot' | 'compactRoot' | 'splitIid' | 'compactMaxIid'>,
-  compactDoneStems: ReadonlySet<string>
+  compactDoneStems: ReadonlySet<string>,
+  minimalBands: ReadonlySet<number> = new Set()
 ): BandPlan {
-  const plan: BandPlan = { legacy: new Map(), compact: new Map(), uncovered: [], uncoveredReasons: {} };
+  const plan: BandPlan = { legacy: new Map(), compact: new Map(), minimal: new Map(), uncovered: [], uncoveredReasons: {} };
   const miss = (id: string, why: string) => {
     plan.uncovered.push(id);
     plan.uncoveredReasons[why] = (plan.uncoveredReasons[why] || 0) + 1;
@@ -85,7 +100,9 @@ export function planBands(
     const n = Number(id);
     if (!Number.isFinite(n) || n <= 0) { miss(id, 'invalid'); continue; }
     const band = Math.floor(n / BAND_SIZE);
-    if (n < cfg.splitIid) {
+    if (n < cfg.compactMaxIid && minimalBands.has(band)) {
+      push(plan.minimal, band, id);
+    } else if (n < cfg.splitIid) {
       if (cfg.legacyRoot) push(plan.legacy, band, id); else miss(id, 'no_legacy_root');
     } else if (n < cfg.compactMaxIid) {
       if (!cfg.compactRoot) miss(id, 'no_compact_root');
@@ -112,6 +129,8 @@ export interface PartnerRow {
   lastPlayedTogether?: string;
   /** most recent shared instance (used to fill missing names from the PGCR). */
   lastInstanceId?: string;
+  /** where displayName came from; 'private' = no name anywhere (shown as Private Guardian). */
+  nameSource?: 'index' | 'name_table' | 'pgcr' | 'private';
 }
 
 export interface PlayedWithCoverage {
@@ -122,6 +141,7 @@ export interface PlayedWithCoverage {
   uncoveredReasons: Record<string, number>;
   legacyBands: number;
   compactBands: number;
+  minimalBands: number;
 }
 
 export interface PlayedWithResult {
@@ -189,6 +209,30 @@ export class PlayedWithService {
 
   constructor(private readonly cfg: PlayedWithConfig, private readonly resolveName?: NameResolver) {}
 
+  private minCache: { at: number; bands: Set<number> } | null = null;
+
+  /** Bands with a minimal-index done marker (either range); re-read at most once a minute. */
+  readMinimalBands(now = Date.now()): Set<number> {
+    if (!this.cfg.minRoot) return new Set();
+    if (this.minCache && now - this.minCache.at < 60_000) return this.minCache.bands;
+    const bands = new Set<number>();
+    for (const kind of ['legacy', 'compact']) {
+      try {
+        for (const f of fs.readdirSync(path.join(this.cfg.minRoot, 'markers', kind))) {
+          if (f.endsWith('.json')) bands.add(Number(f.slice(0, -5)));
+        }
+      } catch { /* no markers for this range */ }
+    }
+    this.minCache = { at: now, bands };
+    return bands;
+  }
+
+  private minimalBandFiles(band: number): string[] {
+    const root = this.cfg.minRoot!;
+    const kind = band * BAND_SIZE < this.cfg.splitIid ? 'legacy' : 'compact';
+    return bandFiles(path.join(root, kind, 'by_iid_1m'), band);
+  }
+
   /** Done-marker stems currently present (re-read per request so new W38 files appear without restart). */
   readCompactDoneStems(): Set<string> {
     const out = new Set<string>();
@@ -204,7 +248,7 @@ export class PlayedWithService {
       this.db = await Database.create(':memory:');
       await this.db.all(`SET threads=${this.cfg.threads}`);
       await this.db.all(`SET memory_limit='${this.cfg.memoryLimit}'`);
-    const tmp = (this.cfg.tempDir || defaultTempDir(this.cfg.compactRoot || this.cfg.legacyRoot)).replace(/'/g, '');
+    const tmp = (this.cfg.tempDir || defaultTempDir(this.cfg.compactRoot || this.cfg.legacyRoot || path.join(this.cfg.minRoot || '.', 'x'))).replace(/'/g, '');
     await this.db.all(`SET temp_directory='${tmp.replace(/\\/g, '/')}'`);
     await this.db.all('SET preserve_insertion_order=false');
     }
@@ -221,16 +265,16 @@ export class PlayedWithService {
   private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number): Promise<PlayedWithResult> {
     const durations = new Map<string, number>();
     for (const i of instances) if (i.instanceId) durations.set(String(i.instanceId), Number(i.durationSeconds) || 0);
-    const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems());
+    const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands());
 
     // Per band: files + this player's ids. Each band is read with its own IN-list so DuckDB
     // can skip row groups by min/max (files are sorted by instance_id); a join would scan whole bands.
-    type BandRead = { kind: 'legacy' | 'compact'; files: string[]; ids: string[] };
+    type BandRead = { kind: 'legacy' | 'compact' | 'minimal'; files: string[]; ids: string[] };
     const reads: BandRead[] = [];
     const covered: string[] = [];
-    const collect = (kind: 'legacy' | 'compact', root: string, m: Map<number, string[]>) => {
+    const collect = (kind: 'legacy' | 'compact' | 'minimal', root: string, m: Map<number, string[]>) => {
       for (const [band, ids] of m) {
-        const files = bandFiles(root, band);
+        const files = kind === 'minimal' ? this.minimalBandFiles(band) : bandFiles(root, band);
         if (files.length) { reads.push({ kind, files, ids }); covered.push(...ids); }
         else {
           plan.uncovered.push(...ids);
@@ -240,6 +284,7 @@ export class PlayedWithService {
     };
     collect('legacy', this.cfg.legacyRoot, plan.legacy);
     collect('compact', this.cfg.compactRoot, plan.compact);
+    collect('minimal', '', plan.minimal);
     const coverage: PlayedWithCoverage = {
       complete: plan.uncovered.length === 0,
       totalInstances: durations.size,
@@ -248,6 +293,7 @@ export class PlayedWithService {
       uncoveredReasons: plan.uncoveredReasons,
       legacyBands: plan.legacy.size,
       compactBands: plan.compact.size,
+      minimalBands: plan.minimal.size,
     };
     if (!covered.length) return { partners: [], coverage };
 
@@ -267,7 +313,7 @@ export class PlayedWithService {
     const one = (r: BandRead) => {
       const src = `read_parquet([${r.files.map(sqlStr).join(',')}], union_by_name=true)`;
       const inList = r.ids.map((id) => String(BigInt(id))).join(',');
-      const legacy = r.kind === 'legacy';
+      const legacy = r.kind === 'legacy'; // minimal reads like compact: numeric ids, TIMESTAMP period, no names
       const per = legacy ? PERIOD_LEGACY : PERIOD_COMPACT;
       const name = legacy ? `NULLIF(display_name, '')` : 'CAST(NULL AS VARCHAR)';
       // Roster rows are one per character (PGCR entries). Window over the whole roster (self included).
@@ -323,10 +369,42 @@ export class PlayedWithService {
       lastPlayedTogether: r.last_period || undefined,
       lastInstanceId: r.last_iid || undefined,
     }));
+    for (const p of partners) if (p.displayName) p.nameSource = 'index';
     const tAgg = Date.now();
+    await this.fillFromNameTable(db, partners);
     await this.fillMissingNames(partners);
+    for (const p of partners) if (!p.displayName) { p.displayName = PRIVATE_GUARDIAN; p.nameSource = 'private'; }
     logger.info('Played With timing', { bands: reads.length, instances: covered.length, readMs: tRead - tStart, aggMs: tAgg - tRead, namesMs: Date.now() - tAgg });
     return { partners, coverage };
+  }
+
+  /**
+   * Names for every partner without one, from the name-range table: the name whose [first_seen, last_seen]
+   * covers the last shared game; else the latest name first seen before it; else the account's latest name.
+   */
+  private async fillFromNameTable(db: Database, partners: PartnerRow[]): Promise<void> {
+    if (!this.cfg.nameTable) return;
+    const todo = partners.filter((p) => !p.displayName && /^\d+$/.test(p.membershipId));
+    if (!todo.length) return;
+    const src = this.cfg.nameTable.replace(/\\/g, '/').replace(/'/g, "''");
+    const byId = new Map(todo.map((p) => [p.membershipId, p]));
+    for (let i = 0; i < todo.length; i += 2000) {
+      const chunk = todo.slice(i, i + 2000);
+      const vals = chunk.map((p) => `(${BigInt(p.membershipId)}, ${p.lastPlayedTogether ? sqlStr(p.lastPlayedTogether.replace('T', ' ').replace('Z', '')) : 'NULL'})`).join(',');
+      const ids = chunk.map((p) => String(BigInt(p.membershipId))).join(',');
+      const rows = (await db.all(`
+        WITH q(mid, t) AS (SELECT * FROM (VALUES ${vals})),
+        h AS (SELECT CAST(mid AS BIGINT) AS mid, name, CAST(first_seen AS TIMESTAMP) AS fs, CAST(last_seen AS TIMESTAMP) AS ls
+              FROM read_parquet('${src}') WHERE mid IN (${ids}))
+        SELECT CAST(q.mid AS VARCHAR) AS mid,
+               arg_max(h.name, (CASE WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) AND h.ls >= CAST(q.t AS TIMESTAMP) THEN 2
+                                     WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) THEN 1 ELSE 0 END) * 10000000000000 + epoch(h.fs)) AS name
+        FROM q JOIN h ON h.mid = q.mid GROUP BY q.mid`)) as Array<{ mid: string; name: string | null }>;
+      for (const r of rows) {
+        const p = byId.get(String(r.mid));
+        if (p && r.name) { p.displayName = r.name; p.nameSource = 'name_table'; }
+      }
+    }
   }
 
   /** 10-16B rows carry no names: look them up from the PGCR of the last shared game (top partners only). */
@@ -336,7 +414,7 @@ export class PlayedWithService {
     for (const p of todo) {
       try {
         const name = await this.resolveName(p.lastInstanceId!, p.membershipId);
-        if (name) p.displayName = name;
+        if (name) { p.displayName = name; p.nameSource = 'pgcr'; }
       } catch (e) {
         logger.debug('Played With name lookup failed', { membershipId: p.membershipId, error: String(e) });
       }
