@@ -1,5 +1,6 @@
 ﻿import express, { Express, Request, Response } from 'express';
 import fs from 'fs';
+import path from 'path';
 import { loadConfig, validateConfig } from './utils/config';
 import { logger } from './utils/logger';
 import { ArchiveService } from './services/archive.service';
@@ -11,6 +12,7 @@ import { createPlayerActivitiesRouter } from './routes/player-activities.routes'
 import { createPlayedWithRouter } from './routes/played-with.routes';
 import { loadPlayedWithConfig, PlayedWithService } from './services/played-with.service';
 import { SummaryStore } from './services/played-with-summary.store';
+import { PartnerNameRefresher } from './services/partner-name-refresh.service';
 import { freeGiB, installApiGuard, serverStartedAt, SELF_CHECK_TOKEN } from './usage/usage';
 import { startMaintenance } from './usage/maintenance';
 import { installUsageAdminRoute } from './usage/usage-admin';
@@ -108,7 +110,19 @@ async function startServer(): Promise<void> {
       return hit ? hit.display_name : null;
     });
     const summaryDir = (process.env.PLAYED_WITH_SUMMARY_DIR || '').trim();
-    app.use('/played-with', createPlayedWithRouter(archiveService, playedWith, summaryDir ? new SummaryStore(summaryDir) : null));
+    // Live current-name refresh for each page's top partners (PLAYED_WITH_NAME_REFRESH_TOP=0 disables).
+    const refreshTop = Number(process.env.PLAYED_WITH_NAME_REFRESH_TOP ?? 25);
+    const nameCache = (process.env.PLAYED_WITH_NAME_CACHE || '').trim()
+      || path.join(summaryDir || playedWithConfig.tempDir || '.', 'partner_names_cache.json');
+    const names = refreshTop > 0
+      ? new PartnerNameRefresher((mid) => bungieApiService.getCurrentDisplayName(mid), {
+          cacheFile: nameCache, top: refreshTop,
+          concurrency: Number(process.env.PLAYED_WITH_NAME_REFRESH_CONCURRENCY || 8),
+          budgetMs: Number(process.env.PLAYED_WITH_NAME_REFRESH_BUDGET_MS || 4000),
+          maxCallsPerMinute: Number(process.env.PLAYED_WITH_NAME_REFRESH_PER_MIN || 120),
+        })
+      : null;
+    app.use('/played-with', createPlayedWithRouter(archiveService, playedWith, summaryDir ? new SummaryStore(summaryDir) : null, names));
     logger.info('Played With enabled', {
       legacy: !!playedWithConfig.legacyRoot,
       compact: !!playedWithConfig.compactRoot,

@@ -124,6 +124,29 @@ export class BungieApiService {
   }
 
   /**
+   * Current Bungie display name for a D2 membership id (any platform, via LinkedProfiles).
+   * Returns null when Bungie has no profile for it; throws on HTTP/API errors.
+   */
+  async getCurrentDisplayName(membershipId: string, timeoutMs = 4000): Promise<string | null> {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`${this.apiRoot}/Destiny2/-1/Profile/${membershipId}/LinkedProfiles/`, { headers: { 'X-API-Key': this.apiKey }, signal: ctl.signal });
+      const data: any = await res.json().catch(() => null);
+      if (!res.ok || !data || data.ErrorCode !== 1) {
+        if (data && (data.ErrorStatus === 'DestinyAccountNotFound' || data.ErrorStatus === 'UserCannotResolveCentralAccount')) return null;
+        throw new BungieApiError(`Bungie LinkedProfiles error: HTTP ${res.status} ${data?.ErrorStatus ?? ''}`.trim(), data?.ErrorCode, data?.ErrorStatus, res.status);
+      }
+      const profiles: any[] = data.Response?.profiles || [];
+      const p = profiles.find((x) => String(x.membershipId) === membershipId) || profiles[0];
+      const name = p ? String(p.displayName || '').trim() : '';
+      return name || null;
+    } finally {
+      clearTimeout(t);
+    }
+  }
+
+  /**
    * Fetch a single PGCR from Bungie API and convert to lean format.
    */
   async getActivityByInstanceId(instanceId: string, game: Game): Promise<LeanActivity | null> {
