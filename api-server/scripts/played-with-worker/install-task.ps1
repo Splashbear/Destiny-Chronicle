@@ -3,7 +3,7 @@
 #   Non-elevated (fallback):  .\install-task.ps1 -EnvFile <worker.env> -AtLogon   -> at logon of the current user
 param([Parameter(Mandatory)][string]$EnvFile, [string]$TaskName = 'DestinyChronicle-PlayedWithWorker', [switch]$AtLogon)
 $runner = Join-Path $PSScriptRoot 'run-worker.cmd'
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$runner`" `"$EnvFile`""
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"`"$runner`" `"$EnvFile`"`""   # outer quotes: cmd /c strips one pair
 $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
   -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
 if ($AtLogon) {

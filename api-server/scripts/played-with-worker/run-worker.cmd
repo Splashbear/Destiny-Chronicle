@@ -12,5 +12,6 @@ cd /d "%~dp0..\.."
 echo {"at":"%date% %time%","msg":"supervisor: starting worker"}>>"%PLAYED_WITH_WORKER_LOG%"
 node dist\workers\played-with-summary.worker.js >>"%PLAYED_WITH_WORKER_LOG%" 2>&1
 echo {"at":"%date% %time%","msg":"supervisor: worker exited %errorlevel%, restarting in 30 s"}>>"%PLAYED_WITH_WORKER_LOG%"
-timeout /t 30 /nobreak >nul
+rem timeout.exe needs a console; ping works in a hidden scheduled task
+ping -n 31 127.0.0.1 >nul
 goto loop
