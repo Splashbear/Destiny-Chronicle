@@ -156,18 +156,19 @@ export const HUB_CLAUSE = ` AND NOT (COALESCE(mode, -1) = 40 OR (COALESCE(mode, 
  * Oversized games (checkpoint-bot lobbies, Bungie mega-PGCRs) are dropped from Played With only.
  * Raids are 6-player; roster rows are per character, so up to 6 players x 3 characters = 18 rows.
  * The 12-person raid glitch (2021-02-26 .. 2021-03-16 UTC) is kept: cap 36 (12 x 3) in that window.
- * Dungeons are 3-player: more than 9 rows (3 x 3) is skipped, no glitch exception.
+ * Dungeons are 3-player: more than 9 rows (3 x 3) is skipped; in the glitch window the cap is 18 (6 x 3).
  * Other activity types are not capped here (they only lose games that contain an excluded bot).
  */
 export const RAID_MODE = 4;
 export const RAID_ROW_CAP = 18;
 export const GLITCH_RAID_ROW_CAP = 36;
 export const DUNGEON_MODE = 82;
-export const DUNGEON_ROW_CAP = 9; // 3 players x 3 characters, no glitch exception
+export const DUNGEON_ROW_CAP = 9; // 3 players x 3 characters
+export const GLITCH_DUNGEON_ROW_CAP = 18; // glitch window: 6 players x 3 characters
 export const GLITCH_FROM = '2021-02-26';
 export const GLITCH_TO_EXCL = '2021-03-17';
 const ROSTER_OK = `NOT (COALESCE(md, -1) = ${RAID_MODE} AND nrows > CASE WHEN per >= '${GLITCH_FROM}' AND per < '${GLITCH_TO_EXCL}' THEN ${GLITCH_RAID_ROW_CAP} ELSE ${RAID_ROW_CAP} END)
-  AND NOT (COALESCE(md, -1) = ${DUNGEON_MODE} AND nrows > ${DUNGEON_ROW_CAP})`;
+  AND NOT (COALESCE(md, -1) = ${DUNGEON_MODE} AND nrows > CASE WHEN per >= '${GLITCH_FROM}' AND per < '${GLITCH_TO_EXCL}' THEN ${GLITCH_DUNGEON_ROW_CAP} ELSE ${DUNGEON_ROW_CAP} END)`;
 
 /** Known checkpoint/carry bot accounts (public accounts named by the site owner); games containing them are skipped. */
 export const KNOWN_BOT_IDS: readonly string[] = [

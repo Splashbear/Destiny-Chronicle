@@ -162,6 +162,8 @@ describe('Played With roster caps + bots', () => {
       UNION ALL SELECT 8100000006, CAST(CASE WHEN i=0 THEN 1 ELSE 600+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 5, 1 FROM range(25) t(i)
       UNION ALL SELECT 8100000007, CAST(CASE WHEN i=0 THEN 1 ELSE 700+i END AS VARCHAR), 'n', '2021-03-01T00:00:00Z', 82, 1 FROM range(10) t(i)
       UNION ALL SELECT 8100000008, CAST(CASE WHEN i=0 THEN 1 ELSE 800+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 82, 1 FROM range(9) t(i)
+      UNION ALL SELECT 8100000009, CAST(CASE WHEN i=0 THEN 1 ELSE 900+i END AS VARCHAR), 'n', '2021-03-01T00:00:00Z', 82, 1 FROM range(19) t(i)
+      UNION ALL SELECT 8100000010, CAST(CASE WHEN i=0 THEN 1 ELSE 1000+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 82, 1 FROM range(10) t(i)
     ) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
     await db.close();
   });
@@ -172,7 +174,7 @@ describe('Played With roster caps + bots', () => {
       legacyRoot: path.join(tmp, 'legacy', 'by_iid_1m'), compactRoot: '', compactDoneDir: '',
       splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000, threads: 1, memoryLimit: '512MB', excludeIds: ['999'],
     });
-    const ids = ['8100000001', '8100000002', '8100000003', '8100000004', '8100000005', '8100000006', '8100000007', '8100000008'];
+    const ids = ['8100000001', '8100000002', '8100000003', '8100000004', '8100000005', '8100000006', '8100000007', '8100000008', '8100000009', '8100000010'];
     const r = await svc.getPartners(['1'], ids.map((instanceId) => ({ instanceId, durationSeconds: 60 })), 100000);
     await svc.close();
     const has = (lo: number) => r.partners.some((p) => Number(p.membershipId) > lo && Number(p.membershipId) < lo + 100);
@@ -183,7 +185,9 @@ describe('Played With roster caps + bots', () => {
     expect(has(500)).toBe(false); // bot game
     expect(r.partners.some((p) => p.membershipId === '999')).toBe(false);
     expect(has(600)).toBe(true);  // non-raid, uncapped
-    expect(has(700)).toBe(false); // dungeon, 10 rows, glitch dates give no exception
+    expect(has(700)).toBe(true);  // glitch-window dungeon, 10 rows (cap 18)
+    expect(has(900)).toBe(false); // glitch-window dungeon, 19 rows
+    expect(has(1000)).toBe(false); // dungeon outside window, 10 rows
     expect(has(800)).toBe(true);  // dungeon, 9 rows
   });
 
