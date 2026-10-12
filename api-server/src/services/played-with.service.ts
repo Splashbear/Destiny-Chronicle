@@ -404,7 +404,9 @@ export class PlayedWithService {
 
   /**
    * Names for every partner without one, from the name-range table: the name whose [first_seen, last_seen]
-   * covers the last shared game; else the latest name first seen before it; else the account's latest name.
+   * covers the last shared game; else a name first seen before it; else any name. Ties (overlapping ranges, or a
+   * game after the table ends) go to the most recently seen name (latest last_seen): it matched Bungie's current
+   * name in 9 of 12 spot checks, vs 7 of 12 for latest first_seen.
    */
   private async fillFromNameTable(db: Database, partners: PartnerRow[]): Promise<void> {
     if (!this.cfg.nameTable) return;
@@ -425,7 +427,7 @@ export class PlayedWithService {
               FROM read_parquet(${src}) WHERE mid IN (${ids}))
         SELECT CAST(q.mid AS VARCHAR) AS mid,
                arg_max(h.name, (CASE WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) AND h.ls >= CAST(q.t AS TIMESTAMP) THEN 2
-                                     WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) THEN 1 ELSE 0 END) * 10000000000000 + epoch(h.fs)) AS name
+                                     WHEN q.t IS NOT NULL AND h.fs <= CAST(q.t AS TIMESTAMP) THEN 1 ELSE 0 END) * 10000000000000 + epoch(h.ls)) AS name
         FROM q JOIN h ON h.mid = q.mid GROUP BY q.mid`)) as Array<{ mid: string; name: string | null }>;
       for (const r of rows) {
         const p = byId.get(String(r.mid));
