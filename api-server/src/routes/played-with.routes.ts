@@ -3,6 +3,7 @@ import { ArchiveService } from '../services/archive.service';
 import { PlayedWithResult, PlayedWithService, PlayerInstance } from '../services/played-with.service';
 import { logger } from '../utils/logger';
 import { isSocialHubActivity } from '../utils/social-hubs';
+import { SummaryStore, summaryKey } from '../services/played-with-summary.store';
 
 /**
  * POST /played-with/stats { membershipIds: string[], limit?: number }
@@ -19,7 +20,7 @@ const MAX_JOBS = 200;
 
 interface Job { started: number; finished?: number; result?: PlayedWithResult; error?: string; promise: Promise<void> }
 
-export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithService): Router {
+export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithService, summaries?: SummaryStore | null): Router {
   const router = Router();
   const jobs = new Map<string, Job>();
 
@@ -60,7 +61,17 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
       : [];
     if (!ids.length) return res.status(400).json({ error: 'membershipIds required' });
     const limit = Math.max(1, Math.min(5000, Number(body.limit) || 500));
-    const key = `${ids.join(',')}|${limit}`;
+    if (summaries) {
+      // Precomputed path: serve the worker's summary, or queue the account and report pending.
+      const skey = summaryKey(ids);
+      const s = summaries.readSummary(skey);
+      if (s) {
+        return res.json({ pending: false, source: 'summary', builtAt: s.builtAt, games: s.games, partners: s.partners.slice(0, limit), coverage: s.coverage });
+      }
+      const st = summaries.status(skey);
+      if (st.status === 'requested' || st.status === 'failed') summaries.request(ids, 'lookup');
+      return res.status(202).json({ pending: true, queued: true, status: st.status === 'failed' ? 'requested' : st.status, position: st.position, partners: [] });
+    }    const key = `${ids.join(',')}|${limit}`;
     let job = jobs.get(key);
     if (job && job.finished && (job.error || Date.now() - job.finished > CACHE_MS)) {
       jobs.delete(key);

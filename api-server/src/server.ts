@@ -10,6 +10,7 @@ import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
 import { createPlayedWithRouter } from './routes/played-with.routes';
 import { loadPlayedWithConfig, PlayedWithService } from './services/played-with.service';
+import { SummaryStore } from './services/played-with-summary.store';
 import { freeGiB, installApiGuard, serverStartedAt, SELF_CHECK_TOKEN } from './usage/usage';
 import { startMaintenance } from './usage/maintenance';
 import { installUsageAdminRoute } from './usage/usage-admin';
@@ -106,7 +107,8 @@ async function startServer(): Promise<void> {
       const hit = rows.find((r) => String(r.membership_id) === membershipId && r.display_name);
       return hit ? hit.display_name : null;
     });
-    app.use('/played-with', createPlayedWithRouter(archiveService, playedWith));
+    const summaryDir = (process.env.PLAYED_WITH_SUMMARY_DIR || '').trim();
+    app.use('/played-with', createPlayedWithRouter(archiveService, playedWith, summaryDir ? new SummaryStore(summaryDir) : null));
     logger.info('Played With enabled', {
       legacy: !!playedWithConfig.legacyRoot,
       compact: !!playedWithConfig.compactRoot,
