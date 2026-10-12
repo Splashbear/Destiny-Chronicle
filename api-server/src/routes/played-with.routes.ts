@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { ArchiveService } from '../services/archive.service';
-import { PlayedWithResult, PlayedWithService, PlayerInstance } from '../services/played-with.service';
+import { PartnerRow, PlayedWithResult, PlayedWithService, PlayerInstance } from '../services/played-with.service';
 import { logger } from '../utils/logger';
 import { isSocialHubActivity } from '../utils/social-hubs';
 import { SummaryStore, summaryKey } from '../services/played-with-summary.store';
+import { PartnerNameRefresher } from '../services/partner-name-refresh.service';
 
 /**
  * POST /played-with/stats { membershipIds: string[], limit?: number }
@@ -20,7 +21,7 @@ const MAX_JOBS = 200;
 
 interface Job { started: number; finished?: number; result?: PlayedWithResult; error?: string; promise: Promise<void> }
 
-export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithService, summaries?: SummaryStore | null): Router {
+export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithService, summaries?: SummaryStore | null, names?: PartnerNameRefresher | null): Router {
   const router = Router();
   const jobs = new Map<string, Job>();
 
@@ -66,7 +67,9 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
       const skey = summaryKey(ids);
       const s = summaries.readSummary(skey);
       if (s) {
-        return res.json({ pending: false, source: 'summary', builtAt: s.builtAt, games: s.games, partners: s.partners.slice(0, limit), coverage: s.coverage });
+        const partners = (s.partners as PartnerRow[]).slice(0, limit).map((p) => ({ ...p }));
+        const nameRefresh = names ? await names.refresh(partners) : undefined;
+        return res.json({ pending: false, source: 'summary', builtAt: s.builtAt, games: s.games, partners, coverage: s.coverage, nameRefresh });
       }
       const st = summaries.status(skey);
       if (st.status === 'requested' || st.status === 'failed') summaries.request(ids, 'lookup');
@@ -85,7 +88,9 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
       return res.status(202).json({ pending: true, partners: [], elapsedMs: Date.now() - job.started });
     }
     if (job.error || !job.result) return res.status(500).json({ error: 'played with lookup failed' });
-    return res.json({ pending: false, ...job.result, ms: job.finished - job.started });
+    const partners = job.result.partners.map((p) => ({ ...p }));
+    const nameRefresh = names ? await names.refresh(partners) : undefined;
+    return res.json({ pending: false, ...job.result, partners, ms: job.finished - job.started, nameRefresh });
   });
   return router;
 }

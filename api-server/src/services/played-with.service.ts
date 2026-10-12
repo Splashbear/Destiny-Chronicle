@@ -154,7 +154,7 @@ export interface PartnerRow {
   /** most recent shared instance (used to fill missing names from the PGCR). */
   lastInstanceId?: string;
   /** where displayName came from; 'private' = no name anywhere (shown as Private Guardian). */
-  nameSource?: 'index' | 'name_table' | 'pgcr' | 'private';
+  nameSource?: 'index' | 'name_table' | 'pgcr' | 'bungie' | 'private';
 }
 
 export interface PlayedWithCoverage {
