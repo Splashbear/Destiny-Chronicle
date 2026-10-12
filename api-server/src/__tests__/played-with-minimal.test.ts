@@ -92,4 +92,19 @@ describe('Played With minimal index + name table', () => {
     expect(rd.partners).toEqual(rf.partners);
     expect(rd.partners.find((p) => p.membershipId === '2')).toMatchObject({ displayName: 'FriendNew', nameSource: 'name_table' });
   });
+
+  test('tie rule: when no range covers the last shared game, the most recently seen name wins (not the latest first seen)', async () => {
+    const tie = path.join(M, 'names_tie.parquet');
+    const db = await Database.create(':memory:');
+    // Partner 2's last shared game is 2021-01-01 (the 10-16B game). Neither range covers it.
+    // 'Long' was first seen earlier but last seen later than 'Short': 'Long' is the name in use most recently.
+    await db.all(`COPY (SELECT * FROM (VALUES
+      (2::BIGINT, 'Long', TIMESTAMP '2019-01-01', TIMESTAMP '2020-12-01'),
+      (2, 'Short', TIMESTAMP '2020-06-01', TIMESTAMP '2020-09-01')) t(mid, name, first_seen, last_seen)) TO '${q(tie)}' (FORMAT parquet)`);
+    await db.close();
+    const base = { compactDoneDir: '', splitIid: 1e10, compactMaxIid: 1.6e10, threads: 1, memoryLimit: '512MB', tempDir: path.join(tmp, 't3') };
+    const S = new PlayedWithService({ ...base, legacyRoot: '', compactRoot: '', minRoot: M, nameTable: tie }, async () => null);
+    const r = await S.getPartners(['1'], inst); await S.close();
+    expect(r.partners.find((p) => p.membershipId === '2')).toMatchObject({ displayName: 'Long', nameSource: 'name_table', lastPlayedTogether: '2021-01-01T00:00:00Z' });
+  });
 });
