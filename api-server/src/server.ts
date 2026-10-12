@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from 'express';
+﻿import express, { Express, Request, Response } from 'express';
 import fs from 'fs';
 import { loadConfig, validateConfig } from './utils/config';
 import { logger } from './utils/logger';
@@ -10,7 +10,8 @@ import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
 import { createPlayedWithRouter } from './routes/played-with.routes';
 import { loadPlayedWithConfig, PlayedWithService } from './services/played-with.service';
-import { freeGiB, installApiGuard, serverStartedAt } from './usage/usage';
+import { freeGiB, installApiGuard, serverStartedAt, SELF_CHECK_TOKEN } from './usage/usage';
+import { startMaintenance } from './usage/maintenance';
 import { installUsageAdminRoute } from './usage/usage-admin';
 
 function fsExists(p: string): boolean {
@@ -161,6 +162,22 @@ async function startServer(): Promise<void> {
 
   app.listen(config.port, () => {
     logger.info(`Server listening on port ${config.port}`);
+    startMaintenance({
+      port: config.port,
+      gapRoot: config.gapIndexRoot,
+      compactRoot: config.compactIndexRoot,
+      watermarkPath: config.watermarkPath,
+      expectComplete: parseInt(process.env.HEALTH_EXPECT_COMPLETE || '256', 10),
+      minFreeGiB: parseInt(process.env.HEALTH_MIN_FREE_GIB || '50', 10),
+      sampleMid: process.env.HEALTH_SAMPLE_MID || '',
+      sampleGame: process.env.HEALTH_SAMPLE_GAME || 'D2',
+      logDir: process.env.USAGE_LOG_DIR || '',
+      outDir: process.env.USAGE_OUT_DIR || '',
+      retentionDays: parseInt(process.env.USAGE_RETAIN_DAYS || '180', 10),
+      checkHourEt: parseInt(process.env.HEALTH_CHECK_HOUR_ET || '4', 10),
+      freeGiB,
+      selfToken: SELF_CHECK_TOKEN,
+    });
     logger.info('DC-facing endpoints (PgcrLite format):');
     logger.info(`  GET  http://localhost:${config.port}/pgcr/:instanceId?game=D2&format=lite`);
     logger.info(`  POST http://localhost:${config.port}/pgcr/batch`);
