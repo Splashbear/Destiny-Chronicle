@@ -1,5 +1,6 @@
 ﻿import crypto from 'crypto';
 import fs from 'fs';
+import net from 'net';
 import path from 'path';
 import { Express, Request, Response, NextFunction } from 'express';
 
@@ -86,6 +87,29 @@ export function extractLookup(
   const clean = [...new Set(ids.map((s) => s.trim()).filter((s) => MID_RE.test(s)))];
   return { membershipIds: clean, instanceId };
 }
+function isLoopback(addr: string): boolean {
+  return addr === '::1' || /^(::ffff:)?127\./.test(addr);
+}
+
+/**
+ * Rate-limit key for the visitor. Behind the Cloudflare tunnel every request arrives
+ * from loopback (cloudflared), so only then is CF-Connecting-IP trusted; a direct
+ * (non-loopback) client can't spoof it. Kept in memory only, never logged or written.
+ */
+export function clientKey(req: Pick<Request, 'headers' | 'socket'>): string {
+  const remote = req.socket?.remoteAddress || 'unknown';
+  if (isLoopback(remote)) {
+    const cf = req.headers['cf-connecting-ip'];
+    const v = (Array.isArray(cf) ? cf[0] : cf || '').trim();
+    if (v && net.isIP(v)) return v;
+  }
+  return remote;
+}
+
+function retryAfterSec(oldest: number, now: number): number {
+  return Math.max(1, Math.ceil((oldest + 60000 - now) / 1000));
+}
+
 function coverageOf(body: unknown): { level?: string; source?: string; rows?: number } {
   if (!body || typeof body !== 'object') return {};
   const b = body as Record<string, unknown>;
@@ -113,9 +137,11 @@ export function installApiGuard(app: Express): void {
   const maxSpanDays = envInt('PGCR_MAX_DATE_SPAN_DAYS', 5000);
   const maxInflight = envInt('PGCR_MAX_INFLIGHT', 4);
   const maxQueue = envInt('PGCR_MAX_QUEUE', 32);
-  const ratePerMin = envInt('PGCR_RATE_PER_MIN', 120);
+  const ratePerMin = envInt('PGCR_RATE_PER_MIN', 240);
+  const globalPerMin = envInt('PGCR_GLOBAL_RATE_PER_MIN', 3000);
   const timeoutMs = envInt('PGCR_REQUEST_TIMEOUT_MS', 120000);
   const hits = new Map<string, number[]>();
+  const globalHits: number[] = [];
   let inflight = 0;
   const waiters: Array<() => void> = [];
 
@@ -147,18 +173,25 @@ export function installApiGuard(app: Express): void {
       if (Number.isFinite(span) && span > maxSpanDays) {
         return res.status(400).json({ error: `date span exceeds ${maxSpanDays} days` });
       }
-    }
 
-    const key = req.socket.remoteAddress || 'local';
+    }
+    const key = clientKey(req);
     const now = Date.now();
     const windowStart = now - 60000;
+    while (globalHits.length && globalHits[0] <= windowStart) globalHits.shift();
+    if (globalHits.length >= globalPerMin) {
+      res.setHeader('Retry-After', String(retryAfterSec(globalHits[0], now)));
+      return res.status(429).json({ error: 'Server is busy, try again shortly' });
+    }
     const prev = (hits.get(key) || []).filter((t) => t > windowStart);
     if (prev.length >= ratePerMin) {
-      res.setHeader('Retry-After', '2');
+      hits.set(key, prev);
+      res.setHeader('Retry-After', String(retryAfterSec(prev[0], now)));
       return res.status(429).json({ error: 'Rate limit exceeded' });
     }
     prev.push(now);
     hits.set(key, prev);
+    globalHits.push(now);
     if (hits.size > 5000) {
       for (const [k, v] of hits) {
         if (v.every((t) => t <= windowStart)) hits.delete(k);
