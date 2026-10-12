@@ -1,8 +1,12 @@
+﻿import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Express, Request, Response, NextFunction } from 'express';
 
 const startedAt = new Date().toISOString();
+
+/** Per-process token so only the server's own self-check is tagged self (header can't be spoofed). */
+export const SELF_CHECK_TOKEN = crypto.randomBytes(16).toString('hex');
 
 export function serverStartedAt(): string {
   return startedAt;
@@ -52,19 +56,36 @@ export function appendUsage(line: Record<string, unknown>): void {
   });
 }
 
-function membershipIdsFrom(req: Request): string[] {
-  const fromParam = req.params?.membershipId || req.params?.instanceId;
-  if (req.body && Array.isArray(req.body.membershipIds)) {
-    return req.body.membershipIds.map((x: unknown) => String(x));
-  }
-  const q = req.query?.membershipId;
-  if (typeof q === 'string' && q) return [q];
-  if (typeof fromParam === 'string' && /^\d+$/.test(fromParam) && req.path.includes('/players/')) {
-    return [fromParam];
-  }
-  return [];
-}
+const MID_RE = /^\d{6,25}$/;
 
+/**
+ * Pull the account(s) and PGCR instance a request looked up from the ORIGINAL URL
+ * (app-level middleware never sees router params). No visitor fields are read.
+ */
+export function extractLookup(
+  originalUrl: string,
+  body: unknown
+): { membershipIds: string[]; instanceId: string | null } {
+  const [p, qs] = String(originalUrl || '').split('?');
+  const ids: string[] = [];
+  let instanceId: string | null = null;
+  const m = p.match(/^\/players\/(\d+)\/activities\/?$/);
+  if (m) ids.push(m[1]);
+  const q = new URLSearchParams(qs || '');
+  const qm = q.get('membershipId');
+  if (qm) ids.push(qm);
+  const b = body as Record<string, unknown> | null;
+  if (b && Array.isArray(b.membershipIds)) {
+    for (const x of b.membershipIds) {
+      const v = typeof x === 'object' && x !== null ? (x as any).membershipId : x;
+      ids.push(String(v));
+    }
+  }
+  const pm = p.match(/^\/(?:api\/)?pgcr\/(\d+)\/?$/);
+  if (pm) instanceId = pm[1];
+  const clean = [...new Set(ids.map((s) => s.trim()).filter((s) => MID_RE.test(s)))];
+  return { membershipIds: clean, instanceId };
+}
 function coverageOf(body: unknown): { level?: string; source?: string; rows?: number } {
   if (!body || typeof body !== 'object') return {};
   const b = body as Record<string, unknown>;
@@ -101,6 +122,8 @@ export function installApiGuard(app: Express): void {
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path === '/health') return next();
     const started = Date.now();
+    const originalUrl = req.originalUrl || req.url;
+    const selfCheck = req.headers['x-dc-selfcheck'] === SELF_CHECK_TOKEN;
     const orig = res.json.bind(res);
     res.json = (body: unknown) => {
       res.locals.usageBody = body;
@@ -162,18 +185,21 @@ export function installApiGuard(app: Express): void {
       });
       res.on('finish', () => {
         release();
-        const mids = membershipIdsFrom(req);
+        const look = extractLookup(originalUrl, req.body);
         const excluded = excludeMids();
-        const self = mids.length > 0 && mids.every((id) => excluded.has(id));
+        const ownIds = look.membershipIds.filter((id) => excluded.has(id));
+        const mids = look.membershipIds.filter((id) => !excluded.has(id));
+        const self = selfCheck || (look.membershipIds.length > 0 && mids.length === 0);
         const cov = coverageOf(res.locals.usageBody);
         const game = (req.query?.game || req.body?.game || '') as string;
         appendUsage({
           ts_utc: new Date().toISOString(),
           ts_et: etStamp(),
-          route: `${req.method} ${req.path}`,
+          route: `${req.method} ${ownIds.reduce((p, id) => p.split(id).join(':excluded'), originalUrl.split('?')[0])}`,
           game: game || null,
           membership_ids: mids,
-          instance_id: req.params?.instanceId || null,
+          excluded_ids: ownIds.length,
+          instance_id: look.instanceId,
           status: res.statusCode,
           ms: Date.now() - started,
           rows: cov.rows ?? null,
