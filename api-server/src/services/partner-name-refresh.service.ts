@@ -40,7 +40,7 @@ export class PartnerNameRefresher {
   constructor(private readonly fetchName: CurrentNameFetcher, private readonly opts: NameRefreshOptions, private readonly now: () => number = Date.now) {
     this.top = Math.max(0, opts.top ?? 25);
     this.ttlMs = opts.ttlMs ?? 24 * 3600_000;
-    this.concurrency = Math.max(1, opts.concurrency ?? 4);
+    this.concurrency = Math.max(1, opts.concurrency ?? 8);
     this.budgetMs = opts.budgetMs ?? 4000;
     this.maxPerMin = opts.maxCallsPerMinute ?? 120;
     try {

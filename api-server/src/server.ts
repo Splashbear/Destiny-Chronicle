@@ -117,6 +117,7 @@ async function startServer(): Promise<void> {
     const names = refreshTop > 0
       ? new PartnerNameRefresher((mid) => bungieApiService.getCurrentDisplayName(mid), {
           cacheFile: nameCache, top: refreshTop,
+          concurrency: Number(process.env.PLAYED_WITH_NAME_REFRESH_CONCURRENCY || 8),
           budgetMs: Number(process.env.PLAYED_WITH_NAME_REFRESH_BUDGET_MS || 4000),
           maxCallsPerMinute: Number(process.env.PLAYED_WITH_NAME_REFRESH_PER_MIN || 120),
         })
