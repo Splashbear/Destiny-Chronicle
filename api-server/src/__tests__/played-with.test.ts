@@ -47,20 +47,26 @@ describe('Played With dual-format read', () => {
     const q = (p: string) => p.replace(/\\/g, '/');
     // legacy: string ids + names + team
     await db.all(`COPY (SELECT * FROM (VALUES
-      (5000000001::BIGINT, '1'::VARCHAR, 'Me', '2020-01-01T00:00:00Z', 1::TINYINT),
-      (5000000001, '2', 'Friend', '2020-01-01T00:00:00Z', 1),
-      (5000000002, '1', 'Me', '2020-02-01T00:00:00Z', 1),
-      (5000000002, '2', 'FriendNew', '2020-02-01T00:00:00Z', 1),
-      (5000000002, '3', 'Other', '2020-02-01T00:00:00Z', 2)
-    ) t(instance_id, membership_id, display_name, period, team)) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
+      (5000000001::BIGINT, '1'::VARCHAR, 'Me', '2020-01-01T00:00:00Z', 1::TINYINT, 4::SMALLINT, 1::UINTEGER),
+      (5000000001, '2', 'Friend', '2020-01-01T00:00:00Z', 1, 4, 1),
+      (5000000002, '1', 'Me', '2020-02-01T00:00:00Z', 1, 0, 2),
+      (5000000002, '2', 'FriendNew', '2020-02-01T00:00:00Z', 1, 0, 2),
+      (5000000002, '3', 'Other', '2020-02-01T00:00:00Z', 2, 0, 2),
+      -- social hub (mode 40): excluded
+      (5000000003, '1', 'Me', '2020-03-01T00:00:00Z', 0, 40, 3),
+      (5000000003, '8', 'TowerPal', '2020-03-01T00:00:00Z', 0, 40, 3)
+    ) t(instance_id, membership_id, display_name, period, team, mode, activity_hash)) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
     // compact: numeric ids, timestamp period, no names
     await db.all(`COPY (SELECT * FROM (VALUES
-      (10000500000::BIGINT, 1::BIGINT, TIMESTAMP '2021-01-01 00:00:00'),
-      (10000500000, 2, TIMESTAMP '2021-01-01 00:00:00'),
-      (10000500000, 4, TIMESTAMP '2021-01-01 00:00:00')
-    ) t(instance_id, membership_id, period)) TO '${q(path.join(C, 'instances.parquet'))}' (FORMAT parquet)`);
+      (10000500000::BIGINT, 1::BIGINT, TIMESTAMP '2021-01-01 00:00:00', 5::SMALLINT, 9::UINTEGER),
+      (10000500000, 2, TIMESTAMP '2021-01-01 00:00:00', 5, 9),
+      (10000500000, 4, TIMESTAMP '2021-01-01 00:00:00', 5, 9),
+      -- mode-0 Tower visit (hub hash), as a compact-only account would have: excluded
+      (10000600000, 1, TIMESTAMP '2021-02-01 00:00:00', 0, 3737830648),
+      (10000600000, 7, TIMESTAMP '2021-02-01 00:00:00', 0, 3737830648)
+    ) t(instance_id, membership_id, period, mode, activity_hash)) TO '${q(path.join(C, 'instances.parquet'))}' (FORMAT parquet)`);
     // band without a done marker: must NOT be read
-    await db.all(`COPY (SELECT 10020000001::BIGINT AS instance_id, 9::BIGINT AS membership_id, TIMESTAMP '2021-06-01' AS period)
+    await db.all(`COPY (SELECT 10020000001::BIGINT AS instance_id, 9::BIGINT AS membership_id, TIMESTAMP '2021-06-01' AS period, 5::SMALLINT AS mode, 9::UINTEGER AS activity_hash)
       TO '${q(path.join(C2, 'instances.parquet'))}' (FORMAT parquet)`);
     await db.close();
   });
@@ -68,7 +74,7 @@ describe('Played With dual-format read', () => {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* Windows may still hold parquet handles */ }
   });
 
-  test('normalizes both formats, excludes self, skips unfinished bands, fills names', async () => {
+  test('normalizes both formats, excludes self + social hubs, skips unfinished bands, fills names', async () => {
     const svc = new PlayedWithService(
       {
         legacyRoot: path.join(tmp, 'legacy', 'by_iid_1m'),
@@ -83,6 +89,8 @@ describe('Played With dual-format read', () => {
       { instanceId: '5000000002', durationSeconds: 200 },
       { instanceId: '10000500000', durationSeconds: 300 },
       { instanceId: '10020000001', durationSeconds: 400 },
+      { instanceId: '5000000003', durationSeconds: 50 },
+      { instanceId: '10000600000', durationSeconds: 50 },
     ]);
     await svc.close();
     const byId = Object.fromEntries(r.partners.map((p) => [p.membershipId, p]));
@@ -91,8 +99,10 @@ describe('Played With dual-format read', () => {
     expect(byId['4']).toMatchObject({ activitiesTogether: 1, displayName: 'NameFromPgcr' });
     expect(byId['1']).toBeUndefined();
     expect(byId['9']).toBeUndefined();
+    expect(byId['8']).toBeUndefined(); // mode 40 hub
+    expect(byId['7']).toBeUndefined(); // mode 0 + Tower hash
     expect(r.partners[0].membershipId).toBe('2');
-    expect(r.coverage).toMatchObject({ complete: false, totalInstances: 4, coveredInstances: 3, uncoveredInstances: 1 });
+    expect(r.coverage).toMatchObject({ complete: false, totalInstances: 6, coveredInstances: 5, uncoveredInstances: 1 });
     expect(r.coverage.uncoveredReasons).toEqual({ band_not_built: 1 });
   });
 });

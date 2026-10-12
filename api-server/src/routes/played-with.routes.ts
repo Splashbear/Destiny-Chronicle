@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { ArchiveService } from '../services/archive.service';
 import { PlayedWithResult, PlayedWithService, PlayerInstance } from '../services/played-with.service';
 import { logger } from '../utils/logger';
+import { isSocialHubActivity } from '../utils/social-hubs';
 
 /**
  * POST /played-with/stats { membershipIds: string[], limit?: number }
@@ -30,6 +31,9 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
         for (const mid of ids) {
           const r = await archive.getPlayerActivitiesMultiTier(mid, { limit: 1_000_000 });
           for (const a of r.activities) {
+            // Skip social hubs before planning band reads (rows with real mode/hash). Compact-only rows
+            // come back as mode 0 / hash 0 and are kept here; the band scan drops their hub rows (HUB_CLAUSE).
+            if (isSocialHubActivity(a)) continue;
             instances.push({ instanceId: String(a.instance_id), durationSeconds: Number(a.duration_seconds) || 0, period: a.period });
           }
         }

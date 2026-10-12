@@ -1,3 +1,4 @@
+import { SOCIAL_HUB_ACTIVITY_HASHES } from '../utils/social-hubs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Database } from 'duckdb-async';
@@ -132,6 +133,14 @@ function bandFiles(root: string, band: number): string[] {
 const PERIOD_LEGACY = `strftime(CAST(replace(replace(CAST(period AS VARCHAR), 'T', ' '), 'Z', '') AS TIMESTAMP), '%Y-%m-%dT%H:%M:%SZ')`;
 const PERIOD_COMPACT = `strftime(CAST(period AS TIMESTAMP), '%Y-%m-%dT%H:%M:%SZ')`;
 
+/**
+ * Social hubs (Tower, Farm, ...) are excluded from Played With, same rule as the activity list (W6/PR #22):
+ * mode 40, or mode 0 with a known hub activity hash; never mode 0 alone. Both band formats carry
+ * mode + activity_hash per row, so this also covers accounts found only in 10-16B (no mode in their
+ * activity list) - those bands are still read, the hub rows are dropped in the scan.
+ */
+export const HUB_CLAUSE = ` AND NOT (COALESCE(mode, -1) = 40 OR (COALESCE(mode, -1) = 0 AND activity_hash IN (${[...SOCIAL_HUB_ACTIVITY_HASHES].join(',')})))`;
+
 const sqlStr = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 export class PlayedWithService {
@@ -213,7 +222,7 @@ export class PlayedWithService {
     const one = (r: BandRead) => {
       const src = `read_parquet([${r.files.map(sqlStr).join(',')}], union_by_name=true)`;
       const inList = r.ids.map((id) => String(BigInt(id))).join(',');
-      const where = `WHERE instance_id IN (${inList}) AND CAST(membership_id AS VARCHAR) NOT IN (${self})`;
+      const where = `WHERE instance_id IN (${inList}) AND CAST(membership_id AS VARCHAR) NOT IN (${self})${HUB_CLAUSE}`;
       return r.kind === 'legacy'
         ? `SELECT CAST(instance_id AS BIGINT), CAST(membership_id AS VARCHAR), NULLIF(display_name, ''), ${PERIOD_LEGACY} FROM ${src} ${where}`
         : `SELECT CAST(instance_id AS BIGINT), CAST(membership_id AS VARCHAR), CAST(NULL AS VARCHAR), ${PERIOD_COMPACT} FROM ${src} ${where}`;
