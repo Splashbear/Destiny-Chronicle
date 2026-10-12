@@ -159,9 +159,13 @@ const ROSTER_OK = `NOT (COALESCE(md, -1) = ${RAID_MODE} AND nrows > CASE WHEN pe
 
 /** Known checkpoint/carry bot accounts (public accounts named by the site owner); games containing them are skipped. */
 export const KNOWN_BOT_IDS: readonly string[] = [
-  '4611686018518440725', // LuckBot9
-  '4611686018540181977', // destinycheckpoints
-  '4611686018536692735', // TravelersChosenTeam
+  // Resolved via Bungie GlobalName search (all linked platform memberships).
+  '4611686018518440725', '4611686018518935262', // LuckBot9#961
+  '4611686018537190973', // luckbot9#8561
+  '4611686018540181977', '4611686018540204958', // destinycheckpoints#499
+  '4611686018557682779', // DestinyCheckpoints#2859
+  '4611686018536692735', '4611686018537888002', // TravelersChosenTeam#8992
+  '4611686018555366187', '4611686018555366367', // D2Catalysts#662
 ];
 
 const sqlStr = (s: string) => `'${s.replace(/'/g, "''")}'`;
