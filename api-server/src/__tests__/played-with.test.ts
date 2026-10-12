@@ -5,7 +5,7 @@ import { Database } from 'duckdb-async';
 import express from 'express';
 import { AddressInfo } from 'net';
 import { createPlayedWithRouter } from '../routes/played-with.routes';
-import { KNOWN_BOT_IDS, loadPlayedWithConfig, planBands, PlayedWithService, sourceStemForBand } from '../services/played-with.service';
+import { defaultTempDir, KNOWN_BOT_IDS, loadPlayedWithConfig, planBands, PlayedWithService, sourceStemForBand } from '../services/played-with.service';
 
 describe('Played With band planning', () => {
   const cfg = { legacyRoot: 'L', compactRoot: 'C', splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000 };
@@ -160,6 +160,8 @@ describe('Played With roster caps + bots', () => {
       UNION ALL SELECT 8100000004, CAST(CASE WHEN i=0 THEN 1 ELSE 400+i END AS VARCHAR), 'n', '2021-03-02T00:00:00Z', 4, 1 FROM range(37) t(i)
       UNION ALL SELECT 8100000005, CAST(CASE WHEN i=0 THEN 1 WHEN i=1 THEN 999 ELSE 500+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 3, 1 FROM range(3) t(i)
       UNION ALL SELECT 8100000006, CAST(CASE WHEN i=0 THEN 1 ELSE 600+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 5, 1 FROM range(25) t(i)
+      UNION ALL SELECT 8100000007, CAST(CASE WHEN i=0 THEN 1 ELSE 700+i END AS VARCHAR), 'n', '2021-03-01T00:00:00Z', 82, 1 FROM range(10) t(i)
+      UNION ALL SELECT 8100000008, CAST(CASE WHEN i=0 THEN 1 ELSE 800+i END AS VARCHAR), 'n', '2022-01-01T00:00:00Z', 82, 1 FROM range(9) t(i)
     ) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
     await db.close();
   });
@@ -170,7 +172,7 @@ describe('Played With roster caps + bots', () => {
       legacyRoot: path.join(tmp, 'legacy', 'by_iid_1m'), compactRoot: '', compactDoneDir: '',
       splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000, threads: 1, memoryLimit: '512MB', excludeIds: ['999'],
     });
-    const ids = ['8100000001', '8100000002', '8100000003', '8100000004', '8100000005', '8100000006'];
+    const ids = ['8100000001', '8100000002', '8100000003', '8100000004', '8100000005', '8100000006', '8100000007', '8100000008'];
     const r = await svc.getPartners(['1'], ids.map((instanceId) => ({ instanceId, durationSeconds: 60 })), 100000);
     await svc.close();
     const has = (lo: number) => r.partners.some((p) => Number(p.membershipId) > lo && Number(p.membershipId) < lo + 100);
@@ -181,6 +183,18 @@ describe('Played With roster caps + bots', () => {
     expect(has(500)).toBe(false); // bot game
     expect(r.partners.some((p) => p.membershipId === '999')).toBe(false);
     expect(has(600)).toBe(true);  // non-raid, uncapped
+    expect(has(700)).toBe(false); // dungeon, 10 rows, glitch dates give no exception
+    expect(has(800)).toBe(true);  // dungeon, 9 rows
+  });
+
+  test('DuckDB temp dir: env override, else next to the index (never the working directory)', () => {
+    const root = path.join(os.tmpdir(), 'data', 'pw_10_16b', 'by_iid_1m');
+    const d = loadPlayedWithConfig({ PLAYED_WITH_COMPACT_ROOT: root } as any)!;
+    expect(d.tempDir).toBe(path.join(path.dirname(root), '_duckdb_tmp'));
+    expect(path.resolve(d.tempDir!)).not.toBe(path.resolve(process.cwd()));
+    expect(defaultTempDir(root)).toBe(d.tempDir);
+    const e = loadPlayedWithConfig({ PLAYED_WITH_COMPACT_ROOT: root, PLAYED_WITH_DUCKDB_TEMP_DIR: ' /scratch/pw ' } as any)!;
+    expect(e.tempDir).toBe('/scratch/pw');
   });
 
   test('config always includes the known bot ids', () => {

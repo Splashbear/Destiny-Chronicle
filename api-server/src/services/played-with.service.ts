@@ -23,6 +23,8 @@ export interface PlayedWithConfig {
   compactMaxIid: number;
   threads: number;
   memoryLimit: string;
+  /** DuckDB spill directory; must be on a data drive (never the server's working directory). */
+  tempDir?: string;
   /** games containing any of these membership ids are skipped (bots). */
   excludeIds?: string[];
 }
@@ -41,8 +43,14 @@ export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): Play
     compactMaxIid: Number(env.PLAYED_WITH_COMPACT_MAX_IID || 16_000_000_000),
     threads: Math.max(1, parseInt(env.PLAYED_WITH_DUCKDB_THREADS || '2', 10) || 2),
     memoryLimit: (env.PLAYED_WITH_DUCKDB_MEMORY || '2GB').replace(/'/g, ''),
+    tempDir: (env.PLAYED_WITH_DUCKDB_TEMP_DIR || '').trim() || defaultTempDir(compactRoot || legacyRoot),
     excludeIds: [...new Set([...KNOWN_BOT_IDS, ...(env.PLAYED_WITH_EXCLUDE_IDS || '').split(',').map((x) => x.trim()).filter((x) => /^\d+$/.test(x))])],
   };
+}
+
+/** Default spill dir: next to the index on its data drive, e.g. <index parent>/_duckdb_tmp. */
+export function defaultTempDir(root: string): string {
+  return path.join(path.dirname(path.resolve(root)), '_duckdb_tmp');
 }
 
 /** Done-marker stem for the 10M source file that holds a band, e.g. band 10003 -> "10000000000-10010000000". */
@@ -148,14 +156,18 @@ export const HUB_CLAUSE = ` AND NOT (COALESCE(mode, -1) = 40 OR (COALESCE(mode, 
  * Oversized games (checkpoint-bot lobbies, Bungie mega-PGCRs) are dropped from Played With only.
  * Raids are 6-player; roster rows are per character, so up to 6 players x 3 characters = 18 rows.
  * The 12-person raid glitch (2021-02-26 .. 2021-03-16 UTC) is kept: cap 36 (12 x 3) in that window.
+ * Dungeons are 3-player: more than 9 rows (3 x 3) is skipped, no glitch exception.
  * Other activity types are not capped here (they only lose games that contain an excluded bot).
  */
 export const RAID_MODE = 4;
 export const RAID_ROW_CAP = 18;
 export const GLITCH_RAID_ROW_CAP = 36;
+export const DUNGEON_MODE = 82;
+export const DUNGEON_ROW_CAP = 9; // 3 players x 3 characters, no glitch exception
 export const GLITCH_FROM = '2021-02-26';
 export const GLITCH_TO_EXCL = '2021-03-17';
-const ROSTER_OK = `NOT (COALESCE(md, -1) = ${RAID_MODE} AND nrows > CASE WHEN per >= '${GLITCH_FROM}' AND per < '${GLITCH_TO_EXCL}' THEN ${GLITCH_RAID_ROW_CAP} ELSE ${RAID_ROW_CAP} END)`;
+const ROSTER_OK = `NOT (COALESCE(md, -1) = ${RAID_MODE} AND nrows > CASE WHEN per >= '${GLITCH_FROM}' AND per < '${GLITCH_TO_EXCL}' THEN ${GLITCH_RAID_ROW_CAP} ELSE ${RAID_ROW_CAP} END)
+  AND NOT (COALESCE(md, -1) = ${DUNGEON_MODE} AND nrows > ${DUNGEON_ROW_CAP})`;
 
 /** Known checkpoint/carry bot accounts (public accounts named by the site owner); games containing them are skipped. */
 export const KNOWN_BOT_IDS: readonly string[] = [
@@ -191,6 +203,9 @@ export class PlayedWithService {
       this.db = await Database.create(':memory:');
       await this.db.all(`SET threads=${this.cfg.threads}`);
       await this.db.all(`SET memory_limit='${this.cfg.memoryLimit}'`);
+    const tmp = (this.cfg.tempDir || defaultTempDir(this.cfg.compactRoot || this.cfg.legacyRoot)).replace(/'/g, '');
+    await this.db.all(`SET temp_directory='${tmp.replace(/\\/g, '/')}'`);
+    await this.db.all('SET preserve_insertion_order=false');
     }
     return this.db;
   }
