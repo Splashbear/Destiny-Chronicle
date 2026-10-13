@@ -102,3 +102,18 @@ analytics: {
 - Analytics scripts load **only in production builds** (not when running `ng serve`)
 - If you leave the placeholders empty (`''`), that provider will be skipped
 - Both tools are privacy-friendly: Cloudflare does not use cookies; GA4 can be configured for minimal data collection
+
+---
+
+## Custom events (privacy-preserving)
+
+The site sends a few GA4 events through the existing `gtag` setup in `SiteAnalyticsService`.
+**No membership IDs, display names, Bungie names, or other account identifiers are ever sent.**
+
+| Event | Params |
+|-------|--------|
+| `account_lookup` | `game` (D1\|D2\|mixed), `platform` (xbox\|psn\|steam\|…\|mixed), `account_count`, `source` (archive\|bungie\|mixed), `load_ms_bucket` (coarse) |
+| `lookup_error` | `error_type` only (e.g. `account_load_failed`, `cancelled`) |
+| `feature_view` | `feature` only (`heatmap`, `breakdown`, `titles`, `seal_poster`, `played_with`, …) |
+
+Params are allowlisted and scrubbed in `SiteAnalyticsService.sanitizeParams` before `gtag('event', …)`.

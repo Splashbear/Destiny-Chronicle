@@ -10,6 +10,7 @@ import { DestinyManifestService } from '../../services/destiny-manifest.service'
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
 import { PgcrApiService } from '../../services/pgcr-api.service';
+import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { environment } from '../../../environments/environment';
 import { ArchiveService } from '../../services/archive.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
@@ -1662,7 +1663,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     public archiveRuntime: ArchiveRuntimeService,
     private archiveHtmlReportService: ArchiveHtmlReportService,
     private assetUrl: AssetUrlService,
-    private pgcrApiService: PgcrApiService
+    private pgcrApiService: PgcrApiService,
+    private siteAnalytics: SiteAnalyticsService
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
@@ -2026,6 +2028,83 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /**
    * Updates the loading status for a specific account
    */
+
+  /** Reset privacy-safe lookup analytics state for a new multi-account load. */
+  private beginLookupAnalytics(): void {
+    this.lookupStartedAtMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.lookupDataSources.clear();
+    this.lookupAnalyticsSent = false;
+  }
+
+  private noteLookupDataSource(source: 'archive' | 'bungie'): void {
+    this.lookupDataSources.add(source);
+  }
+
+  private platformLabelForAnalytics(platform: string): string {
+    const p = (platform || '').toLowerCase();
+    if (p.includes('xbox')) return 'xbox';
+    if (p.includes('playstation') || p === 'psn') return 'psn';
+    if (p.includes('steam')) return 'steam';
+    if (p.includes('epic')) return 'egs';
+    if (p.includes('stadia')) return 'stadia';
+    if (p.includes('blizzard')) return 'blizzard';
+    if (!p || p === 'unknown') return 'unknown';
+    return 'other';
+  }
+
+  private aggregateLookupPlatform(platforms: string[]): string {
+    const labels = [...new Set(platforms.map(p => this.platformLabelForAnalytics(p)))];
+    if (labels.length === 0) return 'unknown';
+    if (labels.length === 1) return labels[0];
+    return 'mixed';
+  }
+
+  private aggregateLookupGame(games: Array<'D1' | 'D2'>): 'D1' | 'D2' | 'mixed' {
+    const uniq = [...new Set(games)];
+    if (uniq.length === 1) return uniq[0];
+    if (uniq.length === 0) return 'D2';
+    return 'mixed';
+  }
+
+  private resolveLookupSource(): 'archive' | 'bungie' | 'mixed' {
+    const hasArchive = this.lookupDataSources.has('archive');
+    const hasBungie = this.lookupDataSources.has('bungie');
+    if (hasArchive && hasBungie) return 'mixed';
+    if (hasArchive) return 'archive';
+    return 'bungie';
+  }
+
+  /** Fire account_lookup (+ per-error lookup_error) once when a load batch finishes. */
+  private maybeSendLookupAnalytics(): void {
+    if (this.lookupAnalyticsSent) return;
+    if (!this.accountLoadingStatuses.length) return;
+    const allDone = this.accountLoadingStatuses.every(
+      s => s.status === 'complete' || s.status === 'error'
+    );
+    if (!allDone) return;
+
+    this.lookupAnalyticsSent = true;
+    const started = this.lookupStartedAtMs;
+    const elapsed = started == null
+      ? 0
+      : (typeof performance !== 'undefined' ? performance.now() : Date.now()) - started;
+    const games = this.accountLoadingStatuses.map(s => s.game);
+    const platforms = this.accountLoadingStatuses.map(s => s.platform);
+
+    this.siteAnalytics.trackAccountLookup({
+      game: this.aggregateLookupGame(games),
+      platform: this.aggregateLookupPlatform(platforms),
+      account_count: this.accountLoadingStatuses.length,
+      source: this.resolveLookupSource(),
+      load_ms_bucket: SiteAnalyticsService.bucketLoadMs(elapsed)
+    });
+
+    const errorCount = this.accountLoadingStatuses.filter(s => s.status === 'error').length;
+    if (errorCount > 0) {
+      this.siteAnalytics.trackLookupError('account_load_failed');
+    }
+  }
+
   private updateAccountLoadingStatus(
     accountKey: string,
     displayName: string,
@@ -2055,6 +2134,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (this.accountLoadingStatuses.length === 1) {
       this.showLoadingModal = true;
       this.isLoadingComplete = false;
+      this.beginLookupAnalytics();
     }
     
     // When first account enters fetch phase, init phase progress so modal shows "fetch" step immediately
@@ -2068,6 +2148,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     );
     if (allComplete && this.accountLoadingStatuses.length > 0) {
       this.isLoadingComplete = true;
+      this.maybeSendLookupAnalytics();
       // Auto-hide modal after 3 seconds
       setTimeout(() => {
         if (this.isLoadingComplete) {
@@ -2110,6 +2191,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     console.warn(
       `[Load] Account cancelled (${reason}): ${player.displayName} ${game} ${player.membershipId}`
     );
+    this.siteAnalytics.trackLookupError('cancelled');
     this.updateAccountLoadingStatus(
       accountKey,
       player.displayName,
@@ -4008,6 +4090,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             cov?.source !== 'none';
           if (archiveData && cov && (effectiveLevel === 'full' || leanPartial) && (cov.rowCount ?? 0) > 0) {
             archiveAnswered = true;
+            this.noteLookupDataSource('archive');
             // Archive is healthy again — drop any prior outage fallback banner.
             if (this.dcApiFallbackNotice) {
               this.dcApiFallbackNotice = null;
@@ -4126,6 +4209,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const modes: (number | undefined)[] = character.game === 'D1'
         ? [...D1_HISTORY_MODES]
         : [undefined];
+
+      // Reached Bungie history pagination (full crawl or archive delta catch-up).
+      this.noteLookupDataSource('bungie');
 
       // Process modes in parallel for faster loading
       const modePromises = modes.map(async (mode) => {
@@ -9989,6 +10075,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap') {
     this.activeTab = tab;
+    if (tab === 'heatmap' || tab === 'breakdown' || tab === 'titles' || tab === 'firsts' || tab === 'activities') {
+      this.siteAnalytics.trackFeatureView(tab);
+    }
     if (tab === 'heatmap') {
       this.cdr.markForCheck();
     }
@@ -10802,6 +10891,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   public showLoadingModal = false;
   loadingPanelExpanded = false;
   public isLoadingComplete = false;
+  /** Privacy-safe lookup timing (performance.now); cleared after account_lookup fires. */
+  private lookupStartedAtMs: number | null = null;
+  private lookupDataSources = new Set<'archive' | 'bungie'>();
+  private lookupAnalyticsSent = false;
+
 
   /** Expose for template: show progress while D1 PGCR prefetch runs in the background. */
   get pgcrPrefetchProgress$() {
