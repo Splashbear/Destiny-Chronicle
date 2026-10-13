@@ -73,7 +73,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
       }
       const st = summaries.status(skey);
       if (st.status === 'requested' || st.status === 'failed') summaries.request(ids, 'lookup');
-      return res.status(202).json({ pending: true, queued: true, status: st.status === 'failed' ? 'requested' : st.status, position: st.position, partners: [] });
+      return res.status(202).json({ pending: true, queued: true, status: st.status === 'failed' ? 'requested' : st.status, position: st.position, progress: st.progress ?? null, partners: [] });
     }    const key = `${ids.join(',')}|${limit}`;
     let job = jobs.get(key);
     if (job && job.finished && (job.error || Date.now() - job.finished > CACHE_MS)) {

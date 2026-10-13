@@ -28,6 +28,17 @@ export interface QueueItem {
   partners?: number;
   buildMs?: number;
   error?: string;
+  /** Real counts written by the worker while building (null/absent when not building). */
+  progress?: BuildProgress;
+}
+export interface BuildProgress {
+  stage: 'loading_games' | 'scanning' | 'ranking';
+  accountsLoaded: number;
+  accountsTotal: number;
+  games: number;
+  batchesDone?: number;
+  batchesTotal?: number;
+  updatedAt: string;
 }
 export interface Queue { items: Record<string, QueueItem> }
 export interface SummaryFile {
@@ -80,10 +91,10 @@ export class SummaryStore {
   }
 
   /** API side: queue position (1-based) of a key among pending items, or null if not queued. */
-  status(key: string): { status: QueueStatus | 'requested'; position: number | null } {
+  status(key: string): { status: QueueStatus | 'requested'; position: number | null; progress?: BuildProgress } {
     const q = this.readQueue(); const it = q.items[key];
     if (!it) return { status: 'requested', position: null };
-    if (it.status !== 'pending') return { status: it.status, position: null };
+    if (it.status !== 'pending') return { status: it.status, position: null, progress: it.progress };
     const ahead = Object.values(q.items).filter((x) => x.status === 'pending' && order(x, it) < 0).length;
     return { status: 'pending', position: ahead + 1 };
   }

@@ -9,7 +9,7 @@
  * Exits non-zero on a fatal error; the service wrapper restarts it.
  */
 import { loadPlayedWithConfig, PlayedWithService, PlayerInstance } from '../services/played-with.service';
-import { pickNext, SummaryStore, QueueItem } from '../services/played-with-summary.store';
+import { pickNext, SummaryStore, QueueItem, BuildProgress } from '../services/played-with-summary.store';
 
 const env = process.env;
 const API = (env.PLAYED_WITH_SUMMARY_API || 'http://127.0.0.1:3001').replace(/\/$/, '');
@@ -21,7 +21,7 @@ const log = (msg: string, extra: Record<string, unknown> = {}) =>
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const httpFetch = (globalThis as any).fetch as (u: string) => Promise<{ ok: boolean; status: number; json(): Promise<any> }>;
 
-export async function loadInstances(ids: string[]): Promise<{ instances: PlayerInstance[]; maxIid: bigint }> {
+export async function loadInstances(ids: string[], onAccount?: (loaded: number, games: number) => void): Promise<{ instances: PlayerInstance[]; maxIid: bigint }> {
   const seen = new Set<string>(); const instances: PlayerInstance[] = []; let maxIid = 0n;
   for (const id of ids) {
     const r = await httpFetch(`${API}/players/${id}/activities?limit=100000&includePartial=1`);
@@ -33,6 +33,7 @@ export async function loadInstances(ids: string[]): Promise<{ instances: PlayerI
       seen.add(k); if (BigInt(k) > maxIid) maxIid = BigInt(k);
       instances.push({ instanceId: k, durationSeconds: Number(a.durationSeconds ?? a.duration_seconds) || 0, period: a.period });
     }
+    onAccount?.(ids.indexOf(id) + 1, instances.length);
   }
   return { instances, maxIid };
 }
@@ -40,20 +41,32 @@ export async function loadInstances(ids: string[]): Promise<{ instances: PlayerI
 async function processOne(store: SummaryStore, svc: PlayedWithService, it: QueueItem): Promise<void> {
   const q = store.readQueue(); const cur = q.items[it.key]; const refresh = cur.status === 'done';
   const t0 = Date.now();
-  const { instances, maxIid } = await loadInstances(cur.ids);
+  // Progress uses real counts only; writes are throttled so queue.json isn't rewritten per batch.
+  let lastWrite = 0;
+  const setProgress = (p: Omit<BuildProgress, 'updatedAt'>, force = false) => {
+    if (refresh) return;
+    cur.progress = { ...p, updatedAt: new Date().toISOString() };
+    if (force || Date.now() - lastWrite >= 2000) { lastWrite = Date.now(); store.writeQueue(q); }
+  };
+  const base = { accountsTotal: cur.ids.length, accountsLoaded: 0, games: 0 };
+  setProgress({ stage: 'loading_games', ...base }, true);
+  const { instances, maxIid } = await loadInstances(cur.ids, (loaded, games) => {
+    base.accountsLoaded = loaded; base.games = games;
+    setProgress({ stage: 'loading_games', ...base }, loaded === cur.ids.length);
+  });
   if (refresh && cur.maxInstanceId && BigInt(cur.maxInstanceId) >= maxIid) {
     cur.checkedAt = new Date().toISOString(); store.writeQueue(q);
     log('refresh: no new games', { key: cur.key }); return;
   }
   cur.status = 'running'; cur.attempts += 1; store.writeQueue(q);
   try {
-    const res = await svc.getPartners(cur.ids, instances, PARTNERS);
+    const res = await svc.getPartners(cur.ids, instances, PARTNERS, (p) => setProgress({ ...base, ...p }, p.stage === 'ranking'));
     const builtAt = new Date().toISOString();
     store.writeSummary({ key: cur.key, ids: cur.ids, label: cur.label, builtAt, games: instances.length, maxInstanceId: String(maxIid), partners: res.partners, coverage: res.coverage });
-    Object.assign(cur, { status: 'done', builtAt, checkedAt: builtAt, games: instances.length, maxInstanceId: String(maxIid), partners: res.partners.length, buildMs: Date.now() - t0, error: undefined, attempts: 0 });
+    Object.assign(cur, { status: 'done', builtAt, checkedAt: builtAt, games: instances.length, maxInstanceId: String(maxIid), partners: res.partners.length, buildMs: Date.now() - t0, error: undefined, attempts: 0, progress: undefined });
     log(refresh ? 'refreshed' : 'built', { key: cur.key, source: cur.source, games: cur.games, partners: cur.partners, ms: cur.buildMs });
   } catch (e) {
-    cur.error = String(e); cur.status = cur.attempts >= 3 ? 'failed' : 'pending';
+    cur.error = String(e); cur.progress = undefined; cur.status = cur.attempts >= 3 ? 'failed' : 'pending';
     log('build failed', { key: cur.key, attempts: cur.attempts, error: cur.error });
   }
   store.writeQueue(q);

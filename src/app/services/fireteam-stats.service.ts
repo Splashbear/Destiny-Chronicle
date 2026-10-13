@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivityDbService } from './activity-db.service';
 import { PGCRCacheService } from './pgcr-cache.service';
-import { PgcrApiService } from './pgcr-api.service';
+import { PgcrApiService, PlayedWithBuildProgress } from './pgcr-api.service';
 import { PrunedPgcr } from '../utils/pgcr-prune';
 import { pickBestPlayerDisplayName } from '../utils/pgcr-player-name';
 
@@ -40,6 +40,7 @@ export class FireteamStatsSession {
   pendingBuild = false;
   pendingStatus?: string;
   pendingPosition?: number | null;
+  pendingProgress?: PlayedWithBuildProgress | null;
 
   constructor(membershipIds: string[], totalActivities: number) {
     this.ourIds = new Set(membershipIds);
@@ -178,6 +179,7 @@ export class FireteamStatsService {
         session.pendingBuild = true;
         session.pendingStatus = api.status;
         session.pendingPosition = api.position ?? null;
+        session.pendingProgress = api.progress ?? null;
         onChunk?.(session);
         return session;
       }
