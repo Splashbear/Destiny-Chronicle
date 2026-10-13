@@ -33,8 +33,12 @@
     <p class="text-xs text-slate-400">{{ uiI18n.t('playedWith.buildingHint') }}</p>
   </div>
 
+  <div *ngIf="buildTimedOut && !sortedPartners.length" class="rounded-lg bg-slate-800/95 border border-red-700/50 p-6 text-center text-red-200 text-sm">
+    {{ uiI18n.t('playedWith.buildTimeout') }}
+  </div>
+
   <div
-    *ngIf="!loading && !building && coverage && coverage.pgcrCached === 0"
+    *ngIf="!loading && !building && !buildTimedOut && coverage && coverage.pgcrCached === 0"
     class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
     {{ uiI18n.t('playedWith.empty') }}
   </div>

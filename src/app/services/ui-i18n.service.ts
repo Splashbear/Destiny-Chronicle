@@ -89,6 +89,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'playedWith.remaining': 'remaining',
     'playedWith.loading': 'Loading Played With…',
     'playedWith.building': 'Building your Played With…',
+    'playedWith.buildTimeout': 'Your Played With summary is taking longer than expected. Please refresh the page in a few minutes to try again.',
     'playedWith.buildingHint': 'This can take a few minutes for veteran accounts. Check back shortly — we will keep trying automatically.',
     'playedWith.empty': 'No activity history is available yet for Played With.',
     'playedWith.noPartners': 'No partners found in the activities covered so far.',
