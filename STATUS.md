@@ -8,7 +8,7 @@
 ### Website
 - **Shipped on `master`:** see latest merge (W26 favorites/First Ever fix shipping). Live site stays on **Bungie** for now — no archive cutover / no `ENABLE_GAP_LEAN` on `:3001`.
 - D1: keep live Bungie until raw D1 PGCRs exist (D1 DECISION Oct 2).
-- **Played With UI:** `enablePlayedWith: false` (dev+prod). Not routed. Do not show at launch.
+- **Played With UI:** prod `enablePlayedWith: true` (PR feat/pw-go-live-enable). Dev still false until you opt in. Tab routed when flag is on; cold accounts show building/queued state.
 
 ### W26 headline (6-account favorites + First Ever)
 - **Root cause (accounts):** `0a69190` load-token guards + mid-sync `loadAllFilteredActivities` bumping `currentLoadToken` cancelled queued favorites after the first 1–2 finished.

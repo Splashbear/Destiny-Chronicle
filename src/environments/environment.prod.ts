@@ -34,8 +34,8 @@ export const environment = {
    * D1 still full-crawls. Off only if this flag is set false.
    */
   archiveBungieDeltaFill: true,
-  /** W19: hide Played With at launch until index is ready. */
-  enablePlayedWith: false,
+  /** Played With tab + archive summary API (queued builds for cold accounts). */
+  enablePlayedWith: true,
   offlineMode: false,
   archiveRoot: ''
 }; 

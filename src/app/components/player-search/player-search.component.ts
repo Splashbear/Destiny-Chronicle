@@ -75,6 +75,7 @@ import { collectFirstsTabMilestonesOnDate } from '../../utils/anniversary-helper
 import { parseUsernames as splitSearchUsernames, shouldSearchAsSingleUsername } from '../../utils/search-usernames';
 import { characterKey, classFromProfileCharacter, HeatmapCharacterLookup } from '../../utils/heatmap-filters';
 import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
+import { PlayedWithComponent } from '../played-with/played-with.component';
 // Chart.js imports – load only what we use (pie + bar)
 import {
   Chart as ChartJS,
@@ -618,7 +619,8 @@ interface PlatformStats {
     PlayerSearchFirstsTabComponent,
     PlayerSearchTitlesTabComponent,
     DestinyLoaderComponent,
-    ActivityHeatmapComponent
+    ActivityHeatmapComponent,
+    PlayedWithComponent
   ],
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
@@ -871,7 +873,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** True while favorites (or any multi-profile sync) is still running. */
   profileLoadInProgress = false;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' | 'playedWith' = 'activities';
+  readonly enablePlayedWith = environment.enablePlayedWith;
   
   // Anniversary celebration banner state
   anniversaryFirsts: AnniversaryFirst[] = [];
@@ -10073,10 +10076,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
-  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap') {
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' | 'playedWith') {
     this.activeTab = tab;
     if (tab === 'heatmap' || tab === 'breakdown' || tab === 'titles' || tab === 'firsts' || tab === 'activities') {
       this.siteAnalytics.trackFeatureView(tab);
+    } else if (tab === 'playedWith') {
+      this.siteAnalytics.trackFeatureView('played_with');
     }
     if (tab === 'heatmap') {
       this.cdr.markForCheck();
