@@ -5,6 +5,7 @@ import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-
 import html2canvas from 'html2canvas';
 import { TitleItem } from '../../services/title.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
+import { SiteAnalyticsService } from '../../services/site-analytics.service';
 
 type ViewMode = 'browse' | 'poster';
 type SortType = 'release' | 'alpha' | 'category' | 'gilded';
@@ -48,13 +49,17 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
   private hiddenHashes = new Set<number>();
   private useManualOrder = false;
 
-  constructor(private cdr: ChangeDetectorRef) {}
+  constructor(
+    private cdr: ChangeDetectorRef,
+    private siteAnalytics: SiteAnalyticsService
+  ) {}
 
   get isPosterView(): boolean {
     return this.viewMode === 'poster' || this.isExporting;
   }
 
   ngOnInit() {
+    this.siteAnalytics.trackFeatureView('seal_poster');
     this.reloadPersistedState();
     this.updateDisplaySeals();
   }

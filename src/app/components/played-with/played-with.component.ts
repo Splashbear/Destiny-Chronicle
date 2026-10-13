@@ -17,6 +17,7 @@ import {
   PlayedWithSortColumn
 } from '../../services/fireteam-stats.service';
 import { PlayedWithPrefetchService } from '../../services/played-with-prefetch.service';
+import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { PrunedPgcr } from '../../utils/pgcr-prune';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { UiI18nService } from '../../services/ui-i18n.service';
@@ -49,11 +50,16 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     public uiI18n: UiI18nService,
     private fireteamStats: FireteamStatsService,
     private prefetch: PlayedWithPrefetchService,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private siteAnalytics: SiteAnalyticsService
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['membershipIds']) {
+      // Count views when the feature is shown with accounts; never send the IDs.
+      if (Array.isArray(this.membershipIds) && this.membershipIds.length > 0) {
+        this.siteAnalytics.trackFeatureView('played_with');
+      }
       void this.reload();
     }
   }
