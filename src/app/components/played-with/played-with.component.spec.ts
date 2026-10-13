@@ -63,3 +63,20 @@ describe('PlayedWithComponent reload guard', () => {
     c.ngOnDestroy();
   });
 });
+
+import { formatBuildProgress } from './played-with.component';
+
+describe('formatBuildProgress', () => {
+  it('uses the server counts per stage', () => {
+    expect(formatBuildProgress('running', null, { stage: 'loading_games', accountsLoaded: 2, accountsTotal: 4, games: 12345 }))
+      .toBe('Loading game history: 2 of 4 accounts (12,345 games found)');
+    expect(formatBuildProgress('running', null, { stage: 'scanning', accountsLoaded: 4, accountsTotal: 4, games: 27215, batchesDone: 10, batchesTotal: 40 }))
+      .toBe('Scanning 27,215 games for fireteam members: 25% (10 of 40 archive batches)');
+    expect(formatBuildProgress('running', null, { stage: 'ranking', accountsLoaded: 4, accountsTotal: 4, games: 27215 }))
+      .toContain('27,215 games');
+  });
+  it('falls back to queue position, never invents numbers', () => {
+    expect(formatBuildProgress('pending', 3, null)).toBe('Waiting in line: #3');
+    expect(formatBuildProgress('requested', null, null)).toBe('');
+  });
+});

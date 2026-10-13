@@ -227,6 +227,9 @@ export const KNOWN_BOT_IDS: readonly string[] = [
 
 const sqlStr = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
+/** Real scan progress: archive band batches read so far out of the planned total. */
+export type ScanProgressFn = (p: { stage: 'scanning' | 'ranking'; batchesDone: number; batchesTotal: number }) => void;
+
 export class PlayedWithService {
   private db: Database | null = null;
   private queue: Promise<unknown> = Promise.resolve();
@@ -280,13 +283,13 @@ export class PlayedWithService {
   }
 
   /** One request at a time on the shared connection (temp tables). */
-  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500): Promise<PlayedWithResult> {
-    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit));
+  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn): Promise<PlayedWithResult> {
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress));
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number): Promise<PlayedWithResult> {
+  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn): Promise<PlayedWithResult> {
     const durations = new Map<string, number>();
     for (const i of instances) if (i.instanceId) durations.set(String(i.instanceId), Number(i.durationSeconds) || 0);
     const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands());
@@ -353,15 +356,20 @@ export class PlayedWithService {
     for (let i = 0; i < reads.length; i += 20) batches.push(reads.slice(i, i + 20));
     const conns = await Promise.all(Array.from({ length: Math.min(this.cfg.threads, batches.length) }, () => db.connect()));
     let next = 0;
+    let done = 0;
+    onProgress?.({ stage: 'scanning', batchesDone: 0, batchesTotal: batches.length });
     const collected: unknown[][] = [];
     await Promise.all(conns.map(async (c) => {
       while (next < batches.length) {
         const b = batches[next++];
         const res = await c.all(b.map(one).join(' UNION ALL '));
         collected.push(res.map((r: Record<string, unknown>) => Object.values(r)));
+        done += 1;
+        onProgress?.({ stage: 'scanning', batchesDone: done, batchesTotal: batches.length });
       }
     }));
     await Promise.all(conns.map((c) => c.close()));
+    onProgress?.({ stage: 'ranking', batchesDone: done, batchesTotal: batches.length });
     const flat = collected.flat() as unknown[][];
     for (let i = 0; i < flat.length; i += 5000) {
       const vals = flat.slice(i, i + 5000).map(([iid, mid, name, per]) =>

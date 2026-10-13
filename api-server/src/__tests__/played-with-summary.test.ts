@@ -48,4 +48,18 @@ describe('Played With summary queue', () => {
       expect(fs.readFileSync(s.requestsPath, 'utf8')).toContain('"8"');
     } finally { srv.close(); }
   });
+
+  test('202 for a running build reports the worker\'s real progress counts', async () => {
+    const s = new SummaryStore(tmp()); s.ensure();
+    const progress = { stage: 'scanning' as const, accountsLoaded: 4, accountsTotal: 4, games: 27215, batchesDone: 12, batchesTotal: 40, updatedAt: '2026-10-13T12:17:00Z' };
+    s.writeQueue({ items: { '1+2': { key: '1+2', ids: ['1', '2'], priority: 10, source: 'lookup', status: 'running', enqueuedAt: 'x', attempts: 1, progress } } });
+    const app = express(); app.use(express.json()); app.use('/played-with', createPlayedWithRouter({} as any, {} as any, s));
+    const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ membershipIds: ['2', '1'] }) });
+      expect(r.status).toBe(202);
+      const j: any = await r.json();
+      expect(j.status).toBe('running'); expect(j.progress).toEqual(progress);
+    } finally { srv.close(); }
+  });
 });

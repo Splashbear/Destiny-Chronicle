@@ -30,6 +30,7 @@
       <app-destiny-loader size="sm"></app-destiny-loader>
       <span>{{ uiI18n.t('playedWith.building') }}</span>
     </div>
+    <p *ngIf="buildingProgress" class="text-sm text-amber-200 font-mono">{{ buildingProgress }}</p>
     <p class="text-xs text-slate-400">{{ uiI18n.t('playedWith.buildingHint') }}</p>
   </div>
 

@@ -21,11 +21,43 @@ import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { PrunedPgcr } from '../../utils/pgcr-prune';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { UiI18nService } from '../../services/ui-i18n.service';
+import { PlayedWithBuildProgress } from '../../services/pgcr-api.service';
 
 /**
  * Stable key for a set of membership ids. The parent binds a getter that returns a new
  * array on every change-detection pass, so reference equality cannot be used.
  */
+/**
+ * Honest progress line from the server's real counts. Returns '' when the server reported none.
+ * Stages: queued (position) → loading games per account → scanning archive batches → ranking.
+ */
+export function formatBuildProgress(
+  status: string | undefined,
+  position: number | null | undefined,
+  p: PlayedWithBuildProgress | null | undefined
+): string {
+  const n = (x: number) => x.toLocaleString('en-US');
+  if (p) {
+    if (p.stage === 'loading_games') {
+      return `Loading game history: ${n(p.accountsLoaded)} of ${n(p.accountsTotal)} accounts (${n(p.games)} games found)`;
+    }
+    if (p.stage === 'scanning' && p.batchesTotal) {
+      const pct = Math.floor(((p.batchesDone || 0) / p.batchesTotal) * 100);
+      return `Scanning ${n(p.games)} games for fireteam members: ${pct}% (${n(p.batchesDone || 0)} of ${n(p.batchesTotal)} archive batches)`;
+    }
+    if (p.stage === 'ranking') {
+      return `Ranking players you've played with across ${n(p.games)} games…`;
+    }
+  }
+  if (status === 'pending' && position) {
+    return position === 1 ? 'Next in line to build' : `Waiting in line: #${n(position)}`;
+  }
+  if (status === 'running') {
+    return 'Build started…';
+  }
+  return '';
+}
+
 export function membershipIdsKey(ids: readonly string[] | null | undefined): string {
   if (!Array.isArray(ids)) {
     return '';
@@ -51,6 +83,8 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   /** Archive API is building a summary; partners are not ready yet. */
   building = false;
   buildingStatus = '';
+  /** Real progress line from the server (empty when it has none). */
+  buildingProgress = '';
   /** Summary build exceeded MAX_BUILD_WAIT_MS; stop polling and tell the user. */
   buildTimedOut = false;
   prefetchActive = false;
@@ -240,6 +274,9 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     this.loading = false;
     this.building = !!session.pendingBuild;
     this.buildingStatus = session.pendingStatus || '';
+    this.buildingProgress = session.pendingBuild
+      ? formatBuildProgress(session.pendingStatus, session.pendingPosition, session.pendingProgress)
+      : '';
     this.cdr.markForCheck();
   }
 

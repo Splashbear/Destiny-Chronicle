@@ -20,6 +20,18 @@ export interface PlayedWithApiResult {
   position?: number | null;
   source?: string;
   games?: number;
+  /** Real counts from the server's summary worker while it builds (null when not started). */
+  progress?: PlayedWithBuildProgress | null;
+}
+
+export interface PlayedWithBuildProgress {
+  stage: 'loading_games' | 'scanning' | 'ranking';
+  accountsLoaded: number;
+  accountsTotal: number;
+  games: number;
+  batchesDone?: number;
+  batchesTotal?: number;
+  updatedAt?: string;
 }
 
 export interface LightActivityRow {
@@ -188,6 +200,7 @@ export class PgcrApiService {
           position?: number | null;
           source?: string;
           games?: number;
+          progress?: PlayedWithBuildProgress | null;
         }>(this.url('/played-with/stats'), { membershipIds, limit: 500 }, { headers: this.headers() })
       );
       const pending = !!resp?.pending;
@@ -198,7 +211,8 @@ export class PgcrApiService {
         status: resp?.status,
         position: resp?.position ?? null,
         source: resp?.source,
-        games: resp?.games
+        games: resp?.games,
+        progress: resp?.progress ?? null
       };
     } catch {
       return null;
