@@ -36,6 +36,10 @@ export class FireteamStatsSession {
   readonly totalActivities: number;
   pgcrCached = 0;
   fromApi = false;
+  /** True when the archive API queued a Played With summary build (no partners yet). */
+  pendingBuild = false;
+  pendingStatus?: string;
+  pendingPosition?: number | null;
 
   constructor(membershipIds: string[], totalActivities: number) {
     this.ourIds = new Set(membershipIds);
@@ -167,11 +171,20 @@ export class FireteamStatsService {
     const session = new FireteamStatsSession(membershipIds, allIds.length);
 
     if (this.pgcrApi.enabled) {
-      const apiPartners = await this.pgcrApi.fetchPlayedWithStats(membershipIds);
-      if (apiPartners?.length) {
+      const api = await this.pgcrApi.fetchPlayedWithStats(membershipIds);
+      if (api?.pending) {
+        // Queued on the server — do not fall through to a local PGCR scan (that can hang).
+        session.fromApi = true;
+        session.pendingBuild = true;
+        session.pendingStatus = api.status;
+        session.pendingPosition = api.position ?? null;
+        onChunk?.(session);
+        return session;
+      }
+      if (api && !api.pending && api.partners.length) {
         session.fromApi = true;
         session.seedFromApiPartners(
-          apiPartners.map(p => ({
+          api.partners.map(p => ({
             membershipId: p.membershipId,
             displayName: p.displayName,
             activitiesTogether: p.activitiesTogether,
@@ -179,6 +192,12 @@ export class FireteamStatsService {
             lastPlayedTogether: p.lastPlayedTogether
           }))
         );
+        onChunk?.(session);
+        return session;
+      }
+      // Empty ready summary (0 partners) — still treat as API so we skip local scan.
+      if (api && !api.pending) {
+        session.fromApi = true;
         onChunk?.(session);
         return session;
       }

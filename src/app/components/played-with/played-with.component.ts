@@ -37,6 +37,9 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   coverage: FireteamCoverage | null = null;
   sortedPartners: FireteamPartnerRow[] = [];
   loading = false;
+  /** Archive API is building a summary; partners are not ready yet. */
+  building = false;
+  buildingStatus = '';
   prefetchActive = false;
   prefetchRemaining = 0;
 
@@ -45,6 +48,8 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
 
   private subs = new Subscription();
   private reloadToken = 0;
+  private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly POLL_MS = 15_000;
 
   constructor(
     public uiI18n: UiI18nService,
@@ -65,8 +70,16 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.clearPoll();
     this.prefetch.cancel();
     this.subs.unsubscribe();
+  }
+
+  private clearPoll(): void {
+    if (this.pollTimer != null) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 
   formatDuration(seconds: number): string {
@@ -119,18 +132,22 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     this.subs.unsubscribe();
     this.subs = new Subscription();
     this.prefetch.cancel();
+    this.clearPoll();
 
     if (!this.membershipIds.length) {
       this.session = null;
       this.coverage = null;
       this.sortedPartners = [];
       this.loading = false;
+      this.building = false;
       this.prefetchActive = false;
       this.cdr.markForCheck();
       return;
     }
 
     this.loading = true;
+    this.building = false;
+    this.buildingStatus = '';
     this.session = null;
     this.coverage = null;
     this.sortedPartners = [];
@@ -148,22 +165,23 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       if (token !== this.reloadToken) {
         return;
       }
-      this.session = s;
-      this.coverage = s.coverage;
-      this.applySort();
-      this.loading = false;
-      this.cdr.markForCheck();
+      this.applySession(s);
     });
 
     if (token !== this.reloadToken) {
       return;
     }
 
-    this.session = session;
-    this.coverage = session.coverage;
-    this.applySort();
-    this.loading = false;
-    this.cdr.markForCheck();
+    this.applySession(session);
+
+    if (session.pendingBuild) {
+      this.pollTimer = setTimeout(() => {
+        if (token === this.reloadToken) {
+          void this.reload();
+        }
+      }, PlayedWithComponent.POLL_MS);
+      return;
+    }
 
     if (session.fromApi) {
       return;
@@ -178,6 +196,16 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       this.applySort();
       this.cdr.markForCheck();
     });
+  }
+
+  private applySession(session: FireteamStatsSession): void {
+    this.session = session;
+    this.coverage = session.coverage;
+    this.applySort();
+    this.loading = false;
+    this.building = !!session.pendingBuild;
+    this.buildingStatus = session.pendingStatus || '';
+    this.cdr.markForCheck();
   }
 
   private applySort(): void {

@@ -367,6 +367,17 @@
              [title]="uiI18n.t('tab.heatmap')">
              🔥 {{ uiI18n.t('tab.heatmap') }}
            </button>
+          <button
+             *ngIf="enablePlayedWith"
+             type="button"
+             (click)="onTabChange('playedWith')"
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'playedWith' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'playedWith'"
+             [title]="uiI18n.t('tab.playedWith')">
+             🤝 {{ uiI18n.t('tab.playedWith') }}
+           </button>
            </nav>
         </div>
 
@@ -411,6 +422,12 @@
             [characterMeta]="heatmapCharacterMeta"
             (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
         </div>
+
+        <!-- Played With Tab -->
+        <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0" @tabContent>
+          <app-played-with [membershipIds]="heatmapMembershipIds"></app-played-with>
+        </div>
+
 
           <!-- Analytics Tab -->
         <!-- Analytics view temporarily removed -->

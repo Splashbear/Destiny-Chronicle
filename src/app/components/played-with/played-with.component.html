@@ -25,14 +25,22 @@
     {{ uiI18n.t('playedWith.loading') }}
   </div>
 
+  <div *ngIf="building && !sortedPartners.length" class="rounded-lg bg-slate-800/95 border border-amber-700/50 p-6 text-center text-amber-100 text-sm space-y-2">
+    <div class="flex items-center justify-center gap-2">
+      <app-destiny-loader size="sm"></app-destiny-loader>
+      <span>{{ uiI18n.t('playedWith.building') }}</span>
+    </div>
+    <p class="text-xs text-slate-400">{{ uiI18n.t('playedWith.buildingHint') }}</p>
+  </div>
+
   <div
-    *ngIf="!loading && coverage && coverage.pgcrCached === 0"
+    *ngIf="!loading && !building && coverage && coverage.pgcrCached === 0"
     class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
     {{ uiI18n.t('playedWith.empty') }}
   </div>
 
   <div
-    *ngIf="coverage && coverage.pgcrCached > 0 && sortedPartners.length === 0 && !loading"
+    *ngIf="!building && coverage && coverage.pgcrCached > 0 && sortedPartners.length === 0 && !loading"
     class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
     {{ uiI18n.t('playedWith.noPartners') }}
   </div>

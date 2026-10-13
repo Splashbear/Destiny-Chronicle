@@ -11,6 +11,17 @@ export interface ExternalPgcrPartner {
   lastPlayedTogether?: string;
 }
 
+/** Result of POST /played-with/stats (summary hit or queued build). */
+export interface PlayedWithApiResult {
+  partners: ExternalPgcrPartner[];
+  pending: boolean;
+  queued?: boolean;
+  status?: string;
+  position?: number | null;
+  source?: string;
+  games?: number;
+}
+
 export interface LightActivityRow {
   instanceId: string;
   period: string;
@@ -159,8 +170,7 @@ export class PgcrApiService {
     }
   }
 
-  async fetchPlayedWithStats(membershipIds: string[]): Promise<ExternalPgcrPartner[] | null> {
-    // W19: keep Played With off at launch until index is wired.
+  async fetchPlayedWithStats(membershipIds: string[]): Promise<PlayedWithApiResult | null> {
     if (!environment.enablePlayedWith) {
       return null;
     }
@@ -168,14 +178,28 @@ export class PgcrApiService {
       return null;
     }
     try {
+      // 202 Accepted (pending build) is still a success body for HttpClient.
       const resp = await firstValueFrom(
-        this.http.post<{ partners: ExternalPgcrPartner[] }>(
-          this.url('/played-with/stats'),
-          { membershipIds, limit: 500 },
-          { headers: this.headers() }
-        )
+        this.http.post<{
+          partners?: ExternalPgcrPartner[];
+          pending?: boolean;
+          queued?: boolean;
+          status?: string;
+          position?: number | null;
+          source?: string;
+          games?: number;
+        }>(this.url('/played-with/stats'), { membershipIds, limit: 500 }, { headers: this.headers() })
       );
-      return resp?.partners ?? [];
+      const pending = !!resp?.pending;
+      return {
+        partners: resp?.partners ?? [],
+        pending,
+        queued: resp?.queued,
+        status: resp?.status,
+        position: resp?.position ?? null,
+        source: resp?.source,
+        games: resp?.games
+      };
     } catch {
       return null;
     }
