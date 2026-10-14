@@ -19,6 +19,7 @@ import {
   uniqueCharacters,
   uniquePlatforms,
   uniqueYears,
+  heatmapYearRange,
   weekMonthLabels
 } from '../../utils/heatmap-filters';
 
@@ -561,7 +562,7 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
   private ensureFilterOptions(accountScoped: any[]): void {
     const platforms = uniquePlatforms(accountScoped);
     const characters = uniqueCharacters(accountScoped, this.characterMeta);
-    const years = uniqueYears(accountScoped);
+    const years = heatmapYearRange(accountScoped);
     const platformSig = platforms.map(platform => platform.type).join(',');
     const characterSig = [...characters.map(character => character.key)].sort().join(',');
     const yearSig = years.join(',');
