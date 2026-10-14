@@ -6,6 +6,9 @@ import { logger } from './utils/logger';
 import { ArchiveService } from './services/archive.service';
 import { BungieApiService } from './services/bungie-api.service';
 import { WatermarkService } from './services/watermark.service';
+import { FlagLookupService } from './services/flag-lookup.service';
+import { PgcrOverrideStore } from './services/pgcr-override.store';
+import { FixOnViewService } from './services/fix-on-view.service';
 import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
@@ -95,8 +98,35 @@ async function startServer(): Promise<void> {
   const watermarkService = new WatermarkService(config.watermarkPath);
   await watermarkService.load();
 
+  // Fix-on-view services (optional)
+  let fixOnViewService: FixOnViewService | undefined;
+  if (config.fixOnViewEnabled) {
+    const flagLookup = new FlagLookupService(config.flagLookupRoot);
+    await flagLookup.initialize();
+
+    const overrideStore = new PgcrOverrideStore(config.pgcrOverrideStoreRoot);
+    await overrideStore.initialize();
+
+    if (flagLookup.isAvailable() && overrideStore.isAvailable()) {
+      fixOnViewService = new FixOnViewService(flagLookup, overrideStore, bungieApiService, {
+        firstViewWaitMs: config.fixOnViewWaitMs,
+        asyncFix: false,
+      });
+      logger.info('Fix-on-view enabled', {
+        flaggedIds: flagLookup.getStats().totalFlaggedIds,
+        existingOverrides: overrideStore.getStats().totalOverrides,
+        waitMs: config.fixOnViewWaitMs,
+      });
+    } else {
+      logger.warn('Fix-on-view enabled but services not available', {
+        flagLookupAvailable: flagLookup.isAvailable(),
+        overrideStoreAvailable: overrideStore.isAvailable(),
+      });
+    }
+  }
+
   // DC-facing routes (PgcrLite format for Angular app)
-  app.use('/pgcr', createDcPgcrRouter(archiveService, bungieApiService, watermarkService));
+  app.use('/pgcr', createDcPgcrRouter(archiveService, bungieApiService, watermarkService, fixOnViewService));
 
   // Player activities routes (light format for cold-start optimization)
   app.use('/players', createPlayerActivitiesRouter(archiveService, watermarkService));

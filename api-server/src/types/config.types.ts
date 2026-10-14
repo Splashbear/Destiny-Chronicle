@@ -29,6 +29,12 @@ export interface ApiConfig {
   bungieApiKey: string;
   bungieApiRoot: string;
   
+  // Fix-on-view for flagged PGCRs
+  flagLookupRoot: string;
+  pgcrOverrideStoreRoot: string;
+  fixOnViewEnabled: boolean;
+  fixOnViewWaitMs: number;
+  
   // Server options
   enableCors: boolean;
   /** Comma-separated allowlist when CORS is on. Empty = reflect request Origin if present, else *. */
@@ -53,6 +59,10 @@ export const ENV_KEYS = {
   GAP_RELAX_COMPLETE: 'GAP_RELAX_COMPLETE',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
+  FLAG_LOOKUP_ROOT: 'FLAG_LOOKUP_ROOT',
+  PGCR_OVERRIDE_STORE_ROOT: 'PGCR_OVERRIDE_STORE_ROOT',
+  FIX_ON_VIEW_ENABLED: 'FIX_ON_VIEW_ENABLED',
+  FIX_ON_VIEW_WAIT_MS: 'FIX_ON_VIEW_WAIT_MS',
   ENABLE_CORS: 'PGCR_ENABLE_CORS',
   CORS_ORIGIN: 'PGCR_CORS_ORIGIN',
   LOG_LEVEL: 'PGCR_LOG_LEVEL',

@@ -29,6 +29,12 @@ export function loadConfig(): ApiConfig {
     bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',
     bungieApiRoot: process.env[ENV_KEYS.BUNGIE_API_ROOT] || 'https://www.bungie.net/Platform',
     
+    // Fix-on-view for flagged PGCRs
+    flagLookupRoot: process.env[ENV_KEYS.FLAG_LOOKUP_ROOT] || '',
+    pgcrOverrideStoreRoot: process.env[ENV_KEYS.PGCR_OVERRIDE_STORE_ROOT] || '',
+    fixOnViewEnabled: process.env[ENV_KEYS.FIX_ON_VIEW_ENABLED] === 'true',
+    fixOnViewWaitMs: parseInt(process.env[ENV_KEYS.FIX_ON_VIEW_WAIT_MS] || '2000', 10),
+    
     // Server options
     enableCors: process.env[ENV_KEYS.ENABLE_CORS] === 'true',
     corsOrigin: process.env[ENV_KEYS.CORS_ORIGIN] || '',
