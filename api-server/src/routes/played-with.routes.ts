@@ -115,7 +115,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
     for (const p of partners) if (!p.displayName) { p.displayName = PRIVATE_GUARDIAN; p.nameSource = 'private'; }
     const sum = (k: 'd1Games' | 'bungieGames') => ready.reduce((n, s) => n + (s[k] || 0), 0);
     const coverage = {
-      complete: ready.length === include.length && ready.every((s) => (s.coverage as any)?.complete !== false && (s.coverage as any)?.bungie === 'ok'),
+      complete: ready.length === include.length && ready.every((s) => (s.coverage as any)?.complete !== false && ['ok', 'account_not_found'].includes((s.coverage as any)?.bungie)),
       games: merged.games, bungieGames: sum('bungieGames'), d1GamesNotCounted: sum('d1Games'),
       archiveMaxIidExclusive: (ready[0].coverage as any)?.archiveMaxIidExclusive ?? null,
       uncoveredInstances: ready.reduce((n, s) => n + Number((s.coverage as any)?.uncoveredInstances || 0), 0),

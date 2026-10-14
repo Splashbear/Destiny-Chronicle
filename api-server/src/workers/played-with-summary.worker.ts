@@ -106,7 +106,8 @@ export async function buildAccount(deps: BuildDeps, it: Pick<QueueItem, 'key' | 
       for (const h of hist) if (BigInt(h.instanceId) > BigInt(bungieTopIid) && !failed.has(h.instanceId)) bungieTopIid = h.instanceId;
       missing = failed; bungieStatus = failed.size ? 'partial' : 'ok';
     } catch (e) {
-      bungieStatus = `error: ${String((e as Error).message || e)}`;
+      // Bungie has no D2 profile for this id (e.g. an unused platform membership): nothing newer to fill.
+      bungieStatus = /DestinyAccountNotFound/.test(String((e as any)?.errorStatus || e)) ? 'account_not_found' : `error: ${String((e as Error).message || e)}`;
     }
   }
 
