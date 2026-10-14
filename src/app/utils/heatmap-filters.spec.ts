@@ -210,3 +210,34 @@ describe('heatmap filters', () => {
     ])).toEqual(['Sep', 'Oct', null]);
   });
 });
+
+import { gameInstanceKey, heatmapYearRange } from './heatmap-filters';
+
+describe('heatmapYearRange', () => {
+  const now = new Date(2026, 9, 14);
+  it('starts at 2014 when D1 rows exist even if the earliest D1 game is later', () => {
+    const years = heatmapYearRange([{ game: 'D1', period: '2017-03-01T00:00:00Z' }], now);
+    expect(years[0]).toBe(2014);
+    expect(years[years.length - 1]).toBe(2026);
+    expect(years.length).toBe(13);
+  });
+  it('starts at 2017 for D2-only data', () => {
+    expect(heatmapYearRange([{ game: 'D2', period: '2020-06-01T00:00:00Z' }], now)[0]).toBe(2017);
+  });
+  it('is empty without data', () => {
+    expect(heatmapYearRange([], now)).toEqual([]);
+  });
+});
+
+describe('gameInstanceKey', () => {
+  it('separates D1 and D2 games that share an instance id', () => {
+    const d1 = { game: 'D1', activityDetails: { instanceId: '6209109107' } };
+    const d2 = { game: 'D2', activityDetails: { instanceId: '6209109107' } };
+    expect(gameInstanceKey(d1)).not.toBe(gameInstanceKey(d2));
+  });
+  it('uses the fallback game, then D2, and blanks missing ids', () => {
+    expect(gameInstanceKey({ activityDetails: { instanceId: 5 } }, 'D1')).toBe('D1|5');
+    expect(gameInstanceKey({ activityDetails: { instanceId: 5 } })).toBe('D2|5');
+    expect(gameInstanceKey({})).toBe('');
+  });
+});

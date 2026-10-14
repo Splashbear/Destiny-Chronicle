@@ -276,6 +276,38 @@ export function uniqueYears(activities: HeatmapActivity[]): number[] {
   return [...years].sort((a, b) => a - b);
 }
 
+/** D1 launched Sept 2014; D2 Sept 2017. */
+export const D1_FIRST_YEAR = 2014;
+export const D2_FIRST_YEAR = 2017;
+
+/**
+ * Continuous year list for selectors: from 2014 when any D1 row is present
+ * (2017 otherwise, or earlier data if any) through the current year.
+ * Years without data stay listed; callers disable them.
+ */
+export function heatmapYearRange(activities: HeatmapActivity[], now: Date = new Date()): number[] {
+  const dataYears = uniqueYears(activities);
+  if (dataYears.length === 0) {
+    return [];
+  }
+  const hasD1 = activities.some(a => a.game === 'D1');
+  const start = Math.min(hasD1 ? D1_FIRST_YEAR : D2_FIRST_YEAR, dataYears[0]);
+  const end = Math.max(now.getFullYear(), dataYears[dataYears.length - 1]);
+  const out: number[] = [];
+  for (let y = start; y <= end; y++) out.push(y);
+  return out;
+}
+
+/** Stored games are unique per game + instance id (D1 and D2 ids overlap). */
+export function gameInstanceKey(
+  activity: { game?: string; activityDetails?: { instanceId?: string | number } } | null | undefined,
+  fallbackGame?: 'D1' | 'D2'
+): string {
+  const iid = activity?.activityDetails?.instanceId;
+  if (iid == null || iid === '') return '';
+  return `${activity?.game || fallbackGame || 'D2'}|${iid}`;
+}
+
 export function seasonOverlapsYear(start: Date, end: Date, year: number): boolean {
   const yearStart = new Date(year, 0, 1);
   const yearEnd = new Date(year, 11, 31, 23, 59, 59);

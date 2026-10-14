@@ -962,10 +962,12 @@ export class ActivityDbService extends Dexie {
     }
   }
 
-  async getActivityByInstanceId(instanceId: string): Promise<StoredActivity | undefined> {
+  /** D1 and D2 instance ids overlap: pass `game` to get the right row. */
+  async getActivityByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<StoredActivity | undefined> {
     await this.initPromise;
     try {
-      return await this.activities.where('instanceId').equals(instanceId).first();
+      const rows = await this.activities.where('instanceId').equals(instanceId).toArray();
+      return game ? rows.find(r => (r.game || 'D2') === game) : rows[0];
     } catch (error) {
       console.error('[Dexie] Error getting activity by instance ID:', error);
       return undefined;
@@ -1005,20 +1007,22 @@ export class ActivityDbService extends Dexie {
   /**
    * Resolve by indexed `instanceId` and by `activityDetails.instanceId` / root copy (deduped by Dexie `id`).
    */
-  async findActivitiesByInstanceIds(instanceIds: string[]): Promise<StoredActivity[]> {
+  async findActivitiesByInstanceIds(instanceIds: string[], game?: 'D1' | 'D2'): Promise<StoredActivity[]> {
     await this.initPromise;
     const set = new Set(instanceIds.map((s) => String(s)));
     const byPk = new Map<number, StoredActivity>();
     for (const id of set) {
-      const row = await this.getActivityByInstanceId(id);
-      if (row != null && (row as any).id != null) {
-        byPk.set((row as any).id as number, row);
+      // Every stored row with this id (D1 and D2 may share it), unless a game is given.
+      const rows = await this.activities.where('instanceId').equals(id).toArray();
+      for (const row of rows) {
+        if (game && (row.game || 'D2') !== game) continue;
+        if ((row as any).id != null) byPk.set((row as any).id as number, row);
       }
     }
     const detailMatches = await this.activities
       .filter((a) => {
         const resolved = ActivityDbService.resolveStoredActivityInstanceId(a);
-        return !!resolved && set.has(resolved);
+        return !!resolved && set.has(resolved) && (!game || (a.game || 'D2') === game);
       })
       .toArray();
     for (const a of detailMatches) {
@@ -1056,7 +1060,8 @@ export class ActivityDbService extends Dexie {
       for (const row of rows) {
         const iid = ActivityDbService.resolveStoredActivityInstanceId(row);
         if (iid) {
-          byInstanceId[iid] = row;
+          // game|instanceId: D1 and D2 rows can share an id.
+          byInstanceId[`${row.game || 'D2'}|${iid}`] = row;
         }
       }
     }

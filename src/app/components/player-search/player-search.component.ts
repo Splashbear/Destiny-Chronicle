@@ -67,6 +67,7 @@ import { AccountCardGridComponent } from '../account-card-grid/account-card-grid
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
+import { gameInstanceKey } from '../../utils/heatmap-filters';
 import { partitionAgainstStored } from '../../utils/archive-stub-merge';
 import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '../../utils/pgcr-prune';
 import { UiI18nService } from '../../services/ui-i18n.service';
@@ -4512,8 +4513,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         });
       }
       const typeGroup = yearGroup.typeGroups.get(groupKey)!;
-      const instanceId = String(activity.activityDetails?.instanceId || '');
-      // Deduplicate by PGCR instance across platforms/accounts
+      const instanceId = gameInstanceKey(activity);
+      // Deduplicate by game + PGCR instance across platforms/accounts (D1/D2 ids overlap)
       if (instanceId) {
         if (typeGroup.seenInstanceIds!.has(instanceId)) {
           continue; // already included from another platform/account
@@ -4860,7 +4861,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           // Merge characterClass back into the activities array by instanceId
           const clsByInstance = new Map<string, string | undefined>();
           for (const v of validated) {
-            const iid = v.activityDetails?.instanceId;
+            const iid = gameInstanceKey(v as any, character.game as 'D1' | 'D2');
             if (iid && v.characterClass) {
               clsByInstance.set(iid, v.characterClass);
             }
@@ -4868,7 +4869,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           if (clsByInstance.size === 0) continue;
 
           for (const a of activities) {
-            const iid = a.activityDetails?.instanceId;
+            const iid = gameInstanceKey(a as any);
             if (iid && !a.characterClass && clsByInstance.has(iid)) {
               (a as any).characterClass = clsByInstance.get(iid);
             }
@@ -4879,7 +4880,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Also reflect in the filtered list used by grouping/rendering
       for (const a of this.filteredActivitiesForDate) {
         if (!a.characterClass) {
-          const match = activities.find(x => x.activityDetails?.instanceId === a.activityDetails?.instanceId);
+          const match = activities.find(x => gameInstanceKey(x as any) === gameInstanceKey(a as any));
           if (match?.characterClass) {
             (a as any).characterClass = match.characterClass;
           }
