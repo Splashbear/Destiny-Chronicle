@@ -9,7 +9,7 @@ export const environment = {
   useBungieDevProxy: false,
   // Production-specific settings
   testMode: false,
-  baseHref: '/Destiny-Chronicle/',
+  baseHref: '/',
   mockData: {
     enabled: false
   },

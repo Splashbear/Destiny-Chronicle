@@ -22,7 +22,7 @@ jobs:
         run: npm ci
 
       - name: Build Angular app
-        run: npx ng build --configuration production --base-href /Destiny-Chronicle/
+        run: npx ng build --configuration production --base-href / --deploy-url /
 
       - name: Copy index.html to 404.html
         run: cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
@@ -31,4 +31,5 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: dist/destiny-chronicle/browser 
+          publish_dir: dist/destiny-chronicle/browser
+          cname: destinychronicle.com 
