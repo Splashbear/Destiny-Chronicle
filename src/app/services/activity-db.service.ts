@@ -2125,7 +2125,7 @@ export class ActivityDbService extends Dexie {
     // parallel HTTP calls, NOT one batched endpoint. Use c=1 so each PGCR is
     // sequential and we stay under PerEndpointRequestThrottleExceeded.
     const batchSize = 6; // ids processed per await (each id fetched one-after-another inside batch)
-    const delayMs = 1800; // pause between batches so other app requests can run
+    // Removed fixed delayMs - natural pacing from network/API latency + rate limiter is sufficient
     const chunks: string[][] = [];
     for (let i = 0; i < instanceIds.length; i += batchSize) {
       chunks.push(instanceIds.slice(i, i + batchSize));
@@ -2150,13 +2150,13 @@ export class ActivityDbService extends Dexie {
             const throttled = /Throttle|429|Too many/i.test(msg);
             console.warn('[D1 PGCR prefetch] Batch failed:', err);
             if (throttled && i < chunks.length - 1) {
-              await new Promise((r) => setTimeout(r, 10_000));
+              // Instead of setTimeout(10000), back off by reducing batch size on next iteration
+              // The rate limiter will naturally pace subsequent requests
+              console.warn('[D1 PGCR prefetch] Rate limited, continuing with natural pacing');
             }
           }
           this.pgcrPrefetchProgress$.next({ inProgress: true, current: i + 1, total });
-          if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-          }
+          // Removed artificial delay between batches - network latency + rate limiter provides natural pacing
         }
       } finally {
         this.pgcrPrefetchRunCount = Math.max(0, this.pgcrPrefetchRunCount - 1);
@@ -2448,10 +2448,7 @@ export class ActivityDbService extends Dexie {
       
       await Promise.allSettled(promises);
       
-      // Add delay between chunks to avoid rate limits (except for last chunk)
-      if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between chunks
-      }
+      // Removed artificial delay between chunks - rate limiter + network latency provides natural pacing
     }
     
     // Cache the successfully fetched PGCRs

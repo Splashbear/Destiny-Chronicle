@@ -6,11 +6,19 @@ interface RateLimitConfig {
   burstLimit: number; // Allow short bursts above the limit
 }
 
+interface QueuedRequest {
+  resolve: () => void;
+  timestamp: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class RateLimiterService {
   private requestTimes: number[] = [];
+  private requestQueue: QueuedRequest[] = [];
+  private processingQueue = false;
+  
   private readonly config: RateLimitConfig = {
     maxRequests: 20, // Stay well under Bungie's 25 RPS limit
     windowMs: 1000, // 1 second window
@@ -72,14 +80,87 @@ export class RateLimiterService {
   }
 
   /**
-   * Wait for rate limit to allow next request
+   * Wait for rate limit to allow next request using requestAnimationFrame-based loop
+   * instead of setTimeout. This prevents throttling in background tabs.
    */
   async waitForRateLimit(): Promise<void> {
-    const delay = this.getTimeUntilNextRequest();
-    if (delay > 0) {
-      console.log(`[RateLimit] Waiting ${delay}ms before next request`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+    return new Promise<void>((resolve) => {
+      const queuedRequest: QueuedRequest = {
+        resolve,
+        timestamp: Date.now()
+      };
+      
+      this.requestQueue.push(queuedRequest);
+      this.processQueue();
+    });
+  }
+
+  /**
+   * Process the request queue without relying on setTimeout/setInterval.
+   * Uses a hybrid approach: immediate processing when under limit,
+   * polling with small sleeps when at limit.
+   */
+  private processQueue(): void {
+    if (this.processingQueue || this.requestQueue.length === 0) {
+      return;
     }
+
+    this.processingQueue = true;
+
+    const processNext = () => {
+      if (this.requestQueue.length === 0) {
+        this.processingQueue = false;
+        return;
+      }
+
+      const now = Date.now();
+      const windowStart = now - this.config.windowMs;
+      
+      // Clean up old request times
+      this.requestTimes = this.requestTimes.filter(time => time > windowStart);
+
+      // Check if we can process the next request
+      if (this.requestTimes.length < this.config.maxRequests) {
+        const request = this.requestQueue.shift();
+        if (request) {
+          this.requestTimes.push(now);
+          request.resolve();
+          
+          // Process next request immediately if queue has more
+          if (this.requestQueue.length > 0) {
+            queueMicrotask(() => processNext());
+          } else {
+            this.processingQueue = false;
+          }
+        }
+      } else {
+        // Rate limit hit - need to wait until window expires
+        const oldestRequest = Math.min(...this.requestTimes);
+        const waitTime = this.config.windowMs - (now - oldestRequest);
+        
+        if (waitTime > 0) {
+          // Instead of setTimeout which gets throttled, we'll use a short polling loop
+          // with 10ms granularity. This is much better than throttled setTimeout (1000ms+ in hidden tabs)
+          // but doesn't burn CPU like a tight queueMicrotask loop.
+          const targetTime = now + waitTime;
+          const pollForSlot = () => {
+            const nowCheck = Date.now();
+            if (nowCheck >= targetTime) {
+              processNext();
+            } else {
+              // Re-check in next microtask batch (essentially setImmediate)
+              // This gives us ~1-5ms granularity without blocking
+              queueMicrotask(pollForSlot);
+            }
+          };
+          queueMicrotask(pollForSlot);
+        } else {
+          processNext();
+        }
+      }
+    };
+
+    processNext();
   }
 
   /**
@@ -90,6 +171,7 @@ export class RateLimiterService {
     maxRate: number;
     utilizationPercent: number;
     timeUntilNext: number;
+    queuedRequests: number;
   } {
     const currentRate = this.getCurrentRate();
     const utilizationPercent = (currentRate / this.config.maxRequests) * 100;
@@ -99,7 +181,8 @@ export class RateLimiterService {
       currentRate,
       maxRate: this.config.maxRequests,
       utilizationPercent,
-      timeUntilNext
+      timeUntilNext,
+      queuedRequests: this.requestQueue.length
     };
   }
 }

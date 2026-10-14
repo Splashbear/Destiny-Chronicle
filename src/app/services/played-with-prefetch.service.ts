@@ -115,8 +115,19 @@ export class PlayedWithPrefetchService {
     };
 
     const fetchOne = async (entry: MissingPgcrEntry): Promise<void> => {
+      // Poll for rate limit clearance without using setTimeout
       while (Date.now() < rateLimitUntil && token === this.cancelToken) {
-        await sleep(50);
+        // Use queueMicrotask for non-blocking wait instead of sleep(50)
+        await new Promise<void>(resolve => {
+          const checkTime = () => {
+            if (Date.now() >= rateLimitUntil || token !== this.cancelToken) {
+              resolve();
+            } else {
+              queueMicrotask(checkTime);
+            }
+          };
+          queueMicrotask(checkTime);
+        });
       }
       if (token !== this.cancelToken) {
         return;
@@ -173,8 +184,4 @@ export class PlayedWithPrefetchService {
       this.progress$.next({ fetchedThisRun, remainingThisRun: 0, active: false });
     }
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
