@@ -34,6 +34,7 @@ export interface ApiConfig {
   pgcrOverrideStoreRoot: string;
   fixOnViewEnabled: boolean;
   fixOnViewWaitMs: number;
+  flagFilter: 'all' | 'sharp';
   
   // Server options
   enableCors: boolean;
@@ -63,6 +64,7 @@ export const ENV_KEYS = {
   PGCR_OVERRIDE_STORE_ROOT: 'PGCR_OVERRIDE_STORE_ROOT',
   FIX_ON_VIEW_ENABLED: 'FIX_ON_VIEW_ENABLED',
   FIX_ON_VIEW_WAIT_MS: 'FIX_ON_VIEW_WAIT_MS',
+  FLAG_FILTER: 'FLAG_FILTER',
   ENABLE_CORS: 'PGCR_ENABLE_CORS',
   CORS_ORIGIN: 'PGCR_CORS_ORIGIN',
   LOG_LEVEL: 'PGCR_LOG_LEVEL',

@@ -3,27 +3,39 @@
  * Convert v3_<startId>.json flag files to compact on-disk flag lookup.
  * 
  * INPUT FORMAT:
- * - 1,600 JSON files named v3_<startId>.json (e.g., v3_0.json, v3_10000000.json, ...)
- * - Each file covers a 10M instance ID range starting at <startId>
- * - Each file is a JSON array of objects: { "instanceId": "123...", "rule": "A" | "L" }
+ * - 1,600 JSON files named v3_<bandStartId>.json (e.g., v3_0.json, v3_10000000.json, v3_13300000000.json)
+ * - Each file covers a 10M instance ID range starting at <bandStartId>
+ * - Each file is a JSON object: { "file": "...", "records": N, "flagged": M, "flags": [...] }
+ * - Each flag is an array: [instanceId_str, n1, n2, n3, mode, rule_str, n4, n5]
+ *   - Element 0: instance ID as string
+ *   - Element 4: D2 activity mode (number)
+ *   - Element 5: rule "A" or "L" (string)
+ *   - Other numeric fields are opaque
  * - Instance IDs are D2 only (0 to 16B range)
+ * - Non-v3_*.json files (e.g., status.json) may exist; skip them
  * 
  * OUTPUT FORMAT:
  * - <outputRoot>/band_<bandId>.bin files
  * - bandId = Math.floor(instanceId / 10_000_000)
- * - Each .bin file is a sorted array of uint64 instance IDs (little-endian, 8 bytes each)
+ * - Each .bin file contains packed records (12 bytes each):
+ *   - 8 bytes: instance ID (uint64, little-endian)
+ *   - 1 byte: mode (uint8)
+ *   - 1 byte: rule (0x41='A', 0x4C='L')
+ *   - 2 bytes: padding (reserved)
+ * - Records are sorted by instance ID for binary search
  * 
  * VALIDATION:
  * - File names must match v3_<startId>.json pattern with startId % 10M == 0
+ * - flagged field must equal flags.length
  * - Instance IDs must be numeric and within the expected range for each file
  * - Instance IDs must be unique within each output band
- * - Rule must be "A" or "L" (both are treated as flagged)
+ * - Rule must be "A" or "L"
  * 
  * Usage:
  *   ts-node build-flag-lookup.ts <inputDir> <outputDir>
  * 
  * Example:
- *   ts-node build-flag-lookup.ts /path/to/v3_json /path/to/flag_lookup
+ *   ts-node build-flag-lookup.ts //Exit43Server/.../v3_json /path/to/flag_lookup
  */
 
 import * as fs from 'fs';
@@ -34,7 +46,17 @@ const FILE_SPAN = 10_000_000; // 10M IDs per input file
 
 interface FlagEntry {
   instanceId: string;
+  mode: number;
   rule: 'A' | 'L';
+}
+
+interface V3FileFormat {
+  file: string;
+  records: number;
+  parseErr?: number;
+  flagged: number;
+  secs?: number;
+  flags: Array<[string, number, number, number, number, string, number, number]>;
 }
 
 interface ValidationError {
@@ -72,74 +94,121 @@ function parseFileName(fileName: string): number | null {
  */
 function parseV3File(filePath: string, expectedStartId: number): FlagEntry[] {
   const content = fs.readFileSync(filePath, 'utf8');
-  const data = JSON.parse(content);
+  const data: V3FileFormat = JSON.parse(content);
 
-  if (!Array.isArray(data)) {
-    throw new Error('File content is not an array');
+  // Validate file structure
+  if (typeof data !== 'object' || data === null) {
+    throw new Error('File content is not an object');
+  }
+
+  if (typeof data.flagged !== 'number') {
+    throw new Error('Missing or invalid "flagged" field');
+  }
+
+  if (!Array.isArray(data.flags)) {
+    throw new Error('Missing or invalid "flags" array');
+  }
+
+  // Validate flagged == flags.length
+  if (data.flagged !== data.flags.length) {
+    throw new Error(
+      `Mismatch: flagged=${data.flagged} but flags.length=${data.flags.length}`
+    );
   }
 
   const entries: FlagEntry[] = [];
   const expectedEnd = expectedStartId + FILE_SPAN;
 
-  for (let i = 0; i < data.length; i++) {
-    const entry = data[i];
+  for (let i = 0; i < data.flags.length; i++) {
+    const flag = data.flags[i];
 
-    if (typeof entry !== 'object' || entry === null) {
-      throw new Error(`Entry ${i} is not an object`);
+    if (!Array.isArray(flag) || flag.length < 6) {
+      throw new Error(`Flag ${i} is not an array or too short`);
     }
 
-    const instanceId = entry.instanceId;
-    const rule = entry.rule;
+    const instanceId = flag[0];
+    const mode = flag[4];
+    const rule = flag[5];
 
     if (typeof instanceId !== 'string' || !/^\d+$/.test(instanceId)) {
-      throw new Error(`Entry ${i} has invalid instanceId: ${instanceId}`);
+      throw new Error(`Flag ${i} has invalid instanceId: ${instanceId}`);
     }
 
-    if (rule !== 'A' && rule !== 'L') {
-      throw new Error(`Entry ${i} has invalid rule: ${rule} (expected A or L)`);
+    if (typeof mode !== 'number') {
+      throw new Error(`Flag ${i} has invalid mode: ${mode}`);
+    }
+
+    if (typeof rule !== 'string' || (rule !== 'A' && rule !== 'L')) {
+      throw new Error(`Flag ${i} has invalid rule: ${rule} (expected A or L)`);
     }
 
     const idNum = parseInt(instanceId, 10);
     if (idNum < expectedStartId || idNum >= expectedEnd) {
       throw new Error(
-        `Entry ${i} instanceId ${instanceId} outside expected range [${expectedStartId}, ${expectedEnd})`
+        `Flag ${i} instanceId ${instanceId} outside expected range [${expectedStartId}, ${expectedEnd})`
       );
     }
 
-    entries.push({ instanceId, rule });
+    entries.push({ instanceId, mode, rule: rule as 'A' | 'L' });
   }
 
   return entries;
 }
 
+interface FlagRecord {
+  id: bigint;
+  mode: number;
+  rule: 'A' | 'L';
+}
+
 /**
- * Convert flag entries to band map.
+ * Convert flag entries to band map with mode/rule metadata.
  */
-function entriesToBands(entries: FlagEntry[]): Map<number, Set<bigint>> {
-  const bands = new Map<number, Set<bigint>>();
+function entriesToBands(entries: FlagEntry[]): Map<number, FlagRecord[]> {
+  const bands = new Map<number, FlagRecord[]>();
 
   for (const entry of entries) {
     const idNum = BigInt(entry.instanceId);
     const bandId = Number(idNum / BigInt(BAND_SIZE));
 
     if (!bands.has(bandId)) {
-      bands.set(bandId, new Set());
+      bands.set(bandId, []);
     }
-    bands.get(bandId)!.add(idNum);
+    bands.get(bandId)!.push({
+      id: idNum,
+      mode: entry.mode,
+      rule: entry.rule,
+    });
   }
 
   return bands;
 }
 
 /**
- * Write a band to disk.
+ * Write a band to disk with mode/rule metadata.
+ * Format: 12 bytes per record (8 bytes ID + 1 byte mode + 1 byte rule + 2 bytes padding)
  */
-function writeBand(outputDir: string, bandId: number, ids: Set<bigint>): void {
-  const sorted = Array.from(ids).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const buffer = Buffer.alloc(sorted.length * 8);
+function writeBand(outputDir: string, bandId: number, records: FlagRecord[]): void {
+  // Dedupe by ID (keep first occurrence)
+  const seen = new Set<bigint>();
+  const unique = records.filter((r) => {
+    if (seen.has(r.id)) return false;
+    seen.add(r.id);
+    return true;
+  });
+
+  // Sort by ID
+  const sorted = unique.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  // Pack into buffer (12 bytes per record)
+  const buffer = Buffer.alloc(sorted.length * 12);
 
   for (let i = 0; i < sorted.length; i++) {
-    buffer.writeBigUInt64LE(sorted[i], i * 8);
+    const offset = i * 12;
+    buffer.writeBigUInt64LE(sorted[i].id, offset); // 8 bytes: instance ID
+    buffer.writeUInt8(sorted[i].mode, offset + 8); // 1 byte: mode
+    buffer.writeUInt8(sorted[i].rule.charCodeAt(0), offset + 9); // 1 byte: 'A'=0x41 or 'L'=0x4C
+    buffer.writeUInt16LE(0, offset + 10); // 2 bytes: padding (reserved)
   }
 
   const bandFile = path.join(outputDir, `band_${bandId}.bin`);
@@ -173,7 +242,7 @@ function convertFlagFiles(inputDir: string, outputDir: string): ConversionStats 
   console.log(`Found ${files.length} v3_*.json files`);
 
   // Accumulate all bands
-  const allBands = new Map<number, Set<bigint>>();
+  const allBands = new Map<number, FlagRecord[]>();
 
   // Process each file
   for (let i = 0; i < files.length; i++) {
@@ -194,13 +263,11 @@ function convertFlagFiles(inputDir: string, outputDir: string): ConversionStats 
       const fileBands = entriesToBands(entries);
 
       // Merge into all bands
-      for (const [bandId, ids] of fileBands) {
+      for (const [bandId, records] of fileBands) {
         if (!allBands.has(bandId)) {
-          allBands.set(bandId, new Set());
+          allBands.set(bandId, []);
         }
-        for (const id of ids) {
-          allBands.get(bandId)!.add(id);
-        }
+        allBands.get(bandId)!.push(...records);
       }
 
       stats.totalFlaggedIds += entries.length;
@@ -259,10 +326,10 @@ function printStats(stats: ConversionStats): void {
 
   // Estimate storage
   const avgIdsPerBand = stats.totalFlaggedIds / Math.max(1, stats.bandsWritten);
-  const storageMB = (stats.totalFlaggedIds * 8) / (1024 * 1024);
+  const storageMB = (stats.totalFlaggedIds * 12) / (1024 * 1024); // 12 bytes per record
   console.log(`\n=== Storage Estimates ===`);
   console.log(`Average IDs per band: ${avgIdsPerBand.toFixed(0)}`);
-  console.log(`Total storage: ${storageMB.toFixed(2)} MB`);
+  console.log(`Total storage: ${storageMB.toFixed(2)} MB (12 bytes per record: 8B ID + 1B mode + 1B rule + 2B padding)`);
 }
 
 /**

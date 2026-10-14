@@ -3,18 +3,34 @@ import * as path from 'path';
 import { logger } from '../utils/logger';
 
 /**
- * Compact on-disk flag lookup for suspect D2 instance IDs.
+ * Compact on-disk flag lookup for suspect D2 instance IDs with mode/rule metadata.
  * 
  * Layout: <root>/band_<bandId>.bin
  * - bandId = Math.floor(instanceId / BAND_SIZE)
- * - Each .bin file is a sorted array of uint64 instance IDs (little-endian, 8 bytes each)
- * - Binary search for O(log n) lookup per band
+ * - Each .bin file contains packed records (12 bytes each):
+ *   - 8 bytes: instance ID (uint64, little-endian)
+ *   - 1 byte: mode (uint8)
+ *   - 1 byte: rule (0x41='A', 0x4C='L')
+ *   - 2 bytes: padding (reserved)
+ * - Records are sorted by instance ID for binary search
  * 
- * Memory usage: ~1MB per 131k flagged IDs per band (8 bytes each), loaded on-demand and cached.
- * With 127M flagged IDs across 1,600 bands (~79k per band avg), peak memory is modest (~10-100 MB).
+ * Filter configuration (env FLAG_FILTER):
+ * - "all" (default): All flagged IDs regardless of mode/rule
+ * - "sharp": Skip rule A in modes 2,4,6,82; L only for mode 40
+ * 
+ * Memory usage: ~1.5MB per 131k flagged IDs per band (12 bytes each), loaded on-demand and cached.
  */
 
 const BAND_SIZE = 10_000_000; // 10M IDs per band
+const RECORD_SIZE = 12; // 8B ID + 1B mode + 1B rule + 2B padding
+
+interface FlagRecord {
+  id: bigint;
+  mode: number;
+  rule: 'A' | 'L';
+}
+
+type FilterMode = 'all' | 'sharp';
 
 export interface FlagLookupStats {
   totalBands: number;
@@ -22,21 +38,27 @@ export interface FlagLookupStats {
   loadedBands: number;
   cacheHits: number;
   cacheMisses: number;
+  filterMode: FilterMode;
+  filteredOut: number;
 }
 
 export class FlagLookupService {
   private root: string;
-  private bandCache = new Map<number, bigint[]>();
+  private filterMode: FilterMode;
+  private bandCache = new Map<number, FlagRecord[]>();
   private stats: FlagLookupStats = {
     totalBands: 0,
     totalFlaggedIds: 0,
     loadedBands: 0,
     cacheHits: 0,
     cacheMisses: 0,
+    filterMode: 'all',
+    filteredOut: 0,
   };
 
-  constructor(root: string) {
+  constructor(root: string, filterMode: FilterMode = 'all') {
     this.root = root;
+    this.filterMode = filterMode;
   }
 
   /**
@@ -57,14 +79,16 @@ export class FlagLookupService {
       for (const file of bandFiles) {
         const filePath = path.join(this.root, file);
         const stat = fs.statSync(filePath);
-        totalIds += stat.size / 8; // 8 bytes per uint64
+        totalIds += stat.size / RECORD_SIZE; // 12 bytes per record
       }
       this.stats.totalFlaggedIds = totalIds;
+      this.stats.filterMode = this.filterMode;
 
       logger.info('Flag lookup initialized', {
         root: this.root,
         totalBands: this.stats.totalBands,
         totalFlaggedIds: this.stats.totalFlaggedIds,
+        filterMode: this.filterMode,
       });
     } catch (error) {
       logger.error('Failed to initialize flag lookup', { error, root: this.root });
@@ -73,7 +97,7 @@ export class FlagLookupService {
 
   /**
    * Check if a D2 instance ID is flagged as suspect.
-   * Returns true if flagged, false otherwise.
+   * Returns true if flagged and passes filter, false otherwise.
    */
   isFlagged(instanceId: string, game: 'D1' | 'D2'): boolean {
     // D1 games are never flagged (scan was D2-only)
@@ -93,14 +117,33 @@ export class FlagLookupService {
       return false;
     }
 
-    return this.binarySearch(band, idNum);
+    const record = this.binarySearch(band, idNum);
+    if (!record) {
+      return false;
+    }
+
+    // Apply filter
+    if (this.filterMode === 'sharp') {
+      // Skip rule A in modes 2,4,6,82
+      if (record.rule === 'A' && [2, 4, 6, 82].includes(record.mode)) {
+        this.stats.filteredOut++;
+        return false;
+      }
+      // L only for mode 40
+      if (record.rule === 'L' && record.mode !== 40) {
+        this.stats.filteredOut++;
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
    * Load a band from disk or cache.
    * Returns null if band file doesn't exist.
    */
-  private loadBand(bandId: number): bigint[] | null {
+  private loadBand(bandId: number): FlagRecord[] | null {
     const cached = this.bandCache.get(bandId);
     if (cached) {
       this.stats.cacheHits++;
@@ -116,19 +159,27 @@ export class FlagLookupService {
 
     try {
       const buffer = fs.readFileSync(bandFile);
-      const count = buffer.length / 8;
-      const band: bigint[] = [];
+      const count = buffer.length / RECORD_SIZE;
+      const band: FlagRecord[] = [];
 
       for (let i = 0; i < count; i++) {
-        // Read little-endian uint64
-        const offset = i * 8;
+        const offset = i * RECORD_SIZE;
         const id = buffer.readBigUInt64LE(offset);
-        band.push(id);
+        const mode = buffer.readUInt8(offset + 8);
+        const ruleCode = buffer.readUInt8(offset + 9);
+        const rule = ruleCode === 0x41 ? 'A' : ruleCode === 0x4C ? 'L' : '?' as any;
+
+        if (rule === '?') {
+          logger.warn('Invalid rule code in band file', { bandId, offset, ruleCode });
+          continue;
+        }
+
+        band.push({ id, mode, rule });
       }
 
       // Verify sorted (should be from converter)
       for (let i = 1; i < band.length; i++) {
-        if (band[i] <= band[i - 1]) {
+        if (band[i].id <= band[i - 1].id) {
           logger.warn('Band not sorted, will not cache', { bandId, bandFile });
           return band; // Don't cache unsorted data
         }
@@ -147,17 +198,18 @@ export class FlagLookupService {
 
   /**
    * Binary search for an ID in a sorted band.
+   * Returns the record if found, null otherwise.
    */
-  private binarySearch(band: bigint[], target: bigint): boolean {
+  private binarySearch(band: FlagRecord[], target: bigint): FlagRecord | null {
     let left = 0;
     let right = band.length - 1;
 
     while (left <= right) {
       const mid = Math.floor((left + right) / 2);
-      const midVal = band[mid];
+      const midVal = band[mid].id;
 
       if (midVal === target) {
-        return true;
+        return band[mid];
       } else if (midVal < target) {
         left = mid + 1;
       } else {
@@ -165,7 +217,7 @@ export class FlagLookupService {
       }
     }
 
-    return false;
+    return null;
   }
 
   /**

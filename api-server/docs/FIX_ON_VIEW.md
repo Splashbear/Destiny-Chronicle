@@ -57,24 +57,30 @@ The converter script builds the compact flag lookup from the v3_*.json scan file
 
 ```bash
 cd api-server
-npx ts-node scripts/build-flag-lookup.ts /path/to/v3_json /path/to/flag_lookup
+npx ts-node scripts/build-flag-lookup.ts //Exit43Server/.../v3_json /path/to/flag_lookup
 ```
 
 **Input format (v3_*.json files):**
-- 1,600 files named `v3_<startId>.json` (e.g., `v3_0.json`, `v3_10000000.json`)
-- Each covers 10M instance IDs starting at `<startId>` (must be multiple of 10M)
-- JSON array of objects: `{ "instanceId": "123...", "rule": "A" | "L" }`
+- 1,600 files named `v3_<bandStartId>.json` (e.g., `v3_0.json`, `v3_10000000.json`, `v3_13300000000.json`)
+- Each covers 10M instance IDs starting at `<bandStartId>` (must be multiple of 10M)
+- JSON object: `{ "file": "...", "records": N, "flagged": M, "flags": [...] }`
+- Each flag is an array: `[instanceId_str, n1, n2, n3, mode, rule_str, n4, n5]`
+  - Element 0: instance ID (string)
+  - Element 4: D2 activity mode (number)
+  - Element 5: rule "A" or "L" (string)
+- Non-v3_*.json files (e.g., status.json) may exist in the same folder; skipped
 
 **Validation:**
-- File names match pattern with startId % 10M == 0
+- File names match pattern with `bandStartId % 10M == 0`
+- `flagged` field equals `flags.length`
 - Instance IDs numeric and within expected range for each file
 - Instance IDs unique within each output band
-- Rule is "A" or "L" (both treated as flagged)
+- Rule is "A" or "L"
 
 **Output:**
 - `band_<bandId>.bin` files (bandId = Math.floor(instanceId / 10M))
-- Sorted uint64 arrays (little-endian, 8 bytes each)
-- Total storage: ~1GB for 127M flagged IDs
+- Packed records (12 bytes each): 8B ID + 1B mode + 1B rule + 2B padding
+- Total storage: ~1.5GB for 127M flagged IDs (12 bytes each)
 
 ### 2. Configure Environment
 
@@ -93,6 +99,11 @@ FIX_ON_VIEW_ENABLED=true
 # Max wait time for Bungie fetch on first view (ms)
 # 0 = return immediately, 1000-3000 = brief wait (recommended)
 FIX_ON_VIEW_WAIT_MS=2000
+
+# Flag filter mode (default: "all")
+# "all" = All flagged IDs regardless of mode/rule
+# "sharp" = Skip rule A in modes 2,4,6,82; L only for mode 40
+FLAG_FILTER=all
 
 # Bungie API key (already configured for Played With v2)
 BUNGIE_API_KEY=your_api_key_here
@@ -173,14 +184,17 @@ Batch pre-fix script marks affected summaries for rebuild when a fix changes a r
 
 ## Storage Cost
 
-**Per corrected game:**
+**Per viewed flagged game:**
 - Full Bungie PGCR response (gzip compressed)
 - Typical: 2-10KB compressed (10-50KB uncompressed)
 - Average from sampling: ~5KB
 
+**Important**: Overrides store EVERY viewed flagged game, not just ones with actually missing players. Even if only ~0.34% truly missing, all 127M flagged games could eventually be stored if viewed.
+
 **Total cost estimate:**
-- 127M flagged IDs × 0.34% actually missing = ~432k games
-- ~432k × 5KB = ~2.1GB total (worst case if all eventually fixed)
+- Best case (only viewed games): Depends on view patterns
+- Worst case (all flagged games viewed): 127M × 5KB = ~635GB
+- Realistic estimate (top accounts pre-fixed + organic views): ~10-50GB over time
 
 **Override store organization:**
 ```
@@ -266,15 +280,13 @@ npm test fix-on-view.test.ts
 
 This PR does NOT include:
 
-1. **Played With summary rebuild marking**: When a fix changes a roster, affected summaries should be marked for rebuild. Currently, summaries use whatever roster is available at build time (archive or override). A future enhancement could add a "dirty" marker to summaries whose games have been fixed since last build.
+1. **Admin UI**: No web interface for monitoring fix progress or triggering batch fixes. Use the batch script for pre-fixing and health endpoint for monitoring.
 
-2. **Admin UI**: No web interface for monitoring fix progress or triggering batch fixes. Use the batch script for pre-fixing and health endpoint for monitoring.
+2. **Automatic batch fixing**: Batch pre-fix is manual via script. Could be scheduled via cron/Task Scheduler, but not included here.
 
-3. **Automatic batch fixing**: Batch pre-fix is manual via script. Could be scheduled via cron/Task Scheduler, but not included here.
+3. **D1 support**: Flag data is D2-only (scan was D2 0-16B). D1 games are never flagged.
 
-4. **D1 support**: Flag data is D2-only (scan was D2 0-16B). D1 games are never flagged.
-
-5. **Real-time sync with Played With v2**: Post-archive store (PLAYED_WITH_POST_ARCHIVE_DIR) and override store are separate. Games >16B continue to use post-archive; <16B use override when flagged.
+4. **Real-time sync with Played With v2**: Post-archive store (PLAYED_WITH_POST_ARCHIVE_DIR) and override store are separate. Games >16B continue to use post-archive; <16B use override when flagged.
 
 ## Performance
 
@@ -284,14 +296,15 @@ This PR does NOT include:
 - Subsequent views: Served from override, <10ms
 
 Memory usage:
-- Flag lookup: ~10-100MB peak (bands loaded on-demand, cached)
+- Flag lookup: ~15-150MB peak (12 bytes per record, bands loaded on-demand, cached)
 - Override store: File-based, no in-memory cache
 - Total: Modest, suitable for limited-RAM Windows server
 
 ## Future Enhancements
 
-1. Automatic rebuild of affected Played With summaries
-2. Admin API for triggering batch fixes and monitoring progress
-3. Scheduled batch fixing (nightly job for top accounts)
-4. Compression ratio tracking for storage optimization
-5. Cache warming: Pre-load flag bands for most-requested ranges
+1. Admin API for triggering batch fixes and monitoring progress
+2. Scheduled batch fixing (nightly job for top accounts)
+3. Compression ratio tracking for storage optimization
+4. Cache warming: Pre-load flag bands for most-requested ranges
+5. Override store cleanup: Remove overrides for games with no roster changes
+6. Metrics dashboard: View patterns, fix rates, storage growth

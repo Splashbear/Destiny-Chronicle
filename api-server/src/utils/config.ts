@@ -34,6 +34,7 @@ export function loadConfig(): ApiConfig {
     pgcrOverrideStoreRoot: process.env[ENV_KEYS.PGCR_OVERRIDE_STORE_ROOT] || '',
     fixOnViewEnabled: process.env[ENV_KEYS.FIX_ON_VIEW_ENABLED] === 'true',
     fixOnViewWaitMs: parseInt(process.env[ENV_KEYS.FIX_ON_VIEW_WAIT_MS] || '2000', 10),
+    flagFilter: (process.env[ENV_KEYS.FLAG_FILTER] === 'sharp' ? 'sharp' : 'all') as 'all' | 'sharp',
     
     // Server options
     enableCors: process.env[ENV_KEYS.ENABLE_CORS] === 'true',

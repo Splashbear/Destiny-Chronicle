@@ -9,6 +9,7 @@ import { WatermarkService } from './services/watermark.service';
 import { FlagLookupService } from './services/flag-lookup.service';
 import { PgcrOverrideStore } from './services/pgcr-override.store';
 import { FixOnViewService } from './services/fix-on-view.service';
+import { PlayedWithRebuildMarker } from './services/played-with-rebuild-marker';
 import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
@@ -100,22 +101,39 @@ async function startServer(): Promise<void> {
 
   // Fix-on-view services (optional)
   let fixOnViewService: FixOnViewService | undefined;
+  let overrideStore: PgcrOverrideStore | undefined;
   if (config.fixOnViewEnabled) {
-    const flagLookup = new FlagLookupService(config.flagLookupRoot);
+    const flagLookup = new FlagLookupService(config.flagLookupRoot, config.flagFilter);
     await flagLookup.initialize();
 
-    const overrideStore = new PgcrOverrideStore(config.pgcrOverrideStoreRoot);
+    overrideStore = new PgcrOverrideStore(config.pgcrOverrideStoreRoot);
     await overrideStore.initialize();
 
     if (flagLookup.isAvailable() && overrideStore.isAvailable()) {
-      fixOnViewService = new FixOnViewService(flagLookup, overrideStore, bungieApiService, {
-        firstViewWaitMs: config.fixOnViewWaitMs,
-        asyncFix: false,
-      });
+      // Create rebuild marker if Played With is configured
+      const playedWithConfig = loadPlayedWithConfig();
+      const summaryDir = (process.env.PLAYED_WITH_SUMMARY_DIR || '').trim();
+      const rebuildMarker = summaryDir
+        ? new PlayedWithRebuildMarker(overrideStore, new SummaryStore(summaryDir))
+        : undefined;
+
+      fixOnViewService = new FixOnViewService(
+        flagLookup,
+        overrideStore,
+        bungieApiService,
+        {
+          firstViewWaitMs: config.fixOnViewWaitMs,
+          asyncFix: false,
+        },
+        rebuildMarker,
+        archiveService
+      );
       logger.info('Fix-on-view enabled', {
         flaggedIds: flagLookup.getStats().totalFlaggedIds,
         existingOverrides: overrideStore.getStats().totalOverrides,
         waitMs: config.fixOnViewWaitMs,
+        filterMode: config.flagFilter,
+        rebuildMarking: !!rebuildMarker,
       });
     } else {
       logger.warn('Fix-on-view enabled but services not available', {
@@ -134,11 +152,33 @@ async function startServer(): Promise<void> {
   // Played With (optional): legacy 0-10B + compact 10-16B band indexes, routed by instance id.
   const playedWithConfig = loadPlayedWithConfig();
   if (playedWithConfig) {
-    const playedWith = new PlayedWithService(playedWithConfig, async (instanceId, membershipId) => {
+    // NameResolver: check override store first, then archive
+    const nameResolver = async (instanceId: string, membershipId: string) => {
+      // Check override store if available
+      if (overrideStore && overrideStore.exists(instanceId, 'D2')) {
+        try {
+          const pgcr = overrideStore.get(instanceId, 'D2');
+          const response = pgcr?.Response;
+          const entries = response?.entries || [];
+          const hit = entries.find(
+            (e: any) => String(e.player?.destinyUserInfo?.membershipId) === membershipId
+          );
+          if (hit) {
+            const name = String(hit.player?.destinyUserInfo?.displayName || '').trim();
+            if (name) return name;
+          }
+        } catch (error) {
+          logger.warn('Failed to resolve name from override', { instanceId, membershipId, error });
+        }
+      }
+
+      // Fallback to archive
       const rows = await archiveService.getActivitiesByInstanceId(instanceId, 'D2');
       const hit = rows.find((r) => String(r.membership_id) === membershipId && r.display_name);
       return hit ? hit.display_name : null;
-    });
+    };
+
+    const playedWith = new PlayedWithService(playedWithConfig, nameResolver);
     const summaryDir = (process.env.PLAYED_WITH_SUMMARY_DIR || '').trim();
     // Live current-name refresh for each page's top partners (PLAYED_WITH_NAME_REFRESH_TOP=0 disables).
     const refreshTop = Number(process.env.PLAYED_WITH_NAME_REFRESH_TOP ?? 25);

@@ -2,6 +2,8 @@ import { logger } from '../utils/logger';
 import { BungieApiError, BungieApiService, Game } from './bungie-api.service';
 import { FlagLookupService } from './flag-lookup.service';
 import { PgcrOverrideStore } from './pgcr-override.store';
+import { PlayedWithRebuildMarker } from './played-with-rebuild-marker';
+import { ArchiveService } from './archive.service';
 
 /**
  * Service that implements fix-on-view for flagged D2 PGCRs.
@@ -10,7 +12,8 @@ import { PgcrOverrideStore } from './pgcr-override.store';
  * 1. Check if override already exists -> serve it
  * 2. Otherwise, fetch from Bungie (async or with brief wait)
  * 3. Save to override store
- * 4. Return corrected PGCR
+ * 4. Mark affected Played With summaries for rebuild if roster changed
+ * 5. Return corrected PGCR
  * 
  * First view may return dump copy with 'verifying' marker or wait briefly.
  */
@@ -52,7 +55,9 @@ export class FixOnViewService {
     private flagLookup: FlagLookupService,
     private overrideStore: PgcrOverrideStore,
     private bungieApi: BungieApiService,
-    private config: FixOnViewConfig = {}
+    private config: FixOnViewConfig = {},
+    private rebuildMarker?: PlayedWithRebuildMarker,
+    private archiveService?: ArchiveService
   ) {}
 
   /**
@@ -97,7 +102,7 @@ export class FixOnViewService {
     try {
       const bungiePgcr = await this.fetchWithTimeout(instanceId, game, waitMs);
       if (bungiePgcr) {
-        this.overrideStore.put(instanceId, game, bungiePgcr);
+        await this.saveOverrideAndMarkRebuild(instanceId, game, bungiePgcr);
         this.stats.overridesSaved++;
         logger.info('Fetched and saved corrected PGCR', { instanceId, game });
         return bungiePgcr;
@@ -122,6 +127,58 @@ export class FixOnViewService {
     }
 
     return null; // Fallback to dump copy
+  }
+
+  /**
+   * Save override and mark affected Played With summaries for rebuild if roster changed.
+   */
+  private async saveOverrideAndMarkRebuild(
+    instanceId: string,
+    game: Game,
+    bungiePgcr: any
+  ): Promise<void> {
+    // Get old PGCR from archive if available (for roster comparison)
+    let oldPgcr: any = null;
+    if (this.archiveService && this.rebuildMarker) {
+      try {
+        const activities = await this.archiveService.getActivitiesByInstanceId(instanceId, game);
+        if (activities.length > 0) {
+          // Convert lean activities to PGCR-like format for roster comparison
+          oldPgcr = {
+            Response: {
+              entries: activities.map((a) => ({
+                player: {
+                  destinyUserInfo: {
+                    membershipId: a.membership_id,
+                    membershipType: a.membership_type,
+                    displayName: a.display_name,
+                  },
+                },
+                characterId: a.character_id,
+              })),
+            },
+          };
+        }
+      } catch (error) {
+        logger.warn('Failed to get old PGCR for roster comparison', { instanceId, game, error });
+      }
+    }
+
+    // Save override
+    this.overrideStore.put(instanceId, game, bungiePgcr);
+
+    // Mark for rebuild if roster changed
+    if (this.rebuildMarker) {
+      try {
+        await this.rebuildMarker.markForRebuild(instanceId, game, oldPgcr, bungiePgcr);
+      } catch (error) {
+        logger.error('Failed to mark Played With summaries for rebuild', {
+          instanceId,
+          game,
+          error,
+        });
+      }
+    }
   }
 
   /**
@@ -159,7 +216,7 @@ export class FixOnViewService {
       this.stats.bungieFetches++;
       const bungiePgcr = await this.bungieApi.getBungiePgcr(instanceId, game);
       if (bungiePgcr) {
-        this.overrideStore.put(instanceId, game, bungiePgcr);
+        await this.saveOverrideAndMarkRebuild(instanceId, game, bungiePgcr);
         this.stats.overridesSaved++;
         logger.info('Async fixed PGCR', { instanceId, game });
       }
@@ -215,7 +272,7 @@ export class FixOnViewService {
         this.stats.bungieFetches++;
         const bungiePgcr = await this.bungieApi.getBungiePgcr(instanceId, game);
         if (bungiePgcr) {
-          this.overrideStore.put(instanceId, game, bungiePgcr);
+          await this.saveOverrideAndMarkRebuild(instanceId, game, bungiePgcr);
           this.stats.overridesSaved++;
         } else {
           failed.push(instanceId);
