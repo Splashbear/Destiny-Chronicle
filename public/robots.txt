@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://splashbear.github.io/Destiny-Chronicle/sitemap.xml
+Sitemap: https://destinychronicle.com/sitemap.xml
 
 # Prevent crawling of unnecessary files
 Disallow: /node_modules/
