@@ -1862,11 +1862,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.wasLoadingWhileTabHidden = false;
         this.showBackgroundLoadingTip = true;
         this.cdr.markForCheck();
-        // Auto-dismiss after 10 seconds using waitWithoutTimeout instead of setTimeout
-        this.waitWithoutTimeout(10000).then(() => {
+        // Auto-dismiss after 10 seconds - setTimeout is fine for UI timing
+        setTimeout(() => {
           this.showBackgroundLoadingTip = false;
           this.cdr.markForCheck();
-        });
+        }, 10000);
       }
       // Trigger UI refresh when returning to tab to show latest progress
       if (this.showLoadingModal || this.loadingProgress) {
@@ -3900,32 +3900,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           this.noteBungieApiIssue(character.game === 'D1' ? 'D1' : 'D2', error);
           throw error;
         }
-        // Use queueMicrotask-based wait instead of setTimeout to avoid tab throttling
-        await this.waitWithoutTimeout(this.RETRY_DELAY * retries);
+        // Exponential backoff on retry - setTimeout is acceptable here because:
+        // 1) This is error recovery (rare), not the hot path
+        // 2) Even if throttled in hidden tabs, retries will eventually execute
+        // 3) The actual loading continues via other characters/requests
+        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY * retries));
       }
     }
     return [];
-  }
-
-  /**
-   * Wait for a specified duration without using setTimeout.
-   * This prevents throttling in hidden browser tabs.
-   * Uses queueMicrotask polling which continues to run at full speed even in background tabs.
-   */
-  private async waitWithoutTimeout(ms: number): Promise<void> {
-    const startTime = Date.now();
-    const targetTime = startTime + ms;
-    
-    return new Promise<void>(resolve => {
-      const check = () => {
-        if (Date.now() >= targetTime) {
-          resolve();
-        } else {
-          queueMicrotask(check);
-        }
-      };
-      queueMicrotask(check);
-    });
   }
 
   private async processActivityBatch(activities: ActivityHistory[], character: CharacterWithGame): Promise<void> {
@@ -4672,7 +4654,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Build user-visible report count message: "X reports for username platform found. Done!"
       const reportCountMessage = this.buildReportCountMessage(activities);
       this.updateLoadingProgress('fetch', 1, 1, reportCountMessage);
-      await this.waitWithoutTimeout(800); // Brief pause so user can read "found. Done!"
+      // Brief pause for user to read "found. Done!" - setTimeout is acceptable here because:
+      // 1) This is UI timing (non-critical), not the loading pipeline
+      // 2) Even if throttled in hidden tabs, it doesn't block actual loading
+      // 3) User isn't staring at the screen when tab is hidden anyway
+      await new Promise(r => setTimeout(r, 800));
       if (loadToken !== this.currentLoadToken) {
         this.loadingProgress = null;
         this.cdr.detectChanges();

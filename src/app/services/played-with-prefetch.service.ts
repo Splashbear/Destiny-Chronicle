@@ -115,19 +115,15 @@ export class PlayedWithPrefetchService {
     };
 
     const fetchOne = async (entry: MissingPgcrEntry): Promise<void> => {
-      // Poll for rate limit clearance without using setTimeout
-      while (Date.now() < rateLimitUntil && token === this.cancelToken) {
-        // Use queueMicrotask for non-blocking wait instead of sleep(50)
-        await new Promise<void>(resolve => {
-          const checkTime = () => {
-            if (Date.now() >= rateLimitUntil || token !== this.cancelToken) {
-              resolve();
-            } else {
-              queueMicrotask(checkTime);
-            }
-          };
-          queueMicrotask(checkTime);
-        });
+      // Wait for rate limit clearance if needed
+      // The rateLimitUntil check prevents hammering the API during throttle backoff
+      if (Date.now() < rateLimitUntil && token === this.cancelToken) {
+        // Use a single setTimeout to wait until rate limit clears
+        // This is acceptable because: 1) it's rare (only after 429), 2) not a polling loop
+        const waitTime = rateLimitUntil - Date.now();
+        if (waitTime > 0) {
+          await new Promise<void>(resolve => setTimeout(resolve, waitTime));
+        }
       }
       if (token !== this.cancelToken) {
         return;

@@ -17,7 +17,7 @@ interface QueuedRequest {
 export class RateLimiterService {
   private requestTimes: number[] = [];
   private requestQueue: QueuedRequest[] = [];
-  private processingQueue = false;
+  private nextCheckTimer: any = null;
   
   private readonly config: RateLimitConfig = {
     maxRequests: 20, // Stay well under Bungie's 25 RPS limit
@@ -80,87 +80,97 @@ export class RateLimiterService {
   }
 
   /**
-   * Wait for rate limit to allow next request using requestAnimationFrame-based loop
-   * instead of setTimeout. This prevents throttling in background tabs.
+   * Wait for rate limit slot to become available.
+   * Event-driven: resolves immediately if slot available, or waits until a slot frees.
+   * Uses a single setTimeout to check when the oldest request expires.
+   * This avoids busy-waiting while still working in hidden tabs (though throttled, it's acceptable
+   * since we're not on the critical path - requests are paced by actual HTTP completion).
    */
   async waitForRateLimit(): Promise<void> {
     return new Promise<void>((resolve) => {
-      const queuedRequest: QueuedRequest = {
-        resolve,
-        timestamp: Date.now()
-      };
-      
-      this.requestQueue.push(queuedRequest);
-      this.processQueue();
-    });
-  }
-
-  /**
-   * Process the request queue without relying on setTimeout/setInterval.
-   * Uses a hybrid approach: immediate processing when under limit,
-   * polling with small sleeps when at limit.
-   */
-  private processQueue(): void {
-    if (this.processingQueue || this.requestQueue.length === 0) {
-      return;
-    }
-
-    this.processingQueue = true;
-
-    const processNext = () => {
-      if (this.requestQueue.length === 0) {
-        this.processingQueue = false;
-        return;
-      }
-
       const now = Date.now();
       const windowStart = now - this.config.windowMs;
       
       // Clean up old request times
       this.requestTimes = this.requestTimes.filter(time => time > windowStart);
 
-      // Check if we can process the next request
+      // If we have capacity, resolve immediately
       if (this.requestTimes.length < this.config.maxRequests) {
-        const request = this.requestQueue.shift();
-        if (request) {
-          this.requestTimes.push(now);
-          request.resolve();
-          
-          // Process next request immediately if queue has more
-          if (this.requestQueue.length > 0) {
-            queueMicrotask(() => processNext());
-          } else {
-            this.processingQueue = false;
-          }
-        }
-      } else {
-        // Rate limit hit - need to wait until window expires
-        const oldestRequest = Math.min(...this.requestTimes);
-        const waitTime = this.config.windowMs - (now - oldestRequest);
-        
-        if (waitTime > 0) {
-          // Instead of setTimeout which gets throttled, we'll use a short polling loop
-          // with 10ms granularity. This is much better than throttled setTimeout (1000ms+ in hidden tabs)
-          // but doesn't burn CPU like a tight queueMicrotask loop.
-          const targetTime = now + waitTime;
-          const pollForSlot = () => {
-            const nowCheck = Date.now();
-            if (nowCheck >= targetTime) {
-              processNext();
-            } else {
-              // Re-check in next microtask batch (essentially setImmediate)
-              // This gives us ~1-5ms granularity without blocking
-              queueMicrotask(pollForSlot);
-            }
-          };
-          queueMicrotask(pollForSlot);
-        } else {
-          processNext();
-        }
+        this.requestTimes.push(now);
+        resolve();
+        return;
       }
-    };
 
-    processNext();
+      // Otherwise, queue the request
+      const queuedRequest: QueuedRequest = {
+        resolve,
+        timestamp: now
+      };
+      
+      this.requestQueue.push(queuedRequest);
+      
+      // Schedule a check for when the oldest request expires
+      // This is the ONLY setTimeout, and it's acceptable because:
+      // 1. It's not a polling loop (single timer per queue state)
+      // 2. Even if throttled in hidden tabs, requests are naturally paced by HTTP completion
+      // 3. The alternative (Web Worker) adds significant complexity for marginal gain
+      if (!this.nextCheckTimer) {
+        const oldestRequest = Math.min(...this.requestTimes);
+        const waitTime = Math.max(0, this.config.windowMs - (now - oldestRequest) + 10); // +10ms buffer
+        
+        this.nextCheckTimer = setTimeout(() => {
+          this.nextCheckTimer = null;
+          this.processQueue();
+        }, waitTime);
+      }
+    });
+  }
+
+  /**
+   * Process queued requests - called when a slot becomes available.
+   * Event-driven: triggered by setTimeout expiration or explicit call after request completion.
+   */
+  private processQueue(): void {
+    if (this.requestQueue.length === 0) {
+      return;
+    }
+
+    const now = Date.now();
+    const windowStart = now - this.config.windowMs;
+    
+    // Clean up old request times
+    this.requestTimes = this.requestTimes.filter(time => time > windowStart);
+
+    // Process all requests that can fit in the current window
+    while (this.requestQueue.length > 0 && this.requestTimes.length < this.config.maxRequests) {
+      const request = this.requestQueue.shift();
+      if (request) {
+        const currentTime = Date.now();
+        this.requestTimes.push(currentTime);
+        request.resolve();
+      }
+    }
+
+    // If there are still queued requests, schedule next check
+    if (this.requestQueue.length > 0 && !this.nextCheckTimer) {
+      const oldestRequest = Math.min(...this.requestTimes);
+      const waitTime = Math.max(0, this.config.windowMs - (Date.now() - oldestRequest) + 10);
+      
+      this.nextCheckTimer = setTimeout(() => {
+        this.nextCheckTimer = null;
+        this.processQueue();
+      }, waitTime);
+    }
+  }
+
+  /**
+   * Notify the rate limiter that a request completed.
+   * This allows queued requests to be processed if slots are now available.
+   * Call this after each HTTP request completes.
+   */
+  notifyRequestComplete(): void {
+    // Process queue in case slots are available
+    this.processQueue();
   }
 
   /**
