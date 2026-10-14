@@ -289,7 +289,32 @@ export class PlayedWithService {
     return run;
   }
 
-  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn): Promise<PlayedWithResult> {
+  /**
+   * Per-game rosters for one account's archive games, after every Played With filter (bots, social hubs,
+   * raid/dungeon caps, self excluded). Rows are [instanceId, membershipId, displayName|null, period].
+   * Used by the per-account summary build so any subset of accounts can be merged later.
+   */
+  async scanRosters(selfIds: string[], instances: PlayerInstance[], onProgress?: ScanProgressFn): Promise<{ rows: Array<[string, string, string | null, string | null]>; coverage: PlayedWithCoverage }> {
+    const out: { rows?: unknown[][] } = {};
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, 1, onProgress, out));
+    this.queue = run.catch(() => undefined);
+    const res = await run;
+    const rows = (out.rows || []).map((r) => [String(r[0]), String(r[1]), r[2] == null ? null : String(r[2]), r[3] == null ? null : String(r[3])] as [string, string, string | null, string | null]);
+    return { rows, coverage: res.coverage };
+  }
+
+  /** Fill names (name-range table, then archive PGCR) for rows that have none. Leaves unresolved rows blank. */
+  async fillNames(partners: PartnerRow[]): Promise<void> {
+    const run = this.queue.then(async () => {
+      const db = await this.getDb();
+      await this.fillFromNameTable(db, partners);
+      await this.fillMissingNames(partners);
+    });
+    this.queue = run.catch(() => undefined);
+    await run;
+  }
+
+  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }): Promise<PlayedWithResult> {
     const durations = new Map<string, number>();
     for (const i of instances) if (i.instanceId) durations.set(String(i.instanceId), Number(i.durationSeconds) || 0);
     const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands());
@@ -371,6 +396,7 @@ export class PlayedWithService {
     await Promise.all(conns.map((c) => c.close()));
     onProgress?.({ stage: 'ranking', batchesDone: done, batchesTotal: batches.length });
     const flat = collected.flat() as unknown[][];
+    if (rawOut) { rawOut.rows = flat; return { partners: [], coverage }; }
     for (let i = 0; i < flat.length; i += 5000) {
       const vals = flat.slice(i, i + 5000).map(([iid, mid, name, per]) =>
         `(${String(iid)}, ${sqlStr(String(mid))}, ${name == null ? 'NULL' : sqlStr(String(name))}, ${per == null ? 'NULL' : sqlStr(String(per))})`);

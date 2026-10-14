@@ -21,7 +21,7 @@ import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { PrunedPgcr } from '../../utils/pgcr-prune';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { UiI18nService } from '../../services/ui-i18n.service';
-import { PlayedWithBuildProgress } from '../../services/pgcr-api.service';
+import { PlayedWithAccount, PlayedWithBuildProgress } from '../../services/pgcr-api.service';
 
 /**
  * Stable key for a set of membership ids. The parent binds a getter that returns a new
@@ -47,6 +47,12 @@ export function formatBuildProgress(
     }
     if (p.stage === 'ranking') {
       return `Ranking players you've played with across ${n(p.games)} games…`;
+    }
+    if (p.stage === 'bungie_history') {
+      return `Checking Bungie for games newer than the archive (${n(p.games)} archive games done)`;
+    }
+    if (p.stage === 'bungie_pgcrs') {
+      return `Loading ${n(p.pgcrsTotal || 0)} newer games from Bungie: ${n(p.pgcrsDone || 0)} of ${n(p.pgcrsTotal || 0)}`;
     }
   }
   if (status === 'pending' && position) {
@@ -90,6 +96,13 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   prefetchActive = false;
   prefetchRemaining = 0;
 
+  /** Looked-up accounts (server v2) and which ones are counted. */
+  accounts: PlayedWithAccount[] = [];
+  included = new Set<string>();
+  /** '' = sort by total, else one account id. */
+  sortAccount = '';
+  expanded = new Set<string>();
+
   sortColumn: PlayedWithSortColumn = 'activities';
   sortDirection: 'asc' | 'desc' = 'desc';
 
@@ -119,6 +132,9 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
         return;
       }
       this.idsKey = key;
+      this.included = new Set(this.membershipIds.map(String));
+      this.sortAccount = '';
+      this.expanded.clear();
       this.buildWaitStartedAt = null;
       this.buildTimedOut = false;
       // Count views when the feature is shown with accounts; never send the IDs.
@@ -180,6 +196,53 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  accountLabel(a: PlayedWithAccount): string {
+    const name = a.name || `Account …${a.id.slice(-4)}`;
+    return a.platform ? `${name} (${a.platform})` : name;
+  }
+
+  accountName(id: string): string {
+    const a = this.accounts.find(x => x.id === id);
+    return a ? this.accountLabel(a) : id;
+  }
+
+  /** Toggle one account in or out of the merged list (at least one stays on). */
+  toggleAccount(id: string): void {
+    if (this.included.has(id)) {
+      if (this.included.size <= 1) {
+        return;
+      }
+      this.included.delete(id);
+      if (this.sortAccount === id) {
+        this.sortAccount = '';
+      }
+    } else {
+      this.included.add(id);
+    }
+    this.buildWaitStartedAt = null;
+    void this.reload();
+  }
+
+  setSortAccount(id: string): void {
+    this.sortAccount = id;
+    this.sortColumn = 'activities';
+    this.sortDirection = 'desc';
+    void this.reload();
+  }
+
+  toggleExpanded(id: string): void {
+    if (this.expanded.has(id)) {
+      this.expanded.delete(id);
+    } else {
+      this.expanded.add(id);
+    }
+    this.cdr.markForCheck();
+  }
+
+  get includedAccounts(): PlayedWithAccount[] {
+    return this.accounts.filter(a => this.included.has(a.id));
+  }
+
   sortIndicator(column: PlayedWithSortColumn): string {
     if (this.sortColumn !== column) {
       return '';
@@ -205,12 +268,15 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       return;
     }
 
-    this.loading = true;
-    this.building = false;
-    this.buildingStatus = '';
-    this.session = null;
-    this.coverage = null;
-    this.sortedPartners = [];
+    const keepTable = this.sortedPartners.length > 0;
+    this.loading = !keepTable;
+    if (!keepTable) {
+      this.building = false;
+      this.buildingStatus = '';
+      this.session = null;
+      this.coverage = null;
+      this.sortedPartners = [];
+    }
     this.cdr.markForCheck();
 
     this.subs.add(
@@ -221,12 +287,21 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       })
     );
 
-    const session = await this.fireteamStats.createSession(this.membershipIds, s => {
-      if (token !== this.reloadToken) {
-        return;
+    const all = this.membershipIds.map(String);
+    const include = all.filter(id => this.included.has(id));
+    const session = await this.fireteamStats.createSession(
+      this.membershipIds,
+      s => {
+        if (token !== this.reloadToken) {
+          return;
+        }
+        this.applySession(s);
+      },
+      {
+        include: include.length && include.length < all.length ? include : undefined,
+        sortBy: this.sortAccount || undefined
       }
-      this.applySession(s);
-    });
+    );
 
     if (token !== this.reloadToken) {
       return;
@@ -253,6 +328,15 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     }
 
     if (session.fromApi) {
+      // Some accounts still building (or refreshing newer games): keep polling so they join the list.
+      const busy = !!session.partial || (session.accounts || []).some(a => a.refreshing);
+      if (busy) {
+        this.pollTimer = setTimeout(() => {
+          if (token === this.reloadToken) {
+            void this.reload();
+          }
+        }, PlayedWithComponent.POLL_MS);
+      }
       return;
     }
 
@@ -269,6 +353,9 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
 
   private applySession(session: FireteamStatsSession): void {
     this.session = session;
+    if (session.accounts?.length) {
+      this.accounts = session.accounts;
+    }
     this.coverage = session.coverage;
     this.applySort();
     this.loading = false;
@@ -285,6 +372,6 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       this.sortedPartners = [];
       return;
     }
-    this.sortedPartners = this.session.sortPartners(this.sortColumn, this.sortDirection);
+    this.sortedPartners = this.session.sortPartners(this.sortColumn, this.sortDirection, this.sortAccount || undefined);
   }
 }

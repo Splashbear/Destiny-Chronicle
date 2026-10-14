@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivityDbService } from './activity-db.service';
 import { PGCRCacheService } from './pgcr-cache.service';
-import { PgcrApiService, PlayedWithBuildProgress } from './pgcr-api.service';
+import { PgcrApiService, PlayedWithAccount, PlayedWithBuildProgress, PlayedWithCoverageInfo, PlayedWithPerAccount } from './pgcr-api.service';
 import { PrunedPgcr } from '../utils/pgcr-prune';
 import { pickBestPlayerDisplayName } from '../utils/pgcr-player-name';
 
@@ -11,6 +11,7 @@ export interface FireteamPartnerRow {
   activitiesTogether: number;
   timeTogetherSeconds: number;
   lastPlayedTogether?: string;
+  perAccount?: PlayedWithPerAccount[];
 }
 
 export interface FireteamCoverage {
@@ -27,6 +28,11 @@ export interface MissingPgcrEntry {
 
 export type PlayedWithSortColumn = 'activities' | 'time' | 'lastPlayed';
 
+/** Games together with one account (0 when the partner never played with it). */
+export function perAccountGames(row: FireteamPartnerRow, accountId: string): number {
+  return row.perAccount?.find(a => a.id === accountId)?.activitiesTogether ?? 0;
+}
+
 /** Incremental partner stats — avoids rescanning the full PGCR cache on every update. */
 export class FireteamStatsSession {
   private readonly partners = new Map<string, FireteamPartnerRow>();
@@ -41,6 +47,11 @@ export class FireteamStatsSession {
   pendingStatus?: string;
   pendingPosition?: number | null;
   pendingProgress?: PlayedWithBuildProgress | null;
+  /** Per-account status from the server (v2). */
+  accounts: PlayedWithAccount[] = [];
+  /** Some selected accounts are still building. */
+  partial = false;
+  serverCoverage: PlayedWithCoverageInfo | null = null;
 
   constructor(membershipIds: string[], totalActivities: number) {
     this.ourIds = new Set(membershipIds);
@@ -126,10 +137,17 @@ export class FireteamStatsSession {
 
   sortPartners(
     column: PlayedWithSortColumn,
-    direction: 'asc' | 'desc'
+    direction: 'asc' | 'desc',
+    byAccount?: string
   ): FireteamPartnerRow[] {
     const dir = direction === 'asc' ? 1 : -1;
     return this.getPartners().sort((a, b) => {
+      if (byAccount && column === 'activities') {
+        const d = perAccountGames(a, byAccount) - perAccountGames(b, byAccount);
+        if (d !== 0) {
+          return d * dir;
+        }
+      }
       switch (column) {
         case 'time':
           return (a.timeTogetherSeconds - b.timeTogetherSeconds) * dir;
@@ -166,13 +184,19 @@ export class FireteamStatsService {
 
   async createSession(
     membershipIds: string[],
-    onChunk?: (session: FireteamStatsSession) => void
+    onChunk?: (session: FireteamStatsSession) => void,
+    opts: { include?: string[]; sortBy?: string } = {}
   ): Promise<FireteamStatsSession> {
     const allIds = await this.collectInstanceIds(membershipIds);
     const session = new FireteamStatsSession(membershipIds, allIds.length);
 
     if (this.pgcrApi.enabled) {
-      const api = await this.pgcrApi.fetchPlayedWithStats(membershipIds);
+      const api = await this.pgcrApi.fetchPlayedWithStats(membershipIds, opts);
+      if (api) {
+        session.accounts = api.accounts ?? [];
+        session.partial = !!api.partial;
+        session.serverCoverage = api.coverage ?? null;
+      }
       if (api?.pending) {
         // Queued on the server — do not fall through to a local PGCR scan (that can hang).
         session.fromApi = true;
@@ -191,7 +215,8 @@ export class FireteamStatsService {
             displayName: p.displayName,
             activitiesTogether: p.activitiesTogether,
             timeTogetherSeconds: p.timeTogetherSeconds,
-            lastPlayedTogether: p.lastPlayedTogether
+            lastPlayedTogether: p.lastPlayedTogether,
+            perAccount: p.perAccount
           }))
         );
         onChunk?.(session);
