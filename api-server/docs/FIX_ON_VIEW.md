@@ -10,11 +10,11 @@ Instead of bulk refetch (rejected), this implements fix-on-view: when serving a 
 
 ### Components
 
-1. **Flag Lookup Service** (`flag-lookup.service.ts`)
-   - Fast on-disk lookup using sorted uint64 arrays per 10M-ID band
+1. **Flag Lookup Service** (`api-server/src/services/flag-lookup.service.ts`)
+   - Fast on-disk lookup using sorted 12-byte records per 10M-ID band
    - Binary search for O(log n) per-band lookups
    - Memory: ~1MB per 131k flagged IDs per band, loaded on-demand
-   - Format: `<root>/band_<bandId>.bin` (8 bytes per ID, little-endian)
+   - Format: `<root>/band_<bandId>.bin` (12 bytes per record, sorted by ID, little-endian: 8B ID + 1B mode + 1B rule + 2B padding)
 
 2. **Override Store** (`pgcr-override.store.ts`)
    - Stores corrected Bungie PGCR responses
@@ -80,6 +80,8 @@ npx ts-node scripts/build-flag-lookup.ts //Exit43Server/.../v3_json /path/to/fla
 **Output:**
 - `band_<bandId>.bin` files (bandId = Math.floor(instanceId / 10M))
 - Packed records (12 bytes each): 8B ID + 1B mode + 1B rule + 2B padding
+- Rule byte: `0x41` 'A', `0x4C` 'L', `0x42` 'B' = combined AL (both rules flagged the game). Input `rule` of `"AL"` maps to `0x42`.
+- The converter streams one band (input file) at a time and accepts instance IDs as numbers or strings.
 - Total storage: ~1.5GB for 127M flagged IDs (12 bytes each)
 
 ### 2. Configure Environment
@@ -102,7 +104,7 @@ FIX_ON_VIEW_WAIT_MS=2000
 
 # Flag filter mode (default: "all")
 # "all" = All flagged IDs regardless of mode/rule
-# "sharp" = Skip rule A in modes 2,4,6,82; L only for mode 40
+# "sharp" = Keep a record if either rule passes (A unless mode 2,4,6,82; L only mode 40); AL kept if A or L passes
 FLAG_FILTER=all
 
 # Bungie API key (already configured for Played With v2)
