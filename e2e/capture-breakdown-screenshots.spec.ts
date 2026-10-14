@@ -67,12 +67,27 @@ test('capture breakdown tile screenshots', async () => {
       console.log('Selecting a tile...');
       const firstTile = page.locator('.breakdown-tile').first();
       await firstTile.click();
-      await page.waitForTimeout(500); // Wait for animation to start
+      await page.waitForTimeout(1000); // Wait for selection to register and animation to show
+      
+      // Verify it's selected
+      const isSelected = await firstTile.evaluate(el => el.classList.contains('breakdown-tile-selected'));
+      console.log(`First tile selected: ${isSelected}`);
       
       // Take AFTER screenshot (with firelight glow on selected tile)
       console.log('Taking AFTER screenshot...');
       await tilesContainer.screenshot({ 
         path: '/opt/cursor/artifacts/breakdown-tiles-after.png'
+      });
+      
+      // Take a close-up crop of the selected tile next to an unselected one
+      console.log('Taking close-up comparison screenshot...');
+      // Get the first two tiles for side-by-side comparison
+      const firstTwoTiles = page.locator('.breakdown-tile').nth(0).locator('..').locator('.breakdown-tile').nth(0).locator('..');
+      // Actually, let's just screenshot the first 3 tiles to show selected vs unselected
+      const tilesRow = page.locator('.grid').filter({ has: page.locator('.breakdown-tile') }).first();
+      await tilesRow.screenshot({ 
+        path: '/opt/cursor/artifacts/breakdown-tiles-closeup.png',
+        clip: { x: 0, y: 0, width: 800, height: 200 }
       });
       
       console.log('✓ Screenshots saved to /opt/cursor/artifacts/');
