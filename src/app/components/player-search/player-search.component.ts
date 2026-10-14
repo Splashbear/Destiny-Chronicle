@@ -67,6 +67,7 @@ import { AccountCardGridComponent } from '../account-card-grid/account-card-grid
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
+import { partitionAgainstStored } from '../../utils/archive-stub-merge';
 import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '../../utils/pgcr-prune';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
@@ -4073,7 +4074,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       let archiveAnswered = false;
       
       // Try loading from archive API first if enabled (membership-level list; PGCR stays lazy).
-      if (environment.useArchiveActivities && this.pgcrApiService.enabled) {
+      // D1 skips the archive list: its D1 rows are zero-stat stubs (no duration),
+      // and D1 always full-crawls Bungie anyway. Storing stubs first made the
+      // crawl's dedupe drop the real rows, leaving the heatmap empty for D1.
+      if (environment.useArchiveActivities && this.pgcrApiService.enabled && character.game !== 'D1') {
         try {
           const archiveData = await this.pgcrApiService.fetchPlayerActivities(
             character.membershipId,
@@ -4295,10 +4299,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           : null)
       );
 
-      // Filter for unique new activities
-      const uniqueNewActivities = allActivities.filter(activity => 
-        !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
-      );
+      // Filter for unique new activities; a timed Bungie row also replaces a
+      // zero-stat archive stub for the same instance (heals IDB filled before the D1 skip).
+      const { fresh: uniqueNewActivities, replacements: stubReplacements } =
+        partitionAgainstStored(allActivities, dbActivities);
+      if (stubReplacements.length > 0) {
+        await this.activityDb.addActivities(stubReplacements);
+        const replacedIids = new Set(stubReplacements.map(a => String(a.activityDetails?.instanceId)));
+        for (let i = 0; i < dbActivities.length; i++) {
+          const iid = String(dbActivities[i].activityDetails?.instanceId);
+          if (replacedIids.has(iid)) {
+            dbActivities[i] = stubReplacements.find(a => String(a.activityDetails?.instanceId) === iid)!;
+          }
+        }
+        this.activitiesCache.delete(character.membershipId);
+        console.log(`[Sync] Replaced ${stubReplacements.length} zero-stat archive rows with Bungie rows for ${character.membershipId} (${character.game})`);
+      }
 
           // Persist any new, unique activities to IndexedDB
           if (uniqueNewActivities.length > 0) {
