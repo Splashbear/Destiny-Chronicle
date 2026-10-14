@@ -115,8 +115,15 @@ export class PlayedWithPrefetchService {
     };
 
     const fetchOne = async (entry: MissingPgcrEntry): Promise<void> => {
-      while (Date.now() < rateLimitUntil && token === this.cancelToken) {
-        await sleep(50);
+      // Wait for rate limit clearance if needed
+      // The rateLimitUntil check prevents hammering the API during throttle backoff
+      if (Date.now() < rateLimitUntil && token === this.cancelToken) {
+        // Use a single setTimeout to wait until rate limit clears
+        // This is acceptable because: 1) it's rare (only after 429), 2) not a polling loop
+        const waitTime = rateLimitUntil - Date.now();
+        if (waitTime > 0) {
+          await new Promise<void>(resolve => setTimeout(resolve, waitTime));
+        }
       }
       if (token !== this.cancelToken) {
         return;
@@ -173,8 +180,4 @@ export class PlayedWithPrefetchService {
       this.progress$.next({ fetchedThisRun, remainingThisRun: 0, active: false });
     }
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }

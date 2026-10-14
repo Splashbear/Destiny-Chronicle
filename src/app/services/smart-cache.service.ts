@@ -173,8 +173,8 @@ export class SmartCacheService {
           console.warn(`[SmartCache] Failed to preload ${cacheKey}:`, error);
         }
 
-        // Small delay to avoid overwhelming the database
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // No artificial delay - operations are naturally paced by DB/network latency
+        // This was: await new Promise(resolve => setTimeout(resolve, 50));
       }
     } finally {
       this.isPreloading = false;

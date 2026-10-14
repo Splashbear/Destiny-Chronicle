@@ -13,6 +13,7 @@
     "update-d1-manifest": "node scripts/d1-manifest-to-json.js",
     "clean": "rimraf dist .angular node_modules/.cache",
     "e2e:splashbear": "playwright test e2e/splashbear-load.spec.ts",
+    "e2e:background-tab": "playwright test e2e/background-tab-loading.spec.ts",
     "archive:download-images": "node tools/archive-builder/download-images.mjs"
   },
   "private": true,

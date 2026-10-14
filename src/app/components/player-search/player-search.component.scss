@@ -937,3 +937,62 @@ img[src*="class-"] {
   background: rgba(96, 165, 250, 0.12) !important;
   border-bottom: 2px solid #60a5fa !important;
 } 
+/* Activity Breakdown Tile Styles */
+.breakdown-tile {
+  position: relative;
+  overflow: hidden;
+  
+  &.breakdown-tile-default {
+    border-color: rgba(245, 197, 66, 0.2);
+  }
+  
+  &.breakdown-tile-selected {
+    border-color: var(--destiny-gold);
+    box-shadow: 
+      0 0 0 1px var(--destiny-gold),
+      0 0 20px rgba(230, 126, 34, 0.4),
+      inset 0 -2px 12px rgba(192, 57, 43, 0.25);
+    
+    /* Firelight glow background - matches site's warm glow aesthetic */
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.85;
+      will-change: opacity;
+      background:
+        radial-gradient(ellipse 70% 55% at 20% 100%, rgba(230, 126, 34, 0.65) 0%, rgba(230, 126, 34, 0.18) 42%, transparent 68%),
+        radial-gradient(ellipse 60% 50% at 80% 100%, rgba(243, 156, 18, 0.48) 0%, rgba(192, 57, 43, 0.15) 48%, transparent 70%),
+        radial-gradient(ellipse 48% 36% at 50% 105%, rgba(255, 200, 120, 0.28) 0%, transparent 62%);
+      animation: breakdown-firelight-shift 4s ease-in-out infinite;
+    }
+    
+    /* Ensure content stays above the glow */
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+    
+    /* Brighter text for better contrast against the glow */
+    .destiny-stat-value {
+      color: var(--destiny-gold-bright);
+      text-shadow: 0 0 8px rgba(230, 126, 34, 0.3);
+    }
+  }
+}
+
+@keyframes breakdown-firelight-shift {
+  0%, 100% { opacity: 0.85; }
+  33% { opacity: 1; }
+  66% { opacity: 0.9; }
+}
+
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .breakdown-tile-selected::before {
+    animation: none;
+    opacity: 0.85;
+  }
+}
