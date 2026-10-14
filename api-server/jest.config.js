@@ -13,6 +13,7 @@ module.exports = {
     '^.+\\.ts$': ['ts-jest', {
       tsconfig: {
         esModuleInterop: true,
+        types: ['node', 'jest'],
       },
     }],
   },

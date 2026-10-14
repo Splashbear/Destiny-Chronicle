@@ -4,6 +4,7 @@ import { BungieApiError, BungieApiService, Game, parseGame, resolvePgcrPeriod, u
 import { WatermarkService } from '../services/watermark.service';
 import { PgcrLite, leanToPgcrLite } from '../types/pgcr-lite.types';
 import { logger } from '../utils/logger';
+import { FixOnViewService } from '../services/fix-on-view.service';
 
 /**
  * Helper to extract string from query parameter
@@ -85,17 +86,32 @@ export function pruneBungiePgcr(bungiePgcr: any, game: Game, requestedInstanceId
 }
 
 /**
- * Resolve one PGCR for a specific game: archive first (filtered by game), then the
- * game-correct Bungie endpoint. The coverage watermark is a D2 instance-ID watermark,
- * so it only gates D2 archive lookups.
+ * Resolve one PGCR for a specific game: override (if flagged) → archive → Bungie live.
+ * The coverage watermark is a D2 instance-ID watermark, so it only gates D2 archive lookups.
+ * 
+ * Fix-on-view logic (when enabled and PGCR is flagged):
+ * 1. Check override store first -> serve if exists
+ * 2. Try archive (dump copy)
+ * 3. If archive found, trigger async Bungie fetch to fix -> serve dump copy
+ * 4. If archive not found, fetch from Bungie immediately
  */
 async function resolvePgcr(
   instanceId: string,
   game: Game,
   archiveService: ArchiveService,
   bungieApiService: BungieApiService,
-  watermarkService: WatermarkService
+  watermarkService: WatermarkService,
+  fixOnViewService?: FixOnViewService
 ): Promise<PgcrLite | null> {
+  // Step 1: Check override store if fix-on-view is enabled
+  if (fixOnViewService?.isAvailable()) {
+    const corrected = await fixOnViewService.getCorrectedPgcr(instanceId, game);
+    if (corrected) {
+      return pruneBungiePgcr(corrected, game, instanceId);
+    }
+  }
+
+  // Step 2: Try archive (filtered by game)
   const tryArchive = archiveService.isAvailable() && (game !== 'D2' || watermarkService.isCovered(instanceId));
   if (tryArchive) {
     try {
@@ -108,6 +124,7 @@ async function resolvePgcr(
     }
   }
 
+  // Step 3: Fetch from Bungie live
   const bungiePgcr = await bungieApiService.getBungiePgcr(instanceId, game);
   return bungiePgcr ? pruneBungiePgcr(bungiePgcr, game, instanceId) : null;
 }
@@ -119,7 +136,8 @@ async function resolvePgcr(
 export function createDcPgcrRouter(
   archiveService: ArchiveService,
   bungieApiService: BungieApiService,
-  watermarkService: WatermarkService
+  watermarkService: WatermarkService,
+  fixOnViewService?: FixOnViewService
 ): Router {
   const router = Router();
 
@@ -146,7 +164,7 @@ export function createDcPgcrRouter(
 
       logger.info('GET /pgcr/:instanceId', { instanceId, game, format });
 
-      const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService);
+      const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService, fixOnViewService);
 
       if (!pgcrLite) {
         return res.status(404).json({
@@ -206,7 +224,7 @@ export function createDcPgcrRouter(
           continue;
         }
         try {
-          const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService);
+          const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService, fixOnViewService);
           if (pgcrLite) {
             result[instanceId] = pgcrLite;
           }
