@@ -21,10 +21,15 @@ describe('FlagLookupService', () => {
 
   function writeBand(bandId: number, instanceIds: bigint[]): void {
     const sorted = instanceIds.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-    const buffer = Buffer.alloc(sorted.length * 8);
+    // New format: 12 bytes per record (8B ID + 1B mode + 1B rule + 2B padding)
+    const buffer = Buffer.alloc(sorted.length * 12);
 
     for (let i = 0; i < sorted.length; i++) {
-      buffer.writeBigUInt64LE(sorted[i], i * 8);
+      const offset = i * 12;
+      buffer.writeBigUInt64LE(sorted[i], offset); // 8 bytes: ID
+      buffer.writeUInt8(0, offset + 8); // 1 byte: mode (0 for test data)
+      buffer.writeUInt8(0x41, offset + 9); // 1 byte: rule 'A' (0x41)
+      buffer.writeUInt16LE(0, offset + 10); // 2 bytes: padding
     }
 
     const bandFile = path.join(tempDir, `band_${bandId}.bin`);
