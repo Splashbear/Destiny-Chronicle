@@ -9,6 +9,40 @@ export interface ExternalPgcrPartner {
   activitiesTogether: number;
   timeTogetherSeconds: number;
   lastPlayedTogether?: string;
+  /** Split by the looked-up account (only accounts that shared at least one game). */
+  perAccount?: PlayedWithPerAccount[];
+}
+
+export interface PlayedWithPerAccount {
+  id: string;
+  activitiesTogether: number;
+  timeTogetherSeconds: number;
+  lastPlayedTogether?: string;
+}
+
+/** One looked-up account in a Played With response. */
+export interface PlayedWithAccount {
+  id: string;
+  name: string | null;
+  platform: string | null;
+  game: 'D1' | 'D2';
+  status: 'ready' | 'building' | 'queued' | string;
+  refreshing?: boolean;
+  included: boolean;
+  games?: number;
+  bungieGames?: number;
+  d1Games?: number;
+  position?: number | null;
+  progress?: PlayedWithBuildProgress | null;
+}
+
+export interface PlayedWithCoverageInfo {
+  complete?: boolean;
+  games?: number;
+  bungieGames?: number;
+  d1GamesNotCounted?: number;
+  accountsReady?: number;
+  accountsIncluded?: number;
 }
 
 /** Result of POST /played-with/stats (summary hit or queued build). */
@@ -22,15 +56,23 @@ export interface PlayedWithApiResult {
   games?: number;
   /** Real counts from the server's summary worker while it builds (null when not started). */
   progress?: PlayedWithBuildProgress | null;
+  /** Per-account status (server v2); empty for older servers. */
+  accounts?: PlayedWithAccount[];
+  /** Some included accounts are still building; partners cover the ready ones. */
+  partial?: boolean;
+  coverage?: PlayedWithCoverageInfo | null;
 }
 
 export interface PlayedWithBuildProgress {
-  stage: 'loading_games' | 'scanning' | 'ranking';
+  stage: 'loading_games' | 'scanning' | 'ranking' | 'bungie_history' | 'bungie_pgcrs';
   accountsLoaded: number;
   accountsTotal: number;
   games: number;
   batchesDone?: number;
   batchesTotal?: number;
+  bungieGames?: number;
+  pgcrsDone?: number;
+  pgcrsTotal?: number;
   updatedAt?: string;
 }
 
@@ -182,7 +224,10 @@ export class PgcrApiService {
     }
   }
 
-  async fetchPlayedWithStats(membershipIds: string[]): Promise<PlayedWithApiResult | null> {
+  async fetchPlayedWithStats(
+    membershipIds: string[],
+    opts: { include?: string[]; sortBy?: string } = {}
+  ): Promise<PlayedWithApiResult | null> {
     if (!environment.enablePlayedWith) {
       return null;
     }
@@ -201,7 +246,14 @@ export class PgcrApiService {
           source?: string;
           games?: number;
           progress?: PlayedWithBuildProgress | null;
-        }>(this.url('/played-with/stats'), { membershipIds, limit: 500 }, { headers: this.headers() })
+          accounts?: PlayedWithAccount[];
+          partial?: boolean;
+          coverage?: PlayedWithCoverageInfo | null;
+        }>(
+          this.url('/played-with/stats'),
+          { membershipIds, include: opts.include, sortBy: opts.sortBy, limit: 500 },
+          { headers: this.headers() }
+        )
       );
       const pending = !!resp?.pending;
       return {
@@ -212,7 +264,10 @@ export class PgcrApiService {
         position: resp?.position ?? null,
         source: resp?.source,
         games: resp?.games,
-        progress: resp?.progress ?? null
+        progress: resp?.progress ?? null,
+        accounts: resp?.accounts ?? [],
+        partial: !!resp?.partial,
+        coverage: resp?.coverage ?? null
       };
     } catch {
       return null;

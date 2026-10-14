@@ -13,14 +13,14 @@ describe('Played With summary queue', () => {
     expect(summaryKey(['3', '1', '3', 'x'])).toBe('1+3');
   });
 
-  test('seeds first, then lookups in arrival order; requests file is consumed', () => {
+  test('seeds first (split into one item per account), then lookups in arrival order; requests file is consumed', () => {
     const s = new SummaryStore(tmp()); s.ensure();
     s.request(['20']); s.request(['10']);
     fs.writeFileSync(s.seedsPath, JSON.stringify([['Seed', '30+31', '']]));
-    const q = s.readQueue(); expect(s.ingest(q, new Date('2026-01-01T00:00:00Z'))).toBe(3); s.writeQueue(q);
+    const q = s.readQueue(); expect(s.ingest(q, new Date('2026-01-01T00:00:00Z'))).toBe(4); s.writeQueue(q);
     expect(fs.existsSync(s.requestsPath)).toBe(false);
-    expect(pickNext(q, 1e12)!.key).toBe('30+31');
-    q.items['30+31'].status = 'done'; q.items['30+31'].builtAt = new Date().toISOString();
+    expect(pickNext(q, 1e12)!.key).toBe('30');
+    for (const k of ['30', '31']) { q.items[k].status = 'done'; q.items[k].builtAt = new Date().toISOString(); }
     expect(pickNext(q, 1e12)!.key).toBe('20');
     s.writeQueue(q);
     expect(s.status('10')).toEqual({ status: 'pending', position: 2 });
@@ -52,7 +52,7 @@ describe('Played With summary queue', () => {
   test('202 for a running build reports the worker\'s real progress counts', async () => {
     const s = new SummaryStore(tmp()); s.ensure();
     const progress = { stage: 'scanning' as const, accountsLoaded: 4, accountsTotal: 4, games: 27215, batchesDone: 12, batchesTotal: 40, updatedAt: '2026-10-13T12:17:00Z' };
-    s.writeQueue({ items: { '1+2': { key: '1+2', ids: ['1', '2'], priority: 10, source: 'lookup', status: 'running', enqueuedAt: 'x', attempts: 1, progress } } });
+    s.writeQueue({ items: { '1': { key: '1', ids: ['1'], priority: 10, source: 'lookup', status: 'running', enqueuedAt: 'x', attempts: 1, progress } } });
     const app = express(); app.use(express.json()); app.use('/played-with', createPlayedWithRouter({} as any, {} as any, s));
     const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
     try {

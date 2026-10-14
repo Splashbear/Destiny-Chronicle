@@ -9,15 +9,22 @@ import path from 'path';
  *   requests.jsonl    append-only; the API appends {ids, priority, source, at} on a lookup miss,
  *                     the worker ingests and truncates it. Only membership ids are stored (no visitor data).
  *   seeds.json        optional priority list [[label, "id+id", ...]] read by the worker at start.
- *   summaries/<key>.json  one finished summary per account (key = sorted membership ids joined by "+").
+ *   summaries/<key>.json  legacy combined summary (key = sorted membership ids joined by "+"); read-only fallback.
+ *   summaries/acct/<id>.json.gz  v2 per-account summary (see played-with-account.ts). Queue items are now one
+ *                     membership id each; multi-id requests are split, and legacy multi-id items are migrated by
+ *                     queueing their accounts (the old items stay in queue.json untouched and are never picked).
  */
 export type QueueStatus = 'pending' | 'running' | 'done' | 'failed';
 export interface QueueItem {
   key: string;
   ids: string[];
   label?: string;
-  priority: number; // 0 = seed, 10 = first lookup, 20 = refresh
-  source: 'seed' | 'lookup' | 'refresh';
+  priority: number; // 0 = seed, 10 = first lookup, 12 = migration, 15 = stale refresh on lookup
+  source: 'seed' | 'lookup' | 'refresh' | 'migrate';
+  /** Bungie membershipType when known (seeds carry it); otherwise resolved at build time. */
+  membershipType?: number;
+  bungieGames?: number;
+  bungieTopIid?: string;
   status: QueueStatus;
   enqueuedAt: string;
   attempts: number;
@@ -32,12 +39,16 @@ export interface QueueItem {
   progress?: BuildProgress;
 }
 export interface BuildProgress {
-  stage: 'loading_games' | 'scanning' | 'ranking';
+  stage: 'loading_games' | 'scanning' | 'ranking' | 'bungie_history' | 'bungie_pgcrs';
   accountsLoaded: number;
   accountsTotal: number;
   games: number;
   batchesDone?: number;
   batchesTotal?: number;
+  /** Bungie step: games newer than the archive found / PGCRs fetched of those missing. */
+  bungieGames?: number;
+  pgcrsDone?: number;
+  pgcrsTotal?: number;
   updatedAt: string;
 }
 export interface Queue { items: Record<string, QueueItem> }
@@ -85,7 +96,7 @@ export class SummaryStore {
   }
 
   /** API side: request a build. Append-only so the API never races the worker on queue.json. */
-  request(ids: string[], source: 'lookup' | 'seed' = 'lookup'): void {
+  request(ids: string[], source: 'lookup' | 'seed' | 'refresh' = 'lookup'): void {
     this.ensure();
     fs.appendFileSync(this.requestsPath, JSON.stringify({ ids, source, at: new Date().toISOString() }) + '\n');
   }
@@ -102,21 +113,31 @@ export class SummaryStore {
   /** Worker side: fold requests.jsonl and seeds.json into the queue. */
   ingest(q: Queue, now = new Date()): number {
     let added = 0; let seq = 0; // +1 ms per item keeps arrival order stable within one ingest
-    const add = (ids: string[], source: QueueItem['source'], priority: number, label?: string) => {
-      const key = summaryKey(ids); if (!key) return;
-      const cur = q.items[key];
-      if (cur) {
-        if (cur.status === 'failed' && cur.attempts < 3) cur.status = 'pending';
-        if (cur.status === 'pending' && priority < cur.priority) { cur.priority = priority; cur.source = source; }
-        return;
+    const add = (ids: string[], source: QueueItem['source'], priority: number, label?: string, types?: Map<string, number>) => {
+      for (const id of new Set(ids.map(String).filter((x) => /^\d{1,20}$/.test(x)))) {
+        const cur = q.items[id];
+        if (types?.get(id) && cur && !cur.membershipType) cur.membershipType = types.get(id);
+        if (cur) {
+          if (cur.status === 'failed' && cur.attempts < 3) cur.status = 'pending';
+          if (source === 'refresh' && cur.status === 'done') { cur.status = 'pending'; cur.priority = priority; cur.source = source; }
+          else if (cur.status === 'pending' && priority < cur.priority) { cur.priority = priority; cur.source = source; }
+          continue;
+        }
+        if (source === 'refresh') continue; // refresh only applies to built accounts
+        q.items[id] = { key: id, ids: [id], label, priority, source, status: 'pending', enqueuedAt: new Date(now.getTime() + seq++).toISOString(), attempts: 0, membershipType: types?.get(id) };
+        added++;
       }
-      q.items[key] = { key, ids: key.split('+'), label, priority, source, status: 'pending', enqueuedAt: new Date(now.getTime() + seq++).toISOString(), attempts: 0 };
-      added++;
     };
+    // Migration: accounts of legacy combined items get their own builds (the legacy item is left as is).
+    for (const it of Object.values(q.items)) if (it.key.includes('+') && it.status === 'done') add(it.ids, 'migrate', 12, it.label);
     try {
       const seeds = JSON.parse(fs.readFileSync(this.seedsPath, 'utf8').replace(/^\uFEFF/, '')) as unknown[];
       for (const s of seeds) {
-        if (Array.isArray(s) && typeof s[1] === 'string') add(s[1].split('+'), 'seed', 0, String(s[0]));
+        if (!Array.isArray(s) || typeof s[1] !== 'string') continue;
+        // optional third field "type/id;type/id" gives each account's membershipType
+        const types = new Map<string, number>();
+        for (const t of String(s[2] || '').split(';')) { const m = /^(\d+)\/(\d+)/.exec(t.trim()); if (m) types.set(m[2], Number(m[1])); }
+        add(s[1].split('+'), 'seed', 0, String(s[0]), types);
       }
     } catch { /* no seeds */ }
     if (fs.existsSync(this.requestsPath)) {
@@ -124,7 +145,10 @@ export class SummaryStore {
       fs.renameSync(this.requestsPath, work);
       for (const line of fs.readFileSync(work, 'utf8').split('\n')) {
         if (!line.trim()) continue;
-        try { const r = JSON.parse(line); if (Array.isArray(r.ids)) add(r.ids.map(String), 'lookup', 10); } catch { /* skip bad line */ }
+        try {
+          const r = JSON.parse(line);
+          if (Array.isArray(r.ids)) r.source === 'refresh' ? add(r.ids.map(String), 'refresh', 15) : add(r.ids.map(String), 'lookup', 10);
+        } catch { /* skip bad line */ }
       }
       fs.unlinkSync(work);
     }
@@ -138,9 +162,11 @@ export function order(a: QueueItem, b: QueueItem): number {
 
 /** Next item: pending by priority, else a done item due for a refresh check. */
 export function pickNext(q: Queue, refreshMs: number, now = Date.now()): QueueItem | null {
-  const pending = Object.values(q.items).filter((x) => x.status === 'pending' || x.status === 'running').sort(order);
+  // Legacy combined items (key with "+") are never built again; their accounts are migrated instead.
+  const items = Object.values(q.items).filter((x) => !x.key.includes('+'));
+  const pending = items.filter((x) => x.status === 'pending' || x.status === 'running').sort(order);
   if (pending.length) return pending[0];
-  const due = Object.values(q.items)
+  const due = items
     .filter((x) => x.status === 'done' && now - Date.parse(x.checkedAt || x.builtAt || x.enqueuedAt) > refreshMs)
     .sort((a, b) => Date.parse(a.checkedAt || a.builtAt || '') - Date.parse(b.checkedAt || b.builtAt || ''));
   return due[0] || null;

@@ -80,3 +80,10 @@ describe('formatBuildProgress', () => {
     expect(formatBuildProgress('requested', null, null)).toBe('');
   });
 });
+
+describe('formatBuildProgress Bungie step', () => {
+  it('reports the Bungie fill with real counts', () => {
+    expect(formatBuildProgress('running', null, { stage: 'bungie_pgcrs', accountsLoaded: 1, accountsTotal: 1, games: 9000, pgcrsDone: 40, pgcrsTotal: 1600 }))
+      .toBe('Loading 1,600 newer games from Bungie: 40 of 1,600');
+  });
+});
