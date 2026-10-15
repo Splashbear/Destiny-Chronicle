@@ -10,13 +10,14 @@ import { logger } from '../utils/logger';
  * - Each .bin file contains packed records (12 bytes each):
  *   - 8 bytes: instance ID (uint64, little-endian)
  *   - 1 byte: mode (uint8)
- *   - 1 byte: rule (0x41='A', 0x4C='L')
+ *   - 1 byte: rule (0x41='A', 0x4C='L', 0x42='B' = combined AL: both rules fired)
  *   - 2 bytes: padding (reserved)
  * - Records are sorted by instance ID for binary search
  * 
  * Filter configuration (env FLAG_FILTER):
  * - "all" (default): All flagged IDs regardless of mode/rule
- * - "sharp": Skip rule A in modes 2,4,6,82; L only for mode 40
+ * - "sharp": Keep a record if either of its rules passes: A passes unless mode in 2,4,6,82;
+ *   L passes only for mode 40. B (AL) is kept if A or L passes.
  * 
  * Memory usage: ~1.5MB per 131k flagged IDs per band (12 bytes each), loaded on-demand and cached.
  */
@@ -27,7 +28,19 @@ const RECORD_SIZE = 12; // 8B ID + 1B mode + 1B rule + 2B padding
 interface FlagRecord {
   id: bigint;
   mode: number;
-  rule: 'A' | 'L';
+  rule: 'A' | 'L' | 'B';
+}
+
+const SHARP_A_SKIP_MODES = [2, 4, 6, 82];
+const SHARP_L_MODE = 40;
+
+/** Whether a record passes the sharp filter. B (AL) passes if either A or L passes. */
+export function passesSharpFilter(rule: 'A' | 'L' | 'B', mode: number): boolean {
+  const aPasses = !SHARP_A_SKIP_MODES.includes(mode);
+  const lPasses = mode === SHARP_L_MODE;
+  if (rule === 'A') return aPasses;
+  if (rule === 'L') return lPasses;
+  return aPasses || lPasses;
 }
 
 type FilterMode = 'all' | 'sharp';
@@ -123,17 +136,9 @@ export class FlagLookupService {
     }
 
     // Apply filter
-    if (this.filterMode === 'sharp') {
-      // Skip rule A in modes 2,4,6,82
-      if (record.rule === 'A' && [2, 4, 6, 82].includes(record.mode)) {
-        this.stats.filteredOut++;
-        return false;
-      }
-      // L only for mode 40
-      if (record.rule === 'L' && record.mode !== 40) {
-        this.stats.filteredOut++;
-        return false;
-      }
+    if (this.filterMode === 'sharp' && !passesSharpFilter(record.rule, record.mode)) {
+      this.stats.filteredOut++;
+      return false;
     }
 
     return true;
@@ -167,7 +172,8 @@ export class FlagLookupService {
         const id = buffer.readBigUInt64LE(offset);
         const mode = buffer.readUInt8(offset + 8);
         const ruleCode = buffer.readUInt8(offset + 9);
-        const rule = ruleCode === 0x41 ? 'A' : ruleCode === 0x4C ? 'L' : '?' as any;
+        const rule: 'A' | 'L' | 'B' | '?' =
+          ruleCode === 0x41 ? 'A' : ruleCode === 0x4C ? 'L' : ruleCode === 0x42 ? 'B' : '?';
 
         if (rule === '?') {
           logger.warn('Invalid rule code in band file', { bandId, offset, ruleCode });
