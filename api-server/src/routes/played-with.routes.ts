@@ -69,6 +69,15 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
   const servePerAccount = async (req: Request, res: Response, store: SummaryStore, ids: string[], limit: number) => {
     const body = (req.body || {}) as { include?: unknown; sortBy?: unknown; game?: unknown };
     const game = body.game === 'D1' || body.game === 'D2' ? body.game : undefined;
+
+    // D1 Played With not supported on per-account route yet
+    if (game === 'D1') {
+      return res.status(501).json({
+        error: 'D1 Played With not supported on per-account route',
+        message: 'Per-account Played With for D1 is not available yet. D1 Played With only works via the legacy getPartners path when summaries is unset.',
+        d1CoverageCaveat: 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014).',
+      });
+    }
     const include = Array.isArray(body.include) ? ids.filter((x) => (body.include as unknown[]).map(String).includes(x)) : ids;
     const sortBy = typeof body.sortBy === 'string' && include.includes(body.sortBy) ? body.sortBy : 'total';
     const t0 = Date.now();

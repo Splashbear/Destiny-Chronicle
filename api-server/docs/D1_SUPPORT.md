@@ -98,6 +98,28 @@ All D1 tier responses include a note in `tier.notes`:
 "D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live."
 ```
 
+## Known Limitations
+
+### D1 Index Does Not Merge with Lite
+
+When `D1_INDEX_ROOT` is set and the D1 tier returns activities, those activities are the complete result — lite tier rows (which may contain D1 games from Dec 10, 2014 onward) are **not merged** with D1 index results.
+
+**Impact**: D1 games from Dec 10, 2014 onward that exist in lite/extract but not in the D1 index will be missing from the response when the D1 tier successfully returns activities.
+
+**Workaround**: When the D1 tier returns empty (player not found in D1 index), the multi-tier lookup falls back to lite/extract, where those newer D1 games will be found (filtered to only return D1 rows).
+
+**Why**: Merging D1 index results with lite tier would require de-duplication by `(game, instance_id, character_id)` across tiers, which is invasive and risks breaking existing lite tier behavior. The current fallback-only approach keeps D1 support strictly additive.
+
+### D1 Played With Per-Account Route Not Supported
+
+The per-account Played With route (`/played-with/stats` when summaries store is configured) does **not** support D1 requests. A request with `game=D1` returns HTTP 501 with a clear error message.
+
+**Impact**: Production deployments using per-account summaries cannot serve D1 Played With requests.
+
+**Workaround**: D1 Played With only works via the legacy `getPartners` path (when summaries store is unset), which directly queries the D1 played-with index.
+
+**Why**: Per-account summaries are built from D2 archive data and cached. Adding D1 support would require rebuilding all summaries to include separate D1 rosters, which is not implemented yet.
+
 ## Configuration
 
 ### Environment Variables

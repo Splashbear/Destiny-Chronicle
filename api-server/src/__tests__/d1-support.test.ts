@@ -577,6 +577,86 @@ describe('D1 Support', () => {
       expect(result.activities.length).toBeGreaterThan(0);
       expect(result.activities[0].game).toBe('D1');
     });
+
+    test('should NOT add post-query D2 row filtering when D1_INDEX_ROOT unset', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '6000000000000';
+
+      // Create lite parquet with both D1 and D2 data
+      const litePath = path.join(FIXTURES_DIR, 'lite_mixed_unset.parquet');
+      
+      await db.all(`
+        CREATE TEMP TABLE lite_mixed_unset (
+          instance_id BIGINT,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode SMALLINT,
+          membership_id BIGINT,
+          membership_type TINYINT,
+          character_id BIGINT,
+          completed BOOLEAN,
+          deaths INTEGER,
+          kills INTEGER,
+          assists INTEGER,
+          duration_seconds INTEGER,
+          game VARCHAR,
+          display_name VARCHAR,
+          director_activity_hash UINTEGER,
+          standing SMALLINT,
+          starting_phase_index SMALLINT,
+          fireteam_id VARCHAR,
+          is_private BOOLEAN,
+          dump_id VARCHAR
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO lite_mixed_unset VALUES
+          (80000, '2014-09-01 10:00:00', 1111111111, 6, ${testMid}, 2, 2305843009400000050, true, 5, 150, 20, 1800, 'D1', 'MixedGuardian1', 0, 0, 0, '', false, ''),
+          (80001, '2017-09-06 10:00:00', 2222222222, 5, ${testMid}, 2, 2305843009400000051, true, 3, 75, 10, 900, 'D2', 'MixedGuardian1', 0, 0, 0, '', false, '')
+      `);
+
+      await db.all(`COPY lite_mixed_unset TO '${litePath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE lite_mixed_unset');
+
+      // Create archive service WITHOUT d1IndexRoot
+      const archiveService = new ArchiveService('', '', litePath, '', '', '', false, '', false, '');
+      archiveService['db'] = db;
+      archiveService['archiveAvailable'] = true;
+
+      const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+      // Should use lite tier; SQL-level game filter means only D1 rows returned (master behavior)
+      // NO post-query D2 filtering happens because D1_INDEX_ROOT is unset
+      expect(result.tier.source).toBe('lite');
+      expect(result.activities.length).toBe(1);
+      expect(result.activities[0].game).toBe('D1');
+    });
+
+    test('should return absent (not partial) when no data found and D1_INDEX_ROOT unset', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '7777777777777';
+
+      // Create archive service WITHOUT d1IndexRoot
+      const archiveService = new ArchiveService('', '', '', '', '', '', false, '', false, '');
+      archiveService['db'] = db;
+      archiveService['archiveAvailable'] = true;
+
+      const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+      // Should return 'absent' (master behavior), NOT 'partial'
+      expect(result.tier.level).toBe('absent');
+      expect(result.tier.source).toBe('none');
+      expect(result.activities).toHaveLength(0);
+    });
   });
 
   describe('Played With with D1', () => {

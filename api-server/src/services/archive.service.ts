@@ -434,6 +434,7 @@ export class ArchiveService {
     }
 
     // D1 requests: try D1 index first (only when D1_INDEX_ROOT is set), then fall back to lite/extract
+    let d1TierTriedAndEmpty = false;
     if (options?.game === 'D1' && this.d1IndexRoot && this.bucketHashType) {
       try {
         const d1Result = await this.tryD1ActLookup(membershipId, options);
@@ -445,6 +446,7 @@ export class ArchiveService {
           return d1Result;
         }
         // D1 tier returned no activities; fall through to lite/extract (may have D1 data there)
+        d1TierTriedAndEmpty = true;
         // Preserve D1 tier errors for the final response
         if (d1Result.tier.notes) {
           tierErrors.push(...d1Result.tier.notes);
@@ -453,6 +455,7 @@ export class ArchiveService {
         const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
         logger.warn(errorMsg, { membershipId, error });
         tierErrors.push(errorMsg);
+        d1TierTriedAndEmpty = true;
       }
     }
 
@@ -467,8 +470,8 @@ export class ArchiveService {
         if (tierErrors.length > 0) {
           liteResult.tier.notes = [...(liteResult.tier.notes || []), ...tierErrors];
         }
-        // For D1 requests, never return D2-labeled rows
-        if (options?.game === 'D1' && liteResult.activities.some(a => a.game === 'D2')) {
+        // For D1 requests with D1_INDEX_ROOT set, never return D2-labeled rows
+        if (this.d1IndexRoot && options?.game === 'D1' && liteResult.activities.some(a => a.game === 'D2')) {
           liteResult.activities = liteResult.activities.filter(a => a.game !== 'D2');
           if (liteResult.activities.length === 0) {
             // Had rows but all were D2; keep searching
@@ -476,6 +479,13 @@ export class ArchiveService {
           }
         }
         if (liteResult.knownPlayer) {
+          // Force partial coverage for D1 when answering after empty D1 tier
+          if (d1TierTriedAndEmpty) {
+            liteResult.tier.level = 'partial';
+            liteResult.tier.indexComplete = false;
+            const d1Caveat = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.';
+            liteResult.tier.notes = liteResult.tier.notes ? [d1Caveat, ...liteResult.tier.notes] : [d1Caveat];
+          }
           return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
         }
       }
@@ -501,8 +511,8 @@ export class ArchiveService {
             const allNotes = [...(extractResult.tier.notes || []), ...tierErrors];
             extractResult.tier.notes = Array.from(new Set(allNotes));
           }
-          // For D1 requests, never return D2-labeled rows
-          if (options?.game === 'D1' && extractResult.activities.some(a => a.game === 'D2')) {
+          // For D1 requests with D1_INDEX_ROOT set, never return D2-labeled rows
+          if (this.d1IndexRoot && options?.game === 'D1' && extractResult.activities.some(a => a.game === 'D2')) {
             extractResult.activities = extractResult.activities.filter(a => a.game !== 'D2');
             if (extractResult.activities.length === 0) {
               // Had rows but all were D2; keep searching
@@ -510,6 +520,13 @@ export class ArchiveService {
             }
           }
           if (extractResult.knownPlayer) {
+            // Force partial coverage for D1 when answering after empty D1 tier
+            if (d1TierTriedAndEmpty) {
+              extractResult.tier.level = 'partial';
+              extractResult.tier.indexComplete = false;
+              const d1Caveat = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.';
+              extractResult.tier.notes = extractResult.tier.notes ? [d1Caveat, ...extractResult.tier.notes] : [d1Caveat];
+            }
             return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
           }
         }
@@ -520,8 +537,8 @@ export class ArchiveService {
       }
     }
 
-    // Tier 3: Try compact index (skip for D1 requests - compact is D2 only)
-    if (options?.game !== 'D1' && this.compactIndexRoot && this.bucketHashType) {
+    // Tier 3: Try compact index (skip for D1 requests when D1_INDEX_ROOT is set - compact is D2 only)
+    if (!(this.d1IndexRoot && options?.game === 'D1') && this.compactIndexRoot && this.bucketHashType) {
       try {
         const compactResult = await this.tryCompactIndexLookup(membershipId, options);
         if (tierErrors.length > 0) {
@@ -565,8 +582,8 @@ export class ArchiveService {
     }
 
     logger.debug('No archive data found for membership', { membershipId });
-    // For D1 requests, always return partial (not absent) with coverage caveat
-    if (options?.game === 'D1') {
+    // For D1 requests with D1_INDEX_ROOT set, always return partial (not absent) with coverage caveat
+    if (this.d1IndexRoot && options?.game === 'D1') {
       return {
         activities: [],
         tier: {

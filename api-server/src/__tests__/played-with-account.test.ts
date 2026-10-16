@@ -120,4 +120,18 @@ describe('queue + route', () => {
       expect(fs.readFileSync(s.requestsPath, 'utf8')).toContain('"12"');
     } finally { srv.close(); }
   });
+
+  test('D1 Played With not supported on per-account route', async () => {
+    const dir = tmp(); const s = new SummaryStore(dir); s.ensure();
+    const app = express(); app.use(express.json()); app.use('/played-with', createPlayedWithRouter({} as any, {} as any, s));
+    const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ membershipIds: ['11', '12'], game: 'D1' }) });
+      expect(r.status).toBe(501);
+      const j: any = await r.json();
+      expect(j.error).toBe('D1 Played With not supported on per-account route');
+      expect(j.message).toContain('legacy getPartners path');
+      expect(j.d1CoverageCaveat).toContain('billion 1 only');
+    } finally { srv.close(); }
+  });
 });
