@@ -341,9 +341,27 @@ export class ArchiveService {
    * Normalize a period timestamp to ISO 8601 with Z suffix.
    * Archive periods are UTC but lack zone info (e.g. "2025-03-16 21:43:05"),
    * which browsers parse as local time. Normalize to "2025-03-16T21:43:05Z".
+   * 
+   * DuckDB TIMESTAMP columns return as JavaScript Date objects, which must be
+   * converted to ISO UTC strings (toISOString()) to avoid timezone-dependent serialization.
    */
   private normalizeArchivePeriod(period: unknown): string {
-    const raw = String(period ?? '').trim();
+    if (!period) {
+      return '';
+    }
+    
+    // DuckDB TIMESTAMP columns come back as Date objects
+    // Note: DuckDB Date objects may fail instanceof check (cross-realm issue), so also check constructor name
+    const isDateObject = period instanceof Date || 
+                         (typeof period === 'object' && (period as any)?.constructor?.name === 'Date');
+    
+    if (isDateObject && typeof (period as any).toISOString === 'function') {
+      // toISOString() always returns UTC format: "2014-10-26T18:57:22.000Z"
+      // Remove milliseconds (.000) to match archive format exactly
+      return (period as Date).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    }
+    
+    const raw = String(period).trim();
     if (!raw) {
       return '';
     }

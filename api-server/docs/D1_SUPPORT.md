@@ -171,12 +171,12 @@ Archive initialized: {
 {
   "membershipId": "4611686018443970323",
   "coverage": {
-    "level": "full",
+    "level": "partial",
     "source": "d1_act",
     "rowCount": 1234,
     "minPeriod": "2014-08-30T12:00:00Z",
     "maxPeriod": "2014-12-09T23:59:00Z",
-    "indexComplete": true,
+    "indexComplete": false,
     "filtersApplied": false,
     "notes": [
       "D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live."
@@ -185,6 +185,8 @@ Archive initialized: {
   "activities": [...]
 }
 ```
+
+**Note**: D1 responses always have `level: "partial"` and `indexComplete: false` because the D1 index only covers billion 1 (instance IDs 1 to 1,000,000,000, Aug 30 to Dec 9 2014). All period fields (`period`, `minPeriod`, `maxPeriod`) are returned as timezone-independent ISO 8601 UTC strings (e.g., `"2014-10-26T18:57:22Z"`).
 
 ### PGCR Endpoints
 
@@ -212,7 +214,7 @@ Archive initialized: {
 {
   "partners": [...],
   "coverage": {
-    "complete": true,
+    "complete": false,
     "totalInstances": 100,
     "coveredInstances": 100,
     "uncoveredInstances": 0,
@@ -220,10 +222,13 @@ Archive initialized: {
     "legacyBands": 5,
     "compactBands": 3,
     "minimalBands": 0,
-    "d1Bands": 10
+    "d1Bands": 10,
+    "d1CoverageCaveat": "D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete."
   }
 }
 ```
+
+**Note**: When D1 bands are present (`d1Bands > 0`), `complete` is always `false` because the D1 index only covers billion 1. The `d1CoverageCaveat` field provides context about this limitation.
 
 ## Data Sizes
 
