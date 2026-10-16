@@ -433,32 +433,27 @@ export class ArchiveService {
       };
     }
 
-    // D1 requests: skip D2 tiers, go straight to D1 tier
-    if (options?.game === 'D1') {
-      if (this.d1IndexRoot && this.bucketHashType) {
-        try {
-          const d1Result = await this.tryD1ActLookup(membershipId, options);
-          if (tierErrors.length > 0) {
-            d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
-          }
-          return d1Result;
-        } catch (error) {
-          const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
-          logger.warn(errorMsg, { membershipId, error });
-          tierErrors.push(errorMsg);
+    // D1 requests: try D1 index first (only when D1_INDEX_ROOT is set), then fall back to lite/extract
+    if (options?.game === 'D1' && this.d1IndexRoot && this.bucketHashType) {
+      try {
+        const d1Result = await this.tryD1ActLookup(membershipId, options);
+        if (tierErrors.length > 0) {
+          d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
         }
+        // If D1 tier found activities, return them
+        if (d1Result.knownPlayer && d1Result.activities.length > 0) {
+          return d1Result;
+        }
+        // D1 tier returned no activities; fall through to lite/extract (may have D1 data there)
+        // Preserve D1 tier errors for the final response
+        if (d1Result.tier.notes) {
+          tierErrors.push(...d1Result.tier.notes);
+        }
+      } catch (error) {
+        const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+        logger.warn(errorMsg, { membershipId, error });
+        tierErrors.push(errorMsg);
       }
-      // D1 requested but no D1 index configured
-      logger.debug('D1 requested but no D1 index configured', { membershipId });
-      return {
-        activities: [],
-        tier: {
-          level: 'partial',
-          source: 'none',
-          indexComplete: false,
-          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
-        },
-      };
     }
 
     // Tier 1: Try lite parquet
@@ -472,7 +467,17 @@ export class ArchiveService {
         if (tierErrors.length > 0) {
           liteResult.tier.notes = [...(liteResult.tier.notes || []), ...tierErrors];
         }
-        return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
+        // For D1 requests, never return D2-labeled rows
+        if (options?.game === 'D1' && liteResult.activities.some(a => a.game === 'D2')) {
+          liteResult.activities = liteResult.activities.filter(a => a.game !== 'D2');
+          if (liteResult.activities.length === 0) {
+            // Had rows but all were D2; keep searching
+            liteResult.knownPlayer = false;
+          }
+        }
+        if (liteResult.knownPlayer) {
+          return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
+        }
       }
     } catch (error) {
       const errorMsg = `Lite tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -496,7 +501,17 @@ export class ArchiveService {
             const allNotes = [...(extractResult.tier.notes || []), ...tierErrors];
             extractResult.tier.notes = Array.from(new Set(allNotes));
           }
-          return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
+          // For D1 requests, never return D2-labeled rows
+          if (options?.game === 'D1' && extractResult.activities.some(a => a.game === 'D2')) {
+            extractResult.activities = extractResult.activities.filter(a => a.game !== 'D2');
+            if (extractResult.activities.length === 0) {
+              // Had rows but all were D2; keep searching
+              extractResult.knownPlayer = false;
+            }
+          }
+          if (extractResult.knownPlayer) {
+            return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
+          }
         }
       } catch (error) {
         const errorMsg = `Extract tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -505,8 +520,8 @@ export class ArchiveService {
       }
     }
 
-    // Tier 3: Try compact index
-    if (this.compactIndexRoot && this.bucketHashType) {
+    // Tier 3: Try compact index (skip for D1 requests - compact is D2 only)
+    if (options?.game !== 'D1' && this.compactIndexRoot && this.bucketHashType) {
       try {
         const compactResult = await this.tryCompactIndexLookup(membershipId, options);
         if (tierErrors.length > 0) {
@@ -550,6 +565,21 @@ export class ArchiveService {
     }
 
     logger.debug('No archive data found for membership', { membershipId });
+    // For D1 requests, always return partial (not absent) with coverage caveat
+    if (options?.game === 'D1') {
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: [
+            'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.',
+            ...(tierErrors.length > 0 ? tierErrors : []),
+          ],
+        },
+      };
+    }
     return {
       activities: [],
       tier: {

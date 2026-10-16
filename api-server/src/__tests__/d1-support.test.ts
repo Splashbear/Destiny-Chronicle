@@ -10,7 +10,7 @@
  */
 
 import { ArchiveService } from '../services/archive.service';
-import { planBands, BAND_SIZE } from '../services/played-with.service';
+import { PlayedWithService, planBands, BAND_SIZE } from '../services/played-with.service';
 import type { Database } from 'duckdb-async';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -454,6 +454,184 @@ describe('D1 Support', () => {
       expect(result.tier.source).toBe('d1_act');
       expect(result.tier.level).toBe('partial');
       expect(result.tier.indexComplete).toBe(false);
+    });
+
+    test('should fall back to lite/extract when D1 tier returns empty', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '9999999999999'; // Not in D1 index
+      const bucket = 200; // Non-existent D1 bucket
+
+      // Create an archive service with both D1 and lite paths set
+      const litePath = path.join(FIXTURES_DIR, 'lite_with_d1.parquet');
+      
+      // Create a lite parquet with D1 data
+      await db.all(`
+        CREATE TEMP TABLE lite_d1_data (
+          instance_id BIGINT,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode SMALLINT,
+          membership_id BIGINT,
+          membership_type TINYINT,
+          character_id BIGINT,
+          completed BOOLEAN,
+          deaths INTEGER,
+          kills INTEGER,
+          assists INTEGER,
+          duration_seconds INTEGER,
+          game VARCHAR,
+          display_name VARCHAR,
+          director_activity_hash UINTEGER,
+          standing SMALLINT,
+          starting_phase_index SMALLINT,
+          fireteam_id VARCHAR,
+          is_private BOOLEAN,
+          dump_id VARCHAR
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO lite_d1_data VALUES
+          (50000, '2014-08-30 10:00:00', 1234567890, 6, ${testMid}, 2, 2305843009400000040, true, 5, 150, 20, 1800, 'D1', 'FallbackGuardian', 0, 0, 0, '', false, '')
+      `);
+
+      await db.all(`COPY lite_d1_data TO '${litePath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE lite_d1_data');
+
+      const archiveService = new ArchiveService('', '', litePath, '', '/fake/compact', '', false, '', false, d1IndexRoot);
+      archiveService['db'] = db;
+      archiveService['archiveAvailable'] = true;
+      archiveService['bucketHashType'] = 'VARCHAR';
+      
+      jest.spyOn(archiveService as any, 'calculateBucket').mockResolvedValue(bucket);
+
+      const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+      // Should fall back to lite tier
+      expect(result.tier.source).toBe('lite');
+      expect(result.activities.length).toBeGreaterThan(0);
+      expect(result.activities[0].game).toBe('D1');
+      expect(result.activities[0].membership_id).toBe(testMid);
+    });
+  });
+
+  describe('D1 without D1_INDEX_ROOT', () => {
+    test('should use unchanged lite/extract/compact path when D1_INDEX_ROOT not set', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '1000000000001';
+
+      // Create lite parquet with D1 data
+      const litePath = path.join(FIXTURES_DIR, 'lite_for_unset_test.parquet');
+      
+      await db.all(`
+        CREATE TEMP TABLE lite_unset_test (
+          instance_id BIGINT,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode SMALLINT,
+          membership_id BIGINT,
+          membership_type TINYINT,
+          character_id BIGINT,
+          completed BOOLEAN,
+          deaths INTEGER,
+          kills INTEGER,
+          assists INTEGER,
+          duration_seconds INTEGER,
+          game VARCHAR,
+          display_name VARCHAR,
+          director_activity_hash UINTEGER,
+          standing SMALLINT,
+          starting_phase_index SMALLINT,
+          fireteam_id VARCHAR,
+          is_private BOOLEAN,
+          dump_id VARCHAR
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO lite_unset_test VALUES
+          (60000, '2014-09-01 10:00:00', 1234567890, 6, ${testMid}, 2, 2305843009400000041, true, 5, 150, 20, 1800, 'D1', 'UnsetTestGuardian', 0, 0, 0, '', false, '')
+      `);
+
+      await db.all(`COPY lite_unset_test TO '${litePath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE lite_unset_test');
+
+      // Create archive service WITHOUT d1IndexRoot
+      const archiveService = new ArchiveService('', '', litePath, '', '', '', false, '', false, '');
+      archiveService['db'] = db;
+      archiveService['archiveAvailable'] = true;
+      archiveService['bucketHashType'] = 'VARCHAR';
+
+      const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+      // Should use lite tier (not D1 tier since D1_INDEX_ROOT not set)
+      expect(result.tier.source).toBe('lite');
+      expect(result.activities.length).toBeGreaterThan(0);
+      expect(result.activities[0].game).toBe('D1');
+    });
+  });
+
+  describe('Played With with D1', () => {
+    test('should reach D1 bands when D1_PLAYED_WITH_ROOT is set and game=D1', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '4611686018443970323';
+      const bucket = 115;
+      const instanceId = '500000';
+      const band = 0;
+
+      // Create D1 Played With parquet with sample data
+      const d1PwPath = path.join(d1PlayedWithRoot!, 'pw', `iid_band=${band}`, 'pw.parquet');
+      await fs.mkdir(path.dirname(d1PwPath), { recursive: true });
+
+      await db.all(`
+        CREATE TEMP TABLE d1_pw_data (
+          instance_id BIGINT,
+          membership_id BIGINT,
+          display_name VARCHAR,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode TINYINT
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO d1_pw_data VALUES
+          (${instanceId}, ${testMid}, 'D1Guardian', '2014-09-01 10:00:00', 1234567890, 6),
+          (${instanceId}, 9999999999999, 'OtherGuardian', '2014-09-01 10:00:00', 1234567890, 6)
+      `);
+
+      await db.all(`COPY d1_pw_data TO '${d1PwPath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE d1_pw_data');
+
+      const pwService = new PlayedWithService({
+        legacyRoot: '',
+        compactRoot: '',
+        compactDoneDir: '',
+        splitIid: 0,
+        compactMaxIid: 0,
+        threads: 2,
+        memoryLimit: '500MB',
+        d1Root: d1PlayedWithRoot!,
+      });
+
+      const instances = [{ instanceId, durationSeconds: 1800, period: '2014-09-01T10:00:00Z' }];
+      const result = await pwService.getPartners([testMid], instances, 100, undefined, 'D1');
+
+      expect(result.coverage.d1Bands).toBe(1);
+      expect(result.partners.length).toBeGreaterThan(0);
+      expect(result.partners[0].membershipId).toBe('9999999999999');
     });
   });
 });

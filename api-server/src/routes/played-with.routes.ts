@@ -30,13 +30,13 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
   const router = Router();
   const jobs = new Map<string, Job>();
 
-  const startJob = (key: string, ids: string[], limit: number): Job => {
+  const startJob = (key: string, ids: string[], limit: number, game?: 'D1' | 'D2'): Job => {
     const job: Job = { started: Date.now(), promise: Promise.resolve() };
     job.promise = (async () => {
       try {
         const instances: PlayerInstance[] = [];
         for (const mid of ids) {
-          const r = await archive.getPlayerActivitiesMultiTier(mid, { limit: 1_000_000 });
+          const r = await archive.getPlayerActivitiesMultiTier(mid, { limit: 1_000_000, game });
           for (const a of r.activities) {
             // Skip social hubs before planning band reads (rows with real mode/hash). Compact-only rows
             // come back as mode 0 / hash 0 and are kept here; the band scan drops their hub rows (HUB_CLAUSE).
@@ -44,7 +44,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
             instances.push({ instanceId: String(a.instance_id), durationSeconds: Number(a.duration_seconds) || 0, period: a.period });
           }
         }
-        job.result = await pw.getPartners(ids, instances, limit);
+        job.result = await pw.getPartners(ids, instances, limit, undefined, game);
       } catch (error) {
         job.error = String(error);
         logger.error('Played With job failed', { key, error: job.error });
@@ -64,10 +64,11 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
 
   /**
    * v2: one summary per account, merged on request. Body: membershipIds (all looked-up accounts, max 10),
-   * include (subset to count; default all), sortBy ('total' or one membership id), limit.
+   * include (subset to count; default all), sortBy ('total' or one membership id), limit, game (optional).
    */
   const servePerAccount = async (req: Request, res: Response, store: SummaryStore, ids: string[], limit: number) => {
-    const body = (req.body || {}) as { include?: unknown; sortBy?: unknown };
+    const body = (req.body || {}) as { include?: unknown; sortBy?: unknown; game?: unknown };
+    const game = body.game === 'D1' || body.game === 'D2' ? body.game : undefined;
     const include = Array.isArray(body.include) ? ids.filter((x) => (body.include as unknown[]).map(String).includes(x)) : ids;
     const sortBy = typeof body.sortBy === 'string' && include.includes(body.sortBy) ? body.sortBy : 'total';
     const t0 = Date.now();
@@ -125,20 +126,21 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
   };
 
   router.post('/stats', async (req: Request, res: Response) => {
-    const body = (req.body || {}) as { membershipIds?: unknown; limit?: unknown };
+    const body = (req.body || {}) as { membershipIds?: unknown; limit?: unknown; game?: unknown };
     const ids = Array.isArray(body.membershipIds)
       ? [...new Set(body.membershipIds.map(String).filter((s) => /^\d{1,20}$/.test(s)))].sort().slice(0, 10)
       : [];
     if (!ids.length) return res.status(400).json({ error: 'membershipIds required' });
     const limit = Math.max(1, Math.min(5000, Number(body.limit) || 500));
+    const game = body.game === 'D1' || body.game === 'D2' ? body.game : undefined;
     if (summaries) return servePerAccount(req, res, summaries, ids, limit);
-    const key = `${ids.join(',')}|${limit}`;
+    const key = `${ids.join(',')}|${limit}|${game || ''}`;
     let job = jobs.get(key);
     if (job && job.finished && (job.error || Date.now() - job.finished > CACHE_MS)) {
       jobs.delete(key);
       job = undefined;
     }
-    if (!job) job = startJob(key, ids, limit);
+    if (!job) job = startJob(key, ids, limit, game);
     if (!job.finished) {
       await Promise.race([job.promise, new Promise((r) => setTimeout(r, WAIT_MS))]);
     }

@@ -171,9 +171,10 @@ Archive initialized: {
 `GET /api/pgcr/:instanceId?game=D1`
 
 **Behavior**:
-- D1 PGCRs **ALWAYS** come from Bungie live API (D1 act index is keyed by membership_id, not instance_id)
-- Never returns D2 data for a D1 request, even if the numeric instance ID exists in D2
-- D2 PGCRs use archive → live fallback as usual
+- Routes to Bungie D1 API endpoint when `game=D1`
+- Archive rows filtered by `game` parameter where present (never returns D2 record for D1 request)
+- Falls back to Bungie live when not in archive
+- D2 PGCRs use watermark-gated archive → live fallback as usual
 
 ### Played-With Endpoint
 

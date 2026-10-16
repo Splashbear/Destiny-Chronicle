@@ -301,8 +301,8 @@ export class PlayedWithService {
   }
 
   /** One request at a time on the shared connection (temp tables). */
-  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn): Promise<PlayedWithResult> {
-    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress));
+  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn, game?: 'D1' | 'D2'): Promise<PlayedWithResult> {
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress, undefined, game));
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -312,9 +312,9 @@ export class PlayedWithService {
    * raid/dungeon caps, self excluded). Rows are [instanceId, membershipId, displayName|null, period].
    * Used by the per-account summary build so any subset of accounts can be merged later.
    */
-  async scanRosters(selfIds: string[], instances: PlayerInstance[], onProgress?: ScanProgressFn): Promise<{ rows: Array<[string, string, string | null, string | null]>; coverage: PlayedWithCoverage }> {
+  async scanRosters(selfIds: string[], instances: PlayerInstance[], onProgress?: ScanProgressFn, game?: 'D1' | 'D2'): Promise<{ rows: Array<[string, string, string | null, string | null]>; coverage: PlayedWithCoverage }> {
     const out: { rows?: unknown[][] } = {};
-    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, 1, onProgress, out));
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, 1, onProgress, out, game));
     this.queue = run.catch(() => undefined);
     const res = await run;
     const rows = (out.rows || []).map((r) => [String(r[0]), String(r[1]), r[2] == null ? null : String(r[2]), r[3] == null ? null : String(r[3])] as [string, string, string | null, string | null]);
@@ -332,10 +332,10 @@ export class PlayedWithService {
     await run;
   }
 
-  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }): Promise<PlayedWithResult> {
+  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }, game?: 'D1' | 'D2'): Promise<PlayedWithResult> {
     const durations = new Map<string, number>();
     for (const i of instances) if (i.instanceId) durations.set(String(i.instanceId), Number(i.durationSeconds) || 0);
-    const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands());
+    const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands(), game);
 
     // Per band: files + this player's ids. Each band is read with its own IN-list so DuckDB
     // can skip row groups by min/max (files are sorted by instance_id); a join would scan whole bands.
