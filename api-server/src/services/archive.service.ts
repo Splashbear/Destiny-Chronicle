@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
  */
 export interface TierInfo {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'd1_act' | 'd1_pw';
+  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'd1_act';
   indexComplete?: boolean;
   filtersApplied?: boolean;
   notes?: string[];
@@ -433,6 +433,34 @@ export class ArchiveService {
       };
     }
 
+    // D1 requests: skip D2 tiers, go straight to D1 tier
+    if (options?.game === 'D1') {
+      if (this.d1IndexRoot && this.bucketHashType) {
+        try {
+          const d1Result = await this.tryD1ActLookup(membershipId, options);
+          if (tierErrors.length > 0) {
+            d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
+          }
+          return d1Result;
+        } catch (error) {
+          const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+          logger.warn(errorMsg, { membershipId, error });
+          tierErrors.push(errorMsg);
+        }
+      }
+      // D1 requested but no D1 index configured
+      logger.debug('D1 requested but no D1 index configured', { membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+      };
+    }
+
     // Tier 1: Try lite parquet
     try {
       const liteResult = await this.tryLiteLookup(membershipId, options);
@@ -496,29 +524,6 @@ export class ArchiveService {
         }
       } catch (error) {
         const errorMsg = `Compact tier error: ${error instanceof Error ? error.message : 'unknown'}`;
-        logger.warn(errorMsg, { membershipId, error });
-        tierErrors.push(errorMsg);
-      }
-    }
-
-    // Tier 3.5: Try D1 index (only for game=D1 requests)
-    if (options?.game === 'D1' && this.d1IndexRoot && this.bucketHashType) {
-      try {
-        const d1Result = await this.tryD1ActLookup(membershipId, options);
-        if (tierErrors.length > 0) {
-          d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
-        }
-        
-        if (d1Result.knownPlayer || d1Result.tier.source === 'none') {
-          logger.debug('D1 tier result', {
-            membershipId,
-            count: d1Result.activities.length,
-            source: d1Result.tier.source,
-          });
-          return d1Result;
-        }
-      } catch (error) {
-        const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
         logger.warn(errorMsg, { membershipId, error });
         tierErrors.push(errorMsg);
       }
@@ -1075,6 +1080,7 @@ export class ArchiveService {
    *
    * Coverage caveat: D1 billion 1 only (instance IDs 1 to 1,000,000,000), Aug 30 to Dec 9 2014.
    * Other billions are missing; later D1 history is incomplete and falls back to Bungie live.
+   * Returns level:'partial', indexComplete:false ALWAYS (D1 is still active, recent games must go live).
    */
   private async tryD1ActLookup(
     membershipId: string,
@@ -1086,22 +1092,51 @@ export class ArchiveService {
     }
   ): Promise<PlayerActivitiesResult> {
     if (!this.d1IndexRoot || !this.db || !this.bucketHashType) {
-      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+        knownPlayer: false,
+      };
     }
 
     // Only serve D1 requests from D1 index
     if (options?.game !== 'D1') {
-      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+        knownPlayer: false,
+      };
     }
 
     const bucket = await this.calculateBucket(membershipId);
     if (bucket === null) {
-      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+        knownPlayer: false,
+      };
     }
 
     const pathMod = await import('path');
     const bucketDir = pathMod.join(this.d1IndexRoot, 'act', `mid_bucket=${bucket}`);
     const instancesPath = pathMod.join(bucketDir, 'instances.parquet');
+
+    const coverageNote = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete; use Bungie live for recent games.';
 
     try {
       await fs.access(instancesPath);
@@ -1110,9 +1145,10 @@ export class ArchiveService {
       return {
         activities: [],
         tier: {
-          level: 'absent',
+          level: 'partial',
           source: 'none',
-          notes: [`D1 index bucket ${bucket} not found`],
+          indexComplete: false,
+          notes: [coverageNote],
         },
         knownPlayer: false,
       };
@@ -1128,16 +1164,16 @@ export class ArchiveService {
 
       const notes = [
         ...(result.notes || []),
-        'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live.',
+        coverageNote,
       ];
 
       return {
         activities: result.activities,
         knownPlayer: result.knownPlayer,
         tier: {
-          level: result.activities.length > 0 ? 'full' : 'absent',
+          level: 'partial',  // Always partial: D1 is still active, index incomplete
           source: result.activities.length > 0 ? 'd1_act' : 'none',
-          indexComplete: true,
+          indexComplete: false,  // Billion 1 only, not complete
           filtersApplied: result.filtersApplied,
           notes,
         },
@@ -1147,9 +1183,10 @@ export class ArchiveService {
       return {
         activities: [],
         tier: {
-          level: 'absent',
+          level: 'partial',
           source: 'none',
-          notes: ['Error reading D1 index'],
+          indexComplete: false,
+          notes: ['Error reading D1 index', coverageNote],
         },
         knownPlayer: false,
       };

@@ -88,10 +88,11 @@ export function pruneBungiePgcr(bungiePgcr: any, game: Game, requestedInstanceId
 /**
  * Resolve one PGCR for a specific game: override (if flagged) → archive → Bungie live.
  * The coverage watermark is a D2 instance-ID watermark, so it only gates D2 archive lookups.
+ * D1 PGCRs ALWAYS come from Bungie live (D1 act index is keyed by membership_id, not instance_id).
  * 
  * Fix-on-view logic (when enabled and PGCR is flagged):
  * 1. Check override store first -> serve if exists
- * 2. Try archive (dump copy)
+ * 2. Try archive (dump copy) - D2 only
  * 3. If archive found, trigger async Bungie fetch to fix -> serve dump copy
  * 4. If archive not found, fetch from Bungie immediately
  */
@@ -111,8 +112,8 @@ async function resolvePgcr(
     }
   }
 
-  // Step 2: Try archive (filtered by game)
-  const tryArchive = archiveService.isAvailable() && (game !== 'D2' || watermarkService.isCovered(instanceId));
+  // Step 2: Try archive (D2 only; D1 act index is keyed by membership_id, not instance_id)
+  const tryArchive = game === 'D2' && archiveService.isAvailable() && watermarkService.isCovered(instanceId);
   if (tryArchive) {
     try {
       const activities = await archiveService.getActivitiesByInstanceId(instanceId, game);

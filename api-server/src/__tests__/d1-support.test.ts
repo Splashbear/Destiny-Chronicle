@@ -90,11 +90,12 @@ describe('D1 Support', () => {
       const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
 
       expect(result.tier.source).toBe('d1_act');
-      expect(result.tier.level).toBe('full');
+      expect(result.tier.level).toBe('partial'); // D1 always returns partial
+      expect(result.tier.indexComplete).toBe(false);
       expect(result.activities.length).toBeGreaterThan(0);
       expect(result.activities[0].game).toBe('D1');
       expect(result.activities[0].membership_id).toBe(testMid);
-      expect(result.tier.notes).toContain('D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live.');
+      expect(result.tier.notes!.some(n => n.includes('billion 1 only'))).toBe(true);
     });
 
     test('should not return D1 data for D2 requests', async () => {
@@ -134,9 +135,12 @@ describe('D1 Support', () => {
 
       const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
 
-      expect(result.tier.level).toBe('absent');
+      expect(result.tier.level).toBe('partial'); // D1 always returns partial
       expect(result.tier.source).toBe('none');
+      expect(result.tier.indexComplete).toBe(false);
       expect(result.activities).toHaveLength(0);
+      expect(result.tier.notes).toBeDefined();
+      expect(result.tier.notes!.some(n => n.includes('billion 1 only'))).toBe(true);
     });
 
     test('should handle NULL display_name in D1 data', async () => {
@@ -157,10 +161,10 @@ describe('D1 Support', () => {
 
       const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
 
-      if (result.activities.length > 0) {
-        // display_name should be empty string when NULL
-        expect(result.activities[0].display_name).toBe('');
-      }
+      // Hard assertion: should find the test data
+      expect(result.activities.length).toBeGreaterThan(0);
+      // display_name should be empty string when NULL
+      expect(result.activities[0].display_name).toBe('');
     });
 
     test('should handle character_id = 0 in D1 data (Bungie data)', async () => {
@@ -181,15 +185,15 @@ describe('D1 Support', () => {
 
       const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
 
-      if (result.activities.length > 0) {
-        const withZeroChar = result.activities.find(a => a.character_id === '0');
-        expect(withZeroChar).toBeDefined();
-      }
+      // Hard assertion: should find the test data
+      expect(result.activities.length).toBeGreaterThan(0);
+      const withZeroChar = result.activities.find(a => a.character_id === '0');
+      expect(withZeroChar).toBeDefined();
     });
   });
 
   describe('D1 played-with band planning', () => {
-    test('should plan D1 bands for instance IDs 1 to 1B', () => {
+    test('should plan D1 bands for instance IDs 1 to 1B when game=D1', () => {
       const cfg = {
         legacyRoot: '',
         compactRoot: '',
@@ -200,7 +204,7 @@ describe('D1 Support', () => {
 
       // D1 billion 1 instance IDs
       const d1Instances = ['100', '500000', '999999999'];
-      const plan = planBands(d1Instances, cfg, new Set());
+      const plan = planBands(d1Instances, cfg, new Set(), new Set(), 'D1');
 
       expect(plan.d1.size).toBeGreaterThan(0);
       expect(plan.uncovered).toHaveLength(0);
@@ -225,14 +229,32 @@ describe('D1 Support', () => {
       };
 
       const aboveBillion1 = ['1000000001', '2000000000'];
-      const plan = planBands(aboveBillion1, cfg, new Set());
+      const plan = planBands(aboveBillion1, cfg, new Set(), new Set(), 'D1');
 
       expect(plan.d1.size).toBe(0);
       // These should be uncovered (no D1 data above billion 1)
       expect(plan.uncovered.length).toBeGreaterThan(0);
     });
 
-    test('should handle D1 and D2 instance ID overlap correctly', () => {
+    test('should not plan D1 bands when game=D2 or game is not specified', () => {
+      const cfg = {
+        legacyRoot: '',
+        compactRoot: '',
+        splitIid: 10_000_000_000,
+        compactMaxIid: 16_000_000_000,
+        d1Root: d1PlayedWithRoot,
+      };
+
+      const d1RangeIds = ['100', '500000'];
+      const planD2 = planBands(d1RangeIds, cfg, new Set(), new Set(), 'D2');
+      const planUnspecified = planBands(d1RangeIds, cfg, new Set(), new Set());
+
+      // D1 bands should not be planned for D2 or unspecified game
+      expect(planD2.d1.size).toBe(0);
+      expect(planUnspecified.d1.size).toBe(0);
+    });
+
+    test('should handle D1 and D2 instance ID overlap correctly with explicit game parameter', () => {
       const cfg = {
         legacyRoot: '/d2/legacy',
         compactRoot: '/d2/compact',
@@ -241,18 +263,22 @@ describe('D1 Support', () => {
         d1Root: d1PlayedWithRoot,
       };
 
-      // Instance IDs that exist in both D1 and D2
+      // Instance IDs that exist in both D1 and D2 ranges
       const overlappingIds = ['12345678', '987654321'];
-      const plan = planBands(overlappingIds, cfg, new Set());
-
-      // Should be in D1 plans (since they're < 1B)
-      expect(plan.d1.size).toBeGreaterThan(0);
       
-      // D1 gets priority for IDs in range 1-1B when d1Root is configured
+      // When game=D1, should use D1 plans
+      const planD1 = planBands(overlappingIds, cfg, new Set(), new Set(), 'D1');
+      expect(planD1.d1.size).toBeGreaterThan(0);
+      
       const band1 = Math.floor(12345678 / BAND_SIZE);
       const band2 = Math.floor(987654321 / BAND_SIZE);
-      expect(plan.d1.get(band1)).toContain('12345678');
-      expect(plan.d1.get(band2)).toContain('987654321');
+      expect(planD1.d1.get(band1)).toContain('12345678');
+      expect(planD1.d1.get(band2)).toContain('987654321');
+      
+      // When game=D2 or unspecified, should use D2 legacy bands
+      const planD2 = planBands(overlappingIds, cfg, new Set(), new Set(), 'D2');
+      expect(planD2.d1.size).toBe(0);
+      expect(planD2.legacy.size).toBeGreaterThan(0);
     });
   });
 
@@ -301,7 +327,8 @@ describe('D1 Support', () => {
         return;
       }
 
-      const testMid = '4611686018443970323';
+      // Use the test data we created in fixtures (membership_id 1000000000001)
+      const testMid = '1000000000001';
       const testPlatform = 2; // Xbox
       const bucket = 115;
 
@@ -314,13 +341,119 @@ describe('D1 Support', () => {
 
       const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
 
-      if (result.activities.length > 0) {
-        // Verify we're using membership_id, not display_name as key
-        expect(result.activities[0].membership_id).toBe(testMid);
-        expect(result.activities[0].membership_type).toBe(testPlatform);
-        // Display name may be empty but should not be used as key
-        expect(typeof result.activities[0].display_name).toBe('string');
+      // Hard assertion: should find the test data
+      expect(result.activities.length).toBeGreaterThan(0);
+      // Verify we're using membership_id, not display_name as key
+      expect(result.activities[0].membership_id).toBe(testMid);
+      expect(result.activities[0].membership_type).toBe(testPlatform);
+      // Display name may be empty but should not be used as key
+      expect(typeof result.activities[0].display_name).toBe('string');
+    });
+  });
+
+  describe('Real DuckDB integration test', () => {
+    test('should read D1 parquet with NULL display_name, character_id=0, and large membership_id', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
       }
+
+      // Create a real parquet file with edge cases
+      const testBucketDir = path.join(d1IndexRoot, 'act', 'mid_bucket=200');
+      await fs.mkdir(testBucketDir, { recursive: true });
+      const testPath = path.join(testBucketDir, 'instances.parquet');
+
+      // Test membership ID above 2^53 (9007199254740992) as string
+      const largeMid = '9007199254740993';
+      
+      await db.all(`
+        CREATE TEMP TABLE d1_edge_cases (
+          instance_id BIGINT,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode SMALLINT,
+          membership_id BIGINT,
+          membership_type TINYINT,
+          character_id BIGINT,
+          completed BOOLEAN,
+          deaths INTEGER,
+          kills INTEGER,
+          assists INTEGER,
+          duration_seconds INTEGER,
+          game VARCHAR,
+          display_name VARCHAR,
+          mid_bucket BIGINT
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO d1_edge_cases VALUES
+          (200001, '2014-09-10 10:00:00', 1234567890, 6, ${largeMid}, 2, 2305843009400000030, true, 5, 150, 20, 1800, 'D1', 'TestGuardian', 200),
+          (200002, '2014-09-11 11:00:00', 1234567891, 4, ${largeMid}, 2, 0, true, 3, 120, 15, 1200, 'D1', 'TestGuardian', 200),
+          (200003, '2014-09-12 12:00:00', 1234567892, 2, ${largeMid}, 1, 2305843009400000031, false, 10, 50, 5, 600, 'D1', NULL, 200)
+      `);
+
+      await db.all(`COPY d1_edge_cases TO '${testPath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE d1_edge_cases');
+
+      // Now test through the service
+      const archiveService = new ArchiveService('', '', '', '', '', '', false, '', false, d1IndexRoot);
+      archiveService['db'] = db;
+      archiveService['archiveAvailable'] = true;
+      archiveService['bucketHashType'] = 'VARCHAR';
+      
+      // Mock bucket calculation to return 200
+      jest.spyOn(archiveService as any, 'calculateBucket').mockResolvedValue(200);
+
+      const result = await archiveService.getPlayerActivitiesMultiTier(largeMid, { game: 'D1' });
+
+      // Hard assertions
+      expect(result.tier.source).toBe('d1_act');
+      expect(result.tier.level).toBe('partial'); // D1 always returns partial
+      expect(result.tier.indexComplete).toBe(false); // D1 is incomplete
+      expect(result.activities.length).toBe(3);
+      
+      // Check large membership_id preserved as string
+      expect(result.activities[0].membership_id).toBe(largeMid);
+      
+      // Check character_id = 0 preserved
+      const withZeroChar = result.activities.find(a => a.character_id === '0');
+      expect(withZeroChar).toBeDefined();
+      
+      // Check NULL display_name converted to empty string
+      const withNullName = result.activities.find(a => a.display_name === '');
+      expect(withNullName).toBeDefined();
+      
+      // Check coverage note always present
+      expect(result.tier.notes).toBeDefined();
+      expect(result.tier.notes!.some(n => n.includes('billion 1 only'))).toBe(true);
+    });
+  });
+
+  describe('D1 with COMPACT_INDEX_ROOT set', () => {
+    test('should skip compact tier and go straight to D1 tier when game=D1', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '1000000000001';
+      const bucket = 115;
+
+      // Create an archive service with COMPACT_INDEX_ROOT set
+      const archiveService = new ArchiveService('', '', '', '', '/fake/compact', '', false, '', false, d1IndexRoot);
+      archiveService['db'] = db;
+      archiveService['archiveAvailable'] = true;
+      archiveService['bucketHashType'] = 'VARCHAR';
+      
+      jest.spyOn(archiveService as any, 'calculateBucket').mockResolvedValue(bucket);
+
+      const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+      // Should go directly to D1 tier, not compact
+      expect(result.tier.source).toBe('d1_act');
+      expect(result.tier.level).toBe('partial');
+      expect(result.tier.indexComplete).toBe(false);
     });
   });
 });

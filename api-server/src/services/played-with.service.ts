@@ -115,7 +115,8 @@ export function planBands(
   instanceIds: Iterable<string>,
   cfg: Pick<PlayedWithConfig, 'legacyRoot' | 'compactRoot' | 'splitIid' | 'compactMaxIid' | 'd1Root'>,
   compactDoneStems: ReadonlySet<string>,
-  minimalBands: ReadonlySet<number> = new Set()
+  minimalBands: ReadonlySet<number> = new Set(),
+  game?: 'D1' | 'D2'
 ): BandPlan {
   const plan: BandPlan = { legacy: new Map(), compact: new Map(), minimal: new Map(), d1: new Map(), uncovered: [], uncoveredReasons: {} };
   const miss = (id: string, why: string) => {
@@ -130,8 +131,8 @@ export function planBands(
     const n = Number(id);
     if (!Number.isFinite(n) || n <= 0) { miss(id, 'invalid'); continue; }
     const band = Math.floor(n / BAND_SIZE);
-    // D1 range: instance IDs 1 to 1,000,000,000 (billion 1 only)
-    if (n > 0 && n <= 1_000_000_000 && cfg.d1Root) {
+    // D1 range: instance IDs 1 to 1,000,000,000 (billion 1 only), only when game=D1 explicitly requested
+    if (game === 'D1' && n > 0 && n <= 1_000_000_000 && cfg.d1Root) {
       push(plan.d1, band, id);
     } else if (n < cfg.compactMaxIid && minimalBands.has(band)) {
       push(plan.minimal, band, id);
@@ -176,6 +177,7 @@ export interface PlayedWithCoverage {
   compactBands: number;
   minimalBands: number;
   d1Bands: number;
+  d1CoverageCaveat?: string;
 }
 
 export interface PlayedWithResult {
@@ -364,6 +366,7 @@ export class PlayedWithService {
       compactBands: plan.compact.size,
       minimalBands: plan.minimal.size,
       d1Bands: plan.d1.size,
+      d1CoverageCaveat: plan.d1.size > 0 ? 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete.' : undefined,
     };
     if (!covered.length) return { partners: [], coverage };
 
@@ -384,17 +387,13 @@ export class PlayedWithService {
       const src = `read_parquet([${r.files.map(sqlStr).join(',')}], union_by_name=true)`;
       const inList = r.ids.map((id) => String(BigInt(id))).join(',');
       const legacy = r.kind === 'legacy'; // minimal and d1 read like compact: numeric ids, TIMESTAMP period
-      const isD1 = r.kind === 'd1';
       const per = legacy ? PERIOD_LEGACY : PERIOD_COMPACT;
       const name = legacy ? `NULLIF(display_name, '')` : 'CAST(NULL AS VARCHAR)';
-      // D1 rows have membership_type, but compact/minimal do not; select NULL if missing
-      const membershipTypeCol = isD1 ? 'membership_type' : 'CAST(NULL AS TINYINT) AS membership_type';
       // Roster rows are one per character (PGCR entries). Window over the whole roster (self included).
       return `SELECT iid, mid, nm, per FROM (
           SELECT CAST(instance_id AS BIGINT) AS iid, CAST(membership_id AS VARCHAR) AS mid, ${name} AS nm, ${per} AS per,
                  mode AS md, count(*) OVER (PARTITION BY instance_id) AS nrows,
-                 bool_or(CAST(membership_id AS VARCHAR) IN (${bots})) OVER (PARTITION BY instance_id) AS hasbot,
-                 ${membershipTypeCol}
+                 bool_or(CAST(membership_id AS VARCHAR) IN (${bots})) OVER (PARTITION BY instance_id) AS hasbot
           FROM ${src} WHERE instance_id IN (${inList})${HUB_CLAUSE}
         ) WHERE mid NOT IN (${self}) AND NOT hasbot AND ${ROSTER_OK}`;
     };

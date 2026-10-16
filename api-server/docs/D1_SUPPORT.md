@@ -106,11 +106,18 @@ Add these to your `.env`:
 
 ```bash
 # Destiny 1 index root (optional, off by default)
-D1_INDEX_ROOT=/path/to/d1_index
+# Points to parent folder containing act/ and pw/ subdirectories
+D1_INDEX_ROOT=/path/to/d1/final
 
 # D1 played-with root (optional, used by played-with routes)
-D1_PLAYED_WITH_ROOT=/path/to/d1_played_with
+# Typically the same as D1_INDEX_ROOT (contains pw/ subdirectory)
+D1_PLAYED_WITH_ROOT=/path/to/d1/final
 ```
+
+Both variables typically point to the same parent folder (e.g., `D:\d1\final`) which contains:
+- `act/mid_bucket=N/instances.parquet` (activity index, ~30.2 GB)
+- `pw/iid_band=N/pw.parquet` (played-with index, ~13.0 GB)
+- **Total: ~43 GB**
 
 If `D1_INDEX_ROOT` is not set or empty, D1 support is disabled and behavior is unchanged.
 
@@ -164,9 +171,9 @@ Archive initialized: {
 `GET /api/pgcr/:instanceId?game=D1`
 
 **Behavior**:
-- Routes to Bungie D1 API endpoint when `game=D1`
+- D1 PGCRs **ALWAYS** come from Bungie live API (D1 act index is keyed by membership_id, not instance_id)
 - Never returns D2 data for a D1 request, even if the numeric instance ID exists in D2
-- Archive lookups filter by `game` column
+- D2 PGCRs use archive → live fallback as usual
 
 ### Played-With Endpoint
 
@@ -197,8 +204,9 @@ Archive initialized: {
 
 ## Data Sizes
 
-- **Activities**: 2,246,590,862 rows, 256 buckets (30.2 GB total)
-- **Played-With**: 1,001 bands (13.0 GB total)
+- **Activities** (`act/`): 2,246,590,862 rows, 256 buckets (~30.2 GB)
+- **Played-With** (`pw/`): 1,001 bands (~13.0 GB)
+- **Total**: ~43 GB
 
 ## Type System Updates
 
@@ -206,14 +214,14 @@ Archive initialized: {
 
 `archive.service.ts`:
 ```typescript
-source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'd1_act' | 'd1_pw'
+source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'd1_act'
 ```
 
 ### PlayerActivitiesCoverage Source
 
 `lean-activity.types.ts`:
 ```typescript
-source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'archive' | 'd1_act' | 'd1_pw'
+source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'archive' | 'd1_act'
 ```
 
 ### PlayedWithCoverage

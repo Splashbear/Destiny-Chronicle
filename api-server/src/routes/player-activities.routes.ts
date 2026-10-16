@@ -110,7 +110,7 @@ function buildCoverage(
   watermarkService: WatermarkService,
   tierInfo: {
     level: 'full' | 'partial' | 'absent';
-    source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'archive' | 'd1_act' | 'd1_pw';
+    source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'archive' | 'd1_act';
     indexComplete?: boolean;
     filtersApplied?: boolean;
     notes?: string[];
