@@ -356,8 +356,13 @@ export class PlayedWithService {
     collect('compact', this.cfg.compactRoot, plan.compact);
     collect('minimal', '', plan.minimal);
     collect('d1', '', plan.d1);
+    
+    // D1 index only covers billion 1 (instance IDs 1-1B); indexComplete must be false when D1 bands are used.
+    // Off-by-default behavior (no D1_ROOT): complete=true when all instances covered.
+    const indexComplete = plan.d1.size > 0 ? false : plan.uncovered.length === 0;
+    
     const coverage: PlayedWithCoverage = {
-      complete: plan.uncovered.length === 0,
+      complete: indexComplete,
       totalInstances: durations.size,
       coveredInstances: covered.length,
       uncoveredInstances: plan.uncovered.length,

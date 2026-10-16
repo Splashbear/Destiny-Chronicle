@@ -713,6 +713,220 @@ describe('D1 Support', () => {
       expect(result.partners.length).toBeGreaterThan(0);
       expect(result.partners[0].membershipId).toBe('9999999999999');
     });
+
+    test('should set coverage.complete=false when D1 bands are used (Bug 2)', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testMid = '4611686018443970323';
+      const instanceId = '500000';
+      const band = 0;
+
+      // Create D1 Played With parquet
+      const d1PwPath = path.join(d1PlayedWithRoot!, 'pw', `iid_band=${band}`, 'pw.parquet');
+      await fs.mkdir(path.dirname(d1PwPath), { recursive: true });
+
+      await db.all(`
+        CREATE TEMP TABLE d1_pw_coverage_test (
+          instance_id BIGINT,
+          membership_id BIGINT,
+          display_name VARCHAR,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode TINYINT
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO d1_pw_coverage_test VALUES
+          (${instanceId}, ${testMid}, 'D1Guardian', '2014-09-01 10:00:00', 1234567890, 6)
+      `);
+
+      await db.all(`COPY d1_pw_coverage_test TO '${d1PwPath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE d1_pw_coverage_test');
+
+      const pwService = new PlayedWithService({
+        legacyRoot: '',
+        compactRoot: '',
+        compactDoneDir: '',
+        splitIid: 0,
+        compactMaxIid: 0,
+        threads: 2,
+        memoryLimit: '500MB',
+        d1Root: d1PlayedWithRoot!,
+      });
+
+      // Request D1 billion 1 instance (covered by D1 index)
+      const instances = [{ instanceId, durationSeconds: 1800, period: '2014-09-01T10:00:00Z' }];
+      const result = await pwService.getPartners([testMid], instances, 100, undefined, 'D1');
+
+      // All instances covered by D1 bands, but coverage.complete must be false
+      expect(result.coverage.d1Bands).toBe(1);
+      expect(result.coverage.uncoveredInstances).toBe(0);
+      expect(result.coverage.complete).toBe(false); // Bug 2 fix: D1 index only covers billion 1
+      expect(result.coverage.d1CoverageCaveat).toBeDefined();
+      expect(result.coverage.d1CoverageCaveat).toContain('billion 1 only');
+    });
+  });
+
+  describe('Bug 1: D1 period Date object serialization', () => {
+    test('should return ISO UTC period strings timezone-independently (Bug 1)', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      // Create test data with TIMESTAMP values
+      const testBucketDir = path.join(d1IndexRoot, 'act', 'mid_bucket=250');
+      await fs.mkdir(testBucketDir, { recursive: true });
+      const testPath = path.join(testBucketDir, 'instances.parquet');
+
+      const testMid = '8000000000001';
+
+      await db.all(`
+        CREATE TEMP TABLE d1_period_test (
+          instance_id BIGINT,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode SMALLINT,
+          membership_id BIGINT,
+          membership_type TINYINT,
+          character_id BIGINT,
+          completed BOOLEAN,
+          deaths INTEGER,
+          kills INTEGER,
+          assists INTEGER,
+          duration_seconds INTEGER,
+          game VARCHAR,
+          display_name VARCHAR,
+          mid_bucket BIGINT
+        )
+      `);
+
+      // Insert data with specific timestamp
+      await db.all(`
+        INSERT INTO d1_period_test VALUES
+          (300001, '2014-10-26 18:57:22', 1234567890, 6, ${testMid}, 2, 2305843009400000060, true, 5, 150, 20, 1800, 'D1', 'PeriodTestGuardian', 250)
+      `);
+
+      await db.all(`COPY d1_period_test TO '${testPath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE d1_period_test');
+
+      // Save original TZ and set to a non-UTC timezone to test timezone independence
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'America/New_York'; // UTC-5 or UTC-4 depending on DST
+
+      try {
+        const archiveService = new ArchiveService('', '', '', '', '', '', false, '', false, d1IndexRoot);
+        archiveService['db'] = db;
+        archiveService['archiveAvailable'] = true;
+        archiveService['bucketHashType'] = 'VARCHAR';
+
+        jest.spyOn(archiveService as any, 'calculateBucket').mockResolvedValue(250);
+
+        const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+        expect(result.activities.length).toBeGreaterThan(0);
+        const activity = result.activities[0];
+
+        // Period must be ISO UTC format, not JS Date string
+        expect(activity.period).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+        expect(activity.period).toBe('2014-10-26T18:57:22Z'); // Exact UTC time, no timezone offset
+        
+        // Must NOT contain timezone abbreviations like "GMT-0400" or "EDT"
+        expect(activity.period).not.toContain('GMT');
+        expect(activity.period).not.toContain('EDT');
+        expect(activity.period).not.toContain('EST');
+        
+        // Verify other period fields (minPeriod, maxPeriod in coverage are via mapRowToActivity too)
+        expect(activity.period).not.toContain('('); // No "(Eastern Daylight Time)" suffix
+      } finally {
+        // Restore original TZ
+        if (originalTZ !== undefined) {
+          process.env.TZ = originalTZ;
+        } else {
+          delete process.env.TZ;
+        }
+      }
+    });
+
+    test('should handle minPeriod/maxPeriod with Date objects correctly', async () => {
+      if (!db) {
+        console.warn('Skipping test: DuckDB not available');
+        return;
+      }
+
+      const testBucketDir = path.join(d1IndexRoot, 'act', 'mid_bucket=251');
+      await fs.mkdir(testBucketDir, { recursive: true });
+      const testPath = path.join(testBucketDir, 'instances.parquet');
+
+      const testMid = '8000000000002';
+
+      await db.all(`
+        CREATE TEMP TABLE d1_minmax_period_test (
+          instance_id BIGINT,
+          period TIMESTAMP,
+          activity_hash UINTEGER,
+          mode SMALLINT,
+          membership_id BIGINT,
+          membership_type TINYINT,
+          character_id BIGINT,
+          completed BOOLEAN,
+          deaths INTEGER,
+          kills INTEGER,
+          assists INTEGER,
+          duration_seconds INTEGER,
+          game VARCHAR,
+          display_name VARCHAR,
+          mid_bucket BIGINT
+        )
+      `);
+
+      await db.all(`
+        INSERT INTO d1_minmax_period_test VALUES
+          (300011, '2014-09-01 08:00:00', 1111111111, 6, ${testMid}, 2, 2305843009400000061, true, 3, 100, 10, 1200, 'D1', 'MinMaxGuardian', 251),
+          (300012, '2014-12-09 23:59:00', 2222222222, 4, ${testMid}, 2, 2305843009400000061, true, 5, 150, 20, 1800, 'D1', 'MinMaxGuardian', 251)
+      `);
+
+      await db.all(`COPY d1_minmax_period_test TO '${testPath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE d1_minmax_period_test');
+
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'Europe/Berlin'; // UTC+1 or UTC+2
+
+      try {
+        const archiveService = new ArchiveService('', '', '', '', '', '', false, '', false, d1IndexRoot);
+        archiveService['db'] = db;
+        archiveService['archiveAvailable'] = true;
+        archiveService['bucketHashType'] = 'VARCHAR';
+
+        jest.spyOn(archiveService as any, 'calculateBucket').mockResolvedValue(251);
+
+        const result = await archiveService.getPlayerActivitiesMultiTier(testMid, { game: 'D1' });
+
+        expect(result.activities.length).toBe(2);
+        
+        // All periods must be ISO UTC format
+        for (const activity of result.activities) {
+          expect(activity.period).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+          expect(activity.period).not.toContain('GMT');
+          expect(activity.period).not.toContain('CET');
+          expect(activity.period).not.toContain('CEST');
+        }
+
+        // Verify exact values (DESC order by period)
+        expect(result.activities[0].period).toBe('2014-12-09T23:59:00Z');
+        expect(result.activities[1].period).toBe('2014-09-01T08:00:00Z');
+      } finally {
+        if (originalTZ !== undefined) {
+          process.env.TZ = originalTZ;
+        } else {
+          delete process.env.TZ;
+        }
+      }
+    });
   });
 });
 
