@@ -35,6 +35,8 @@ export interface PlayedWithConfig {
   minRoot?: string;
   /** Name-range table (mid BIGINT, name, first_seen, last_seen) parquet file(s) or glob; fills names for every partner. */
   nameTable?: string;
+  /** D1 played-with root: pw/iid_band=N/pw.parquet, N = instance_id // 1,000,000 */
+  d1Root?: string;
 }
 
 /**
@@ -66,7 +68,8 @@ export const PRIVATE_GUARDIAN = 'Private Guardian';
 export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): PlayedWithConfig | null {
   const legacyRoot = (env.PLAYED_WITH_LEGACY_ROOT || env.PLAYED_WITH_ROOT || '').trim();
   const compactRoot = (env.PLAYED_WITH_COMPACT_ROOT || '').trim();
-  if (!legacyRoot && !compactRoot && !(env.PLAYED_WITH_MIN_ROOT || '').trim()) return null;
+  const d1Root = (env.D1_PLAYED_WITH_ROOT || '').trim();
+  if (!legacyRoot && !compactRoot && !(env.PLAYED_WITH_MIN_ROOT || '').trim() && !d1Root) return null;
   const compactDoneDir = (env.PLAYED_WITH_COMPACT_DONE_DIR || '').trim()
     || (compactRoot ? path.join(path.dirname(compactRoot), '_w38_state', 'done') : '');
   return {
@@ -77,10 +80,11 @@ export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): Play
     compactMaxIid: Number(env.PLAYED_WITH_COMPACT_MAX_IID || 16_000_000_000),
     threads: Math.max(1, parseInt(env.PLAYED_WITH_DUCKDB_THREADS || '2', 10) || 2),
     memoryLimit: (env.PLAYED_WITH_DUCKDB_MEMORY || '2GB').replace(/'/g, ''),
-    tempDir: (env.PLAYED_WITH_DUCKDB_TEMP_DIR || '').trim() || defaultTempDir(compactRoot || legacyRoot || path.join((env.PLAYED_WITH_MIN_ROOT || '').trim(), 'x')),
+    tempDir: (env.PLAYED_WITH_DUCKDB_TEMP_DIR || '').trim() || defaultTempDir(compactRoot || legacyRoot || d1Root || path.join((env.PLAYED_WITH_MIN_ROOT || '').trim(), 'x')),
     excludeIds: [...new Set([...KNOWN_BOT_IDS, ...(env.PLAYED_WITH_EXCLUDE_IDS || '').split(',').map((x) => x.trim()).filter((x) => /^\d+$/.test(x))])],
     minRoot: (env.PLAYED_WITH_MIN_ROOT || '').trim() || undefined,
     nameTable: (env.PLAYED_WITH_NAME_TABLE || '').trim() || undefined,
+    d1Root: d1Root || undefined,
   };
 }
 
@@ -100,6 +104,8 @@ export interface BandPlan {
   compact: Map<number, string[]>;
   /** bands served from the minimal index (either range). */
   minimal: Map<number, string[]>;
+  /** D1 bands (instance_id < 1B, from D1 pw index). */
+  d1: Map<number, string[]>;
   /** instance ids we cannot answer from the index (unfinished band, above range, no root). */
   uncovered: string[];
   uncoveredReasons: Record<string, number>;
@@ -107,11 +113,12 @@ export interface BandPlan {
 
 export function planBands(
   instanceIds: Iterable<string>,
-  cfg: Pick<PlayedWithConfig, 'legacyRoot' | 'compactRoot' | 'splitIid' | 'compactMaxIid'>,
+  cfg: Pick<PlayedWithConfig, 'legacyRoot' | 'compactRoot' | 'splitIid' | 'compactMaxIid' | 'd1Root'>,
   compactDoneStems: ReadonlySet<string>,
-  minimalBands: ReadonlySet<number> = new Set()
+  minimalBands: ReadonlySet<number> = new Set(),
+  game?: 'D1' | 'D2'
 ): BandPlan {
-  const plan: BandPlan = { legacy: new Map(), compact: new Map(), minimal: new Map(), uncovered: [], uncoveredReasons: {} };
+  const plan: BandPlan = { legacy: new Map(), compact: new Map(), minimal: new Map(), d1: new Map(), uncovered: [], uncoveredReasons: {} };
   const miss = (id: string, why: string) => {
     plan.uncovered.push(id);
     plan.uncoveredReasons[why] = (plan.uncoveredReasons[why] || 0) + 1;
@@ -124,7 +131,10 @@ export function planBands(
     const n = Number(id);
     if (!Number.isFinite(n) || n <= 0) { miss(id, 'invalid'); continue; }
     const band = Math.floor(n / BAND_SIZE);
-    if (n < cfg.compactMaxIid && minimalBands.has(band)) {
+    // D1 range: instance IDs 1 to 1,000,000,000 (billion 1 only), only when game=D1 explicitly requested
+    if (game === 'D1' && n > 0 && n <= 1_000_000_000 && cfg.d1Root) {
+      push(plan.d1, band, id);
+    } else if (n < cfg.compactMaxIid && minimalBands.has(band)) {
       push(plan.minimal, band, id);
     } else if (n < cfg.splitIid) {
       if (cfg.legacyRoot) push(plan.legacy, band, id); else miss(id, 'no_legacy_root');
@@ -166,6 +176,8 @@ export interface PlayedWithCoverage {
   legacyBands: number;
   compactBands: number;
   minimalBands: number;
+  d1Bands: number;
+  d1CoverageCaveat?: string;
 }
 
 export interface PlayedWithResult {
@@ -260,6 +272,12 @@ export class PlayedWithService {
     return bandFiles(path.join(root, kind, 'by_iid_1m'), band);
   }
 
+  /** D1 band files: D1_ROOT/pw/iid_band=N/pw.parquet */
+  private d1BandFiles(band: number): string[] {
+    if (!this.cfg.d1Root) return [];
+    return bandFiles(path.join(this.cfg.d1Root, 'pw'), band);
+  }
+
   /** Done-marker stems currently present (re-read per request so new W38 files appear without restart). */
   readCompactDoneStems(): Set<string> {
     const out = new Set<string>();
@@ -283,8 +301,8 @@ export class PlayedWithService {
   }
 
   /** One request at a time on the shared connection (temp tables). */
-  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn): Promise<PlayedWithResult> {
-    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress));
+  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn, game?: 'D1' | 'D2'): Promise<PlayedWithResult> {
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress, undefined, game));
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -294,9 +312,9 @@ export class PlayedWithService {
    * raid/dungeon caps, self excluded). Rows are [instanceId, membershipId, displayName|null, period].
    * Used by the per-account summary build so any subset of accounts can be merged later.
    */
-  async scanRosters(selfIds: string[], instances: PlayerInstance[], onProgress?: ScanProgressFn): Promise<{ rows: Array<[string, string, string | null, string | null]>; coverage: PlayedWithCoverage }> {
+  async scanRosters(selfIds: string[], instances: PlayerInstance[], onProgress?: ScanProgressFn, game?: 'D1' | 'D2'): Promise<{ rows: Array<[string, string, string | null, string | null]>; coverage: PlayedWithCoverage }> {
     const out: { rows?: unknown[][] } = {};
-    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, 1, onProgress, out));
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, 1, onProgress, out, game));
     this.queue = run.catch(() => undefined);
     const res = await run;
     const rows = (out.rows || []).map((r) => [String(r[0]), String(r[1]), r[2] == null ? null : String(r[2]), r[3] == null ? null : String(r[3])] as [string, string, string | null, string | null]);
@@ -314,19 +332,19 @@ export class PlayedWithService {
     await run;
   }
 
-  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }): Promise<PlayedWithResult> {
+  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }, game?: 'D1' | 'D2'): Promise<PlayedWithResult> {
     const durations = new Map<string, number>();
     for (const i of instances) if (i.instanceId) durations.set(String(i.instanceId), Number(i.durationSeconds) || 0);
-    const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands());
+    const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands(), game);
 
     // Per band: files + this player's ids. Each band is read with its own IN-list so DuckDB
     // can skip row groups by min/max (files are sorted by instance_id); a join would scan whole bands.
-    type BandRead = { kind: 'legacy' | 'compact' | 'minimal'; files: string[]; ids: string[] };
+    type BandRead = { kind: 'legacy' | 'compact' | 'minimal' | 'd1'; files: string[]; ids: string[] };
     const reads: BandRead[] = [];
     const covered: string[] = [];
-    const collect = (kind: 'legacy' | 'compact' | 'minimal', root: string, m: Map<number, string[]>) => {
+    const collect = (kind: 'legacy' | 'compact' | 'minimal' | 'd1', root: string, m: Map<number, string[]>) => {
       for (const [band, ids] of m) {
-        const files = kind === 'minimal' ? this.minimalBandFiles(band) : bandFiles(root, band);
+        const files = kind === 'minimal' ? this.minimalBandFiles(band) : kind === 'd1' ? this.d1BandFiles(band) : bandFiles(root, band);
         if (files.length) { reads.push({ kind, files, ids }); covered.push(...ids); }
         else {
           plan.uncovered.push(...ids);
@@ -337,6 +355,7 @@ export class PlayedWithService {
     collect('legacy', this.cfg.legacyRoot, plan.legacy);
     collect('compact', this.cfg.compactRoot, plan.compact);
     collect('minimal', '', plan.minimal);
+    collect('d1', '', plan.d1);
     const coverage: PlayedWithCoverage = {
       complete: plan.uncovered.length === 0,
       totalInstances: durations.size,
@@ -346,6 +365,8 @@ export class PlayedWithService {
       legacyBands: plan.legacy.size,
       compactBands: plan.compact.size,
       minimalBands: plan.minimal.size,
+      d1Bands: plan.d1.size,
+      d1CoverageCaveat: plan.d1.size > 0 ? 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete.' : undefined,
     };
     if (!covered.length) return { partners: [], coverage };
 
@@ -365,7 +386,7 @@ export class PlayedWithService {
     const one = (r: BandRead) => {
       const src = `read_parquet([${r.files.map(sqlStr).join(',')}], union_by_name=true)`;
       const inList = r.ids.map((id) => String(BigInt(id))).join(',');
-      const legacy = r.kind === 'legacy'; // minimal reads like compact: numeric ids, TIMESTAMP period, no names
+      const legacy = r.kind === 'legacy'; // minimal and d1 read like compact: numeric ids, TIMESTAMP period
       const per = legacy ? PERIOD_LEGACY : PERIOD_COMPACT;
       const name = legacy ? `NULLIF(display_name, '')` : 'CAST(NULL AS VARCHAR)';
       // Roster rows are one per character (PGCR entries). Window over the whole roster (self included).

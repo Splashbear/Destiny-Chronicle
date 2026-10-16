@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
  */
 export interface TierInfo {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending';
+  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'd1_act';
   indexComplete?: boolean;
   filtersApplied?: boolean;
   notes?: string[];
@@ -45,6 +45,7 @@ export class ArchiveService {
   private gapIndexSortedRoot: string;
   private enableGapLean: boolean;
   private gapRelaxComplete: boolean;
+  private d1IndexRoot: string;
   private archiveAvailable = false;
   private db: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
@@ -62,7 +63,8 @@ export class ArchiveService {
     gapIndexRoot: string = '',
     enableGapLean: boolean = false,
     gapIndexSortedRoot: string = '',
-    gapRelaxComplete: boolean = false
+    gapRelaxComplete: boolean = false,
+    d1IndexRoot: string = ''
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
@@ -73,6 +75,7 @@ export class ArchiveService {
     this.gapIndexSortedRoot = gapIndexSortedRoot;
     this.gapRelaxComplete = gapRelaxComplete;
     this.enableGapLean = enableGapLean && !!gapIndexRoot;
+    this.d1IndexRoot = d1IndexRoot;
   }
 
   /** Brief 5 Option A: whether gap ready/ merge is active. */
@@ -117,6 +120,7 @@ export class ArchiveService {
         gapIndexSortedRoot: this.gapIndexSortedRoot || '(none)',
         enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
+        d1IndexRoot: this.d1IndexRoot || '(none)',
       });
     } catch (error) {
       logger.warn('Archive files not accessible or DuckDB init failed', {
@@ -429,6 +433,32 @@ export class ArchiveService {
       };
     }
 
+    // D1 requests: try D1 index first (only when D1_INDEX_ROOT is set), then fall back to lite/extract
+    let d1TierTriedAndEmpty = false;
+    if (options?.game === 'D1' && this.d1IndexRoot && this.bucketHashType) {
+      try {
+        const d1Result = await this.tryD1ActLookup(membershipId, options);
+        if (tierErrors.length > 0) {
+          d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
+        }
+        // If D1 tier found activities, return them
+        if (d1Result.knownPlayer && d1Result.activities.length > 0) {
+          return d1Result;
+        }
+        // D1 tier returned no activities; fall through to lite/extract (may have D1 data there)
+        d1TierTriedAndEmpty = true;
+        // Preserve D1 tier errors for the final response
+        if (d1Result.tier.notes) {
+          tierErrors.push(...d1Result.tier.notes);
+        }
+      } catch (error) {
+        const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+        logger.warn(errorMsg, { membershipId, error });
+        tierErrors.push(errorMsg);
+        d1TierTriedAndEmpty = true;
+      }
+    }
+
     // Tier 1: Try lite parquet
     try {
       const liteResult = await this.tryLiteLookup(membershipId, options);
@@ -440,7 +470,24 @@ export class ArchiveService {
         if (tierErrors.length > 0) {
           liteResult.tier.notes = [...(liteResult.tier.notes || []), ...tierErrors];
         }
-        return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
+        // For D1 requests with D1_INDEX_ROOT set, never return D2-labeled rows
+        if (this.d1IndexRoot && options?.game === 'D1' && liteResult.activities.some(a => a.game === 'D2')) {
+          liteResult.activities = liteResult.activities.filter(a => a.game !== 'D2');
+          if (liteResult.activities.length === 0) {
+            // Had rows but all were D2; keep searching
+            liteResult.knownPlayer = false;
+          }
+        }
+        if (liteResult.knownPlayer) {
+          // Force partial coverage for D1 when answering after empty D1 tier
+          if (d1TierTriedAndEmpty) {
+            liteResult.tier.level = 'partial';
+            liteResult.tier.indexComplete = false;
+            const d1Caveat = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.';
+            liteResult.tier.notes = liteResult.tier.notes ? [d1Caveat, ...liteResult.tier.notes] : [d1Caveat];
+          }
+          return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
+        }
       }
     } catch (error) {
       const errorMsg = `Lite tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -464,7 +511,24 @@ export class ArchiveService {
             const allNotes = [...(extractResult.tier.notes || []), ...tierErrors];
             extractResult.tier.notes = Array.from(new Set(allNotes));
           }
-          return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
+          // For D1 requests with D1_INDEX_ROOT set, never return D2-labeled rows
+          if (this.d1IndexRoot && options?.game === 'D1' && extractResult.activities.some(a => a.game === 'D2')) {
+            extractResult.activities = extractResult.activities.filter(a => a.game !== 'D2');
+            if (extractResult.activities.length === 0) {
+              // Had rows but all were D2; keep searching
+              extractResult.knownPlayer = false;
+            }
+          }
+          if (extractResult.knownPlayer) {
+            // Force partial coverage for D1 when answering after empty D1 tier
+            if (d1TierTriedAndEmpty) {
+              extractResult.tier.level = 'partial';
+              extractResult.tier.indexComplete = false;
+              const d1Caveat = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.';
+              extractResult.tier.notes = extractResult.tier.notes ? [d1Caveat, ...extractResult.tier.notes] : [d1Caveat];
+            }
+            return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
+          }
         }
       } catch (error) {
         const errorMsg = `Extract tier error: ${error instanceof Error ? error.message : 'unknown'}`;
@@ -473,8 +537,8 @@ export class ArchiveService {
       }
     }
 
-    // Tier 3: Try compact index
-    if (this.compactIndexRoot && this.bucketHashType) {
+    // Tier 3: Try compact index (skip for D1 requests when D1_INDEX_ROOT is set - compact is D2 only)
+    if (!(this.d1IndexRoot && options?.game === 'D1') && this.compactIndexRoot && this.bucketHashType) {
       try {
         const compactResult = await this.tryCompactIndexLookup(membershipId, options);
         if (tierErrors.length > 0) {
@@ -518,6 +582,21 @@ export class ArchiveService {
     }
 
     logger.debug('No archive data found for membership', { membershipId });
+    // For D1 requests with D1_INDEX_ROOT set, always return partial (not absent) with coverage caveat
+    if (this.d1IndexRoot && options?.game === 'D1') {
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: [
+            'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.',
+            ...(tierErrors.length > 0 ? tierErrors : []),
+          ],
+        },
+      };
+    }
     return {
       activities: [],
       tier: {
@@ -1030,6 +1109,131 @@ export class ArchiveService {
           source: markerExists ? 'none' : 'pending',
           indexComplete: markerExists,
           notes: ['Error reading compact index'],
+        },
+        knownPlayer: false,
+      };
+    }
+  }
+
+  /**
+   * Try D1 activity index lookup.
+   * D1 layout: D1_INDEX_ROOT/act/mid_bucket=N/instances.parquet
+   * Bucket = hash(membership_id::VARCHAR) % 256 (test vector: 4611686018443970323 -> 115)
+   * Sorted by (membership_id, instance_id).
+   * Columns: instance_id BIGINT, period TIMESTAMP, activity_hash UINTEGER, mode SMALLINT,
+   *          membership_id BIGINT, membership_type TINYINT, character_id BIGINT, completed BOOLEAN,
+   *          deaths/kills/assists/duration_seconds INTEGER, game VARCHAR ('D1'),
+   *          display_name VARCHAR, mid_bucket BIGINT.
+   *
+   * Coverage caveat: D1 billion 1 only (instance IDs 1 to 1,000,000,000), Aug 30 to Dec 9 2014.
+   * Other billions are missing; later D1 history is incomplete and falls back to Bungie live.
+   * Returns level:'partial', indexComplete:false ALWAYS (D1 is still active, recent games must go live).
+   */
+  private async tryD1ActLookup(
+    membershipId: string,
+    options?: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    }
+  ): Promise<PlayerActivitiesResult> {
+    if (!this.d1IndexRoot || !this.db || !this.bucketHashType) {
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    // Only serve D1 requests from D1 index
+    if (options?.game !== 'D1') {
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    const bucket = await this.calculateBucket(membershipId);
+    if (bucket === null) {
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    const pathMod = await import('path');
+    const bucketDir = pathMod.join(this.d1IndexRoot, 'act', `mid_bucket=${bucket}`);
+    const instancesPath = pathMod.join(bucketDir, 'instances.parquet');
+
+    const coverageNote = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete; use Bungie live for recent games.';
+
+    try {
+      await fs.access(instancesPath);
+    } catch {
+      logger.debug('D1 index bucket not found', { bucket, membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: [coverageNote],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    try {
+      const result = await this.queryPlayerActivitiesSchema(
+        instancesPath,
+        membershipId,
+        { ...options, game: 'D1' },
+        'd1_act'
+      );
+
+      const notes = [
+        ...(result.notes || []),
+        coverageNote,
+      ];
+
+      return {
+        activities: result.activities,
+        knownPlayer: result.knownPlayer,
+        tier: {
+          level: 'partial',  // Always partial: D1 is still active, index incomplete
+          source: result.activities.length > 0 ? 'd1_act' : 'none',
+          indexComplete: false,  // Billion 1 only, not complete
+          filtersApplied: result.filtersApplied,
+          notes,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to read D1 index', { error, bucket, membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'partial',
+          source: 'none',
+          indexComplete: false,
+          notes: ['Error reading D1 index', coverageNote],
         },
         knownPlayer: false,
       };
