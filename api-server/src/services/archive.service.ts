@@ -8,7 +8,7 @@ import { logger } from '../utils/logger';
  */
 export interface TierInfo {
   level: 'full' | 'partial' | 'absent';
-  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending';
+  source: 'lite' | 'extract' | 'compact_ids' | 'gap_lean' | 'merged' | 'none' | 'pending' | 'd1_act' | 'd1_pw';
   indexComplete?: boolean;
   filtersApplied?: boolean;
   notes?: string[];
@@ -45,6 +45,7 @@ export class ArchiveService {
   private gapIndexSortedRoot: string;
   private enableGapLean: boolean;
   private gapRelaxComplete: boolean;
+  private d1IndexRoot: string;
   private archiveAvailable = false;
   private db: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
@@ -62,7 +63,8 @@ export class ArchiveService {
     gapIndexRoot: string = '',
     enableGapLean: boolean = false,
     gapIndexSortedRoot: string = '',
-    gapRelaxComplete: boolean = false
+    gapRelaxComplete: boolean = false,
+    d1IndexRoot: string = ''
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
@@ -73,6 +75,7 @@ export class ArchiveService {
     this.gapIndexSortedRoot = gapIndexSortedRoot;
     this.gapRelaxComplete = gapRelaxComplete;
     this.enableGapLean = enableGapLean && !!gapIndexRoot;
+    this.d1IndexRoot = d1IndexRoot;
   }
 
   /** Brief 5 Option A: whether gap ready/ merge is active. */
@@ -117,6 +120,7 @@ export class ArchiveService {
         gapIndexSortedRoot: this.gapIndexSortedRoot || '(none)',
         enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
+        d1IndexRoot: this.d1IndexRoot || '(none)',
       });
     } catch (error) {
       logger.warn('Archive files not accessible or DuckDB init failed', {
@@ -492,6 +496,29 @@ export class ArchiveService {
         }
       } catch (error) {
         const errorMsg = `Compact tier error: ${error instanceof Error ? error.message : 'unknown'}`;
+        logger.warn(errorMsg, { membershipId, error });
+        tierErrors.push(errorMsg);
+      }
+    }
+
+    // Tier 3.5: Try D1 index (only for game=D1 requests)
+    if (options?.game === 'D1' && this.d1IndexRoot && this.bucketHashType) {
+      try {
+        const d1Result = await this.tryD1ActLookup(membershipId, options);
+        if (tierErrors.length > 0) {
+          d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
+        }
+        
+        if (d1Result.knownPlayer || d1Result.tier.source === 'none') {
+          logger.debug('D1 tier result', {
+            membershipId,
+            count: d1Result.activities.length,
+            source: d1Result.tier.source,
+          });
+          return d1Result;
+        }
+      } catch (error) {
+        const errorMsg = `D1 tier error: ${error instanceof Error ? error.message : 'unknown'}`;
         logger.warn(errorMsg, { membershipId, error });
         tierErrors.push(errorMsg);
       }
@@ -1030,6 +1057,99 @@ export class ArchiveService {
           source: markerExists ? 'none' : 'pending',
           indexComplete: markerExists,
           notes: ['Error reading compact index'],
+        },
+        knownPlayer: false,
+      };
+    }
+  }
+
+  /**
+   * Try D1 activity index lookup.
+   * D1 layout: D1_INDEX_ROOT/act/mid_bucket=N/instances.parquet
+   * Bucket = hash(membership_id::VARCHAR) % 256 (test vector: 4611686018443970323 -> 115)
+   * Sorted by (membership_id, instance_id).
+   * Columns: instance_id BIGINT, period TIMESTAMP, activity_hash UINTEGER, mode SMALLINT,
+   *          membership_id BIGINT, membership_type TINYINT, character_id BIGINT, completed BOOLEAN,
+   *          deaths/kills/assists/duration_seconds INTEGER, game VARCHAR ('D1'),
+   *          display_name VARCHAR, mid_bucket BIGINT.
+   *
+   * Coverage caveat: D1 billion 1 only (instance IDs 1 to 1,000,000,000), Aug 30 to Dec 9 2014.
+   * Other billions are missing; later D1 history is incomplete and falls back to Bungie live.
+   */
+  private async tryD1ActLookup(
+    membershipId: string,
+    options?: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    }
+  ): Promise<PlayerActivitiesResult> {
+    if (!this.d1IndexRoot || !this.db || !this.bucketHashType) {
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+    }
+
+    // Only serve D1 requests from D1 index
+    if (options?.game !== 'D1') {
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+    }
+
+    const bucket = await this.calculateBucket(membershipId);
+    if (bucket === null) {
+      return { activities: [], tier: { level: 'absent', source: 'none' }, knownPlayer: false };
+    }
+
+    const pathMod = await import('path');
+    const bucketDir = pathMod.join(this.d1IndexRoot, 'act', `mid_bucket=${bucket}`);
+    const instancesPath = pathMod.join(bucketDir, 'instances.parquet');
+
+    try {
+      await fs.access(instancesPath);
+    } catch {
+      logger.debug('D1 index bucket not found', { bucket, membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'none',
+          notes: [`D1 index bucket ${bucket} not found`],
+        },
+        knownPlayer: false,
+      };
+    }
+
+    try {
+      const result = await this.queryPlayerActivitiesSchema(
+        instancesPath,
+        membershipId,
+        { ...options, game: 'D1' },
+        'd1_act'
+      );
+
+      const notes = [
+        ...(result.notes || []),
+        'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live.',
+      ];
+
+      return {
+        activities: result.activities,
+        knownPlayer: result.knownPlayer,
+        tier: {
+          level: result.activities.length > 0 ? 'full' : 'absent',
+          source: result.activities.length > 0 ? 'd1_act' : 'none',
+          indexComplete: true,
+          filtersApplied: result.filtersApplied,
+          notes,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to read D1 index', { error, bucket, membershipId });
+      return {
+        activities: [],
+        tier: {
+          level: 'absent',
+          source: 'none',
+          notes: ['Error reading D1 index'],
         },
         knownPlayer: false,
       };

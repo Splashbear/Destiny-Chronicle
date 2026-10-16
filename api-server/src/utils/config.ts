@@ -25,6 +25,10 @@ export function loadConfig(): ApiConfig {
     enableGapLean: process.env[ENV_KEYS.ENABLE_GAP_LEAN] === 'true',
     gapRelaxComplete: process.env[ENV_KEYS.GAP_RELAX_COMPLETE] === 'true',
     
+    // Destiny 1 index paths (off by default)
+    d1IndexRoot: process.env[ENV_KEYS.D1_INDEX_ROOT] || '',
+    d1PlayedWithRoot: process.env[ENV_KEYS.D1_PLAYED_WITH_ROOT] || '',
+    
     // Bungie API - REQUIRED via environment variable
     bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',
     bungieApiRoot: process.env[ENV_KEYS.BUNGIE_API_ROOT] || 'https://www.bungie.net/Platform',

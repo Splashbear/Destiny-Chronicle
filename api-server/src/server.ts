@@ -90,7 +90,8 @@ async function startServer(): Promise<void> {
     config.gapIndexRoot,
     config.enableGapLean,
     config.gapIndexSortedRoot,
-    config.gapRelaxComplete
+    config.gapRelaxComplete,
+    config.d1IndexRoot
   );
   await archiveService.initialize();
 

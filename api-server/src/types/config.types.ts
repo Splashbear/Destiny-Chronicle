@@ -25,6 +25,12 @@ export interface ApiConfig {
    */
   gapRelaxComplete: boolean;
   
+  // Destiny 1 index paths (off by default; behavior unchanged when unset)
+  /** D1 activity index root: act/mid_bucket=N/instances.parquet */
+  d1IndexRoot: string;
+  /** D1 played-with legacy root: pw/iid_band=N/pw.parquet */
+  d1PlayedWithRoot: string;
+  
   // Bungie API
   bungieApiKey: string;
   bungieApiRoot: string;
@@ -58,6 +64,8 @@ export const ENV_KEYS = {
   GAP_INDEX_SORTED_ROOT: 'GAP_INDEX_SORTED_ROOT',
   ENABLE_GAP_LEAN: 'ENABLE_GAP_LEAN',
   GAP_RELAX_COMPLETE: 'GAP_RELAX_COMPLETE',
+  D1_INDEX_ROOT: 'D1_INDEX_ROOT',
+  D1_PLAYED_WITH_ROOT: 'D1_PLAYED_WITH_ROOT',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   FLAG_LOOKUP_ROOT: 'FLAG_LOOKUP_ROOT',
