@@ -653,8 +653,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   currentDay: number = new Date().getDate();
   selectedPlayers: PlayerSearchDisplay[] = [];
 
+  private heatmapIdCacheKey = '';
+  private heatmapIdCache: string[] = [];
+
   get heatmapMembershipIds(): string[] {
-    return this.selectedPlayers.map(p => p.membershipId);
+    const ids = this.selectedPlayers.map(p => p.membershipId);
+    const key = ids.join('\n');
+    if (key === this.heatmapIdCacheKey) {
+      return this.heatmapIdCache;
+    }
+    this.heatmapIdCacheKey = key;
+    this.heatmapIdCache = ids;
+    return ids;
   }
 
   private heatmapClassCacheKey = '';

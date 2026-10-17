@@ -1,15 +1,17 @@
-import { ChangeDetectorRef, Component, EventEmitter, inject, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, inject, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivityDbService } from '../../services/activity-db.service';
 import { ACTIVITY_RELEASE_DATES } from '../../models/activity-release-dates';
 import {
   activitySeconds,
-  characterKey,
   clipRangeToYear,
   filterHeatmapActivities,
   formatDaysHours,
   heatmapHasActivity,
+  heatmapOptionPresence,
+  projectHeatmapRow,
+  sameMembershipIds,
   HeatmapCharacterLookup,
   HeatmapCharacterOption,
   HeatmapPlatformOption,
@@ -312,7 +314,7 @@ interface NamedRange {
     }
   `]
 })
-export class ActivityHeatmapComponent implements OnInit, OnChanges {
+export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   readonly text = inject(TextViewService);
   textYearPick = 0;
   private activityByDay = new Map<string, { count: number; seconds: number }>();
@@ -415,6 +417,12 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
     'Season of Reclamation': 'edge-of-fate.png',
   };
 
+  /** How many times this instance started a table read. A new id array with the same ids does not count. */
+  loadActivitiesCalls = 0;
+  private loadGen = 0;
+  private destroyed = false;
+  private tableReady = false;
+
   constructor(
     private activityDb: ActivityDbService,
     private cdr: ChangeDetectorRef
@@ -424,16 +432,28 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
     await this.loadActivities();
   }
 
+  ngOnDestroy(): void {
+    this.destroyed = true;
+    this.loadGen += 1;
+    this.allActivities = [];
+  }
+
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
-    const membershipChanged = changes['membershipIds'] && !changes['membershipIds'].firstChange;
-    const metaChanged = changes['characterMeta'] && !changes['characterMeta'].firstChange;
-    if (membershipChanged) {
-      await this.loadActivities();
+    const ids = changes['membershipIds'];
+    const membershipChanged = !!ids
+      && !ids.firstChange
+      && !sameMembershipIds(ids.previousValue, ids.currentValue);
+    const meta = changes['characterMeta'];
+    const metaChanged = !!meta && !meta.firstChange && meta.previousValue !== meta.currentValue;
+    if (!membershipChanged && !metaChanged) {
       return;
     }
-    if (metaChanged) {
-      await this.loadActivities();
+    if (metaChanged && !membershipChanged && this.tableReady) {
+      this.rebuild();
+      this.cdr.markForCheck();
+      return;
     }
+    await this.loadActivities();
   }
 
   formatDaysHours = formatDaysHours;
@@ -487,8 +507,21 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
   }
 
   async loadActivities(): Promise<void> {
-    this.allActivities = await this.activityDb.activities.toArray();
+    if (this.destroyed) {
+      return;
+    }
+    const gen = ++this.loadGen;
+    this.loadActivitiesCalls += 1;
+    const rows = await this.activityDb.activities.toArray();
+    if (gen !== this.loadGen || this.destroyed) {
+      return;
+    }
+    this.allActivities = rows;
+    this.tableReady = true;
     this.rebuild();
+    if (gen !== this.loadGen || this.destroyed) {
+      return;
+    }
     // Dexie/IndexedDB resolves outside the Angular zone, and this component
     // lives under an OnPush parent. Refresh the view so the first paint
     // shows data without waiting for a dropdown change.
@@ -504,21 +537,7 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
         typeByMembership.set(membershipId, info.membershipType);
       }
     }
-    return activities.map(activity => {
-      const info = meta[characterKey(activity)] || meta[activity.characterId];
-      const membershipType = activity.membershipType
-        || info?.membershipType
-        || typeByMembership.get(activity.membershipId);
-      const hasClass = activity.characterClass && activity.characterClass !== 'Unknown';
-      if (!info && membershipType == null) {
-        return activity;
-      }
-      return {
-        ...activity,
-        characterClass: hasClass ? activity.characterClass : (info?.className || activity.characterClass),
-        membershipType
-      };
-    });
+    return activities.map(activity => projectHeatmapRow(activity, meta, typeByMembership));
   }
 
   rebuild(): void {
@@ -652,26 +671,26 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
     platformType: number | null,
     characterKeyFilter: string | null
   ): void {
+    const platformsOpen = heatmapOptionPresence(accountScoped, {
+      characterKey: characterKeyFilter,
+      year: yearNum
+    });
+    const charactersOpen = heatmapOptionPresence(accountScoped, {
+      membershipType: platformType,
+      year: yearNum
+    });
+    const yearsOpen = heatmapOptionPresence(accountScoped, {
+      membershipType: platformType,
+      characterKey: characterKeyFilter
+    });
     for (const platform of this.platforms) {
-      platform.disabled = !heatmapHasActivity(accountScoped, {
-        membershipType: platform.type,
-        characterKey: characterKeyFilter,
-        year: yearNum
-      });
+      platform.disabled = !platformsOpen.platforms.has(platform.type);
     }
     for (const character of this.characters) {
-      character.disabled = !heatmapHasActivity(accountScoped, {
-        membershipType: platformType,
-        characterKey: character.key,
-        year: yearNum
-      });
+      character.disabled = !charactersOpen.characters.has(character.key);
     }
     for (const option of this.yearOptions) {
-      option.disabled = !heatmapHasActivity(accountScoped, {
-        membershipType: platformType,
-        characterKey: characterKeyFilter,
-        year: option.year
-      });
+      option.disabled = !yearsOpen.years.has(option.year);
     }
   }
 

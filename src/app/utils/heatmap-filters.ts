@@ -332,6 +332,92 @@ export function clipRangeToYear(
   return { start: clippedStart, end: clippedEnd };
 }
 
+export function sameMembershipIds(
+  previous: readonly string[] | null | undefined,
+  next: readonly string[] | null | undefined
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+  if (!previous || !next || previous.length !== next.length) {
+    return false;
+  }
+  for (let i = 0; i < previous.length; i++) {
+    if (previous[i] !== next[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** One pass. Matches heatmapHasActivity for each platform, character, and year option. */
+export function heatmapOptionPresence(
+  activities: HeatmapActivity[],
+  opts: {
+    membershipType?: number | null;
+    characterKey?: string | null;
+    year?: number | null;
+  }
+): { platforms: Set<number>; characters: Set<string>; years: Set<number> } {
+  const platforms = new Set<number>();
+  const characters = new Set<string>();
+  const years = new Set<number>();
+  for (const activity of activities) {
+    if (!activity.period) {
+      continue;
+    }
+    const year = new Date(activity.period).getFullYear();
+    const key = characterKey(activity);
+    const type = activity.membershipType;
+    const yearOk = opts.year == null || year === opts.year;
+    const characterOk = !opts.characterKey || key === opts.characterKey;
+    const platformOk = opts.membershipType == null || type === opts.membershipType;
+    if (characterOk && yearOk && type != null) {
+      platforms.add(type);
+    }
+    if (platformOk && yearOk) {
+      characters.add(key);
+    }
+    if (platformOk && characterOk && Number.isFinite(year)) {
+      years.add(year);
+    }
+  }
+  return { platforms, characters, years };
+}
+
+/**
+ * Fill class and platform from the profile lookup.
+ * Returns the same row when those fields are already set, and otherwise a
+ * small row with only the heatmap fields (not a copy of the stored record).
+ */
+export function projectHeatmapRow(
+  activity: HeatmapActivity,
+  meta: Record<string, HeatmapCharacterLookup>,
+  typeByMembership: Map<string, number>
+): HeatmapActivity {
+  const info = meta[characterKey(activity)] || (activity.characterId ? meta[activity.characterId] : undefined);
+  const membershipType = activity.membershipType
+    || info?.membershipType
+    || (activity.membershipId ? typeByMembership.get(activity.membershipId) : undefined);
+  const hasClass = !!activity.characterClass && activity.characterClass !== 'Unknown';
+  if (!info && membershipType == null) {
+    return activity;
+  }
+  const characterClass = hasClass ? activity.characterClass : (info?.className || activity.characterClass);
+  if (activity.membershipType === membershipType && activity.characterClass === characterClass) {
+    return activity;
+  }
+  return {
+    period: activity.period,
+    membershipId: activity.membershipId,
+    membershipType,
+    characterId: activity.characterId,
+    characterClass,
+    game: activity.game,
+    values: activity.values,
+  };
+}
+
 export function heatmapHasActivity(
   activities: HeatmapActivity[],
   opts: {
@@ -341,7 +427,25 @@ export function heatmapHasActivity(
     year?: number | null;
   }
 ): boolean {
-  return filterHeatmapActivities(activities, opts).length > 0;
+  const membershipSet = opts.membershipIds?.length ? new Set(opts.membershipIds) : null;
+  return activities.some(activity => {
+    if (!activity.period) {
+      return false;
+    }
+    if (membershipSet && activity.membershipId && !membershipSet.has(activity.membershipId)) {
+      return false;
+    }
+    if (opts.membershipType != null && activity.membershipType !== opts.membershipType) {
+      return false;
+    }
+    if (opts.characterKey && characterKey(activity) !== opts.characterKey) {
+      return false;
+    }
+    if (opts.year != null && new Date(activity.period).getFullYear() !== opts.year) {
+      return false;
+    }
+    return true;
+  });
 }
 
 export function formatDaysHours(totalSeconds: number, daysPlayed: number): string {
