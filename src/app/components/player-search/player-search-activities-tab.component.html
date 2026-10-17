@@ -1,5 +1,44 @@
+        <p *ngIf="ps.archiveCoverage as cov" class="text-day-cov">{{ ps.coverageLine(cov) }}</p>
+
+        <div *ngIf="text.enabled()" class="text-day">
+          <p *ngIf="ps.selectedPlayers.length > 0">
+            Player:
+            <strong>{{ ps.selectedPlayers[0].displayName }}</strong>
+            <span class="text-day-dim" *ngIf="ps.selectedPlayers.length > 1"> and {{ ps.selectedPlayers.length - 1 }} more</span>
+          </p>
+          <p class="text-day-date">Date: <strong>{{ ps.formatSelectedDateLabel() }}</strong>
+            <span class="text-day-dim" *ngIf="!ps.loadingActivities[ps.selectedDate] && !ps.profileLoadInProgress"> · {{ ps.formatSecondsToHoursMinutes(ps.totalTimeForSelectedDate) }}</span>
+          </p>
+          <div *ngIf="ps.showAnniversaryBanner && ps.anniversaryFirsts.length > 0" class="text-day-banner">
+            <p *ngFor="let anniversary of ps.anniversaryFirsts">
+              Firsts anniversary — {{ anniversary.yearsAgo }} years ago today:
+              <strong>{{ anniversary.activityName }}</strong>
+              ({{ anniversary.completionDate.slice(0, 10) }})
+            </p>
+          </div>
+          <p *ngIf="ps.loadingActivities[ps.selectedDate] || ps.profileLoadInProgress" class="text-day-dim">Loading activities…</p>
+          <ng-container *ngIf="!ps.loadingActivities[ps.selectedDate] && !ps.profileLoadInProgress">
+            <ng-container *ngIf="textDay() as day">
+              <section *ngFor="let section of day.sections">
+                <h2>{{ section.year }} <span class="text-day-dim">{{ section.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</span></h2>
+                <div *ngFor="let row of section.rows; trackBy: ps.trackByChronologicalRow" class="text-day-row">
+                  <span class="text-day-dim">{{ ps.formatTime(row.activity.period) }}</span>
+                  <span class="text-day-name">{{ row.activityName }}</span>
+                  <span>{{ row.activityType }}</span>
+                  <span [class.text-day-ok]="ps.isActivityCompleted(row.activity)" [class.text-day-no]="!ps.isActivityCompleted(row.activity)">
+                    {{ ps.isActivityCompleted(row.activity) ? 'Completed' : 'Not completed' }}
+                  </span>
+                  <span>{{ ps.formatSecondsToHoursMinutes(ps.getActivityDurationSeconds(row.activity)) }}</span>
+                  <button type="button" class="text-day-link" (click)="ps.openExternalPGCR(row.activity, row.isD1, $event)">PGCR</button>
+                </div>
+              </section>
+              <p *ngIf="day.total === 0" class="text-day-dim">No activities found for this date.</p>
+            </ng-container>
+          </ng-container>
+        </div>
+
         <!-- Account Summary — same glass/holo shell as activities below -->
-        <div *ngIf="ps.selectedPlayers.length > 0" class="activities-glass-view mb-6">
+        <div *ngIf="!text.enabled() && ps.selectedPlayers.length > 0" class="activities-glass-view mb-6">
         <app-account-stats 
           [stats]="ps.accountStats" 
           [perPlatformStats]="ps.perPlatformStats"
@@ -13,7 +52,7 @@
         
         <!-- Anniversary Celebration Banner -->
         <app-anniversary-celebration-banner
-          *ngIf="ps.showAnniversaryBanner && ps.anniversaryFirsts.length > 0"
+          *ngIf="!text.enabled() && ps.showAnniversaryBanner && ps.anniversaryFirsts.length > 0"
           [anniversaries]="ps.anniversaryFirsts"
           [selectedDate]="ps.selectedDate"
           (dismiss)="ps.onDismissAnniversaryBanner()"
@@ -21,7 +60,7 @@
         </app-anniversary-celebration-banner>
         
         <!-- Loading States with Skeleton Loaders to Prevent Layout Shifts -->
-        <div *ngIf="ps.loadingActivities[ps.selectedDate] && ps.loadingProgress" class="text-center text-slate-400 py-4 flex flex-col items-center justify-center gap-2">
+        <div *ngIf="!text.enabled() && ps.loadingActivities[ps.selectedDate] && ps.loadingProgress" class="text-center text-slate-400 py-4 flex flex-col items-center justify-center gap-2">
           <div class="flex items-center gap-2">
             <app-destiny-loader size="sm"></app-destiny-loader>
             <span>{{ ps.loadingProgress.message }}</span>
@@ -41,7 +80,7 @@
         </div>
         
         <!-- Skeleton Loader for Activities to Prevent Layout Shifts -->
-        <div *ngIf="ps.loadingActivities[ps.selectedDate]" class="space-y-6 w-full min-w-0">
+        <div *ngIf="!text.enabled() && ps.loadingActivities[ps.selectedDate]" class="space-y-6 w-full min-w-0">
           <!-- Destiny 2 Skeleton -->
           <div class="space-y-6">
             <div class="flex items-center mb-4">
@@ -112,7 +151,7 @@
             </div>
           </div>
         </div>
-        <div *ngIf="!ps.loadingActivities[ps.selectedDate] && (ps.groupedActivitiesByAccount && ps.groupedActivitiesByAccount.length > 0)"
+        <div *ngIf="!text.enabled() && !ps.loadingActivities[ps.selectedDate] && (ps.groupedActivitiesByAccount && ps.groupedActivitiesByAccount.length > 0)"
              class="space-y-6 w-full min-w-0 activities-glass-view">
           <!-- Total time on the selected date for all activities -->
           <div class="destiny-surface-panel p-4 flex flex-wrap items-center justify-between gap-2">
@@ -254,7 +293,7 @@
             No activities match the selected filter for this date.
           </div>
         </div>
-        <div *ngIf="!ps.loadingActivities[ps.selectedDate] && (!ps.groupedActivitiesByAccount || ps.groupedActivitiesByAccount.length === 0)" 
+        <div *ngIf="!text.enabled() && !ps.loadingActivities[ps.selectedDate] && (!ps.groupedActivitiesByAccount || ps.groupedActivitiesByAccount.length === 0)" 
              class="destiny-empty-state">
           No activities found for this date.
         </div>

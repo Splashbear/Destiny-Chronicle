@@ -156,6 +156,40 @@ export class PgcrApiService {
     return `${root}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
+  /** Stable archive high-water mark. Not a per-account activity date. */
+  async fetchWatermark(): Promise<{ max_instance_id: string; as_of: string } | null> {
+    if (!this.enabled) {
+      return null;
+    }
+    try {
+      const body = await firstValueFrom(
+        this.http.get<{ max_instance_id?: string; as_of?: string }>(
+          this.url('/api/pgcr/watermark'),
+          { headers: this.headers() }
+        )
+      );
+      if (!body?.max_instance_id) {
+        return null;
+      }
+      const instanceId = String(body.max_instance_id);
+      let asOf = String(body.as_of || '');
+      // Live watermark JSON has no as_of. The date is the period of that instance.
+      if (!/^\d{4}-\d{2}-\d{2}/.test(asOf)) {
+        const pgcr = await this.fetchPgcr(instanceId, 'D2') as { activityDetails?: { period?: string } } | null;
+        const period = pgcr?.activityDetails?.period || '';
+        if (/^\d{4}-\d{2}-\d{2}/.test(period)) {
+          asOf = period;
+        }
+      }
+      return {
+        max_instance_id: instanceId,
+        as_of: asOf,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async fetchPgcr(instanceId: string, game: 'D1' | 'D2'): Promise<unknown | null> {
     if (!this.enabled) {
       return null;

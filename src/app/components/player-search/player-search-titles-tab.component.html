@@ -1,3 +1,25 @@
+<ng-container *ngIf="text.enabled(); else fullTitles">
+  <div class="text-day">
+    <p *ngIf="ps.archiveCoverage as cov" class="text-day-cov">{{ ps.coverageLine(cov) }}</p>
+    <h2>Titles &amp; Seals</h2>
+    <p class="text-day-banner">Bungie does not record when a title or seal was earned, so no earn dates are shown here — only owned or missing.</p>
+    <p *ngIf="ps.loadingTitlesOverall" class="text-day-dim">Loading titles…</p>
+    <ng-container *ngIf="!ps.loadingTitlesOverall && textTitles() as page">
+      <section *ngFor="let section of page.sections">
+        <h2>{{ section.title }}</h2>
+        <div *ngFor="let row of section.rows" class="text-trow">
+          <span class="text-day-name">{{ row.name }}</span>
+          <span [class.text-day-ok]="row.owned" [class.text-day-no]="!row.owned">{{ row.owned ? 'owned' : 'missing' }}</span>
+        </div>
+      </section>
+      <button *ngIf="page.shown < page.total" type="button" class="text-day-more" (click)="showMoreTextRows()">
+        Show more ({{ page.shown }} of {{ page.total }})
+      </button>
+      <p *ngIf="page.total === 0" class="text-day-dim">No titles found.</p>
+    </ng-container>
+  </div>
+</ng-container>
+<ng-template #fullTitles>
 <div class="space-y-6">
   <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
     <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
@@ -34,3 +56,4 @@
     [membershipId]="ps.getMainMembershipId()">
   </app-seal-poster-studio>
 </div>
+</ng-template>

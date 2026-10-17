@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { TextViewService } from './services/text-view.service';
 import { PlayerSearchComponent } from './components/player-search/player-search.component';
 import { PerformanceMonitorComponent } from './components/performance-monitor/performance-monitor.component';
 import { BrowserCompatibilityWarningComponent } from './components/browser-compatibility-warning/browser-compatibility-warning.component';
@@ -19,6 +20,7 @@ import { SiteAnalyticsService } from './services/site-analytics.service';
 })
 export class AppComponent {
   title = 'Destiny Chronicle';
+  readonly textView = inject(TextViewService);
 
   constructor(
     public theme: ThemeService,

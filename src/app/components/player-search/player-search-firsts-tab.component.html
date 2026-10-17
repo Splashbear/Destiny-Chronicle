@@ -1,3 +1,29 @@
+<ng-container *ngIf="text.enabled(); else fullFirsts">
+  <div class="text-day">
+    <p *ngIf="ps.archiveCoverage as cov" class="text-day-cov">{{ ps.coverageLine(cov) }}</p>
+    <h2>Guardian Firsts</h2>
+    <p class="text-day-dim">Your first completed clear of each activity. Completions only. {{ ps.activeFirstsGame === 'D1' ? 'Destiny 1' : 'Destiny 2' }}.</p>
+    <p *ngIf="ps.loadingGuardianFirsts" class="text-day-dim">Loading firsts…</p>
+    <ng-container *ngIf="!ps.loadingGuardianFirsts && textFirsts() as page">
+      <section *ngFor="let section of page.sections">
+        <h2>{{ section.title }}</h2>
+        <div *ngFor="let row of section.rows" class="text-frow">
+          <span class="text-day-name">{{ row.name }}</span>
+          <button *ngIf="row.first || row.activity" type="button" class="text-day-link" (click)="openFirst(row, $event)">{{ row.when }}</button>
+          <span *ngIf="!row.first && !row.activity">{{ row.when }}</span>
+          <span class="text-day-dim">{{ row.years }}</span>
+          <span>{{ row.tags }}</span>
+        </div>
+      </section>
+      <button *ngIf="page.shown < page.total" type="button" class="text-day-more" (click)="showMoreTextRows()">
+        Show more ({{ page.shown }} of {{ page.total }})
+      </button>
+      <p *ngIf="page.total === 0" class="text-day-dim">No completed firsts for this game.</p>
+    </ng-container>
+    <p class="text-day-dim">Tags are shown only when the archive confirms them.</p>
+  </div>
+</ng-container>
+<ng-template #fullFirsts>
 <div class="space-y-6">
 <ng-template #storyMilestoneBlock let-milestones="milestones" let-firstsGame="firstsGame">
   <ng-container *ngIf="ps.showFirstsSection('story')">
@@ -521,3 +547,4 @@
   </ng-template>
 </ng-container>
 </div>
+</ng-template>

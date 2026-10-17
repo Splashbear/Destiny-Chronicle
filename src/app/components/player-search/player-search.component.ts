@@ -1,4 +1,4 @@
-import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy, HostListener } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy, HostListener, inject } from '@angular/core';
 import { trigger, transition, style, animate } from '@angular/animations';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -9,7 +9,8 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
-import { PgcrApiService } from '../../services/pgcr-api.service';
+import { PgcrApiService, PlayerActivitiesCoverage } from '../../services/pgcr-api.service';
+import { TextViewService } from '../../services/text-view.service';
 import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { environment } from '../../../environments/environment';
 import { ArchiveService } from '../../services/archive.service';
@@ -871,6 +872,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Not set for expected archive misses (404 / no rows) or intentional delta-fill.
    */
   dcApiFallbackNotice: string | null = null;
+  /**
+   * Worst coverage level across accounts loaded so far.
+   * `through` and `instanceId` come from the archive watermark once, not from each account's newest row.
+   */
+  archiveCoverage: { level: 'full' | 'partial' | 'absent'; through: string; instanceId: string } | null = null;
+  private archiveWatermarkRequested = false;
+  readonly textView = inject(TextViewService);
   /** Offer to load saved favorites without blocking a fresh search. */
   showFavoritesLoadPrompt = false;
   /** True while favorites (or any multi-profile sync) is still running. */
@@ -2049,6 +2057,55 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   private noteLookupDataSource(source: 'archive' | 'bungie'): void {
     this.lookupDataSources.add(source);
+  }
+
+  noteArchiveCoverage(cov: PlayerActivitiesCoverage): void {
+    const rank = { absent: 0, partial: 1, full: 2 } as const;
+    const level = (cov.level === 'full' || cov.level === 'partial' || cov.level === 'absent')
+      ? cov.level
+      : 'absent';
+    const cur = this.archiveCoverage;
+    const nextLevel = cur && rank[cur.level] <= rank[level] ? cur.level : level;
+    if (!cur || nextLevel !== cur.level) {
+      this.archiveCoverage = {
+        level: nextLevel,
+        through: cur?.through ?? '',
+        instanceId: cur?.instanceId ?? '',
+      };
+    }
+    this.ensureArchiveWatermark();
+  }
+
+  /** Label for the coverage line. The date is the watermark, not a running account max. */
+  coverageLine(cov: { level: string; through: string; instanceId: string }): string {
+    const when = cov.through
+      ? `Newest archived game ${cov.through}${cov.instanceId ? ` (instance ${cov.instanceId})` : ''}`
+      : cov.instanceId
+        ? `Archive watermark instance ${cov.instanceId}`
+        : 'Archive coverage';
+    return `${when} — coverage: ${cov.level}`;
+  }
+
+  private ensureArchiveWatermark(): void {
+    if (this.archiveWatermarkRequested || !this.pgcrApiService.enabled) {
+      return;
+    }
+    this.archiveWatermarkRequested = true;
+    void this.pgcrApiService.fetchWatermark().then(mark => {
+      if (!mark || !this.archiveCoverage) {
+        return;
+      }
+      const through = (mark.as_of || '').slice(0, 10);
+      if (this.archiveCoverage.through === through && this.archiveCoverage.instanceId === mark.max_instance_id) {
+        return;
+      }
+      this.archiveCoverage = {
+        ...this.archiveCoverage,
+        through,
+        instanceId: mark.max_instance_id,
+      };
+      this.cdr.markForCheck();
+    });
   }
 
   private platformLabelForAnalytics(platform: string): string {
@@ -4099,6 +4156,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           // compact_ids-only partials have empty activities[] — fall through to Bungie.
           // Backward compat: treat missing level as 'full' when source='archive' and rowCount > 0 (old server)
           const cov = archiveData?.coverage;
+          if (cov) {
+            this.noteArchiveCoverage(cov);
+          }
           const effectiveLevel = cov?.level ?? (cov?.source === 'archive' && (cov?.rowCount ?? 0) > 0 ? 'full' : undefined);
           const leanPartial =
             effectiveLevel === 'partial' &&
@@ -5871,7 +5931,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
           }
           this.clearAllPlayers();
-          this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+          this.router.navigate([], { relativeTo: this.route, queryParams: this.textView.queryParams(), replaceUrl: true });
         }
 
         this.d1SearchResults = [];
@@ -5945,7 +6005,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               console.log('[CLEAR] Database completely cleared - verified 0 activities remaining');
             }
             this.clearAllPlayers();
-            this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+            this.router.navigate([], { relativeTo: this.route, queryParams: this.textView.queryParams(), replaceUrl: true });
           }
 
           // Accumulate results across all names so the modal shows everything at once
@@ -6015,7 +6075,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Clear URL parameters to avoid confusion
       this.router.navigate([], {
         relativeTo: this.route,
-        queryParams: {},
+        queryParams: this.textView.queryParams(),
         replaceUrl: true
       });
     }
@@ -6411,6 +6471,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.loading = {};
     this.error = {};
     this.groupedActivitiesByAccount = [];
+    this.archiveCoverage = null;
+    this.archiveWatermarkRequested = false;
     this.addMode = false;
     
     // Clear filtered activities and related data
@@ -9523,7 +9585,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     })).filter((g: any) => g.yearGroups.length > 0);
   }
 
-  private isActivityCompleted(activity: any): boolean {
+  isActivityCompleted(activity: any): boolean {
     const v = activity?.values?.completed?.basic?.value;
     return v === 1 || v === true;
   }
@@ -10711,6 +10773,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       queryParams.set('players', params.players);
       }
     
+    if (this.textView.enabled()) {
+      queryParams.set('view', 'text');
+    }
     if (queryParams.toString()) {
       newUrl += '?' + queryParams.toString();
     }
