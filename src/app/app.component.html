@@ -13,6 +13,13 @@
             <p class="text-sm text-destiny-text-secondary">Track your Destiny 1 &amp; 2 activity history</p>
           </div>
         </div>
+        <button type="button"
+                class="text-view-toggle"
+                [class.text-view-toggle--on]="textView.enabled()"
+                [attr.aria-pressed]="textView.enabled()"
+                (click)="textView.toggle()">
+          Text view
+        </button>
       </div>
     </div>
   </header>

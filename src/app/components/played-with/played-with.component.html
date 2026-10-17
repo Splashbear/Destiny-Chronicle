@@ -80,8 +80,22 @@
     {{ uiI18n.t('playedWith.noPartners') }}
   </div>
 
+  <div *ngIf="text.enabled() && sortedPartners.length > 0" class="text-day">
+    <p class="text-day-dim">Games shared. No ranking of people.</p>
+    <ng-container *ngIf="textPartners() as page">
+      <div *ngFor="let row of page.sections[0]?.rows || []" class="text-prow">
+        <span class="text-day-name">{{ partnerName(row.displayName) }}</span>
+        <span>{{ row.activitiesTogether }}</span>
+        <span class="text-day-dim">{{ formatDate(row.lastPlayedTogether) }}</span>
+      </div>
+      <button *ngIf="page.shown < page.total" type="button" class="text-day-more" (click)="showMoreTextRows()">
+        Show more ({{ page.shown }} of {{ page.total }})
+      </button>
+    </ng-container>
+  </div>
+
   <div
-    *ngIf="sortedPartners.length > 0"
+    *ngIf="!text.enabled() && sortedPartners.length > 0"
     class="overflow-x-auto rounded-lg bg-slate-800/95 border border-slate-700">
     <table class="w-full text-sm text-left">
       <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">

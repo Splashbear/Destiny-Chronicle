@@ -16,6 +16,20 @@
   border-color: rgb(51, 65, 85);
 }
 
+.text-view-toggle {
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  background: transparent;
+  color: #d8e4ee;
+  font: 14px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.text-view-toggle--on {
+  color: #e4c04a;
+  border-color: #e4c04a;
+}
+
 .app-container {
   min-height: 100vh;
   background-color: #1a1b1e;

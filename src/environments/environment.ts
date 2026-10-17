@@ -17,15 +17,15 @@ export const environment = {
     googleMeasurementId: '',
     cloudflareToken: ''
   },
-  // Experimental external PGCR API integration (disabled by default in dev)
-  pgcrApiRoot: 'http://localhost:3001',
+  // Dev server proxies /dc-archive to the public archive (see proxy.conf.js).
+  pgcrApiRoot: '/dc-archive',
   pgcrApiKey: '',
   useExternalPgcr: true,
   /** 
    * When true, use the external archive API to fetch pre-indexed player activities
    * for faster cold-start loading. Falls back to Bungie API for memberships with
    * no archived data or for activities above the archive watermark.
-   * Archive API should be running at pgcrApiRoot (e.g., http://localhost:3001)
+   * Dev archive calls go through pgcrApiRoot (/dc-archive on ng serve).
    */
   useArchiveActivities: true,
   /**

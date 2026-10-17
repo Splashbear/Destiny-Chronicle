@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  inject,
   Input,
   OnChanges,
   OnDestroy,
@@ -22,6 +23,8 @@ import { PrunedPgcr } from '../../utils/pgcr-prune';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { PlayedWithAccount, PlayedWithBuildProgress } from '../../services/pgcr-api.service';
+import { TextViewService } from '../../services/text-view.service';
+import { pageSections, playedWithDisplayName } from '../../utils/text-tab-rows';
 
 /**
  * Stable key for a set of membership ids. The parent binds a getter that returns a new
@@ -80,6 +83,9 @@ export function membershipIdsKey(ids: readonly string[] | null | undefined): str
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PlayedWithComponent implements OnChanges, OnDestroy {
+  readonly text = inject(TextViewService);
+  readonly pageSize = 40;
+  textPages = 1;
   @Input() membershipIds: string[] = [];
 
   session: FireteamStatsSession | null = null;
@@ -194,6 +200,19 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     }
     this.applySort();
     this.cdr.markForCheck();
+  }
+
+  showMoreTextRows(): void {
+    this.textPages += 1;
+    this.cdr.markForCheck();
+  }
+
+  partnerName(name: string | null | undefined): string {
+    return playedWithDisplayName(name);
+  }
+
+  textPartners(): { sections: Array<{ title: string; rows: FireteamPartnerRow[] }>; total: number; shown: number } {
+    return pageSections([{ title: 'Played with', rows: this.sortedPartners }], this.pageSize, this.textPages);
   }
 
   accountLabel(a: PlayedWithAccount): string {

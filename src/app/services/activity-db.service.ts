@@ -19,7 +19,7 @@ import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 import { environment } from '../../environments/environment';
-import { firstOfEachStored } from '../utils/activity-dedupe';
+import { planActivityWrites } from '../utils/activity-batch-merge';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -531,7 +531,14 @@ export class ActivityDbService extends Dexie {
   async addActivities(activities: StoredActivity[]) {
     await this.initPromise;
     try {
-      const uniqueActivities = firstOfEachStored(activities);
+      const membershipIds = [...new Set(activities.map(activity => activity.membershipId).filter(Boolean))];
+      const existing = membershipIds.length
+        ? await this.activities.where('membershipId').anyOf(membershipIds).toArray()
+        : [];
+      const uniqueActivities = planActivityWrites(existing, activities);
+      if (uniqueActivities.length === 0) {
+        return;
+      }
       await this.transaction('rw', this.activities, () => this.activities.bulkPut(uniqueActivities));
       // Log the total count after adding
       // const totalCount = await this.activities.count();

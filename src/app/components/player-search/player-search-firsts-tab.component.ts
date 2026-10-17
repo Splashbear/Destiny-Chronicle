@@ -3,6 +3,19 @@ import { FormsModule } from '@angular/forms';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { PlayerSearchComponent } from './player-search.component';
+import { TextViewService } from '../../services/text-view.service';
+import { ActivityFirstCompletion } from '../../models/guardian-firsts.model';
+import { completedClearRows, firstTags, pageSections, yearsAgoLabel } from '../../utils/text-tab-rows';
+
+interface TextFirstRow {
+  name: string;
+  when: string;
+  years: string;
+  tags: string;
+  first: ActivityFirstCompletion | null;
+  activity?: any;
+  isD1?: boolean;
+}
 
 @Component({
   selector: 'app-player-search-firsts-tab',
@@ -14,4 +27,227 @@ import { PlayerSearchComponent } from './player-search.component';
 })
 export class PlayerSearchFirstsTabComponent {
   readonly ps = inject(PlayerSearchComponent);
+  readonly text = inject(TextViewService);
+  readonly pageSize = 40;
+  textPages = 1;
+
+  showMoreTextRows(): void {
+    this.textPages += 1;
+  }
+
+  /** Same completed firsts the full tab lists for the active game, without images. */
+  textFirsts(): { sections: Array<{ title: string; rows: TextFirstRow[] }>; total: number; shown: number } {
+    if (this.ps.loadingGuardianFirsts) {
+      return { sections: [], total: 0, shown: 0 };
+    }
+    return pageSections(this.collectFirstSections(), this.pageSize, this.textPages);
+  }
+
+  openFirst(row: TextFirstRow, event: MouseEvent): void {
+    if (row.first) {
+      this.ps.openExternalPGCRForFirst(row.first, event);
+      return;
+    }
+    if (row.activity) {
+      this.ps.openExternalPGCR(row.activity, !!row.isD1, event);
+    }
+  }
+
+  private collectFirstSections(): Array<{ title: string; rows: TextFirstRow[] }> {
+    const game = this.ps.activeFirstsGame;
+    if (this.ps.selectedAccountKeysForFirsts.size > 0) {
+      const sections: Array<{ title: string; rows: TextFirstRow[] }> = [];
+      for (const player of this.ps.getFirstsFilteredPlayers()) {
+        if (player.game !== game) {
+          continue;
+        }
+        const prefix = player.displayName ? `${player.displayName} — ` : '';
+        sections.push(...this.playerSections(player, prefix));
+      }
+      return sections.filter(section => section.rows.length);
+    }
+    return this.aggregateSections(game);
+  }
+
+  private aggregateSections(game: 'D1' | 'D2'): Array<{ title: string; rows: TextFirstRow[] }> {
+    const sections: Array<{ title: string; rows: TextFirstRow[] }> = [];
+    if (this.ps.showFirstsSection('first-ever')) {
+      const first = this.ps.getAggregateFirstEver(game);
+      sections.push({
+        title: `First ever (${game})`,
+        rows: first ? [this.rowFromActivity(first, true)] : [],
+      });
+    }
+    if (this.ps.showFirstsSection('story')) {
+      sections.push({
+        title: 'Story milestones',
+        rows: (this.ps.getAggregateStoryMilestones(game) || []).map(item => this.rowFromFirst(item)),
+      });
+    }
+    if (game === 'D2' && this.ps.showFirstsSection('pantheon-events')) {
+      sections.push({
+        title: 'Pantheon',
+        rows: [
+          ...this.rowsFromVersions(this.ps.getGroupedLegacyPantheonRaids()),
+          ...this.rowsFromVersions(this.ps.getGroupedMotPantheonRaids()),
+          ...this.rowsFromRite(this.ps.getRiteOfTheNineDungeons()),
+        ],
+      });
+    }
+    if (this.ps.showFirstsSection('raids')) {
+      const raids = game === 'D1' ? this.ps.getAllD1RaidVariants() : this.ps.getAllD2RaidVariants();
+      sections.push({ title: `${game} raids`, rows: this.rowsFromVariants(raids) });
+    }
+    if (game === 'D2' && this.ps.showFirstsSection('dungeons')) {
+      sections.push({ title: 'D2 dungeons', rows: this.rowsFromVariants(this.ps.getAllD2DungeonVariants(), true) });
+    }
+    return this.withCounts(sections);
+  }
+
+  private playerSections(player: any, prefix: string): Array<{ title: string; rows: TextFirstRow[] }> {
+    const game = player.game as 'D1' | 'D2';
+    const sections: Array<{ title: string; rows: TextFirstRow[] }> = [];
+    if (this.ps.showFirstsSection('first-ever')) {
+      const first = this.ps.getFirstEverForPlayer(player);
+      sections.push({
+        title: `${prefix}First ever`,
+        rows: first ? [this.rowFromActivity(first, game === 'D1')] : [],
+      });
+    }
+    if (this.ps.showFirstsSection('story')) {
+      sections.push({
+        title: `${prefix}Story milestones`,
+        rows: (this.ps.getPlayerStoryMilestones(player, game) || []).map(item => this.rowFromFirst(item)),
+      });
+    }
+    if (game === 'D2' && this.ps.showFirstsSection('pantheon-events')) {
+      sections.push({
+        title: `${prefix}Pantheon`,
+        rows: [
+          ...this.rowsFromVersions(this.ps.getGroupedPantheonRaidsForPlayer(player, 'legacy-pantheon')),
+          ...this.rowsFromVersions(this.ps.getGroupedPantheonRaidsForPlayer(player, 'mot-pantheon')),
+          ...this.rowsFromRite(this.ps.getPlayerRiteOfTheNineVariants(player)),
+        ],
+      });
+    }
+    if (this.ps.showFirstsSection('raids')) {
+      const raids = game === 'D1' ? this.ps.getPlayerD1RaidVariants(player) : this.ps.getPlayerD2RaidVariants(player);
+      sections.push({
+        title: `${prefix}${game} raids`,
+        rows: this.rowsFromVariants(raids),
+      });
+    }
+    if (game === 'D2' && this.ps.showFirstsSection('dungeons')) {
+      sections.push({
+        title: `${prefix}D2 dungeons`,
+        rows: this.rowsFromVariants(this.ps.getPlayerD2DungeonVariants(player), true),
+      });
+    }
+    return this.withCounts(sections);
+  }
+
+  private withCounts(sections: Array<{ title: string; rows: TextFirstRow[] }>): Array<{ title: string; rows: TextFirstRow[] }> {
+    return sections
+      .filter(section => section.rows.length)
+      .map(section => ({ ...section, title: `${section.title} (${section.rows.length})` }));
+  }
+
+  private rowsFromVariants(
+    items: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean }> }>,
+    solo = false
+  ): TextFirstRow[] {
+    const shaped = items.map(item => ({
+      baseName: item.baseName,
+      variants: item.variants.map(variant => ({
+        version: variant.version,
+        hasClear: variant.hasClear,
+        when: variant.first?.completionDate || variant.first?.period,
+        tags: this.tagsFor(variant.first, solo),
+      })),
+    }));
+    return completedClearRows(shaped).map(row => ({
+      ...row,
+      years: yearsAgoLabel(row.when),
+      first: this.findFirst(items, row.name),
+    }));
+  }
+
+  private findFirst(
+    items: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean }> }>,
+    name: string
+  ): ActivityFirstCompletion | null {
+    for (const item of items) {
+      for (const variant of item.variants) {
+        if (!variant.hasClear || !variant.first) {
+          continue;
+        }
+        const version = variant.version && variant.version !== 'Normal' ? `: ${variant.version}` : '';
+        if (`${item.baseName}${version}` === name) {
+          return variant.first;
+        }
+      }
+    }
+    return null;
+  }
+
+  private rowsFromVersions(groups: Array<{ baseName: string; versions: ActivityFirstCompletion[]; cardTitle?: string }>): TextFirstRow[] {
+    const rows: TextFirstRow[] = [];
+    for (const group of groups || []) {
+      for (const first of group.versions || []) {
+        rows.push(this.rowFromFirst(first));
+      }
+    }
+    return rows;
+  }
+
+  private rowsFromRite(groups: any[]): TextFirstRow[] {
+    const rows: TextFirstRow[] = [];
+    for (const rite of groups || []) {
+      for (const dungeon of this.ps.getRiteOfTheNineDungeonGroups(rite.variants || [])) {
+        for (const variant of dungeon.variants || []) {
+          if (!variant.hasClear || !variant.first) {
+            continue;
+          }
+          rows.push(this.rowFromFirst(variant.first));
+        }
+      }
+    }
+    return rows;
+  }
+
+  private rowFromActivity(activity: any, isD1: boolean): TextFirstRow {
+    const when = String(activity?.period || '').slice(0, 10);
+    return {
+      name: this.ps.getActivityName(activity, isD1),
+      when,
+      years: yearsAgoLabel(activity?.period),
+      tags: '-',
+      first: null,
+      activity,
+      isD1,
+    };
+  }
+
+  private rowFromFirst(first: ActivityFirstCompletion, solo = false): TextFirstRow {
+    const when = String(first.completionDate || first.period || '').slice(0, 10);
+    return {
+      name: first.name,
+      when,
+      years: yearsAgoLabel(first.completionDate || first.period),
+      tags: this.tagsFor(first, solo),
+      first,
+    };
+  }
+
+  private tagsFor(first: ActivityFirstCompletion | undefined, solo: boolean): string {
+    if (!first) {
+      return '-';
+    }
+    const extra = solo ? this.ps.getSoloFirstForFirst(first) : null;
+    return firstTags({
+      isSolo: !!first.isSolo || !!extra?.firstSolo,
+      isFlawless: !!first.isFlawless || !!extra?.firstFlawless,
+      isSoloFlawless: !!first.isSoloFlawless,
+    });
+  }
 }
