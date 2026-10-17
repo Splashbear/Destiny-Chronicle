@@ -417,6 +417,7 @@
 
         <!-- Heatmap Tab -->
         <div *ngIf="activeTab === 'heatmap'" @tabContent>
+          <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
           <app-activity-heatmap
             [membershipIds]="heatmapMembershipIds"
             [characterMeta]="heatmapCharacterMeta"
@@ -425,6 +426,7 @@
 
         <!-- Played With Tab -->
         <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0" @tabContent>
+          <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
           <app-played-with [membershipIds]="heatmapMembershipIds"></app-played-with>
         </div>
 

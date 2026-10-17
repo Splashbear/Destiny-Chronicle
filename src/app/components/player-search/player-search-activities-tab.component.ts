@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { PlayerSearchComponent } from './player-search.component';
 import { AnniversaryCelebrationBannerComponent } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
 import { TextViewService } from '../../services/text-view.service';
-import { windowRows } from '../../utils/text-view-rows';
+import { pageSections, textViewShouldBuild } from '../../utils/text-tab-rows';
 
 interface TextDaySection {
   year: string;
@@ -27,34 +27,53 @@ export class PlayerSearchActivitiesTabComponent {
   readonly pageSize = 40;
   textPages = 1;
   private textDate = '';
+  private textSig = '';
+  private textCache: { sections: TextDaySection[]; total: number; shown: number } | null = null;
 
-  /** Same activities as the full On this Day panels, windowed so long lists stay small. */
+  /**
+   * Same activities as the full On this Day panels, windowed so long lists stay small.
+   * Cached, and skipped while a profile load is in progress, so naming every row
+   * cannot block the other accounts from loading.
+   */
   textDay(): { sections: TextDaySection[]; total: number; shown: number } {
     if (this.textDate !== this.ps.selectedDate) {
       this.textDate = this.ps.selectedDate;
       this.textPages = 1;
+      this.textSig = '';
+      this.textCache = null;
     }
-    const flat: Array<{ year: string; game: 'D1' | 'D2'; row: any }> = [];
+    const empty = { sections: [], total: 0, shown: 0 };
+    if (!textViewShouldBuild(!!this.ps.loadingActivities[this.ps.selectedDate], this.ps.profileLoadInProgress)) {
+      return this.textCache ?? empty;
+    }
+    const list = this.ps.filteredActivitiesForDate || [];
+    const tail = list.length ? String(list[list.length - 1]?.activityDetails?.instanceId ?? '') : '';
+    const sig = `${this.ps.selectedDate}|${this.textPages}|${list.length}|${tail}`;
+    if (this.textCache && sig === this.textSig) {
+      return this.textCache;
+    }
+    const built: Array<{ title: string; rows: any[] }> = [];
     for (const game of ['D2', 'D1'] as const) {
       for (const group of this.ps.getDisplayedAccountGroupsForGame(game)) {
         for (const yearGroup of group.yearGroups ?? []) {
-          for (const row of this.ps.getChronologicalRowsForYear(yearGroup, game)) {
-            flat.push({ year: String(yearGroup.year), game, row });
+          const rows = this.ps.getChronologicalRowsForYear(yearGroup, game);
+          if (rows.length) {
+            built.push({
+              title: `${yearGroup.year}|${game}`,
+              rows,
+            });
           }
         }
       }
     }
-    const visible = windowRows(flat, this.pageSize, this.textPages);
-    const sections: TextDaySection[] = [];
-    for (const item of visible) {
-      const last = sections[sections.length - 1];
-      if (!last || last.year !== item.year || last.game !== item.game) {
-        sections.push({ year: item.year, game: item.game, rows: [item.row] });
-      } else {
-        last.rows.push(item.row);
-      }
-    }
-    return { sections, total: flat.length, shown: visible.length };
+    const paged = pageSections(built, this.pageSize, this.textPages);
+    const sections: TextDaySection[] = paged.sections.map(section => {
+      const [year, game] = section.title.split('|');
+      return { year, game: game as 'D1' | 'D2', rows: section.rows };
+    });
+    this.textSig = sig;
+    this.textCache = { sections, total: paged.total, shown: paged.shown };
+    return this.textCache;
   }
 
   showMoreTextRows(): void {

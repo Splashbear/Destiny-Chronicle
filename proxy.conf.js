@@ -48,5 +48,13 @@ module.exports = {
   '/Platform/Destiny2/Stats': bungieProxy('https://stats.bungie.net'),
   '/Platform': bungieProxy('https://www.bungie.net'),
   '/d1': bungieProxy('https://www.bungie.net'),
-  '/common': bungieProxy('https://www.bungie.net')
+  '/common': bungieProxy('https://www.bungie.net'),
+  // The public archive does not send Access-Control-Allow-Origin for this
+  // dev origin, and nothing is listening on :3001. Same-origin proxy.
+  '/dc-archive': {
+    target: 'https://api.destinychronicle.com',
+    secure: true,
+    changeOrigin: true,
+    pathRewrite: { '^/dc-archive': '' }
+  }
 };

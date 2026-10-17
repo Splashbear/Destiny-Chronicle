@@ -871,8 +871,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Not set for expected archive misses (404 / no rows) or intentional delta-fill.
    */
   dcApiFallbackNotice: string | null = null;
-  /** Worst coverage seen this load, plus the newest archived period (YYYY-MM-DD). */
-  archiveCoverage: { level: 'full' | 'partial' | 'absent'; through: string } | null = null;
+  /**
+   * Worst coverage level across accounts loaded so far.
+   * `through` and `instanceId` come from the archive watermark once, not from each account's newest row.
+   */
+  archiveCoverage: { level: 'full' | 'partial' | 'absent'; through: string; instanceId: string } | null = null;
+  private archiveWatermarkRequested = false;
   readonly textView = inject(TextViewService);
   /** Offer to load saved favorites without blocking a fresh search. */
   showFavoritesLoadPrompt = false;
@@ -2059,15 +2063,48 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const level = (cov.level === 'full' || cov.level === 'partial' || cov.level === 'absent')
       ? cov.level
       : 'absent';
-    const through = (cov.maxPeriod || '').slice(0, 10);
     const cur = this.archiveCoverage;
-    if (!cur) {
-      this.archiveCoverage = { level, through };
+    const nextLevel = cur && rank[cur.level] <= rank[level] ? cur.level : level;
+    if (!cur || nextLevel !== cur.level) {
+      this.archiveCoverage = {
+        level: nextLevel,
+        through: cur?.through ?? '',
+        instanceId: cur?.instanceId ?? '',
+      };
+    }
+    this.ensureArchiveWatermark();
+  }
+
+  /** Label for the coverage line. The date is the watermark, not a running account max. */
+  coverageLine(cov: { level: string; through: string; instanceId: string }): string {
+    const when = cov.through
+      ? `Newest archived game ${cov.through}${cov.instanceId ? ` (instance ${cov.instanceId})` : ''}`
+      : cov.instanceId
+        ? `Archive watermark instance ${cov.instanceId}`
+        : 'Archive coverage';
+    return `${when} — coverage: ${cov.level}`;
+  }
+
+  private ensureArchiveWatermark(): void {
+    if (this.archiveWatermarkRequested || !this.pgcrApiService.enabled) {
       return;
     }
-    const nextLevel = rank[level] < rank[cur.level] ? level : cur.level;
-    const nextThrough = through > cur.through ? through : cur.through;
-    this.archiveCoverage = { level: nextLevel, through: nextThrough };
+    this.archiveWatermarkRequested = true;
+    void this.pgcrApiService.fetchWatermark().then(mark => {
+      if (!mark || !this.archiveCoverage) {
+        return;
+      }
+      const through = (mark.as_of || '').slice(0, 10);
+      if (this.archiveCoverage.through === through && this.archiveCoverage.instanceId === mark.max_instance_id) {
+        return;
+      }
+      this.archiveCoverage = {
+        ...this.archiveCoverage,
+        through,
+        instanceId: mark.max_instance_id,
+      };
+      this.cdr.markForCheck();
+    });
   }
 
   private platformLabelForAnalytics(platform: string): string {
@@ -6436,6 +6473,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.error = {};
     this.groupedActivitiesByAccount = [];
     this.archiveCoverage = null;
+    this.archiveWatermarkRequested = false;
     this.addMode = false;
     
     // Clear filtered activities and related data
@@ -10740,7 +10778,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       queryParams.set('players', params.players);
       }
     
-    if (this.textView.enabled) {
+    if (this.textView.enabled()) {
       queryParams.set('view', 'text');
     }
     if (queryParams.toString()) {

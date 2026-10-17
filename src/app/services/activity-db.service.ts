@@ -19,6 +19,7 @@ import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 import { environment } from '../../environments/environment';
+import { planActivityWrites } from '../utils/activity-batch-merge';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -527,23 +528,18 @@ export class ActivityDbService extends Dexie {
     this.favorites = this.table('favorites');
   }
 
-  private isDuplicateActivity(a1: StoredActivity, a2: StoredActivity): boolean {
-    return a1.membershipId === a2.membershipId &&
-           a1.characterId === a2.characterId &&
-           a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
-  }
-
   async addActivities(activities: StoredActivity[]) {
     await this.initPromise;
     try {
-      // console.log(`[Dexie] Adding ${activities.length} activities to database`);
-      // Deduplicate activities before storing
-      const uniqueActivities = activities.filter((activity, index, self) => {
-        return index === self.findIndex(a => this.isDuplicateActivity(a, activity));
-      });
-      // console.log(`[Dexie] After deduplication: ${uniqueActivities.length} unique activities`);
-      // Store activities in the database
-      await this.activities.bulkPut(uniqueActivities);
+      const membershipIds = [...new Set(activities.map(activity => activity.membershipId).filter(Boolean))];
+      const existing = membershipIds.length
+        ? await this.activities.where('membershipId').anyOf(membershipIds).toArray()
+        : [];
+      const uniqueActivities = planActivityWrites(existing, activities);
+      if (uniqueActivities.length === 0) {
+        return;
+      }
+      await this.transaction('rw', this.activities, () => this.activities.bulkPut(uniqueActivities));
       // Log the total count after adding
       // const totalCount = await this.activities.count();
       // console.log(`[Dexie] Total activities in database: ${totalCount}`);

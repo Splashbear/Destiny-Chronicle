@@ -1,3 +1,27 @@
+.text-day {
+  max-width: 800px;
+  font: 16px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #d8e4ee;
+}
+.text-day-dim { color: #98a2b0; }
+.text-day-name { color: #fff; }
+.text-prow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #15191e;
+}
+.text-day-more {
+  margin-top: 16px;
+  background: transparent;
+  color: #e4c04a;
+  border: 1px solid #c9a227;
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
 .played-with table {
   border-collapse: collapse;
 }

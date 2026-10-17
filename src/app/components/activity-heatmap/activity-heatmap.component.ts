@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, inject, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivityDbService } from '../../services/activity-db.service';
@@ -22,6 +22,8 @@ import {
   heatmapYearRange,
   weekMonthLabels
 } from '../../utils/heatmap-filters';
+import { TextViewService } from '../../services/text-view.service';
+import { textYearCalendar, TextHeatDay, TextHeatMonth } from '../../utils/text-tab-rows';
 
 interface DayCell {
   day: number;
@@ -114,7 +116,22 @@ interface NamedRange {
         </div>
       </div>
 
-      <div class="heatmap-scroll" *ngIf="seasonColumns.length > 0; else emptyHeatmap">
+      <div *ngIf="text.enabled()" class="text-hm">
+        <p class="text-hm-years">Year:
+          <button *ngFor="let y of years" type="button" (click)="textYearPick = y" [class.on]="textYear() === y">{{ textYear() === y ? '[' + y + ']' : y }}</button>
+        </p>
+        <p class="text-hm-note">Each row is a month, each character is one day. ░ none · ▒ some · ▓ heavy · █ peak</p>
+        <div *ngFor="let month of textMonths()" class="text-hm-row">
+          <span class="text-hm-month">{{ month.label }}</span>
+          <button *ngFor="let day of month.days" type="button" class="text-hm-day" (click)="openTextDay(day)" [title]="day.year + '-' + day.month + '-' + day.day">{{ day.glyph }}</button>
+        </div>
+        <h3 class="text-hm-markers">Season markers</h3>
+        <div *ngFor="let marker of textSeasonMarkers()" class="text-hm-marker">
+          <span>{{ marker.name }}</span><span>{{ marker.when }}</span>
+        </div>
+        <p *ngIf="textSeasonMarkers().length === 0" class="text-hm-note">No season starts in this year.</p>
+      </div>
+      <div class="heatmap-scroll" *ngIf="!text.enabled() && seasonColumns.length > 0">
         <div class="heatmap-columns">
           <div *ngFor="let season of seasonColumns" class="season-column">
             <div class="season-header">
@@ -145,11 +162,9 @@ interface NamedRange {
           </div>
         </div>
       </div>
-      <ng-template #emptyHeatmap>
-        <p class="text-sm text-slate-400 py-8 text-center">No activity for {{ viewSummary }}. Greyed-out dropdown options have no playtime in this view.</p>
-      </ng-template>
+      <p *ngIf="!text.enabled() && seasonColumns.length === 0" class="text-sm text-slate-400 py-8 text-center">No activity for {{ viewSummary }}. Greyed-out dropdown options have no playtime in this view.</p>
 
-      <div class="legend">
+      <div class="legend" *ngIf="!text.enabled()">
         <span>Less</span>
         <div class="w-3 h-3 rounded-sm" [style.background-color]="getIntensityColor(0.15)"></div>
         <div class="w-3 h-3 rounded-sm" [style.background-color]="getIntensityColor(0.4)"></div>
@@ -161,6 +176,14 @@ interface NamedRange {
   `,
   styles: [`
     .activity-heatmap { color: #e2e8f0; }
+    .text-day-cov { color: #98a2b0; margin: 8px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .text-hm { font: 15px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; }
+    .text-hm-years button, .text-hm-day { background: none; border: none; color: #d8e4ee; font: inherit; cursor: pointer; padding: 0 2px; }
+    .text-hm-years button.on { color: #fff; font-weight: 700; }
+    .text-hm-row { white-space: nowrap; }
+    .text-hm-month { display: inline-block; width: 2.5rem; color: #98a2b0; }
+    .text-hm-note, .text-hm-markers { color: #98a2b0; margin: 12px 0 4px; }
+    .text-hm-marker { display: flex; justify-content: space-between; max-width: 420px; gap: 12px; }
     .filter-field {
       display: flex;
       flex-direction: column;
@@ -290,6 +313,10 @@ interface NamedRange {
   `]
 })
 export class ActivityHeatmapComponent implements OnInit, OnChanges {
+  readonly text = inject(TextViewService);
+  textYearPick = 0;
+  private activityByDay = new Map<string, { count: number; seconds: number }>();
+
   @Input() membershipIds: string[] = [];
   @Input() characterMeta: Record<string, HeatmapCharacterLookup> = {};
   @Output() navigateToDate = new EventEmitter<Date>();
@@ -513,6 +540,12 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
     });
 
     const activityMap = this.buildActivityMap(scoped);
+    const yearFree = filterHeatmapActivities(accountScoped, {
+      membershipType: platformType,
+      characterKey: characterKeyFilter,
+      year: null
+    });
+    this.activityByDay = this.buildActivityMap(yearFree);
 
     if (this.groupBy === 'year') {
       this.seasonNames = [];
@@ -702,6 +735,38 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges {
       lines.push(this.formatTime(cell.totalSeconds), `${cell.activities} activities`);
     }
     return lines.join('\n');
+  }
+
+  textYear(): number {
+    if (this.yearFilter !== 'all') {
+      const selected = Number(this.yearFilter);
+      if (Number.isFinite(selected)) {
+        return selected;
+      }
+    }
+    if (this.textYearPick && this.years.includes(this.textYearPick)) {
+      return this.textYearPick;
+    }
+    return this.years.length ? this.years[this.years.length - 1] : new Date().getFullYear();
+  }
+
+  textMonths(): TextHeatMonth[] {
+    const year = this.textYear();
+    return textYearCalendar(year, (y, month, day) => this.activityByDay.get(`${y}-${month}-${day}`)?.seconds ?? 0);
+  }
+
+  textSeasonMarkers(): Array<{ name: string; when: string }> {
+    const year = this.textYear();
+    return [...this.D1_SEASONS, ...this.D2_SEASONS]
+      .filter(range => range.start.getFullYear() === year)
+      .map(range => ({
+        name: range.name,
+        when: range.start.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }),
+      }));
+  }
+
+  openTextDay(day: TextHeatDay): void {
+    this.navigateToDate.emit(new Date(day.year, day.month - 1, day.day));
   }
 
   onDayClick(cell: DayCell): void {

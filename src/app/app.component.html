@@ -15,8 +15,8 @@
         </div>
         <button type="button"
                 class="text-view-toggle"
-                [class.text-view-toggle--on]="textView.enabled"
-                [attr.aria-pressed]="textView.enabled"
+                [class.text-view-toggle--on]="textView.enabled()"
+                [attr.aria-pressed]="textView.enabled()"
                 (click)="textView.toggle()">
           Text view
         </button>

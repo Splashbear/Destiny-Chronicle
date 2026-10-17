@@ -373,7 +373,15 @@ img[src*='class-'] {
   cursor: pointer;
   font: inherit;
 }
+.text-frow, .text-trow, .text-prow {
+  display: grid;
+  gap: 4px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #15191e;
+}
+.text-frow { grid-template-columns: 1fr 110px 70px 140px; }
+.text-trow, .text-prow { grid-template-columns: 1fr auto; }
 @media (max-width: 640px) {
-  .text-day-row { grid-template-columns: 1fr 1fr; }
+  .text-day-row, .text-frow, .text-trow, .text-prow { grid-template-columns: 1fr 1fr; }
   .text-day-name { grid-column: 1 / -1; font-weight: 700; }
 }

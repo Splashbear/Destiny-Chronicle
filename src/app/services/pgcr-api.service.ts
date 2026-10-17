@@ -156,6 +156,30 @@ export class PgcrApiService {
     return `${root}${path.startsWith('/') ? path : `/${path}`}`;
   }
 
+  /** Stable archive high-water mark. Not a per-account activity date. */
+  async fetchWatermark(): Promise<{ max_instance_id: string; as_of: string } | null> {
+    if (!this.enabled) {
+      return null;
+    }
+    try {
+      const body = await firstValueFrom(
+        this.http.get<{ max_instance_id?: string; as_of?: string }>(
+          this.url('/api/pgcr/watermark'),
+          { headers: this.headers() }
+        )
+      );
+      if (!body?.max_instance_id) {
+        return null;
+      }
+      return {
+        max_instance_id: String(body.max_instance_id),
+        as_of: String(body.as_of || ''),
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async fetchPgcr(instanceId: string, game: 'D1' | 'D2'): Promise<unknown | null> {
     if (!this.enabled) {
       return null;
