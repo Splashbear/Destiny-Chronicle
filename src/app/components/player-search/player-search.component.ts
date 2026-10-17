@@ -62,6 +62,7 @@ import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { buildBreakdownCategoryOptions, selectBreakdownChartItems } from '../../utils/breakdown-chart';
 import { D1_HISTORY_MODES, dedupeByInstanceId, isSocialActivity } from '../../utils/activity-history-filters';
+import { excludeExistingInstances } from '../../utils/activity-dedupe';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
@@ -4141,9 +4142,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
                 game: character.game
               }));
 
-              const uniqueNewActivities = storedActivities.filter(activity =>
-                !dbActivities.some(existing => this.isDuplicateActivity(existing, activity))
-              );
+              const uniqueNewActivities = excludeExistingInstances(dbActivities, storedActivities);
 
               if (uniqueNewActivities.length > 0) {
                 await this.activityDb.addActivities(uniqueNewActivities);
@@ -6940,10 +6939,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
     this.openFullPgcrInNewTab(first.instanceId, isD1);
-  }
-
-  private isDuplicateActivity(a1: any, a2: any): boolean {
-    return a1.activityDetails?.instanceId === a2.activityDetails?.instanceId;
   }
 
   /** Original Bungie-style game badge (tricorn, with "2" on D2). */
