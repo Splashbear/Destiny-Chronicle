@@ -171,9 +171,19 @@ export class PgcrApiService {
       if (!body?.max_instance_id) {
         return null;
       }
+      const instanceId = String(body.max_instance_id);
+      let asOf = String(body.as_of || '');
+      // Live watermark JSON has no as_of. The date is the period of that instance.
+      if (!/^\d{4}-\d{2}-\d{2}/.test(asOf)) {
+        const pgcr = await this.fetchPgcr(instanceId, 'D2') as { activityDetails?: { period?: string } } | null;
+        const period = pgcr?.activityDetails?.period || '';
+        if (/^\d{4}-\d{2}-\d{2}/.test(period)) {
+          asOf = period;
+        }
+      }
       return {
-        max_instance_id: String(body.max_instance_id),
-        as_of: String(body.as_of || ''),
+        max_instance_id: instanceId,
+        as_of: asOf,
       };
     } catch {
       return null;

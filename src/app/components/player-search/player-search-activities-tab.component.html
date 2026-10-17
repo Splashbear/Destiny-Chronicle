@@ -32,9 +32,6 @@
                   <button type="button" class="text-day-link" (click)="ps.openExternalPGCR(row.activity, row.isD1, $event)">PGCR</button>
                 </div>
               </section>
-              <button *ngIf="day.shown < day.total" type="button" class="text-day-more" (click)="showMoreTextRows()">
-                Show more ({{ day.shown }} of {{ day.total }})
-              </button>
               <p *ngIf="day.total === 0" class="text-day-dim">No activities found for this date.</p>
             </ng-container>
           </ng-container>

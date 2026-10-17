@@ -10,6 +10,18 @@ export interface TextSection<T> {
   rows: T[];
 }
 
+/**
+ * On this Day text view lists every row the full view lists.
+ * A 40-row window showed only the first accounts (IFrostBolt's Oct 16 games never appeared).
+ */
+export function textDaySections<T>(
+  sections: TextSection<T>[]
+): { sections: TextSection<T>[]; total: number; shown: number } {
+  const kept = sections.filter(section => section.rows.length > 0);
+  const total = kept.reduce((count, section) => count + section.rows.length, 0);
+  return { sections: kept, total, shown: total };
+}
+
 /** Keep section titles, but only materialize the open page of rows. */
 export function pageSections<T>(
   sections: TextSection<T>[],

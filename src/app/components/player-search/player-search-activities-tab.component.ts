@@ -5,7 +5,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { PlayerSearchComponent } from './player-search.component';
 import { AnniversaryCelebrationBannerComponent } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
 import { TextViewService } from '../../services/text-view.service';
-import { pageSections, textViewShouldBuild } from '../../utils/text-tab-rows';
+import { textDaySections, textViewShouldBuild } from '../../utils/text-tab-rows';
 
 interface TextDaySection {
   year: string;
@@ -24,8 +24,6 @@ interface TextDaySection {
 export class PlayerSearchActivitiesTabComponent {
   readonly ps = inject(PlayerSearchComponent);
   readonly text = inject(TextViewService);
-  readonly pageSize = 40;
-  textPages = 1;
   private textDate = '';
   private textSig = '';
   private textCache: { sections: TextDaySection[]; total: number; shown: number } | null = null;
@@ -38,7 +36,6 @@ export class PlayerSearchActivitiesTabComponent {
   textDay(): { sections: TextDaySection[]; total: number; shown: number } {
     if (this.textDate !== this.ps.selectedDate) {
       this.textDate = this.ps.selectedDate;
-      this.textPages = 1;
       this.textSig = '';
       this.textCache = null;
     }
@@ -46,9 +43,7 @@ export class PlayerSearchActivitiesTabComponent {
     if (!textViewShouldBuild(!!this.ps.loadingActivities[this.ps.selectedDate], this.ps.profileLoadInProgress)) {
       return this.textCache ?? empty;
     }
-    const list = this.ps.filteredActivitiesForDate || [];
-    const tail = list.length ? String(list[list.length - 1]?.activityDetails?.instanceId ?? '') : '';
-    const sig = `${this.ps.selectedDate}|${this.textPages}|${list.length}|${tail}`;
+    const sig = `${this.ps.selectedDate}|${this.displayedRowSig()}`;
     if (this.textCache && sig === this.textSig) {
       return this.textCache;
     }
@@ -66,7 +61,7 @@ export class PlayerSearchActivitiesTabComponent {
         }
       }
     }
-    const paged = pageSections(built, this.pageSize, this.textPages);
+    const paged = textDaySections(built);
     const sections: TextDaySection[] = paged.sections.map(section => {
       const [year, game] = section.title.split('|');
       return { year, game: game as 'D1' | 'D2', rows: section.rows };
@@ -76,7 +71,20 @@ export class PlayerSearchActivitiesTabComponent {
     return this.textCache;
   }
 
-  showMoreTextRows(): void {
-    this.textPages += 1;
+  /** Changes when any account's rows change, so a list built before the last account arrived cannot stick. */
+  private displayedRowSig(): string {
+    const parts: string[] = [];
+    for (const game of ['D2', 'D1'] as const) {
+      for (const group of this.ps.getDisplayedAccountGroupsForGame(game)) {
+        for (const yearGroup of group.yearGroups ?? []) {
+          for (const typeGroup of yearGroup.typeGroups ?? []) {
+            for (const activity of typeGroup.activities ?? []) {
+              parts.push(String(activity?.membershipId ?? ''));
+            }
+          }
+        }
+      }
+    }
+    return `${parts.length}|${parts.join(',')}`;
   }
 }

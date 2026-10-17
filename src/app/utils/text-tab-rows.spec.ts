@@ -4,6 +4,7 @@ import {
   heatGlyph,
   pageSections,
   playedWithDisplayName,
+  textDaySections,
   splitTitles,
   textViewShouldBuild,
   textYearCalendar,
@@ -31,6 +32,28 @@ describe('text tab rows', () => {
     expect(paged.sections.map(section => section.title)).toEqual(['Raids']);
     expect(pageSections([{ title: 'Raids', rows: [1, 2] }, { title: 'Dungeons', rows: [3] }], 2, 2).sections.map(s => s.title))
       .toEqual(['Raids', 'Dungeons']);
+  });
+
+  it('keeps a later account when the first accounts already fill 40 rows', () => {
+    const rows = (membershipId: string, count: number) =>
+      Array.from({ length: count }, (_, index) => ({ membershipId, instanceId: `${membershipId}-${index}` }));
+    const sections = [
+      { title: '2024|D2', rows: rows('splashbear', 12) },
+      { title: '2022|D2', rows: rows('datto', 21) },
+      { title: '2021|D2', rows: rows('fruit', 7) },
+      { title: '2023|D2', rows: rows('ifrostbolt', 100) },
+      { title: '2020|D2', rows: rows('ifrostbolt', 58) },
+    ];
+    const firstPage = pageSections(sections, 40, 1);
+    expect(firstPage.shown).toBe(40);
+    expect(firstPage.sections.flatMap(section => section.rows).some(row => row.membershipId === 'ifrostbolt')).toBe(false);
+
+    const day = textDaySections(sections);
+    const shown = day.sections.flatMap(section => section.rows);
+    expect(day.total).toBe(198);
+    expect(day.shown).toBe(198);
+    expect(shown.filter(row => row.membershipId === 'ifrostbolt').length).toBe(158);
+    expect(day.sections.map(section => section.title)).toEqual(['2024|D2', '2022|D2', '2021|D2', '2023|D2', '2020|D2']);
   });
 
   it('keeps completed clears and skips empty variants', () => {
