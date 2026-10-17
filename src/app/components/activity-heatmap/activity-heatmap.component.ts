@@ -25,6 +25,8 @@ import {
   weekMonthLabels
 } from '../../utils/heatmap-filters';
 import { TextViewService } from '../../services/text-view.service';
+import { noteIdbRead } from '../../utils/idb-read-log';
+import { heatmapLoadAction } from '../../utils/heatmap-load-plan';
 import { textYearCalendar, TextHeatDay, TextHeatMonth } from '../../utils/text-tab-rows';
 
 interface DayCell {
@@ -422,6 +424,9 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   private loadGen = 0;
   private destroyed = false;
   private tableReady = false;
+  private loadedKey = '';
+  private inflightKey = '';
+  private inflight: Promise<void> | null = null;
 
   constructor(
     private activityDb: ActivityDbService,
@@ -435,6 +440,7 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.loadGen += 1;
+    this.inflightKey = '';
     this.allActivities = [];
   }
 
@@ -507,25 +513,57 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   async loadActivities(): Promise<void> {
-    if (this.destroyed) {
+    const key = (this.membershipIds || []).map(id => String(id)).filter(Boolean).join('\n');
+    const action = heatmapLoadAction({
+      destroyed: this.destroyed,
+      membershipKey: key,
+      cachedKey: this.loadedKey,
+      tableReady: this.tableReady,
+      inflightKey: this.inflightKey
+    });
+    if (action === 'none' || action === 'cached') {
       return;
+    }
+    if (action === 'join' && this.inflight) {
+      return this.inflight;
     }
     const gen = ++this.loadGen;
+    this.inflightKey = key;
     this.loadActivitiesCalls += 1;
-    const rows = await this.activityDb.activities.toArray();
-    if (gen !== this.loadGen || this.destroyed) {
-      return;
+    const ids = key.split('\n');
+    this.inflight = (async () => {
+      const rows = await this.activityDb.activities.where('membershipId').anyOf(ids).toArray();
+      noteIdbRead('heatmap.loadActivities', rows.length);
+      if (gen !== this.loadGen || this.destroyed) {
+        return;
+      }
+      this.allActivities = rows.map(row => ({
+        period: row.period,
+        membershipId: row.membershipId,
+        membershipType: row.membershipType,
+        characterId: row.characterId,
+        characterClass: row.characterClass,
+        game: row.game,
+        values: row.values?.timePlayedSeconds
+          ? { timePlayedSeconds: row.values.timePlayedSeconds }
+          : undefined
+      }));
+      this.loadedKey = key;
+      this.tableReady = true;
+      this.rebuild();
+      if (gen !== this.loadGen || this.destroyed) {
+        return;
+      }
+      this.cdr.detectChanges();
+    })();
+    try {
+      await this.inflight;
+    } finally {
+      if (this.inflightKey === key) {
+        this.inflightKey = '';
+        this.inflight = null;
+      }
     }
-    this.allActivities = rows;
-    this.tableReady = true;
-    this.rebuild();
-    if (gen !== this.loadGen || this.destroyed) {
-      return;
-    }
-    // Dexie/IndexedDB resolves outside the Angular zone, and this component
-    // lives under an OnPush parent. Refresh the view so the first paint
-    // shows data without waiting for a dropdown change.
-    this.cdr.detectChanges();
   }
 
   private withCharacterMeta(activities: any[]): any[] {

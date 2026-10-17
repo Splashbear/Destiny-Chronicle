@@ -6637,6 +6637,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     return allActivities;
   }
+  /** One date read for the account, then keep the characters the caller asked for. */
+  private async activitiesForCharacters(
+    membershipId: string,
+    characterIds: string[],
+    month: number,
+    day: number
+  ): Promise<StoredActivity[]> {
+    const rows = await this.activityDb.getActivitiesByDateForMembership(membershipId, month, day);
+    const wanted = new Set(characterIds);
+    return rows.filter(row => wanted.has(row.characterId));
+  }
+
   /**
    * Retrieves all filtered activities for the selected date and players.
    */
@@ -6645,7 +6657,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return [];
     }
 
-    const cacheKey = `filtered-${this.selectedDate}-${this.selectedActivityType.label}`;
+    const accountKey = this.selectedPlayers
+      .map(player => `${player.game || ''}:${player.membershipId}`)
+      .sort()
+      .join('|');
+    const cacheKey = `filtered-${this.selectedDate}-${accountKey}-${this.selectedActivityType.label}`;
     const cachedEntry = this.filteredActivitiesCache.get(cacheKey);
     if (cachedEntry && !forceRefresh && !cachedEntry.dirty && this.firstFullSyncDone) {
       return cachedEntry.list;
@@ -6665,40 +6681,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     // Get all activities for selected players in parallel
     const playerActivitiesPromises = this.selectedPlayers.map(async player => {
-      // Verify that this player's activities were actually cleared from database
-      const totalActivitiesForPlayer = await this.activityDb.activities
-        .where('membershipId')
-        .equals(player.membershipId)
-        .count();
-      
-      if (totalActivitiesForPlayer > 0) {
-        console.log(`[CLEAR] Database verification: ${totalActivitiesForPlayer} activities found for ${player.displayName} - this should be 0 after clearing`);
-      }
-      
-      // Use the new optimized query methods based on activity type
       let playerActivities: StoredActivity[] = [];
       
       if (this.selectedActivityType.label === 'All') {
-        // Get all activities for the date
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-        
-        const activitiesPromises = charIds.map(async charId => {
-          const activities = await this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
-          return activities;
-        });
-        const activitiesArrays = await Promise.all(activitiesPromises);
-        playerActivities = activitiesArrays.flat();
+        playerActivities = charIds.length
+          ? await this.activitiesForCharacters(player.membershipId, charIds, month, day)
+          : [];
       } else {
         const charIds = (this.characters[this.getPlayerKey(player)] || [])
           .map(getCharacterId)
           .filter((id): id is string => !!id);
-
-        const activitiesPromises = charIds.map(async charId => {
-          return this.activityDb.getActivitiesByDate(player.membershipId, charId, month, day);
-        });
-        playerActivities = (await Promise.all(activitiesPromises)).flat();
+        playerActivities = charIds.length
+          ? await this.activitiesForCharacters(player.membershipId, charIds, month, day)
+          : [];
 
         let mode: number | undefined;
         if (this.selectedActivityType.label === 'Dungeon' && player.game === 'D2') {
@@ -6747,18 +6745,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
     const playerFilteredActivities = await Promise.all(playerActivitiesPromises);
     allFilteredActivities.push(...playerFilteredActivities.flat());
-    
-    // Additional verification: check if there are any activities in database for other players
-    const currentMembershipIds = this.selectedPlayers.map(p => p.membershipId);
-    const allActivitiesInDb = await this.activityDb.activities.toArray();
-    const activitiesForOtherPlayers = allActivitiesInDb.filter(activity => 
-      !currentMembershipIds.includes(activity.membershipId)
-    );
-    
-    if (activitiesForOtherPlayers.length > 0) {
-      console.warn(`[CLEAR] WARNING: Found ${activitiesForOtherPlayers.length} activities in database for other players:`, 
-        activitiesForOtherPlayers.map(a => a.membershipId));
-    }
 
     // Deduplicate by game + membershipId + instanceId (D1/D2 can share membershipId)
     const dedupedMap = new Map<string, ActivityWithMembership>();

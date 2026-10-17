@@ -19,7 +19,10 @@ import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 import { environment } from '../../environments/environment';
-import { planActivityWrites } from '../utils/activity-batch-merge';
+import { AccountWriteIndex } from '../utils/account-write-index';
+import { matchesCalendarDay, scanYears, utcDayWindow } from '../utils/calendar-day-query';
+import { noteIdbRead } from '../utils/idb-read-log';
+import { MembershipRowCache } from '../utils/membership-row-cache';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -117,6 +120,10 @@ export class ActivityDbService extends Dexie {
   
   // Enhanced LRU caches with TTL support
   private activitiesCache: LRUCache<StoredActivity[]> = { maxSize: 200, data: new Map() };
+  /** One UTC calendar day, all accounts. Shared by every character lookup for that day. */
+  private utcDayCache = new Map<string, StoredActivity[]>();
+  private readonly accountWriteIndex = new AccountWriteIndex();
+  private readonly activityIdentityCache = new MembershipRowCache<Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }>>();
   private filteredActivitiesCache: LRUCache<StoredActivity[]> = { maxSize: 100, data: new Map() };
   private firstEverActivities: LRUCache<ActivityFirstCompletion> = { maxSize: 50, data: new Map() };
   private guardianFirstsCache: LRUCache<ActivityFirstCompletion[]> = { maxSize: 100, data: new Map() };
@@ -532,61 +539,70 @@ export class ActivityDbService extends Dexie {
     await this.initPromise;
     try {
       const membershipIds = [...new Set(activities.map(activity => activity.membershipId).filter(Boolean))];
-      const existing = membershipIds.length
-        ? await this.activities.where('membershipId').anyOf(membershipIds).toArray()
-        : [];
-      const uniqueActivities = planActivityWrites(existing, activities);
+      for (const membershipId of membershipIds) {
+        if (this.accountWriteIndex.has(membershipId)) {
+          continue;
+        }
+        const existing = await this.activities.where('membershipId').equals(membershipId).toArray();
+        noteIdbRead('addActivities', existing.length);
+        this.accountWriteIndex.load(membershipId, existing);
+      }
+      const uniqueActivities = this.accountWriteIndex.plan(membershipIds, activities) as StoredActivity[];
       if (uniqueActivities.length === 0) {
         return;
       }
       await this.transaction('rw', this.activities, () => this.activities.bulkPut(uniqueActivities));
-      // Log the total count after adding
-      // const totalCount = await this.activities.count();
-      // console.log(`[Dexie] Total activities in database: ${totalCount}`);
+      this.accountWriteIndex.commit(uniqueActivities);
+      this.invalidateActivityReads(membershipIds);
     } catch (error) {
       console.error('[Dexie] Error adding activities:', error);
       throw error;
     }
   }
 
+  private invalidateActivityReads(membershipIds?: string[]): void {
+    this.utcDayCache.clear();
+    if (!membershipIds) {
+      this.accountWriteIndex.drop();
+      this.activityIdentityCache.invalidate();
+      this.activitiesCache.data.clear();
+      return;
+    }
+    for (const membershipId of membershipIds) {
+      this.activityIdentityCache.invalidate(membershipId);
+      this.activitiesCache.data.delete(`${membershipId}_all`);
+    }
+  }
+
+  private async rowsOnUtcDay(year: number, month: number, day: number): Promise<StoredActivity[]> {
+    const key = `${year}-${month}-${day}`;
+    const cached = this.utcDayCache.get(key);
+    if (cached) {
+      return cached;
+    }
+    const window = utcDayWindow(year, month, day);
+    const rows = await this.activities
+      .where('[period+membershipId+characterId]')
+      .between([window.start, '', ''], [window.end, '\uffff', '\uffff'], true, false)
+      .toArray();
+    noteIdbRead('getActivitiesByDate', rows.length);
+    const kept = rows.filter(row => matchesCalendarDay(row.period, month, day, year));
+    this.utcDayCache.set(key, kept);
+    return kept;
+  }
+
   async getActivitiesByDate(membershipId: string, characterId: string, month: number, day: number, year?: number): Promise<StoredActivity[]> {
     await this.initPromise;
     try {
-      // Defensive check
       if (!membershipId || !characterId || !month || !day) {
         console.error('[Dexie] Invalid key for getActivitiesByDate:', { membershipId, characterId, month, day });
         return [];
       }
-
-      // Use the compound index for much faster queries
-      // The index [period+membershipId+characterId] allows us to do range queries efficiently
-      const startOfDay = new Date((year ?? 2014), month - 1, day);
-      const endOfDay = new Date((year ?? 2030), month - 1, day + 1);
-
-      // Use Dexie's between() method which leverages the compound index
-      const activities = await this.activities
-        .where('[period+membershipId+characterId]')
-        .between(
-          [startOfDay.toISOString(), membershipId, characterId],
-          [endOfDay.toISOString(), membershipId, characterId],
-          true,
-          false
-        )
-        .toArray();
-
-      // Additional filtering to ensure exact date match (handles timezone edge cases)
-      return activities.filter(activity => {
-        if (!activity.period) return false;
-        const activityDate = new Date(activity.period);
-        const activityMonth = activityDate.getUTCMonth() + 1;
-        const activityDay = activityDate.getUTCDate();
-        const activityYear = activityDate.getUTCFullYear();
-
-        if (year) {
-          return activityMonth === month && activityDay === day && activityYear === year;
-        }
-        return activityMonth === month && activityDay === day;
-      });
+      const years = scanYears(year);
+      const chunks = await Promise.all(years.map(y => this.rowsOnUtcDay(y, month, day)));
+      return chunks.flat().filter(activity =>
+        activity.membershipId === membershipId && activity.characterId === characterId
+      );
     } catch (error) {
       console.error('[Dexie] Error getting activities by date:', error);
       throw error;
@@ -609,23 +625,9 @@ export class ActivityDbService extends Dexie {
         console.error('[Dexie] Invalid key for getActivitiesByDateForMembership:', { membershipId, month, day });
         return [];
       }
-      // Query by membershipId, then filter by date
-      const activities = await this.activities
-        .where('membershipId')
-        .equals(membershipId)
-        .toArray();
-
-      return activities.filter(activity => {
-        if (!activity.period) return false;
-        const d = new Date(activity.period);
-        const m = d.getUTCMonth() + 1;
-        const dy = d.getUTCDate();
-        const y = d.getUTCFullYear();
-        if (year) {
-          return m === month && dy === day && y === year;
-        }
-        return m === month && dy === day;
-      });
+      const years = scanYears(year);
+      const chunks = await Promise.all(years.map(y => this.rowsOnUtcDay(y, month, day)));
+      return chunks.flat().filter(activity => activity.membershipId === membershipId);
     } catch (error) {
       console.error('[Dexie] Error in getActivitiesByDateForMembership:', error);
       return [];
@@ -655,6 +657,8 @@ export class ActivityDbService extends Dexie {
       await this.activities
         .where({ membershipId, characterId })
         .delete();
+      this.accountWriteIndex.drop(membershipId);
+      this.invalidateActivityReads([membershipId]);
       // console.log('[Dexie] Activities cleared successfully');
     } catch (error) {
       console.error('[Dexie] Error clearing activities:', error);
@@ -684,6 +688,8 @@ export class ActivityDbService extends Dexie {
         .where('membershipId')
         .equals(membershipId)
         .delete();
+      this.accountWriteIndex.drop(membershipId);
+      this.invalidateActivityReads([membershipId]);
 
       // Verify the deletion worked
       const afterCount = await this.activities
@@ -881,6 +887,31 @@ export class ActivityDbService extends Dexie {
   }
 
   /**
+   * Instance id, period, and game for Played With. Cached until this account is written.
+   * The stored row's other fields are not kept.
+   */
+  async getActivityIdentityForMembership(
+    membershipId: string
+  ): Promise<Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }>> {
+    await this.initPromise;
+    if (this.activityIdentityCache.has(membershipId)) {
+      return this.activityIdentityCache.get(membershipId) || [];
+    }
+    const rows = await this.activities.where('membershipId').equals(membershipId).toArray();
+    noteIdbRead('playedWith.membership', rows.length);
+    const slim: Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }> = [];
+    for (const row of rows) {
+      const instanceId = ActivityDbService.resolveStoredActivityInstanceId(row);
+      if (!instanceId) {
+        continue;
+      }
+      slim.push({ instanceId, period: row.period || '', game: row.game });
+    }
+    this.activityIdentityCache.set(membershipId, slim);
+    return slim;
+  }
+
+  /**
    * Preload favorite accounts' data into memory cache for instant access
    */
   async preloadFavoritesCache(): Promise<void> {
@@ -942,6 +973,7 @@ export class ActivityDbService extends Dexie {
       const beforeCount = await this.activities.count();
 
       await this.activities.clear();
+      this.invalidateActivityReads();
 
       const afterCount = await this.activities.count();
 
