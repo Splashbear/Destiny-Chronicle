@@ -1,5 +1,4 @@
 import { Component, OnInit, ChangeDetectorRef, ChangeDetectionStrategy, TrackByFunction, OnDestroy, HostListener, inject } from '@angular/core';
-import { trigger, transition, style, animate } from '@angular/animations';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -630,14 +629,6 @@ interface PlatformStats {
   templateUrl: './player-search.component.html',
   styleUrls: ['./player-search.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  animations: [
-    trigger('tabContent', [
-      transition(':enter', [
-        style({ opacity: 0, transform: 'translateY(8px)' }),
-        animate('250ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
-      ]),
-    ])
-  ]
 })
 export class PlayerSearchComponent implements OnInit, OnDestroy {
   d1XboxSearchTerm: string = '';
@@ -727,6 +718,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   crossSavePlayer: PlayerSearchDisplay | null = null;
   loadingActivities: { [key: string]: boolean } = {};
   groupedActivitiesByAccount: any[] = [];
+  private displayedAccountGroups = new Map<'D1' | 'D2', { source: any[]; preset: string; accounts: string; groups: any[] }>();
   private processedActivities: any[] = [];
   loadingProgress: LoadingProgress | null = null;
   /** True when user returns to tab after it was hidden during loading; show explanatory message. */
@@ -1047,8 +1039,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Category options: All, or each unique category (Raid, Dungeon, Strike, etc.).
    *  Built from ALL groups (not tile-filtered) so selecting a tile does not shrink the list. */
+  private categoryOptionsCache: { groups: unknown; options: { value: string; label: string }[] } | null = null;
+
   get breakdownChartCategoryOptions(): { value: string; label: string }[] {
-    return buildBreakdownCategoryOptions(this.activityBreakdownGroups || [], this.categoryDisplayNames);
+    const groups = this.activityBreakdownGroups || [];
+    if (this.categoryOptionsCache?.groups === groups) {
+      return this.categoryOptionsCache.options;
+    }
+    const options = buildBreakdownCategoryOptions(groups, this.categoryDisplayNames);
+    this.categoryOptionsCache = { groups, options };
+    return options;
   }
 
   /** Game filter options */
@@ -8683,7 +8683,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  private chronoRowsCache = new WeakMap<object, { sort: string; rows: ChronologicalActivityRow[] }>();
+
   getChronologicalRowsForYear(yearGroup: YearGroup, game: 'D1' | 'D2'): ChronologicalActivityRow[] {
+    const cached = this.chronoRowsCache.get(yearGroup);
+    if (cached && cached.sort === this.activitiesChronologicalSort) {
+      return cached.rows;
+    }
     const rows: ChronologicalActivityRow[] = [];
     for (const typeGroup of yearGroup.typeGroups ?? []) {
       const isD1 = typeGroup.isD1 ?? game === 'D1';
@@ -8723,6 +8729,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       return (ta - tb) * dir;
     });
+    this.chronoRowsCache.set(yearGroup, { sort: this.activitiesChronologicalSort, rows });
     return rows;
   }
 
@@ -9529,6 +9536,27 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Returns grouped activities filtered by activityFilterPreset for display in Activities tab. When account cards are selected, only those accounts' activities are shown. */
   getDisplayedAccountGroupsForGame(game: 'D1' | 'D2') {
+    const accounts = Array.from(this.selectedAccountKeysForActivities).sort().join('\n');
+    const hit = this.displayedAccountGroups.get(game);
+    if (
+      hit &&
+      hit.source === this.groupedActivitiesByAccount &&
+      hit.preset === this.activityFilterPreset &&
+      hit.accounts === accounts
+    ) {
+      return hit.groups;
+    }
+    const groups = this.buildDisplayedAccountGroups(game);
+    this.displayedAccountGroups.set(game, {
+      source: this.groupedActivitiesByAccount,
+      preset: this.activityFilterPreset,
+      accounts,
+      groups,
+    });
+    return groups;
+  }
+
+  private buildDisplayedAccountGroups(game: 'D1' | 'D2') {
     const base = this.getAccountGroupsForGame(game);
     const preset = this.activityFilterPreset;
     const accountFilter = this.selectedAccountKeysForActivities.size > 0;
@@ -9850,6 +9878,40 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.openBreakdownPgcr(row, event);
   }
 
+  onActivityReportClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('button.activity-pgcr-link')) {
+      return;
+    }
+    const el = target.closest('[data-instance-id]') as HTMLElement | null;
+    const instanceId = el?.getAttribute('data-instance-id');
+    if (!instanceId) {
+      return;
+    }
+    const isD1 = el?.getAttribute('data-d1') === '1';
+    const activity = this.findDisplayedActivity(instanceId, isD1);
+    if (activity) {
+      this.openExternalPGCR(activity, isD1, event);
+    }
+  }
+
+  private findDisplayedActivity(instanceId: string, isD1: boolean): ActivityWithMembership | undefined {
+    for (const group of this.groupedActivitiesByAccount) {
+      for (const yearGroup of group.yearGroups ?? []) {
+        for (const typeGroup of yearGroup.typeGroups ?? []) {
+          for (const activity of typeGroup.activities ?? []) {
+            const id = activity?.activityDetails?.instanceId;
+            const activityIsD1 = (activity?.game || group.game) === 'D1';
+            if (id != null && String(id) === instanceId && activityIsD1 === isD1) {
+              return activity;
+            }
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
   trackBreakdownGroup(_index: number, group: BreakdownGroup): string {
     return `${group.game || ''}|${group.label}`;
   }
@@ -9861,10 +9923,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   trackBreakdownCard(_index: number, card: { label: string }): string {
     return card.label;
   }
+  private versionGroupsCache = new WeakMap<object, Array<{ version: string; activities: ActivityWithMembership[] }>>();
+
   /**
    * Groups activities by their version (Normal, Master, Explorer, etc.)
    */
   getVersionGroups(activities: ActivityWithMembership[]): Array<{ version: string; activities: ActivityWithMembership[] }> {
+    const cached = this.versionGroupsCache.get(activities);
+    if (cached) {
+      return cached;
+    }
     const versionMap = new Map<string, ActivityWithMembership[]>();
     
     for (const activity of activities) {
@@ -9883,8 +9951,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     
     // Sort versions in preferred order
     const versionOrder = ['Normal', 'Standard', 'Explorer', 'Eternity', 'Ultimatum', 'Master'];
-    return Array.from(versionMap.entries())
-      .map(([version, activities]) => ({ version, activities }))
+    const groups = Array.from(versionMap.entries())
+      .map(([version, versionActivities]) => ({ version, activities: versionActivities }))
       .sort((a, b) => {
         const aIndex = versionOrder.indexOf(a.version);
         const bIndex = versionOrder.indexOf(b.version);
@@ -9893,6 +9961,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         if (bIndex === -1) return -1;
         return aIndex - bIndex;
       });
+    this.versionGroupsCache.set(activities, groups);
+    return groups;
   }
 
   /**
@@ -10198,6 +10268,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' | 'playedWith') {
     this.activeTab = tab;
+    // Drop the previous tab's cards in this turn. A later await must not leave them mounted.
+    this.cdr.detectChanges();
     if (tab === 'heatmap' || tab === 'breakdown' || tab === 'titles' || tab === 'firsts' || tab === 'activities') {
       this.siteAnalytics.trackFeatureView(tab);
     } else if (tab === 'playedWith') {

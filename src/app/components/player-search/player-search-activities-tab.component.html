@@ -217,7 +217,7 @@
               </svg>
             </button>
             <div *ngIf="!ps.isActivityGameCollapsed('D2')">
-            <div *ngFor="let gameGroup of ps.getDisplayedAccountGroupsForGame('D2')" class="destiny-surface-panel p-4">
+            <div *ngFor="let gameGroup of ps.getDisplayedAccountGroupsForGame('D2'); trackBy: ps.trackByAccountGroup" class="destiny-surface-panel p-4">
               <div *ngFor="let yearGroup of gameGroup.yearGroups; trackBy: ps.trackByYearGroup" class="destiny-year-block mb-8 p-4">
                 <button type="button"
                         class="activity-collapse-toggle activity-year-heading flex items-center mb-4 w-full text-left group"
@@ -261,7 +261,7 @@
               </svg>
             </button>
             <div *ngIf="!ps.isActivityGameCollapsed('D1')">
-            <div *ngFor="let gameGroup of ps.getDisplayedAccountGroupsForGame('D1')" class="destiny-surface-panel p-4">
+            <div *ngFor="let gameGroup of ps.getDisplayedAccountGroupsForGame('D1'); trackBy: ps.trackByAccountGroup" class="destiny-surface-panel p-4">
               <div *ngFor="let yearGroup of gameGroup.yearGroups; trackBy: ps.trackByYearGroup" class="destiny-year-block mb-8 p-4">
                 <button type="button"
                         class="activity-collapse-toggle activity-year-heading flex items-center mb-4 w-full text-left group"
@@ -298,8 +298,8 @@
           No activities found for this date.
         </div>
 <ng-template #yearActivitiesCards let-game="game" let-yearGroup="yearGroup" let-gameGroup="gameGroup">
-  <div class="activity-cards-grid">
-    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="activity-card-column">
+  <div class="activity-cards-grid" (click)="ps.onActivityReportClick($event)">
+    <div *ngFor="let typeGroup of yearGroup.typeGroups; trackBy: ps.trackByTypeGroup" class="activity-card-column">
       <div class="flex items-start mb-2 gap-3 min-w-0">
         <ng-container *ngIf="ps.getActivityImage(typeGroup.activities[0], typeGroup.activities[0]?.game === 'D1') as img">
           <img *ngIf="img && typeof img === 'string'" [src]="img" class="w-16 h-16 object-cover rounded shadow shrink-0 pgcr-thumb" />
@@ -327,7 +327,8 @@
             </div>
             <span class="activity-row-name text-xs text-slate-300 font-medium">{{ ps.getActivityDisplayName(activity) }}</span>
             <button type="button"
-                    (click)="ps.openExternalPGCR(activity, (activity.game || gameGroup.game) === 'D1', $event)"
+                    [attr.data-instance-id]="activity.activityDetails?.instanceId"
+                    [attr.data-d1]="(activity.game || gameGroup.game) === 'D1' ? '1' : '0'"
                     [title]="ps.uiI18n.t('pgcr.openReportHint')"
                     class="activity-pgcr-link activity-pgcr-link--card">
               {{ ps.formatTime(activity.period) }}
@@ -340,7 +341,7 @@
 </ng-template>
 
 <ng-template #yearActivitiesChronological let-game="game" let-yearGroup="yearGroup">
-  <div class="space-y-2">
+  <div class="space-y-2" (click)="ps.onActivityReportClick($event)">
     <div *ngFor="let row of ps.getChronologicalRowsForYear(yearGroup, game); trackBy: ps.trackByChronologicalRow"
          class="activity-chrono-row activity-row destiny-panel destiny-panel--compact flex items-center gap-2 min-w-0 transition-colors"
          [ngStyle]="{ '--activity-accent': ps.getActivityTypeAccent(row.activityType) }">
@@ -356,7 +357,8 @@
       <img [src]="ps.getPlatformIconUrl(row.activity.membershipType || 0)" class="w-4 h-4 platform-icon shrink-0" alt="platform" />
       <span class="text-xs text-slate-300 font-medium truncate shrink-0 max-w-[120px]">{{ ps.getActivityDisplayName(row.activity) }}</span>
       <button type="button"
-              (click)="ps.openExternalPGCR(row.activity, (row.game || game) === 'D1', $event)"
+              [attr.data-instance-id]="row.activity.activityDetails?.instanceId"
+              [attr.data-d1]="(row.game || game) === 'D1' ? '1' : '0'"
               [title]="ps.uiI18n.t('pgcr.openReportHint')"
               class="activity-pgcr-link text-xs font-mono shrink-0">
         {{ ps.formatTime(row.activity.period) }}
