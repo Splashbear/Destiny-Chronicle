@@ -256,9 +256,9 @@ export class FireteamStatsService {
     const metaById = new Map<string, MissingPgcrEntry>();
 
     for (const membershipId of membershipIds) {
-      const acts = await this.activityDb.getAllActivitiesForMembershipOptimized(membershipId);
+      const acts = await this.activityDb.getActivityIdentityForMembership(membershipId);
       for (const a of acts) {
-        const inst = ActivityDbService.resolveStoredActivityInstanceId(a);
+        const inst = a.instanceId;
         if (!inst) {
           continue;
         }
@@ -285,11 +285,10 @@ export class FireteamStatsService {
   private async collectInstanceIds(membershipIds: string[]): Promise<string[]> {
     const ids = new Set<string>();
     for (const membershipId of membershipIds) {
-      const acts = await this.activityDb.getAllActivitiesForMembershipOptimized(membershipId);
+      const acts = await this.activityDb.getActivityIdentityForMembership(membershipId);
       for (const a of acts) {
-        const inst = ActivityDbService.resolveStoredActivityInstanceId(a);
-        if (inst) {
-          ids.add(inst);
+        if (a.instanceId) {
+          ids.add(a.instanceId);
         }
       }
     }

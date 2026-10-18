@@ -211,7 +211,7 @@ describe('heatmap filters', () => {
   });
 });
 
-import { gameInstanceKey, heatmapYearRange } from './heatmap-filters';
+import { gameInstanceKey, heatmapOptionPresence, heatmapYearRange, projectHeatmapRow, sameMembershipIds } from './heatmap-filters';
 
 describe('heatmapYearRange', () => {
   const now = new Date(2026, 9, 14);
@@ -239,5 +239,49 @@ describe('gameInstanceKey', () => {
     expect(gameInstanceKey({ activityDetails: { instanceId: 5 } }, 'D1')).toBe('D1|5');
     expect(gameInstanceKey({ activityDetails: { instanceId: 5 } })).toBe('D2|5');
     expect(gameInstanceKey({})).toBe('');
+  });
+});
+
+describe('heatmap reload guard', () => {
+  const rows = [xboxTitan, steamHunter];
+
+  it('treats a new array with the same ids as unchanged', () => {
+    expect(sameMembershipIds(['a', 'b'], ['a', 'b'])).toBe(true);
+    expect(sameMembershipIds(['a', 'b'], ['b', 'a'])).toBe(false);
+    expect(sameMembershipIds(['a'], ['a', 'b'])).toBe(false);
+  });
+
+  it('marks the same platform, character, and year options as heatmapHasActivity', () => {
+    const platforms = heatmapOptionPresence(rows, { year: 2021 });
+    const characters = heatmapOptionPresence(rows, { membershipType: 1, year: 2021 });
+    const years = heatmapOptionPresence(rows, { membershipType: 1, characterKey: characterKey(xboxTitan) });
+    expect(platforms.platforms.has(1)).toBe(heatmapHasActivity(rows, { membershipType: 1, year: 2021 }));
+    expect(platforms.platforms.has(3)).toBe(heatmapHasActivity(rows, { membershipType: 3, year: 2021 }));
+    expect(characters.characters.has(characterKey(steamHunter))).toBe(
+      heatmapHasActivity(rows, { membershipType: 1, characterKey: characterKey(steamHunter), year: 2021 })
+    );
+    expect(years.years.has(2021)).toBe(heatmapHasActivity(rows, { membershipType: 1, characterKey: characterKey(xboxTitan), year: 2021 }));
+    expect(years.years.has(2014)).toBe(heatmapHasActivity(rows, { membershipType: 1, characterKey: characterKey(xboxTitan), year: 2014 }));
+  });
+
+  it('does not copy a row that already has its class and platform', () => {
+    const extra = { ...xboxTitan, extraField: 'keep-off-the-copy' };
+    const same = projectHeatmapRow(extra, {}, new Map());
+    expect(same).toBe(extra);
+    const bare = {
+      period: '2021-05-11T12:00:00Z',
+      membershipId: '111',
+      characterId: 'char-titan',
+      game: 'D2' as const,
+      values: xboxTitan.values,
+      extraField: 'stored-only'
+    };
+    const projected = projectHeatmapRow(bare, {
+      [characterKey(bare)]: { className: 'Titan', membershipType: 1 }
+    }, new Map());
+    expect(projected).not.toBe(bare);
+    expect(projected.membershipType).toBe(1);
+    expect(projected.characterClass).toBe('Titan');
+    expect((projected as { extraField?: string }).extraField).toBeUndefined();
   });
 });
