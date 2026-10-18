@@ -61,6 +61,11 @@
                   class="px-4 py-2 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm">
             {{ isExporting ? 'Exporting...' : 'Export PNG (2×)' }}
           </button>
+          <button type="button"
+                  (click)="rearrangeSeals = !rearrangeSeals"
+                  class="px-4 py-2 destiny-btn-secondary text-sm">
+            {{ rearrangeSeals ? 'Done rearranging' : 'Rearrange' }}
+          </button>
           <button (click)="resetManualOrder()"
                   class="px-4 py-2 destiny-btn-secondary text-sm">
             Reset Manual Order
@@ -80,13 +85,13 @@
         <span *ngIf="hiddenCount > 0"> · {{ hiddenCount }} hidden</span>
         <span *ngIf="viewMode === 'browse'"> · unearned seals are faded · platform icons shown</span>
         <span *ngIf="viewMode === 'poster'"> · poster presentation · full-color seals, no platform icons</span>
-        <span *ngIf="sortType !== 'category'"> · drag a seal onto a slot to place it</span>
+        <span *ngIf="sortType !== 'category' && rearrangeSeals"> · drag a seal onto a slot to place it</span>
         <span *ngIf="displaySeals.length === 0"> — adjust filters or restore hidden seals</span>
       </span>
     </div>
   </div>
 
-  <div class="poster-container">
+  <div class="poster-container" (click)="onPosterClick($event)">
     <div #posterCanvas
          class="poster-canvas canvas-grid"
          [ngClass]="{'is-exporting': isExporting, 'is-poster': isPosterView}">
@@ -108,7 +113,7 @@
         </div>
       </div>
 
-      <div *ngIf="sortType !== 'category'"
+      <div *ngIf="sortType !== 'category' && rearrangeSeals"
            class="seals-flat"
            cdkDropList
            cdkDropListOrientation="mixed"
@@ -120,6 +125,13 @@
              cdkDrag
              [cdkDragData]="seal">
           <ng-container *ngTemplateOutlet="sealCardInner; context: {$implicit: seal, draggable: true}"></ng-container>
+        </div>
+      </div>
+      <div *ngIf="sortType !== 'category' && !rearrangeSeals" class="seals-flat">
+        <div *ngFor="let seal of displaySeals; trackBy: trackByHash"
+             class="seal-card"
+             [ngClass]="{'seal-card-unearned': !seal.completed && !isPosterView}">
+          <ng-container *ngTemplateOutlet="sealCardInner; context: {$implicit: seal, draggable: false}"></ng-container>
         </div>
       </div>
 
@@ -139,8 +151,7 @@
   <button *ngIf="!isExporting"
           type="button"
           class="seal-hide browse-only"
-          (click)="hideSeal(seal, $event)"
-          (pointerdown)="draggable ? $event.stopPropagation() : null"
+          [attr.data-seal-hash]="seal.hash"
           [attr.aria-label]="'Hide ' + seal.name">
     ×
   </button>

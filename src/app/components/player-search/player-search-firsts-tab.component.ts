@@ -1,11 +1,36 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Directive, ElementRef, HostListener, inject, Input, OnChanges, OnDestroy } from '@angular/core';
 import { PlayerSearchComponent } from './player-search.component';
 import { TextViewService } from '../../services/text-view.service';
 import { ActivityFirstCompletion } from '../../models/guardian-firsts.model';
 import { completedClearRows, firstTags, pageSections, yearsAgoLabel } from '../../utils/text-tab-rows';
+
+const firstsClicks = new WeakMap<HTMLElement, { kind: string; payload: unknown; flag?: boolean }>();
+
+@Directive({
+  selector: '[dcKind]',
+  standalone: true,
+})
+export class FirstsClickDirective implements OnChanges, OnDestroy {
+  @Input() dcKind = '';
+  @Input() dcPayload: unknown;
+  @Input() dcFlag = false;
+  private readonly el: HTMLElement;
+
+  constructor(element: ElementRef<HTMLElement>) {
+    this.el = element.nativeElement;
+  }
+
+  ngOnChanges(): void {
+    firstsClicks.set(this.el, { kind: this.dcKind, payload: this.dcPayload, flag: this.dcFlag });
+  }
+
+  ngOnDestroy(): void {
+    firstsClicks.delete(this.el);
+  }
+}
 
 interface TextFirstRow {
   name: string;
@@ -20,7 +45,7 @@ interface TextFirstRow {
 @Component({
   selector: 'app-player-search-firsts-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule, AccountCardGridComponent],
+  imports: [CommonModule, FormsModule, AccountCardGridComponent, FirstsClickDirective],
   templateUrl: './player-search-firsts-tab.component.html',
   styleUrls: ['./player-search-tab-shared.scss'],
   changeDetection: ChangeDetectionStrategy.Default,
@@ -30,6 +55,36 @@ export class PlayerSearchFirstsTabComponent {
   readonly text = inject(TextViewService);
   readonly pageSize = 40;
   textPages = 1;
+
+  @HostListener('click', ['$event'])
+  onDelegatedClick(event: MouseEvent): void {
+    const el = (event.target as HTMLElement | null)?.closest?.('[dcKind]') as HTMLElement | null;
+    const hit = el ? firstsClicks.get(el) : undefined;
+    if (!hit) return;
+    if (hit.kind === 'show-more') {
+      this.showMoreTextRows();
+      return;
+    }
+    if (hit.kind === 'game') {
+      this.ps.setActiveFirstsGame(hit.payload as 'D1' | 'D2');
+      return;
+    }
+    if (hit.kind === 'text-first') {
+      this.openFirst(hit.payload as TextFirstRow, event);
+      return;
+    }
+    if (hit.kind === 'pgcr-first') {
+      this.ps.openExternalPGCRForFirst(hit.payload as ActivityFirstCompletion, event);
+      return;
+    }
+    if (hit.kind === 'pgcr-stored') {
+      this.ps.openExternalPGCRFromStored(hit.payload as any, event);
+      return;
+    }
+    if (hit.kind === 'pgcr') {
+      this.ps.openExternalPGCR(hit.payload as any, !!hit.flag, event);
+    }
+  }
 
   showMoreTextRows(): void {
     this.textPages += 1;

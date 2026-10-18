@@ -67,6 +67,7 @@ import { excludeExistingInstances } from '../../utils/activity-dedupe';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
+import { BreakdownGroup, BreakdownView, breakdownRowFromEvent, breakdownRowKey, cardLabelFromEvent } from '../../utils/breakdown-view';
 import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
 import { gameInstanceKey } from '../../utils/heatmap-filters';
@@ -635,9 +636,6 @@ interface PlatformStats {
         style({ opacity: 0, transform: 'translateY(8px)' }),
         animate('250ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
       ]),
-      transition(':leave', [
-        animate('150ms ease-in', style({ opacity: 0, transform: 'translateY(-4px)' }))
-      ])
     ])
   ]
 })
@@ -8841,21 +8839,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     });
   }
 
-  private sortBreakdownRows(rows: ActivityCountRow[]): ActivityCountRow[] {
-    if (!this.breakdownLastPlayedSort) {
-      return rows;
-    }
-    const dir = this.breakdownLastPlayedSort === 'asc' ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      const ta = a.lastPlayed ? new Date(a.lastPlayed).getTime() : 0;
-      const tb = b.lastPlayed ? new Date(b.lastPlayed).getTime() : 0;
-      if (ta === tb) return 0;
-      if (!ta) return 1;
-      if (!tb) return -1;
-      return (ta - tb) * dir;
-    });
-  }
-
   private formatDateSolo(dateStr: string | Date | undefined): string {
     if (typeof dateStr === 'string') {
       return this.formatDate(dateStr);
@@ -9650,19 +9633,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.selectedBreakdownCardLabels.has(label);
   }
 
+  readonly breakdownView = new BreakdownView();
+
   /** Filtered groups for display: when cards are selected, only those; otherwise all */
-  get filteredActivityBreakdownGroups(): { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] {
-    if (!this.activityBreakdownGroups?.length) return [];
-    const base = this.selectedBreakdownCardLabels.size === 0
-      ? this.activityBreakdownGroups
-      : this.activityBreakdownGroups.filter(g => this.selectedBreakdownCardLabels.has(g.label));
-    if (!this.breakdownLastPlayedSort) {
-      return base;
-    }
-    return base.map(g => ({
-      ...g,
-      rows: this.sortBreakdownRows(g.rows)
-    }));
+  get filteredActivityBreakdownGroups(): BreakdownGroup[] {
+    this.breakdownView.sync(
+      this.activityBreakdownGroups || [],
+      this.selectedBreakdownCardLabels,
+      this.breakdownLastPlayedSort
+    );
+    return this.breakdownView.groups;
   }
 
   /** Unique platform names across selected players for Breakdown tab (All vs per-account). */
@@ -9809,20 +9789,77 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /** Summary cards for Activity Breakdown: aggregated stats per category */
-  get activityBreakdownSummaryCards(): { label: string; runs: number; clears: number; timeSeconds: number; clearRate: number }[] {
-    if (!this.activityBreakdownGroups?.length) return [];
-    return this.activityBreakdownGroups.map(g => {
-      const runs = g.rows.reduce((s, r) => s + (r.runs ?? 0), 0);
-      const clears = g.rows.reduce((s, r) => s + (r.clears ?? 0), 0);
-      const timeSeconds = g.rows.reduce((s, r) => s + (r.timeSeconds ?? 0), 0);
-      return {
-        label: g.label,
-        runs,
-        clears,
-        timeSeconds,
-        clearRate: runs > 0 ? (clears / runs) * 100 : 0,
-      };
-    });
+  get activityBreakdownSummaryCards() {
+    this.breakdownView.sync(
+      this.activityBreakdownGroups || [],
+      this.selectedBreakdownCardLabels,
+      this.breakdownLastPlayedSort
+    );
+    return this.breakdownView.cards;
+  }
+
+  toggleBreakdownGroup(group: BreakdownGroup): void {
+    this.breakdownView.toggle(group);
+    this.cdr.markForCheck();
+  }
+
+  showMoreBreakdownRows(group: BreakdownGroup): void {
+    this.breakdownView.showMore(group);
+    this.cdr.markForCheck();
+  }
+
+  expandAllBreakdownGroups(): void {
+    this.filteredActivityBreakdownGroups;
+    this.breakdownView.expandAll();
+    this.cdr.markForCheck();
+  }
+
+  visibleBreakdownRows(group: BreakdownGroup): ActivityCountRow[] {
+    return this.breakdownView.visibleRows(group);
+  }
+
+  breakdownGroupTotals(group: BreakdownGroup): { runs: number; clears: number; timeSeconds: number } {
+    let runs = 0;
+    let clears = 0;
+    let timeSeconds = 0;
+    for (const row of group.rows) {
+      runs += row.runs ?? 0;
+      clears += row.clears ?? 0;
+      timeSeconds += row.timeSeconds ?? 0;
+    }
+    return { runs, clears, timeSeconds };
+  }
+
+  onBreakdownTilesClick(event: Event): void {
+    const label = cardLabelFromEvent(event);
+    if (!label) return;
+    this.toggleBreakdownCardSelection(label);
+  }
+
+  onBreakdownTilesKey(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const label = cardLabelFromEvent(event);
+    if (!label) return;
+    event.preventDefault();
+    this.toggleBreakdownCardSelection(label);
+  }
+
+  onBreakdownRowsClick(group: BreakdownGroup, event: MouseEvent): void {
+    const row = breakdownRowFromEvent(event, group.rows);
+    if (!row) return;
+    this.openBreakdownPgcr(row, event);
+  }
+
+  trackBreakdownGroup(_index: number, group: BreakdownGroup): string {
+    return `${group.game || ''}|${group.label}`;
+  }
+
+  trackBreakdownRow(_index: number, row: ActivityCountRow): string {
+    return breakdownRowKey(row);
+  }
+
+  trackBreakdownCard(_index: number, card: { label: string }): string {
+    return card.label;
   }
   /**
    * Groups activities by their version (Normal, Master, Explorer, etc.)
