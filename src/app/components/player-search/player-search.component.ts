@@ -4459,8 +4459,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           // W31: Bungie returns newest-first. Keep rows above the complete-below
           // line (10B). Archive rows already stored cover that line and below.
           // W56: D1 archive is the fast list. Bungie keeps going while a page
-          // still has new games or zero-stat stubs. A page that is already
-          // fully stat-filled is the handoff: older pages are already stored.
+          // still has new games or rows with no duration. Kills alone are not
+          // a filled page: 2014 index rows can have kills and still need time.
+          // A page whose stored rows already have duration is the handoff.
           if (character.game === 'D1' && d1ArchiveFilled) {
             if (d1BungiePageCaughtUp(storedActivities, dbActivities)) {
               hasMore = false;

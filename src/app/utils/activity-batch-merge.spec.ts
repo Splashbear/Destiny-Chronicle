@@ -62,6 +62,22 @@ describe('activity batch merge', () => {
     expect(planActivityWrites([kept], [stub])).toEqual([]);
   });
 
+  it('replaces a kills-only row when the live row has duration', () => {
+    const killsOnly = {
+      ...real('D1', '999602761', '2014-12-09T09:33:44Z', 8),
+      values: { kills: { basic: { value: 71 } }, timePlayedSeconds: { basic: { value: 0 } } }
+    };
+    const live = {
+      ...real('D1', '999602761', '2014-12-09T09:33:44Z'),
+      values: { kills: { basic: { value: 71 } }, timePlayedSeconds: { basic: { value: 752 } } }
+    };
+    const writes = planActivityWrites([killsOnly], [live]);
+    expect(writes.length).toBe(1);
+    expect(writes[0].id).toBe(8);
+    expect(writes[0].values?.timePlayedSeconds?.basic?.value).toBe(752);
+    expect(writes[0].values?.kills?.basic?.value).toBe(71);
+  });
+
   it('keeps D1 and D2 rows that share an instance id', () => {
     const writes = planActivityWrites([], [real('D1', '10'), real('D2', '10')]);
     expect(writes.map(row => row.game)).toEqual(['D1', 'D2']);

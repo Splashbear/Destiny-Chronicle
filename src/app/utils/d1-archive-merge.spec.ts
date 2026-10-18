@@ -84,13 +84,28 @@ describe('D1 archive merge', () => {
     expect(replacements[0].values?.timePlayedSeconds?.basic?.value).toBe(480);
   });
 
-  it('keeps paging when a Bungie page is only archive stubs, and stops when the page already has stats', () => {
+  it('replaces a kills-only archive row with the live duration and keeps the id', () => {
+    const stub = row('D1', '999602761', '2014-12-09T09:33:44Z', 0, 8, 1, 71);
+    const live = row('D1', '999602761', '2014-12-09T09:33:44Z', 752, undefined, 1, 71);
+    const { fresh, replacements } = partitionD1AgainstStored([live], [stub]);
+    expect(fresh).toHaveSize(0);
+    expect(replacements).toHaveSize(1);
+    expect(replacements[0].id).toBe(8);
+    expect(replacements[0].values?.timePlayedSeconds?.basic?.value).toBe(752);
+    expect(replacements[0].values?.kills?.basic?.value).toBe(71);
+  });
+
+  it('keeps paging when a Bungie page is only archive stubs, and stops when the page already has duration', () => {
     const stub = row('D1', '1', '2016-01-01T00:00:00Z', 0, 1);
+    const killsOnly = row('D1', '999602761', '2014-12-09T09:33:44Z', 0, 4, undefined, 71);
     const rich = row('D1', '2', '2020-01-01T00:00:00Z', 600, 2);
     const liveStub = row('D1', '1', '2016-01-01T00:00:00Z', 300);
     const liveHole = row('D1', '3', '2015-12-01T00:00:00Z', 100);
+    const liveKillsOnly = row('D1', '999602761', '2014-12-09T09:33:44Z', 752, undefined, undefined, 71);
     expect(d1BungiePageCaughtUp([liveStub], [stub])).toBe(false);
     expect(d1RowsToIngest([liveStub, liveHole], [stub]).map(r => r.activityDetails?.instanceId)).toEqual(['1', '3']);
+    expect(d1BungiePageCaughtUp([killsOnly], [killsOnly])).toBe(false);
+    expect(d1RowsToIngest([liveKillsOnly], [killsOnly]).map(r => r.activityDetails?.instanceId)).toEqual(['999602761']);
     expect(d1BungiePageCaughtUp([rich], [rich])).toBe(true);
     expect(d1RowsToIngest([rich], [rich])).toEqual([]);
   });

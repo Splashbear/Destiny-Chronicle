@@ -1,11 +1,12 @@
-import { hasPlayStats, isZeroStatStub } from './activity-batch-merge';
+import { hasDuration, hasPlayStats, isZeroStatStub } from './activity-batch-merge';
 
 /**
  * W55/W56: D1 archive rows and live Bungie rows.
  * A game is keyed by game + instance id, so a D1 activity and a D2 activity
  * that share an instance id both stay. Within one game, one row remains.
- * An empty period, or a zero-stat archive stub, is replaced by the live row.
- * A row that already has kills or duration is left in place.
+ * An empty period, or a row with no duration, is replaced by the live row.
+ * Kills on the archive row do not count as filled in. A row that already has
+ * duration is left in place.
  * membershipType 0 and an empty period are valid archive rows, not drops.
  */
 
@@ -37,11 +38,12 @@ export function hasRealD1Period(row: D1MergeRow | null | undefined): boolean {
   return typeof row?.period === 'string' && row.period.length > 0 && !Number.isNaN(Date.parse(row.period));
 }
 
-/** Incoming wins when it fills an empty period or replaces a zero-stat stub. */
+/** Incoming wins when it fills an empty period or supplies a missing duration. */
 function preferFilled<T extends D1MergeRow>(current: T, incoming: T): T {
   const fillsPeriod = !hasRealD1Period(current) && hasRealD1Period(incoming);
-  const fillsStats = isZeroStatStub(current) && hasPlayStats(incoming);
-  if (fillsPeriod || fillsStats) {
+  const fillsDuration = !hasDuration(current) && hasDuration(incoming);
+  const fillsEmpty = isZeroStatStub(current) && hasPlayStats(incoming);
+  if (fillsPeriod || fillsDuration || fillsEmpty) {
     return current.id != null ? { ...incoming, id: current.id } : incoming;
   }
   return current;
@@ -60,8 +62,8 @@ function storedByKey(stored: D1MergeRow[]): Map<string, D1MergeRow> {
 
 /**
  * Bungie rows worth writing after the archive list is already on screen.
- * New games, and live stats for a zero-stat stub. Rows that already have
- * kills or duration are left alone.
+ * New games, and any live row that supplies duration the stored row lacks.
+ * Kills without duration still need the live row.
  */
 export function d1RowsToIngest<T extends D1MergeRow>(page: T[], stored: D1MergeRow[]): T[] {
   const byKey = storedByKey(stored);
@@ -73,15 +75,17 @@ export function d1RowsToIngest<T extends D1MergeRow>(page: T[], stored: D1MergeR
     if (!existing) {
       return true;
     }
+    if (!hasDuration(existing) && hasDuration(row)) {
+      return true;
+    }
     return isZeroStatStub(existing) && hasPlayStats(row);
   });
 }
 
 /**
- * Newest-first handoff. A whole page of rows that already have stats means
- * older pages were stored on an earlier pass, so Bungie can stop.
- * A page of archive stubs is not caught up: those still need live stats,
- * and older holes may sit on the next page.
+ * Newest-first handoff. Stop only when every row on the page is already
+ * stored with a duration. Kills alone are not enough: a 2014 index row can
+ * have kills and still be missing time, and older pages still need a request.
  */
 export function d1BungiePageCaughtUp(page: D1MergeRow[], stored: D1MergeRow[]): boolean {
   if (page.length === 0) {
@@ -93,7 +97,7 @@ export function d1BungiePageCaughtUp(page: D1MergeRow[], stored: D1MergeRow[]): 
       return true;
     }
     const existing = byKey.get(d1MergeKey(row));
-    return !!existing && !isZeroStatStub(existing);
+    return !!existing && hasDuration(existing);
   });
 }
 

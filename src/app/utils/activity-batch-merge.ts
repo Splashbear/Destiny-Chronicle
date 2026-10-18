@@ -26,14 +26,42 @@ function hasInstance(row: BatchActivity): boolean {
   return iid != null && iid !== '';
 }
 
-function statValue(value: number | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+function statValue(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : 0;
 }
 
-/** Kills or time played. A lite/index row with neither is a stub, even with a period. */
+/** Seconds from the fields Bungie history and the archive list both use. */
+export function playSeconds(row: BatchActivity | null | undefined): number {
+  const values = row?.values as {
+    timePlayedSeconds?: { basic?: { value?: unknown } } | number;
+    secondsPlayed?: { basic?: { value?: unknown } } | number;
+    activityDurationSeconds?: { basic?: { value?: unknown } } | number;
+  } | undefined;
+  if (!values) {
+    return 0;
+  }
+  const nested = (field: { basic?: { value?: unknown } } | number | undefined): number => {
+    if (typeof field === 'number' || typeof field === 'string') {
+      return statValue(field);
+    }
+    return statValue(field?.basic?.value);
+  };
+  const seconds = [
+    nested(values.timePlayedSeconds),
+    nested(values.secondsPlayed),
+    nested(values.activityDurationSeconds)
+  ].find(n => n > 0);
+  return seconds ?? 0;
+}
+
+export function hasDuration(row: BatchActivity | null | undefined): boolean {
+  return playSeconds(row) > 0;
+}
+
+/** Kills or time played. Kills alone do not mean the row is filled in. */
 export function hasPlayStats(row: BatchActivity | null | undefined): boolean {
-  return statValue(row?.values?.timePlayedSeconds?.basic?.value) > 0
-    || statValue(row?.values?.kills?.basic?.value) > 0;
+  return hasDuration(row) || statValue(row?.values?.kills?.basic?.value) > 0;
 }
 
 export function isZeroStatStub(row: BatchActivity | null | undefined): boolean {
@@ -41,13 +69,15 @@ export function isZeroStatStub(row: BatchActivity | null | undefined): boolean {
 }
 
 /**
- * Empty period yields to a real period. A zero-stat stub yields to kills or duration.
- * A row that already has stats is left in place, so a stub cannot overwrite it.
+ * Empty period yields to a real period. Missing duration yields to a live row
+ * that has duration, even when the stored row already has kills. A row that
+ * already has duration is left in place.
  */
 function preferReal<T extends BatchActivity>(current: T, incoming: T): T {
   const fillsPeriod = !hasRealPeriod(current) && hasRealPeriod(incoming);
-  const fillsStats = isZeroStatStub(current) && hasPlayStats(incoming);
-  if (fillsPeriod || fillsStats) {
+  const fillsDuration = !hasDuration(current) && hasDuration(incoming);
+  const fillsEmpty = isZeroStatStub(current) && hasPlayStats(incoming);
+  if (fillsPeriod || fillsDuration || fillsEmpty) {
     return current.id != null ? { ...incoming, id: current.id } : incoming;
   }
   return current;
