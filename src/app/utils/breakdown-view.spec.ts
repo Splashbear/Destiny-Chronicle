@@ -67,6 +67,19 @@ describe('breakdown view', () => {
     expect(view.visibleRows(source[0]).length).toBe(60);
   });
 
+  it('keeps the open groups when a later count replaces the list', () => {
+    const view = new BreakdownView();
+    const source = groups();
+    view.sync(source, new Set(), null);
+    view.toggle(source[1]);
+    const next = groups();
+    next[0] = { ...next[0], rows: [...next[0].rows, row('Raid extra', '2020-02-01T00:00:00Z', 'extra')] };
+    view.sync(next, new Set(), null, true);
+    expect(view.isExpanded(next[1])).toBe(true);
+    expect(view.visibleRows(next[0]).length).toBe(BREAKDOWN_PAGE_SIZE);
+    expect(view.cards[0].runs).toBe(122);
+  });
+
   it('opens the selected card group and keeps the other groups closed', () => {
     const view = new BreakdownView();
     const source = groups();

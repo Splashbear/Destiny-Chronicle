@@ -73,7 +73,7 @@ export class BreakdownView {
   private shown = new Map<string, number>();
   private visibleCache = new Map<string, ActivityCountRow[]>();
 
-  sync(groups: BreakdownGroup[], selected: Set<string>, sort: 'asc' | 'desc' | null): void {
+  sync(groups: BreakdownGroup[], selected: Set<string>, sort: 'asc' | 'desc' | null, retainExpansion = false): void {
     const selectionKey = Array.from(selected).sort().join('\n');
     if (groups === this.source && selectionKey === this.selectionKey && sort === this.sort) {
       return;
@@ -91,10 +91,9 @@ export class BreakdownView {
         : groups.filter(group => selected.has(group.label));
     this.groups = !sort ? base : base.map(group => ({ ...group, rows: sortRows(group.rows, sort) }));
     this.visibleCache.clear();
-    if (sourceChanged || selectionChanged) {
+    if ((sourceChanged || selectionChanged) && !retainExpansion) {
       this.expanded = new Set();
       this.shown.clear();
-      this.visibleCache.clear();
       const initial = selected.size > 0 ? this.groups : this.groups.slice(0, 1);
       for (const group of initial) {
         this.expanded.add(breakdownGroupKey(group));

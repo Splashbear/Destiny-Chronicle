@@ -396,27 +396,27 @@
         </div>
 
         <!-- Activities Tab -->
-        <div *ngIf="activeTab === 'activities'" @tabContent>
+        <div *ngIf="activeTab === 'activities'">
           <app-player-search-activities-tab></app-player-search-activities-tab>
         </div>
 
         <!-- Activity breakdown tab -->
-        <div *ngIf="activeTab === 'breakdown'" @tabContent>
+        <div *ngIf="activeTab === 'breakdown'">
           <app-player-search-breakdown-tab></app-player-search-breakdown-tab>
         </div>
 
         <!-- Guardian Firsts Tab -->
-        <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0" @tabContent>
+        <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0">
           <app-player-search-firsts-tab></app-player-search-firsts-tab>
         </div>
 
         <!-- Titles Tab -->
-        <div *ngIf="activeTab === 'titles'" @tabContent>
+        <div *ngIf="activeTab === 'titles'">
           <app-player-search-titles-tab></app-player-search-titles-tab>
         </div>
 
         <!-- Heatmap Tab -->
-        <div *ngIf="activeTab === 'heatmap'" @tabContent>
+        <div *ngIf="activeTab === 'heatmap'">
           <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
           <app-activity-heatmap
             [membershipIds]="heatmapMembershipIds"
@@ -425,7 +425,7 @@
         </div>
 
         <!-- Played With Tab -->
-        <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0" @tabContent>
+        <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0">
           <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
           <app-played-with [membershipIds]="heatmapMembershipIds"></app-played-with>
         </div>
