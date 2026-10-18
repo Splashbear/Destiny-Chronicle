@@ -1,5 +1,61 @@
 import { activityBatchKey, BatchActivity, hasRealPeriod, planActivityWrites } from './activity-batch-merge';
 
+/** Empty-period rows to delete when a real row with the same key is already stored. */
+export function placeholderIdsToDrop(rows: BatchActivity[]): number[] {
+  const best = new Map<string, BatchActivity>();
+  const drop: number[] = [];
+  for (const row of rows) {
+    const iid = row.activityDetails?.instanceId;
+    if (row.id == null || iid == null || iid === '') {
+      continue;
+    }
+    const key = activityBatchKey(row);
+    const prior = best.get(key);
+    if (!prior) {
+      best.set(key, row);
+      continue;
+    }
+    if (!hasRealPeriod(prior) && hasRealPeriod(row)) {
+      drop.push(prior.id as number);
+      best.set(key, row);
+      continue;
+    }
+    if (!hasRealPeriod(row)) {
+      drop.push(row.id);
+    }
+  }
+  return drop;
+}
+
+/**
+ * Give inserted rows the id they will have in IndexedDB, and overwrite a placeholder in place.
+ * Returns the rows to remember, including ids.
+ */
+export function persistPlannedRows<T extends BatchActivity>(
+  table: T[],
+  planned: T[],
+  nextId: () => number
+): T[] {
+  const stored: T[] = [];
+  for (const row of planned) {
+    if (row.id != null) {
+      const at = table.findIndex(existing => existing.id === row.id);
+      const saved = { ...row } as T;
+      if (at >= 0) {
+        table[at] = saved;
+      } else {
+        table.push(saved);
+      }
+      stored.push(saved);
+      continue;
+    }
+    const saved = { ...row, id: nextId() } as T;
+    table.push(saved);
+    stored.push(saved);
+  }
+  return stored;
+}
+
 /**
  * Existing-row keys for one account, loaded once and updated after each write.
  * Later batches do not read IndexedDB again.

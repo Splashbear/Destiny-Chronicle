@@ -19,7 +19,7 @@ import { Activity } from '../models/activity.model';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 import { environment } from '../../environments/environment';
-import { AccountWriteIndex } from '../utils/account-write-index';
+import { AccountWriteIndex, placeholderIdsToDrop } from '../utils/account-write-index';
 import { matchesCalendarDay, scanYears, utcDayWindow } from '../utils/calendar-day-query';
 import { noteIdbRead } from '../utils/idb-read-log';
 import { MembershipRowCache } from '../utils/membership-row-cache';
@@ -78,6 +78,7 @@ interface PgcrLite {
 }
 
 export interface StoredActivity extends ActivityHistory {
+  id?: number;
   membershipId: string;
   characterId: string;
   // period is already in ActivityHistory
@@ -124,6 +125,9 @@ export class ActivityDbService extends Dexie {
   private utcDayCache = new Map<string, StoredActivity[]>();
   private readonly accountWriteIndex = new AccountWriteIndex();
   private readonly activityIdentityCache = new MembershipRowCache<Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }>>();
+  /** Full rows for an account, filled by the first read and updated after writes. */
+  private readonly accountRows = new MembershipRowCache<StoredActivity[]>();
+  private readonly accountReadLocks = new Map<string, Promise<StoredActivity[]>>();
   private filteredActivitiesCache: LRUCache<StoredActivity[]> = { maxSize: 100, data: new Map() };
   private firstEverActivities: LRUCache<ActivityFirstCompletion> = { maxSize: 50, data: new Map() };
   private guardianFirstsCache: LRUCache<ActivityFirstCompletion[]> = { maxSize: 100, data: new Map() };
@@ -540,23 +544,83 @@ export class ActivityDbService extends Dexie {
     try {
       const membershipIds = [...new Set(activities.map(activity => activity.membershipId).filter(Boolean))];
       for (const membershipId of membershipIds) {
-        if (this.accountWriteIndex.has(membershipId)) {
-          continue;
-        }
-        const existing = await this.activities.where('membershipId').equals(membershipId).toArray();
-        noteIdbRead('addActivities', existing.length);
-        this.accountWriteIndex.load(membershipId, existing);
+        await this.readAccountRows(membershipId);
       }
       const uniqueActivities = this.accountWriteIndex.plan(membershipIds, activities) as StoredActivity[];
       if (uniqueActivities.length === 0) {
         return;
       }
-      await this.transaction('rw', this.activities, () => this.activities.bulkPut(uniqueActivities));
+      await this.transaction('rw', this.activities, async () => {
+        for (const row of uniqueActivities) {
+          if (row.id != null) {
+            await this.activities.put(row);
+          } else {
+            row.id = await this.activities.add(row) as number;
+          }
+        }
+      });
       this.accountWriteIndex.commit(uniqueActivities);
-      this.invalidateActivityReads(membershipIds);
+      this.rememberAccountRows(uniqueActivities);
+      this.utcDayCache.clear();
+      for (const membershipId of membershipIds) {
+        this.activityIdentityCache.invalidate(membershipId);
+      }
     } catch (error) {
       console.error('[Dexie] Error adding activities:', error);
       throw error;
+    }
+  }
+
+  /** One membership read, shared by later character and Played With calls. Drops empty-period duplicates. */
+  private async readAccountRows(membershipId: string): Promise<StoredActivity[]> {
+    if (!membershipId) {
+      return [];
+    }
+    if (this.accountRows.has(membershipId)) {
+      return this.accountRows.get(membershipId) || [];
+    }
+    const pending = this.accountReadLocks.get(membershipId);
+    if (pending) {
+      return pending;
+    }
+    const loading = this.loadAccountRows(membershipId);
+    this.accountReadLocks.set(membershipId, loading);
+    try {
+      return await loading;
+    } finally {
+      this.accountReadLocks.delete(membershipId);
+    }
+  }
+
+  private async loadAccountRows(membershipId: string): Promise<StoredActivity[]> {
+    const rows = await this.activities.where('membershipId').equals(membershipId).toArray();
+    noteIdbRead('accountRows', rows.length);
+    const drop = placeholderIdsToDrop(rows);
+    let kept = rows;
+    if (drop.length > 0) {
+      await this.activities.bulkDelete(drop);
+      const dropSet = new Set(drop);
+      kept = rows.filter(row => row.id == null || !dropSet.has(row.id as number));
+    }
+    this.accountRows.set(membershipId, kept);
+    if (!this.accountWriteIndex.has(membershipId)) {
+      this.accountWriteIndex.load(membershipId, kept);
+    }
+    return kept;
+  }
+
+  private rememberAccountRows(rows: StoredActivity[]): void {
+    for (const row of rows) {
+      if (!row.membershipId || !this.accountRows.has(row.membershipId)) {
+        continue;
+      }
+      const list = this.accountRows.get(row.membershipId) || [];
+      const at = row.id == null ? -1 : list.findIndex(existing => existing.id === row.id);
+      if (at >= 0) {
+        list[at] = row;
+      } else {
+        list.push(row);
+      }
     }
   }
 
@@ -565,11 +629,14 @@ export class ActivityDbService extends Dexie {
     if (!membershipIds) {
       this.accountWriteIndex.drop();
       this.activityIdentityCache.invalidate();
+      this.accountRows.invalidate();
       this.activitiesCache.data.clear();
       return;
     }
     for (const membershipId of membershipIds) {
+      this.accountWriteIndex.drop(membershipId);
       this.activityIdentityCache.invalidate(membershipId);
+      this.accountRows.invalidate(membershipId);
       this.activitiesCache.data.delete(`${membershipId}_all`);
     }
   }
@@ -717,9 +784,8 @@ export class ActivityDbService extends Dexie {
   async getAllActivitiesForCharacter(membershipId: string, characterId: string): Promise<StoredActivity[]> {
     await this.initPromise;
     try {
-      // console.log(`[Dexie] Getting all activities for ${membershipId}/${characterId}`);
-      const activities = await this.activities.where({ membershipId, characterId }).toArray();
-      return activities;
+      const rows = await this.readAccountRows(membershipId);
+      return rows.filter(row => row.characterId === characterId);
     } catch (error) {
       console.error('[Dexie] Error getting all activities:', error);
       throw error;
@@ -738,9 +804,7 @@ export class ActivityDbService extends Dexie {
     await this.initPromise;
     try {
       // Use a more efficient query that only gets the period field
-      const activities = await this.activities
-        .where({ membershipId, characterId })
-        .toArray();
+      const activities = await this.getAllActivitiesForCharacter(membershipId, characterId);
       
       const yearsWithCounts: { [year: number]: number } = {};
       let totalCount = 0;
@@ -862,10 +926,7 @@ export class ActivityDbService extends Dexie {
 
     try {
       // Query database if not in memory cache
-      const activities = await this.activities
-        .where('membershipId')
-        .equals(membershipId)
-        .toArray();
+      const activities = [...await this.readAccountRows(membershipId)];
       
       // Sort by period (most recent first) for consistent ordering
       const sortedActivities = activities.sort((a, b) => 
@@ -894,11 +955,21 @@ export class ActivityDbService extends Dexie {
     membershipId: string
   ): Promise<Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }>> {
     await this.initPromise;
+    if (this.accountRows.has(membershipId)) {
+      const cached = this.identitiesFrom(this.accountRows.get(membershipId) || []);
+      this.activityIdentityCache.set(membershipId, cached);
+      return cached;
+    }
     if (this.activityIdentityCache.has(membershipId)) {
       return this.activityIdentityCache.get(membershipId) || [];
     }
-    const rows = await this.activities.where('membershipId').equals(membershipId).toArray();
-    noteIdbRead('playedWith.membership', rows.length);
+    const rows = await this.readAccountRows(membershipId);
+    const slim = this.identitiesFrom(rows);
+    this.activityIdentityCache.set(membershipId, slim);
+    return slim;
+  }
+
+  private identitiesFrom(rows: StoredActivity[]): Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }> {
     const slim: Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }> = [];
     for (const row of rows) {
       const instanceId = ActivityDbService.resolveStoredActivityInstanceId(row);
@@ -907,7 +978,6 @@ export class ActivityDbService extends Dexie {
       }
       slim.push({ instanceId, period: row.period || '', game: row.game });
     }
-    this.activityIdentityCache.set(membershipId, slim);
     return slim;
   }
 
@@ -1507,7 +1577,7 @@ export class ActivityDbService extends Dexie {
     const traceFirsts = environment.traceGuardianFirsts;
     // Same query as getAllActivitiesForCharacter — compound [membershipId,characterId] index is not declared;
     // object form uses membershipId + characterId indexes (Dexie 4).
-    const activities = await this.activities.where({ membershipId, characterId }).toArray();
+    const activities = (await this.readAccountRows(membershipId)).filter(row => row.characterId === characterId);
     const gameResolved = this.resolveFirstCompletionsGameParam(game, activities);
     // Align with getActivitiesByGame / UI: ignore stray rows tagged with the other game.
     const activitiesScoped = activities.filter(
@@ -1830,7 +1900,7 @@ export class ActivityDbService extends Dexie {
     game: 'D1' | 'D2'
   ): Promise<ActivityFirstCompletion[]> {
     await this.initPromise;
-    const allForMember = await this.activities.where('membershipId').equals(membershipId).toArray();
+    const allForMember = await this.readAccountRows(membershipId);
     const scoped = allForMember.filter((a) => !(a as any).game || (a as any).game === game);
     const storyInput =
       game === 'D1'
@@ -2110,9 +2180,7 @@ export class ActivityDbService extends Dexie {
       }
 
       // Filter out activities we already have by instanceId (allows backfilling older pages)
-      const existingForCharacter = await this.activities
-        .where({ membershipId, characterId })
-        .toArray();
+      const existingForCharacter = await this.getAllActivitiesForCharacter(membershipId, characterId);
       const existingInstanceIds = new Set(
         existingForCharacter
           .map(a => a.activityDetails?.instanceId)
