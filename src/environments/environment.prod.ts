@@ -35,10 +35,10 @@ export const environment = {
    */
   archiveBungieDeltaFill: true,
   /**
-   * W55: D1 archive read. Off on the live site. Turn on only for a test build.
-   * D2 archive behavior is unchanged.
+   * W55: D1 account load reads older history from the archive, then still fills
+   * from live Bungie. On for the live site. D2 archive behavior is unchanged.
    */
-  enableD1Archive: false,
+  enableD1Archive: true,
   /** Played With tab + archive summary API (queued builds for cold accounts). */
   enablePlayedWith: true,
   offlineMode: false,
