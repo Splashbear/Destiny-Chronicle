@@ -34,6 +34,11 @@ export const environment = {
    * D1 still full-crawls. Off only if this flag is set false.
    */
   archiveBungieDeltaFill: true,
+  /**
+   * W55: D1 archive read. Off on the live site. Turn on only for a test build.
+   * D2 archive behavior is unchanged.
+   */
+  enableD1Archive: false,
   /** Played With tab + archive summary API (queued builds for cold accounts). */
   enablePlayedWith: true,
   offlineMode: false,

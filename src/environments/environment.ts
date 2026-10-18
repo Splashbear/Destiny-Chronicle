@@ -37,6 +37,12 @@ export const environment = {
    */
   archiveBungieDeltaFill: true,
   /**
+   * W55: D1 account load reads older history from the archive API, then still
+   * full-crawls live Bungie. Off by default. D1 coverage is never treated as
+   * complete. D2 is unchanged.
+   */
+  enableD1Archive: false,
+  /**
    * W19: Played With UI / API client. Keep OFF at launch until W18 index is
    * validated and wired. Component is not routed; this guards future entry points.
    */

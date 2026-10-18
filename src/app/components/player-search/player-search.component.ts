@@ -8,7 +8,7 @@ import { firstValueFrom } from 'rxjs';
 import { DestinyManifestService } from '../../services/destiny-manifest.service';
 import { ActivityCacheService } from '../../services/activity-cache.service';
 import { PGCRCacheService } from '../../services/pgcr-cache.service';
-import { PgcrApiService, PlayerActivitiesCoverage } from '../../services/pgcr-api.service';
+import { PgcrApiService, PlayerActivitiesCoverage, PlayerActivitiesResponse } from '../../services/pgcr-api.service';
 import { TextViewService } from '../../services/text-view.service';
 import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { environment } from '../../../environments/environment';
@@ -71,6 +71,7 @@ import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
 import { gameInstanceKey } from '../../utils/heatmap-filters';
 import { partitionAgainstStored } from '../../utils/archive-stub-merge';
+import { partitionD1AgainstStored } from '../../utils/d1-archive-merge';
 import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '../../utils/pgcr-prune';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
@@ -4096,6 +4097,61 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
+  /** Archive read must not hang a D1 load. Past this, the Bungie-only path runs. */
+  private readonly d1ArchiveTimeoutMs = 20000;
+
+  private fetchD1ArchiveActivities(membershipId: string): Promise<PlayerActivitiesResponse | null> {
+    const request = this.pgcrApiService.fetchPlayerActivities(membershipId, {
+      game: 'D1',
+      limit: 100000
+    });
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('D1 archive timeout')), this.d1ArchiveTimeoutMs);
+      request.then(
+        value => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        err => {
+          clearTimeout(timer);
+          reject(err);
+        }
+      );
+    });
+  }
+
+  /**
+   * Archive rows for this character. Empty periods and membershipType 0 stay.
+   * Game is forced to D1 so a shared instance id cannot collapse into a D2 row.
+   * Coverage is ignored: D1 is never treated as complete.
+   */
+  private d1ArchiveRowsForCharacter(
+    archiveData: PlayerActivitiesResponse | null,
+    character: CharacterWithGame
+  ): StoredActivity[] {
+    const rows = archiveData?.activities ?? [];
+    return rows
+      .filter(light =>
+        light?.instanceId != null &&
+        String(light.instanceId) !== '' &&
+        String(light.characterId) === String(character.characterId)
+      )
+      .map(light => {
+        const period = typeof light.period === 'string' && !Number.isNaN(Date.parse(light.period))
+          ? light.period
+          : '';
+        const activity = this.convertLightActivityToHistory({ ...light, period, game: 'D1' });
+        return {
+          ...activity,
+          membershipId: character.membershipId,
+          characterId: character.characterId,
+          instanceId: activity.activityDetails?.instanceId,
+          mode: activity.activityDetails?.mode,
+          game: 'D1' as const
+        };
+      });
+  }
+
   /**
    * Converts light activity rows from the archive API into the ActivityHistory format
    * used by the rest of the application.
@@ -4153,6 +4209,71 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       let bungieStopAtIid: number | null = null;
       let bungieDeltaOnly = false;
       let archiveAnswered = false;
+      let d1ArchiveFilled = false;
+
+      // W55: D1 archive is opt-in and always partial. Older rows land first;
+      // live Bungie still runs for every game the archive does not cover.
+      // Any error or timeout leaves the Bungie-only path exactly as it is.
+      if (character.game === 'D1' && environment.enableD1Archive && this.pgcrApiService.enabled) {
+        try {
+          const archiveData = await this.fetchD1ArchiveActivities(character.membershipId);
+          const storedFromArchive = this.d1ArchiveRowsForCharacter(archiveData, character);
+          if (storedFromArchive.length > 0) {
+            const { fresh, replacements } = partitionD1AgainstStored(storedFromArchive, dbActivities);
+            if (replacements.length > 0) {
+              await this.activityDb.addActivities(replacements);
+              this.noteActivitiesStored();
+              const replaced = new Set(replacements.map(a => `${a.game}|${a.activityDetails?.instanceId}`));
+              for (let i = 0; i < dbActivities.length; i++) {
+                const key = `${dbActivities[i].game}|${dbActivities[i].activityDetails?.instanceId}`;
+                if (replaced.has(key)) {
+                  dbActivities[i] = replacements.find(
+                    a => `${a.game}|${a.activityDetails?.instanceId}` === key
+                  )!;
+                }
+              }
+            }
+            if (fresh.length > 0) {
+              await this.activityDb.addActivities(fresh);
+              this.noteActivitiesStored();
+              dbActivities.push(...fresh);
+              this.activitiesCache.delete(character.membershipId);
+              if (accountKey && existingStatus) {
+                this.reportActivityCountDelta(
+                  accountKey,
+                  existingStatus.displayName,
+                  existingStatus.platform,
+                  'D1',
+                  character.membershipType,
+                  fresh.length,
+                  false
+                );
+              }
+              this.overallActivitiesProcessed += fresh.length;
+            }
+            d1ArchiveFilled = true;
+            this.noteLookupDataSource('archive');
+            this.processAndGroupActivities();
+            console.log(
+              '[Archive] D1 partial fill for membership',
+              character.membershipId,
+              ':',
+              fresh.length,
+              'new,',
+              replacements.length,
+              'placeholders replaced; live Bungie continues'
+            );
+          }
+        } catch (err) {
+          console.warn(
+            '[Archive] D1 archive failed for membership',
+            character.membershipId,
+            '- Bungie-only path:',
+            err
+          );
+          this.noteDcApiFallback();
+        }
+      }
       
       // Try loading from archive API first if enabled (membership-level list; PGCR stays lazy).
       // D1 skips the archive list: its D1 rows are zero-stat stubs (no duration),
@@ -4385,7 +4506,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Filter for unique new activities; a timed Bungie row also replaces a
       // zero-stat archive stub for the same instance (heals IDB filled before the D1 skip).
       const { fresh: uniqueNewActivities, replacements: stubReplacements } =
-        partitionAgainstStored(allActivities, dbActivities);
+        character.game === 'D1' && d1ArchiveFilled
+          ? partitionD1AgainstStored(allActivities, dbActivities)
+          : partitionAgainstStored(allActivities, dbActivities);
       if (stubReplacements.length > 0) {
         await this.activityDb.addActivities(stubReplacements);
         this.noteActivitiesStored();
