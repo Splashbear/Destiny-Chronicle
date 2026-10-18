@@ -34,6 +34,34 @@ describe('activity batch merge', () => {
     expect(writes).toEqual([]);
   });
 
+  it('replaces a zero-stat row that already has a period when live stats arrive', () => {
+    const stub = {
+      ...real('D1', '10', '2015-06-01T00:00:00Z', 4),
+      values: { kills: { basic: { value: 0 } }, timePlayedSeconds: { basic: { value: 0 } } }
+    };
+    const live = {
+      ...real('D1', '10', '2015-06-01T00:00:00Z'),
+      values: { kills: { basic: { value: 12 } }, timePlayedSeconds: { basic: { value: 900 } } }
+    };
+    const writes = planActivityWrites([stub], [live]);
+    expect(writes.length).toBe(1);
+    expect(writes[0].id).toBe(4);
+    expect(writes[0].values?.kills?.basic?.value).toBe(12);
+    expect(writes[0].values?.timePlayedSeconds?.basic?.value).toBe(900);
+  });
+
+  it('does not let a zero-stat row overwrite a stored row that has stats', () => {
+    const kept = {
+      ...real('D1', '10', '2015-06-01T00:00:00Z', 4),
+      values: { kills: { basic: { value: 12 } }, timePlayedSeconds: { basic: { value: 900 } } }
+    };
+    const stub = {
+      ...real('D1', '10', '2015-06-01T00:00:00Z'),
+      values: { kills: { basic: { value: 0 } }, timePlayedSeconds: { basic: { value: 0 } } }
+    };
+    expect(planActivityWrites([kept], [stub])).toEqual([]);
+  });
+
   it('keeps D1 and D2 rows that share an instance id', () => {
     const writes = planActivityWrites([], [real('D1', '10'), real('D2', '10')]);
     expect(writes.map(row => row.game)).toEqual(['D1', 'D2']);

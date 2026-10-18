@@ -6,6 +6,10 @@ export interface BatchActivity {
   characterId?: string;
   period?: string;
   activityDetails?: { instanceId?: string | number };
+  values?: {
+    timePlayedSeconds?: { basic?: { value?: number } };
+    kills?: { basic?: { value?: number } };
+  };
 }
 
 export function activityBatchKey(row: BatchActivity): string {
@@ -22,9 +26,28 @@ function hasInstance(row: BatchActivity): boolean {
   return iid != null && iid !== '';
 }
 
-/** Keep the row that already has a period. A real row is never replaced by another real row. */
+function statValue(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/** Kills or time played. A lite/index row with neither is a stub, even with a period. */
+export function hasPlayStats(row: BatchActivity | null | undefined): boolean {
+  return statValue(row?.values?.timePlayedSeconds?.basic?.value) > 0
+    || statValue(row?.values?.kills?.basic?.value) > 0;
+}
+
+export function isZeroStatStub(row: BatchActivity | null | undefined): boolean {
+  return !hasPlayStats(row);
+}
+
+/**
+ * Empty period yields to a real period. A zero-stat stub yields to kills or duration.
+ * A row that already has stats is left in place, so a stub cannot overwrite it.
+ */
 function preferReal<T extends BatchActivity>(current: T, incoming: T): T {
-  if (!hasRealPeriod(current) && hasRealPeriod(incoming)) {
+  const fillsPeriod = !hasRealPeriod(current) && hasRealPeriod(incoming);
+  const fillsStats = isZeroStatStub(current) && hasPlayStats(incoming);
+  if (fillsPeriod || fillsStats) {
     return current.id != null ? { ...incoming, id: current.id } : incoming;
   }
   return current;
@@ -32,8 +55,8 @@ function preferReal<T extends BatchActivity>(current: T, incoming: T): T {
 
 /**
  * Dedupe across batches. Same game + membership + character + instance collapses
- * to one row, and an empty-period placeholder is replaced by the real row.
- * A real row already stored is left in place.
+ * to one row. An empty-period placeholder, or a zero-stat archive stub, is
+ * replaced by the live row. A row that already has stats is left in place.
  */
 export function planActivityWrites<T extends BatchActivity>(existing: T[], incoming: T[]): T[] {
   const stored = new Map<string, T>();
@@ -65,8 +88,9 @@ export function planActivityWrites<T extends BatchActivity>(existing: T[], incom
       writes.push(row);
       continue;
     }
-    if (!hasRealPeriod(already) && hasRealPeriod(row)) {
-      writes.push(already.id != null ? { ...row, id: already.id } : row);
+    const chosen = preferReal(already, row);
+    if (chosen !== already) {
+      writes.push(chosen);
     }
   }
   return writes;

@@ -20,12 +20,12 @@ describe('account write index', () => {
     const table: Array<typeof real & { id?: number }> = [];
     const index = new AccountWriteIndex();
     let next = 1;
-    const write = (incoming: Array<typeof real>) => {
+    const write = (incoming: Array<typeof real | typeof placeholder>) => {
       if (!index.has('m1')) {
         index.load('m1', table);
       }
       const planned = index.plan(['m1'], incoming);
-      const stored = persistPlannedRows(table, planned, () => next++);
+      const stored = persistPlannedRows(table, planned as typeof table, () => next++);
       index.commit(stored);
     };
 

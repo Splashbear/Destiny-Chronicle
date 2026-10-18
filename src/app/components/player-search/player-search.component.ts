@@ -71,7 +71,7 @@ import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
 import { gameInstanceKey } from '../../utils/heatmap-filters';
 import { partitionAgainstStored } from '../../utils/archive-stub-merge';
-import { partitionD1AgainstStored } from '../../utils/d1-archive-merge';
+import { partitionD1AgainstStored, d1BungiePageCaughtUp, d1RowsToIngest } from '../../utils/d1-archive-merge';
 import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '../../utils/pgcr-prune';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
@@ -3843,7 +3843,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private async fetchActivitiesWithRetry(
     character: CharacterWithGame,
     page: number,
-    maxRetries: number = this.MAX_RETRIES
+    maxRetries: number = this.MAX_RETRIES,
+    keepKnownD1Rows = false
   ): Promise<ActivityHistory[]> {
     let retries = 0;
     while (retries < maxRetries) {
@@ -3889,15 +3890,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             return true;
           });
 
-          // Get already validated activities from DB
-          const dbActivities = await this.activityDb.getAllActivitiesForCharacter(
-            character.membershipId,
-            character.characterId
-          );
-          const dbInstanceIds = new Set(dbActivities.map(a => a.activityDetails?.instanceId));
-
-          // Only validate activities not already in DB
-          const toValidate = validStructureActivities.filter((a: ActivityHistory) => !dbInstanceIds.has(a.activityDetails?.instanceId));
+          // Flag-off keeps the old skip: an instance already stored is not returned.
+          // Flag-on must still see those rows so a zero-stat archive stub can take
+          // live kills and duration, and so a full page of stubs is not the end.
+          let toValidate = validStructureActivities;
+          if (!keepKnownD1Rows) {
+            const dbActivities = await this.activityDb.getAllActivitiesForCharacter(
+              character.membershipId,
+              character.characterId
+            );
+            const dbInstanceIds = new Set(dbActivities.map(a => a.activityDetails?.instanceId));
+            toValidate = validStructureActivities.filter((a: ActivityHistory) => !dbInstanceIds.has(a.activityDetails?.instanceId));
+          }
 
           // Log raid activities
           const raidActivities = toValidate.filter((activity: ActivityHistory) => {
@@ -4433,7 +4437,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         while (hasMore) {
           const activities = await this.fetchActivitiesWithRetry(
             { ...character, mode },
-            page
+            page,
+            this.MAX_RETRIES,
+            character.game === 'D1' && d1ArchiveFilled
           );
           
           if (!activities || activities.length === 0) {
@@ -4452,7 +4458,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
           // W31: Bungie returns newest-first. Keep rows above the complete-below
           // line (10B). Archive rows already stored cover that line and below.
-          if (bungieDeltaOnly && bungieStopAtIid != null) {
+          // W56: D1 archive is the fast list. Bungie keeps going while a page
+          // still has new games or zero-stat stubs. A page that is already
+          // fully stat-filled is the handoff: older pages are already stored.
+          if (character.game === 'D1' && d1ArchiveFilled) {
+            if (d1BungiePageCaughtUp(storedActivities, dbActivities)) {
+              hasMore = false;
+              storedActivities = [];
+            } else {
+              storedActivities = d1RowsToIngest(storedActivities, dbActivities);
+              hasMore = activities.length === 250;
+              page++;
+            }
+          } else if (bungieDeltaOnly && bungieStopAtIid != null) {
             const pageIids = storedActivities
               .map(a => Number(a.instanceId))
               .filter(n => Number.isFinite(n) && n > 0);
