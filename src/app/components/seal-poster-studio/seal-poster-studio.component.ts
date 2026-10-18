@@ -37,6 +37,7 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
 
   viewMode: ViewMode = 'browse';
   sortType: SortType = 'release';
+  rearrangeSeals = false;
   showGildedBadge: boolean = true;
   legacyFilter: LegacyFilter = 'all';
   includeChronicleFooter: boolean = true;
@@ -194,6 +195,16 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     this.useManualOrder = true;
     this.saveManualOrder();
     this.cdr.detectChanges();
+  }
+
+  onPosterClick(event: Event): void {
+    const el = (event.target as HTMLElement | null)?.closest?.('[data-seal-hash]');
+    if (!el) return;
+    const hash = Number(el.getAttribute('data-seal-hash'));
+    const seal = this.displaySeals.find(item => item.hash === hash);
+    if (seal) {
+      this.hideSeal(seal, event);
+    }
   }
 
   hideSeal(seal: SealDisplayItem, event: Event) {
