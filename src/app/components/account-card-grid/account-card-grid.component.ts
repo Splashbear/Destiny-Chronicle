@@ -24,17 +24,17 @@ export interface AccountCardPlatformStats {
   template: `
     <div *ngIf="perPlatformStats && perPlatformStats.length > 0" class="platform-breakdown">
       <p *ngIf="hint" class="text-xs text-slate-400 mb-2">{{ hint }}</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div *ngFor="let plat of perPlatformStats"
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+           (click)="onGridClick($event)"
+           (keydown)="onGridKey($event)">
+        <div *ngFor="let plat of perPlatformStats; trackBy: trackAccount"
              class="emblem-card relative rounded-lg overflow-hidden shadow-lg h-24 cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-yellow-400/80"
              [class.ring-2]="selectedAccountKeys?.has(plat.accountKey)"
              [class.ring-yellow-400]="selectedAccountKeys?.has(plat.accountKey)"
              [class.opacity-90]="selectedAccountKeys && selectedAccountKeys.size > 0 && !selectedAccountKeys.has(plat.accountKey)"
-             (click)="accountKeyToggle.emit(plat.accountKey)"
              role="button"
              tabindex="0"
-             (keydown.enter)="accountKeyToggle.emit(plat.accountKey)"
-             (keydown.space)="accountKeyToggle.emit(plat.accountKey); $event.preventDefault()"
+             [attr.data-account-key]="plat.accountKey"
              [attr.aria-pressed]="selectedAccountKeys?.has(plat.accountKey)"
              [attr.aria-label]="'Filter by ' + (plat.displayName || plat.platform) + ' ' + plat.platform">
           <img *ngIf="plat.emblemBackground" [src]="resolveBungie(plat.emblemBackground)" class="absolute inset-0 w-full h-full object-cover" alt="emblem bg" />
@@ -76,6 +76,29 @@ export class AccountCardGridComponent {
 
   resolveBungie(path: string | undefined): string {
     return path ? this.assetUrl.resolve(path) : '';
+  }
+
+  trackAccount(_index: number, plat: AccountCardPlatformStats): string {
+    return plat.accountKey;
+  }
+
+  onGridClick(event: Event): void {
+    const key = (event.target as HTMLElement | null)?.closest?.('[data-account-key]')?.getAttribute('data-account-key');
+    if (key) {
+      this.accountKeyToggle.emit(key);
+    }
+  }
+
+  onGridKey(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    const key = (event.target as HTMLElement | null)?.closest?.('[data-account-key]')?.getAttribute('data-account-key');
+    if (!key) {
+      return;
+    }
+    event.preventDefault();
+    this.accountKeyToggle.emit(key);
   }
 
   private pad(n: number): string {
