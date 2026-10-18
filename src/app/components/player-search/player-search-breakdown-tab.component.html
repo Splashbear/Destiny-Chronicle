@@ -74,7 +74,7 @@
         <select [(ngModel)]="ps.breakdownChartCategory" 
                 (ngModelChange)="ps.setBreakdownChartCategory($event)"
                 class="destiny-input text-sm py-1.5 max-w-none w-auto">
-          <option *ngFor="let opt of ps.breakdownChartCategoryOptions" [value]="opt.value">{{ opt.label }}</option>
+          <option *ngFor="let opt of ps.breakdownChartCategoryOptions; trackBy: ps.trackBreakdownCard" [value]="opt.value">{{ opt.label }}</option>
         </select>
         <select *ngIf="ps.showBreakdownGameDropdown"
                 [(ngModel)]="ps.breakdownChartGame" 
