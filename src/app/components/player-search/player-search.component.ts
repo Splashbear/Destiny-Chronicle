@@ -1864,6 +1864,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Clean up any subscriptions or timers
     this.statsDebounce$.complete();
     this.filteredActivities$.complete();
+    if (this.breakdownRefreshTimer) {
+      clearTimeout(this.breakdownRefreshTimer);
+      this.breakdownRefreshTimer = null;
+    }
   }
 
   /** Page Visibility API: track when user leaves during loading so we can show a tip on return. */
@@ -4021,6 +4025,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
 
       await this.activityDb.addActivities(storedActivities);
+      this.noteActivitiesStored();
       // Update totals in background (no await to avoid slowing batch loop)
       this.statsDebounce$.next();
       if (environment.debug) {
@@ -4214,6 +4219,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
               if (uniqueNewActivities.length > 0) {
                 await this.activityDb.addActivities(uniqueNewActivities);
+                this.noteActivitiesStored();
                 newActivities.push(...uniqueNewActivities);
                 this.activitiesCache.delete(character.membershipId);
 
@@ -4382,6 +4388,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         partitionAgainstStored(allActivities, dbActivities);
       if (stubReplacements.length > 0) {
         await this.activityDb.addActivities(stubReplacements);
+        this.noteActivitiesStored();
         const replacedIids = new Set(stubReplacements.map(a => String(a.activityDetails?.instanceId)));
         for (let i = 0; i < dbActivities.length; i++) {
           const iid = String(dbActivities[i].activityDetails?.instanceId);
@@ -4396,6 +4403,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           // Persist any new, unique activities to IndexedDB
           if (uniqueNewActivities.length > 0) {
             await this.activityDb.addActivities(uniqueNewActivities);
+            this.noteActivitiesStored();
             // keep local cache in sync to avoid duplicate inserts on subsequent pages/modes
             dbActivities.push(...uniqueNewActivities);
 
@@ -9668,8 +9676,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.breakdownView.sync(
       this.activityBreakdownGroups || [],
       this.selectedBreakdownCardLabels,
-      this.breakdownLastPlayedSort
+      this.breakdownLastPlayedSort,
+      this.breakdownRetainExpansion
     );
+    this.breakdownRetainExpansion = false;
     return this.breakdownView.groups;
   }
 
@@ -9821,8 +9831,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.breakdownView.sync(
       this.activityBreakdownGroups || [],
       this.selectedBreakdownCardLabels,
-      this.breakdownLastPlayedSort
+      this.breakdownLastPlayedSort,
+      this.breakdownRetainExpansion
     );
+    this.breakdownRetainExpansion = false;
     return this.breakdownView.cards;
   }
 
@@ -10230,18 +10242,52 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return mainPlayer?.membershipId || '';
   }
 
-  async loadActivityBreakdown(): Promise<void> {
+  private breakdownRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private breakdownLoadGen = 0;
+  private breakdownLoadInFlight = false;
+  private breakdownDirty = false;
+  private breakdownRetainExpansion = false;
+
+  /** History pages can finish after Breakdown is open. Refresh the totals without blanking the tab. */
+  private noteActivitiesStored(): void {
+    if (this.activeTab !== 'breakdown' || this.selectedPlayers.length === 0) {
+      return;
+    }
+    this.breakdownDirty = true;
+    if (this.breakdownRefreshTimer) {
+      clearTimeout(this.breakdownRefreshTimer);
+    }
+    this.breakdownRefreshTimer = setTimeout(() => {
+      this.breakdownRefreshTimer = null;
+      if (this.activeTab === 'breakdown') {
+        void this.loadActivityBreakdown({ preserveView: true });
+      }
+    }, this.BATCH_UPDATE_DELAY);
+  }
+
+  async loadActivityBreakdown(options?: { preserveView?: boolean }): Promise<void> {
     if (this.selectedPlayers.length === 0) return;
-    this.loadingActivityBreakdown = true;
-    this.activityBreakdownRows = null;
-    this.activityBreakdownGroups = [];
-    this.selectedBreakdownCardLabels = new Set();
-    this.cdr.markForCheck();
+    const preserve = !!options?.preserveView && (this.activityBreakdownGroups?.length ?? 0) > 0;
+    if (preserve && this.breakdownLoadInFlight) {
+      this.breakdownDirty = true;
+      return;
+    }
+    const gen = ++this.breakdownLoadGen;
+    this.breakdownLoadInFlight = true;
+    this.breakdownDirty = false;
+    if (!preserve) {
+      this.loadingActivityBreakdown = true;
+      this.activityBreakdownRows = null;
+      this.activityBreakdownGroups = [];
+      this.selectedBreakdownCardLabels = new Set();
+      this.cdr.markForCheck();
+    }
     try {
       const membershipIds = this.getBreakdownMembershipIds();
       if (membershipIds.length === 0) return;
       this.activityBreakdownService.clearActivityCountsCache();
       const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
+      if (gen !== this.breakdownLoadGen) return;
 
       // When specific account cards are selected, restrict Breakdown to the games (D1/D2)
       // represented by those accounts so a D1-only selection does not include D2 time.
@@ -10252,17 +10298,28 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         effectiveRows = rows.filter(r => !r.game || allowed.has(r.game));
       }
 
+      this.breakdownRetainExpansion = preserve;
       this.activityBreakdownRows = effectiveRows;
       this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(effectiveRows);
       this.recomputeBreakdownChartData();
       this.logBreakdownDebug('loadActivityBreakdown');
     } catch (err) {
+      if (gen !== this.breakdownLoadGen) return;
       console.error('[ActivityBreakdown] Failed to load', err);
-      this.activityBreakdownRows = [];
-      this.activityBreakdownGroups = [];
+      if (!preserve) {
+        this.activityBreakdownRows = [];
+        this.activityBreakdownGroups = [];
+      }
     } finally {
-      this.loadingActivityBreakdown = false;
-      this.cdr.markForCheck();
+      if (gen === this.breakdownLoadGen) {
+        this.loadingActivityBreakdown = false;
+        this.breakdownLoadInFlight = false;
+        this.cdr.markForCheck();
+        if (this.breakdownDirty && this.activeTab === 'breakdown') {
+          this.breakdownDirty = false;
+          void this.loadActivityBreakdown({ preserveView: true });
+        }
+      }
     }
   }
 
