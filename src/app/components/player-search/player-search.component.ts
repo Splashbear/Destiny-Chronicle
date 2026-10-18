@@ -4255,12 +4255,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             this.noteLookupDataSource('archive');
             this.processAndGroupActivities();
             console.log(
-              `[Archive] D1 partial fill for ${character.membershipId}: ` +
-                `${fresh.length} new, ${replacements.length} placeholders replaced; live Bungie continues`
+              '[Archive] D1 partial fill for membership',
+              character.membershipId,
+              ':',
+              fresh.length,
+              'new,',
+              replacements.length,
+              'placeholders replaced; live Bungie continues'
             );
           }
         } catch (err) {
-          console.warn(`[Archive] D1 archive failed for ${character.membershipId}; Bungie-only path:`, err);
+          console.warn(
+            '[Archive] D1 archive failed for membership',
+            character.membershipId,
+            '- Bungie-only path:',
+            err
+          );
           this.noteDcApiFallback();
         }
       }
