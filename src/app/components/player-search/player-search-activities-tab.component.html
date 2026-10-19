@@ -1,11 +1,22 @@
         <p *ngIf="ps.archiveCoverage as cov" class="text-day-cov">{{ ps.coverageLine(cov) }}</p>
 
         <div *ngIf="text.enabled()" class="text-day">
-          <p *ngIf="ps.selectedPlayers.length > 0">
-            Player:
-            <strong>{{ ps.selectedPlayers[0].displayName }}</strong>
-            <span class="text-day-dim" *ngIf="ps.selectedPlayers.length > 1"> and {{ ps.selectedPlayers.length - 1 }} more</span>
+          <h2>Account Summary</h2>
+          <p *ngIf="ps.accountStats as stats">
+            Time <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalTime) }}</strong>
+            · Seals <strong>{{ stats.totalSeals || 0 }}</strong>
+            · Activities <strong>{{ stats.totalActivityCount }}</strong>
           </p>
+          <div *ngIf="ps.perPlatformStats.length > 0" class="text-accounts">
+            <p class="text-day-dim">Accounts. Select one or more. No selection = all accounts.</p>
+            <button *ngFor="let plat of ps.perPlatformStats"
+                    type="button"
+                    class="text-account"
+                    [class.on]="ps.selectedAccountKeysForActivities.has(plat.accountKey)"
+                    (click)="ps.onAccountSummaryCardToggle(plat.accountKey)">
+              {{ plat.displayName || plat.platform }} · {{ plat.platform }} · {{ plat.game }}
+            </button>
+          </div>
           <p class="text-day-date">Date: <strong>{{ ps.formatSelectedDateLabel() }}</strong>
             <span class="text-day-dim" *ngIf="!ps.loadingActivities[ps.selectedDate] && !ps.profileLoadInProgress"> · {{ ps.formatSecondsToHoursMinutes(ps.totalTimeForSelectedDate) }}</span>
           </p>

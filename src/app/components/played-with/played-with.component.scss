@@ -7,10 +7,28 @@
 .text-day-name { color: #fff; }
 .text-prow {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1.4fr 70px 150px 150px;
   gap: 4px 12px;
   padding: 8px 0;
   border-bottom: 1px solid #15191e;
+}
+.text-prow-head {
+  color: #98a2b0;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.text-day-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #e67e22;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+@media (max-width: 640px) {
+  .text-prow { grid-template-columns: 1fr 1fr; }
+  .text-day-name { grid-column: 1 / -1; }
 }
 .text-day-more {
   margin-top: 16px;

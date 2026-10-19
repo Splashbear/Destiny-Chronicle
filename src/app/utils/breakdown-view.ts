@@ -27,6 +27,35 @@ export function breakdownRowKey(row: { game?: string; baseName: string; variantN
   return `${row.game || ''}|${row.baseName}|${row.variantName || ''}`;
 }
 
+export interface BreakdownTextBar {
+  label: string;
+  pct: number;
+  bar: string;
+  timeSeconds: number;
+  runs: number;
+}
+
+/** One text bar per category, longest time first. The bar is that category's share of the total. */
+export function breakdownTextBars(cards: BreakdownCard[], width = 20): BreakdownTextBar[] {
+  const ranked = [...(cards || [])].filter(card => (card.timeSeconds ?? 0) > 0)
+    .sort((a, b) => b.timeSeconds - a.timeSeconds);
+  const total = ranked.reduce((sum, card) => sum + card.timeSeconds, 0);
+  if (!total) {
+    return [];
+  }
+  return ranked.map(card => {
+    const pct = (card.timeSeconds / total) * 100;
+    const filled = Math.min(width, Math.max(1, Math.round((pct / 100) * width)));
+    return {
+      label: card.label,
+      pct,
+      bar: `${'█'.repeat(filled)}${'░'.repeat(width - filled)}`,
+      timeSeconds: card.timeSeconds,
+      runs: card.runs ?? 0,
+    };
+  });
+}
+
 export function breakdownCards(groups: BreakdownGroup[]): BreakdownCard[] {
   return groups.map(group => {
     let runs = 0;
@@ -72,6 +101,8 @@ export class BreakdownView {
   private expanded = new Set<string>();
   private shown = new Map<string, number>();
   private visibleCache = new Map<string, ActivityCountRow[]>();
+  /** Survives the next sync, which otherwise reopens only the first group. */
+  private expansionMode: 'default' | 'all' | 'none' | 'manual' = 'default';
 
   sync(groups: BreakdownGroup[], selected: Set<string>, sort: 'asc' | 'desc' | null, retainExpansion = false): void {
     const selectionKey = Array.from(selected).sort().join('\n');
@@ -91,6 +122,15 @@ export class BreakdownView {
         : groups.filter(group => selected.has(group.label));
     this.groups = !sort ? base : base.map(group => ({ ...group, rows: sortRows(group.rows, sort) }));
     this.visibleCache.clear();
+    if (this.expansionMode === 'all') {
+      this.applyExpandAll();
+      return;
+    }
+    if (this.expansionMode === 'none') {
+      this.expanded = new Set();
+      this.shown.clear();
+      return;
+    }
     if ((sourceChanged || selectionChanged) && !retainExpansion) {
       this.expanded = new Set();
       this.shown.clear();
@@ -131,6 +171,7 @@ export class BreakdownView {
   }
 
   toggle(group: BreakdownGroup): void {
+    this.expansionMode = 'manual';
     const key = breakdownGroupKey(group);
     if (this.expanded.has(key)) {
       this.expanded.delete(key);
@@ -148,6 +189,18 @@ export class BreakdownView {
   }
 
   expandAll(): void {
+    this.expansionMode = 'all';
+    this.applyExpandAll();
+  }
+
+  collapseAll(): void {
+    this.expansionMode = 'none';
+    this.expanded = new Set();
+    this.shown.clear();
+    this.visibleCache.clear();
+  }
+
+  private applyExpandAll(): void {
     this.expanded = new Set(this.groups.map(breakdownGroupKey));
     this.shown.clear();
     this.visibleCache.clear();

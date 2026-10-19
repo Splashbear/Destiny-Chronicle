@@ -1,13 +1,19 @@
 import { SimpleChange } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { TextViewService } from '../../services/text-view.service';
+import { ActivityDbService } from '../../services/activity-db.service';
+import { PGCRModalService } from '../../services/pgcr-modal.service';
 import { PlayedWithComponent, membershipIdsKey } from './played-with.component';
 
 describe('PlayedWithComponent reload guard', () => {
   function makeComponent(createSession: jasmine.Spy) {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      providers: [{ provide: TextViewService, useValue: { enabled: () => false } }]
+      providers: [
+        { provide: TextViewService, useValue: { enabled: () => false } },
+        { provide: ActivityDbService, useValue: {} },
+        { provide: PGCRModalService, useValue: { openPgcrLite: () => {} } }
+      ]
     });
     const cdr = { markForCheck: () => {} } as any;
     const prefetch = { cancel: () => {}, progress$: { subscribe: () => ({ unsubscribe() {} }) } } as any;

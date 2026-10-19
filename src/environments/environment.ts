@@ -43,10 +43,10 @@ export const environment = {
    */
   enableD1Archive: false,
   /**
-   * W19: Played With UI / API client. Keep OFF at launch until W18 index is
-   * validated and wired. Component is not routed; this guards future entry points.
+   * Played With tab. On so the local server matches the live site.
+   * Requests go through the /dc-archive proxy.
    */
-  enablePlayedWith: false,
+  enablePlayedWith: true,
   /** When true, app runs from an imported offline archive (no Bungie API). */
   offlineMode: false,
   archiveRoot: ''

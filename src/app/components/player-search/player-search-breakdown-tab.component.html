@@ -1,3 +1,33 @@
+<ng-container *ngIf="text.enabled(); else fullBreakdown">
+  <div class="text-day">
+    <h2>Activity Breakdown</h2>
+    <p class="text-day-dim">Share of time played. Each bar is that activity type's percentage of the total.</p>
+    <div *ngIf="ps.perPlatformStats.length > 0" class="text-accounts">
+      <p class="text-day-dim">Accounts. Select one or more. No selection = all accounts.</p>
+      <button *ngFor="let plat of ps.perPlatformStats"
+              type="button"
+              class="text-account"
+              [class.on]="ps.selectedAccountKeysForBreakdown.has(plat.accountKey)"
+              (click)="ps.onBreakdownAccountCardToggle(plat.accountKey)">
+        {{ plat.displayName || plat.platform }} · {{ plat.platform }} · {{ plat.game }}
+      </button>
+    </div>
+    <p *ngIf="ps.loadingActivityBreakdown" class="text-day-dim">Loading activity breakdown…</p>
+    <ng-container *ngIf="!ps.loadingActivityBreakdown">
+      <p>Total <strong>{{ ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}</strong></p>
+      <ng-container *ngIf="textBars() as bars">
+        <div *ngFor="let bar of bars" class="text-brow">
+          <span class="text-day-name">{{ bar.label }}</span>
+          <span class="text-bbar">{{ bar.bar }}</span>
+          <span>{{ bar.pct | number:'1.0-0' }}%</span>
+          <span class="text-day-dim">{{ ps.formatSecondsToHoursMinutes(bar.timeSeconds) }}</span>
+        </div>
+        <p *ngIf="bars.length === 0" class="text-day-dim">No activity time for this selection.</p>
+      </ng-container>
+    </ng-container>
+  </div>
+</ng-container>
+<ng-template #fullBreakdown>
 <div class="space-y-6">
 <div *ngIf="ps.selectedPlayers.length === 0" class="destiny-empty-state">
   Search for and select at least one profile to see activity counts.
@@ -111,6 +141,7 @@
       <p class="text-slate-400 text-sm">Click a card to filter the table below. Click again to deselect. When none are selected, all activities are shown.</p>
       <div class="flex items-center gap-2">
         <button type="button" (click)="ps.expandAllBreakdownGroups()" class="px-3 py-1.5 text-sm text-slate-300 hover:text-white destiny-btn-secondary">Expand all</button>
+        <button type="button" (click)="ps.collapseAllBreakdownGroups()" class="px-3 py-1.5 text-sm text-slate-300 hover:text-white destiny-btn-secondary">Collapse all</button>
         <button type="button" (click)="ps.breakdownTilesCollapsed = !ps.breakdownTilesCollapsed"
               class="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-300 hover:text-white destiny-btn-secondary">
         <span>{{ ps.breakdownTilesCollapsed ? 'Show' : 'Hide' }} Tiles</span>
@@ -216,3 +247,4 @@
   <ng-container *ngIf="ps.hasBreakdownAccountFilter">No activities in database for selected account(s). Load activities for a date first so data is synced.</ng-container>
 </div>
 </div>
+</ng-template>

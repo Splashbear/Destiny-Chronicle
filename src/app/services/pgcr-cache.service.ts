@@ -105,14 +105,11 @@ export class PGCRCacheService {
       if (legacyKeyed) {
         return legacyKeyed;
       }
-      const legacy = accept(await this.get(idStr));
-      if (legacy) {
-        return legacy;
-      }
+      // Destiny 2 reports are stored under the bare instance id. Destiny 1 and
+      // Destiny 2 reuse numbers, so that record can be a different person's game.
       return undefined;
     }
-    const bare = await this.get(idStr);
-    return isUsablePrunedPgcr(bare) ? bare : undefined;
+    return undefined;
   }
 
   /** Cache full D1 instance (all players); filter fireteam when displaying Activities popup. */

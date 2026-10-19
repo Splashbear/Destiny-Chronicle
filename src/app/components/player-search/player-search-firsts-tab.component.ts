@@ -34,6 +34,7 @@ export class FirstsClickDirective implements OnChanges, OnDestroy {
 
 interface TextFirstRow {
   name: string;
+  who: string;
   when: string;
   years: string;
   tags: string;
@@ -66,7 +67,13 @@ export class PlayerSearchFirstsTabComponent {
       return;
     }
     if (hit.kind === 'game') {
+      this.textPages = 1;
       this.ps.setActiveFirstsGame(hit.payload as 'D1' | 'D2');
+      return;
+    }
+    if (hit.kind === 'account') {
+      this.textPages = 1;
+      this.ps.onFirstsAccountCardToggle(String(hit.payload));
       return;
     }
     if (hit.kind === 'text-first') {
@@ -104,7 +111,9 @@ export class PlayerSearchFirstsTabComponent {
       return;
     }
     if (row.activity) {
-      this.ps.openExternalPGCR(row.activity, !!row.isD1, event);
+      const game = row.activity.game;
+      const isD1 = game === 'D1' ? true : game === 'D2' ? false : !!row.isD1;
+      this.ps.openExternalPGCR(row.activity, isD1, event);
     }
   }
 
@@ -113,11 +122,8 @@ export class PlayerSearchFirstsTabComponent {
     if (this.ps.selectedAccountKeysForFirsts.size > 0) {
       const sections: Array<{ title: string; rows: TextFirstRow[] }> = [];
       for (const player of this.ps.getFirstsFilteredPlayers()) {
-        if (player.game !== game) {
-          continue;
-        }
-        const prefix = player.displayName ? `${player.displayName} — ` : '';
-        sections.push(...this.playerSections(player, prefix));
+        const prefix = [player.displayName, player.platform, player.game].filter(Boolean).join(' · ');
+        sections.push(...this.playerSections(player, prefix ? `${prefix} — ` : ''));
       }
       return sections.filter(section => section.rows.length);
     }
@@ -127,10 +133,10 @@ export class PlayerSearchFirstsTabComponent {
   private aggregateSections(game: 'D1' | 'D2'): Array<{ title: string; rows: TextFirstRow[] }> {
     const sections: Array<{ title: string; rows: TextFirstRow[] }> = [];
     if (this.ps.showFirstsSection('first-ever')) {
-      const first = this.ps.getAggregateFirstEver(game);
+      const first = this.earliestAcrossGames();
       sections.push({
-        title: `First ever (${game})`,
-        rows: first ? [this.rowFromActivity(first, true)] : [],
+        title: 'First ever',
+        rows: first ? [this.rowFromActivity(first, first.game === 'D1')] : [],
       });
     }
     if (this.ps.showFirstsSection('story')) {
@@ -220,11 +226,15 @@ export class PlayerSearchFirstsTabComponent {
         tags: this.tagsFor(variant.first, solo),
       })),
     }));
-    return completedClearRows(shaped).map(row => ({
-      ...row,
-      years: yearsAgoLabel(row.when),
-      first: this.findFirst(items, row.name),
-    }));
+    return completedClearRows(shaped).map(row => {
+      const first = this.findFirst(items, row.name);
+      return {
+        ...row,
+        years: yearsAgoLabel(row.when),
+        first,
+        who: first ? this.whoFor(first.membershipId, first.game) : '',
+      };
+    });
   }
 
   private findFirst(
@@ -270,16 +280,48 @@ export class PlayerSearchFirstsTabComponent {
     return rows;
   }
 
+  /** Lifetime first across every selected account, D1 and D2. */
+  private earliestAcrossGames(): any {
+    const candidates = [
+      this.ps.getAggregateFirstEver('D1'),
+      this.ps.getAggregateFirstEver('D2'),
+    ].filter(Boolean) as Array<{ period?: string; game?: string }>;
+    candidates.sort((a, b) => new Date(a.period || 0).getTime() - new Date(b.period || 0).getTime());
+    return candidates[0];
+  }
+
+  private whoFor(membershipId?: string, game?: string): string {
+    const match = (this.ps.selectedPlayers || []).find(player =>
+      String(player.membershipId) === String(membershipId || '') && (!game || player.game === game)
+    );
+    if (!match) {
+      return game || '';
+    }
+    return [match.displayName, match.platform, match.game].filter(Boolean).join(' · ');
+  }
+
   private rowFromActivity(activity: any, isD1: boolean): TextFirstRow {
+    const game = activity?.game === 'D1' || activity?.game === 'D2' ? activity.game : (isD1 ? 'D1' : 'D2');
+    const d1 = game === 'D1';
+    const who = this.whoFor(activity?.membershipId, game);
+    if (activity && !activity.displayName) {
+      const match = (this.ps.selectedPlayers || []).find(player =>
+        String(player.membershipId) === String(activity.membershipId || '') && player.game === game
+      );
+      if (match) {
+        activity.displayName = match.displayName;
+      }
+    }
     const when = String(activity?.period || '').slice(0, 10);
     return {
-      name: this.ps.getActivityName(activity, isD1),
+      name: this.ps.getActivityName(activity, d1),
+      who,
       when,
       years: yearsAgoLabel(activity?.period),
       tags: '-',
       first: null,
       activity,
-      isD1,
+      isD1: d1,
     };
   }
 
@@ -287,10 +329,12 @@ export class PlayerSearchFirstsTabComponent {
     const when = String(first.completionDate || first.period || '').slice(0, 10);
     return {
       name: first.name,
+      who: this.whoFor(first.membershipId, first.game),
       when,
       years: yearsAgoLabel(first.completionDate || first.period),
       tags: this.tagsFor(first, solo),
       first,
+      isD1: first.game === 'D1',
     };
   }
 
