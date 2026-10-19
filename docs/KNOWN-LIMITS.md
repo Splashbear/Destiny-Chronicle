@@ -8,6 +8,6 @@
 - Games that include a known checkpoint bot are left out of Played With.
 - The anniversary banner celebrates one clear per raid or dungeon version, the one the Firsts card shows. It does not celebrate every activity hash of that raid.
 - Text view does not draw the activity tables under Activity Breakdown.
-- First and last played open a report from the instance id when the API sent one. Until that API process is updated, the site looks the date up in activities already stored in the browser.
+- First played and last played open the report for that shared game. The archive API sends the instance id for each date.
 - Social hubs are omitted from partner lists. They can still appear in the activity history when the site asks for them.
 - Rate limits can delay a cold Played With build or a large history load. The page should say it is still building rather than show an empty list as if the player had no games.
