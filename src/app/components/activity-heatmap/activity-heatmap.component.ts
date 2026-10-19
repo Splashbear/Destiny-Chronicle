@@ -381,8 +381,8 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
     { name: 'Season of the Witch', game: 'D2', start: new Date(2023, 7, 22), end: new Date(2023, 10, 28) },
     { name: 'Season of the Wish', game: 'D2', start: new Date(2023, 10, 28), end: new Date(2024, 5, 11) },
     { name: 'Episode: Echoes', game: 'D2', start: new Date(2024, 5, 11), end: new Date(2024, 9, 8) },
-    { name: 'Episode: Revenant', game: 'D2', start: new Date(2024, 9, 8), end: new Date(2025, 1, 10) },
-    { name: 'Episode: Heresy', game: 'D2', start: new Date(2025, 1, 10), end: new Date(2025, 6, 15) },
+    { name: 'Episode: Revenant', game: 'D2', start: new Date(2024, 9, 8), end: new Date(2025, 1, 4) },
+    { name: 'Episode: Heresy', game: 'D2', start: new Date(2025, 1, 4), end: new Date(2025, 6, 15) },
     { name: 'Season of Reclamation', game: 'D2', start: new Date(2025, 6, 15), end: new Date(2025, 11, 2) },
     { name: 'Season of the Lawless', game: 'D2', start: new Date(2025, 11, 2), end: new Date(2027, 0, 1) },
   ];
