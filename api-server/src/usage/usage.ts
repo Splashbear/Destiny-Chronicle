@@ -110,6 +110,16 @@ function retryAfterSec(oldest: number, now: number): number {
   return Math.max(1, Math.ceil((oldest + 60000 - now) / 1000));
 }
 
+/** Map X-DC-Client to a fixed label. The raw header is never stored. */
+export function clientSource(header: unknown): 'web' | 'bot' | 'other' {
+  const raw = Array.isArray(header) ? header[0] : header;
+  if (typeof raw !== 'string') return 'other';
+  const v = raw.trim().toLowerCase();
+  if (v === 'web') return 'web';
+  if (v === 'discord-bot') return 'bot';
+  return 'other';
+}
+
 function coverageOf(body: unknown): { level?: string; source?: string; rows?: number } {
   if (!body || typeof body !== 'object') return {};
   const b = body as Record<string, unknown>;
@@ -237,7 +247,8 @@ export function installApiGuard(app: Express): void {
           ms: Date.now() - started,
           rows: cov.rows ?? null,
           coverage_level: cov.level ?? null,
-          source: cov.source ?? null,
+          coverage_source: cov.source ?? null,
+          source: clientSource(req.headers['x-dc-client']),
           self,
         });
       });

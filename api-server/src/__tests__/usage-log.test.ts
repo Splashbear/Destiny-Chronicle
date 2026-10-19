@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import express from 'express';
 import request from 'supertest';
-import { extractLookup, installApiGuard } from '../usage/usage';
+import { clientSource, extractLookup, installApiGuard } from '../usage/usage';
 
 describe('extractLookup', () => {
   it('reads the account from /players/:id/activities', () => {
@@ -73,5 +73,47 @@ describe('usage log lines', () => {
     expect(raw).not.toMatch(/203\.0\.113\.9|ua-test|127\.0\.0\.1|::1|4611686018443970323/);
     expect(b.route).toBe('GET /players/:excluded/activities');
     for (const l of [a, b]) expect(Object.keys(l).filter((k) => /^(ip|remote|addr|user_agent|ua|referer|forwarded|headers)/i.test(k))).toEqual([]);
+    expect(a.source).toBe('other');
+  });
+
+  async function oneLine(header?: string): Promise<any> {
+    const app = express();
+    app.use(express.json());
+    installApiGuard(app);
+    app.get('/players/:membershipId/activities', (_q, s) => { s.json({ activities: [], coverage: { source: 'archive', level: 'partial' } }); });
+    const before = fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => n.endsWith('.jsonl')).reduce((n, f) => n + fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter(Boolean).length, 0) : 0;
+    const req = request(app).get('/players/111111111/activities');
+    if (header !== undefined) req.set('X-DC-Client', header);
+    await req;
+    for (let i = 0; i < 40; i++) {
+      const f = fs.readdirSync(dir).find((n) => n.endsWith('.jsonl'));
+      if (f) {
+        const rows = fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter(Boolean);
+        if (rows.length > before) return JSON.parse(rows[rows.length - 1]);
+      }
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error('no usage line');
+  }
+
+  it('labels web, bot, and anything else as other, and never stores the raw header', async () => {
+    expect(clientSource('web')).toBe('web');
+    expect(clientSource('discord-bot')).toBe('bot');
+    expect(clientSource(['discord-bot'])).toBe('bot');
+    expect(clientSource(' WEB ')).toBe('web');
+    expect(clientSource('not-a-client')).toBe('other');
+    expect(clientSource('discord-bot; web')).toBe('other');
+    expect(clientSource(undefined)).toBe('other');
+
+    const web = await oneLine('web');
+    expect(web.source).toBe('web');
+    expect(web.coverage_source).toBe('archive');
+    const bot = await oneLine('discord-bot');
+    expect(bot.source).toBe('bot');
+    const junk = await oneLine('<script>alert(1)</script>');
+    expect(junk.source).toBe('other');
+    const raw = JSON.stringify([web, bot, junk]);
+    expect(raw).not.toMatch(/discord-bot|<script>|not-a-client/);
+    expect(Object.keys(junk).filter((k) => /^(ip|remote|addr|user_agent|ua|referer|forwarded|headers)/i.test(k))).toEqual([]);
   });
 });
