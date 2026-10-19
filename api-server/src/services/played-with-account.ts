@@ -94,10 +94,10 @@ export class AccountSummaryBuilder {
   }
 }
 
-export interface PerAccountStat { id: string; activitiesTogether: number; timeTogetherSeconds: number; lastPlayedTogether?: string }
+export interface PerAccountStat { id: string; activitiesTogether: number; timeTogetherSeconds: number; firstPlayedTogether?: string; lastPlayedTogether?: string }
 export interface MergedPartner {
   membershipId: string; displayName: string; activitiesTogether: number; timeTogetherSeconds: number;
-  lastPlayedTogether?: string; lastInstanceId?: string; nameSource?: string; perAccount: PerAccountStat[];
+  firstPlayedTogether?: string; lastPlayedTogether?: string; lastInstanceId?: string; nameSource?: string; perAccount: PerAccountStat[];
 }
 
 /**
@@ -125,15 +125,19 @@ export function mergeAccounts(sums: AccountSummary[], ownIds: string[], limit = 
       }
     }
   });
-  type Acc = { n: number; t: number; last: string; lastIid: string; per: Array<{ n: number; t: number; last: string }> };
+  type Acc = { n: number; t: number; first: string; last: string; lastIid: string; per: Array<{ n: number; t: number; first: string; last: string }> };
   const agg = new Map<string, Acc>();
   for (const [iid, g] of games) {
     for (const mid of g.mids) {
       let x = agg.get(mid);
-      if (!x) { x = { n: 0, t: 0, last: '', lastIid: '', per: order.map(() => ({ n: 0, t: 0, last: '' })) }; agg.set(mid, x); }
-      x.n++; x.t += g.d; if (g.p >= x.last) { x.last = g.p; x.lastIid = iid; }
+      if (!x) { x = { n: 0, t: 0, first: '', last: '', lastIid: '', per: order.map(() => ({ n: 0, t: 0, first: '', last: '' })) }; agg.set(mid, x); }
+      x.n++; x.t += g.d;
+      if (g.p && (!x.first || g.p < x.first)) x.first = g.p;
+      if (g.p >= x.last) { x.last = g.p; x.lastIid = iid; }
       for (const a of g.acc) {
-        const pa = x.per[a]; pa.n++; pa.t += g.d; if (g.p > pa.last) pa.last = g.p;
+        const pa = x.per[a]; pa.n++; pa.t += g.d;
+        if (g.p && (!pa.first || g.p < pa.first)) pa.first = g.p;
+        if (g.p > pa.last) pa.last = g.p;
       }
     }
   }
@@ -144,8 +148,8 @@ export function mergeAccounts(sums: AccountSummary[], ownIds: string[], limit = 
     const nm = names.get(mid)?.name || '';
     return {
       membershipId: mid, displayName: nm, activitiesTogether: x.n, timeTogetherSeconds: x.t,
-      lastPlayedTogether: x.last || undefined, lastInstanceId: x.lastIid || undefined, nameSource: nm ? 'summary' : undefined,
-      perAccount: x.per.map((p, a) => ({ id: order[a], activitiesTogether: p.n, timeTogetherSeconds: p.t, lastPlayedTogether: p.last || undefined })).filter((p) => p.activitiesTogether > 0),
+      firstPlayedTogether: x.first || undefined, lastPlayedTogether: x.last || undefined, lastInstanceId: x.lastIid || undefined, nameSource: nm ? 'summary' : undefined,
+      perAccount: x.per.map((p, a) => ({ id: order[a], activitiesTogether: p.n, timeTogetherSeconds: p.t, firstPlayedTogether: p.first || undefined, lastPlayedTogether: p.last || undefined })).filter((p) => p.activitiesTogether > 0),
     };
   });
   return { partners, games: games.size, totalPartners: agg.size };

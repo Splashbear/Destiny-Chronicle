@@ -83,7 +83,9 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'archive.progress.downloadingImages': 'Downloading images ({done}/{total})…',
     'archive.progress.savingDownload': 'Saving download…',
     'archive.progress.exportComplete': 'Archive export complete.',
-    'playedWith.intro': 'Guardians you have played with across your Destiny history.',
+    'playedWith.intro': 'Guardians you have played with on the selected Destiny 2 account.',
+    'playedWith.account': 'Account',
+    'playedWith.d2Only': 'Played With covers Destiny 2 accounts. Destiny 1 accounts are not listed here.',
     'playedWith.coverage': 'Activity coverage',
     'playedWith.downloading': 'Downloading more reports…',
     'playedWith.remaining': 'remaining',
@@ -96,6 +98,7 @@ const MESSAGES: Record<UiLocale, Record<string, string>> = {
     'playedWith.player': 'Player',
     'playedWith.activities': 'Activities',
     'playedWith.time': 'Time together',
+    'playedWith.firstPlayed': 'First played',
     'playedWith.lastPlayed': 'Last played',
     'archive.progress.updatePrefix': 'Update: {message}'
   },

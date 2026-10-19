@@ -427,7 +427,10 @@
         <!-- Played With Tab -->
         <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0">
           <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
-          <app-played-with [membershipIds]="heatmapMembershipIds"></app-played-with>
+          <app-played-with *ngIf="playedWithAccounts.length; else playedWithD2Only" [accounts]="playedWithAccounts"></app-played-with>
+          <ng-template #playedWithD2Only>
+            <p class="text-sm text-slate-400">{{ uiI18n.t('playedWith.d2Only') }}</p>
+          </ng-template>
         </div>
 
 
