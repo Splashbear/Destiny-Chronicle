@@ -27,6 +27,20 @@ export function breakdownCategoryFromLabel(label: string): string {
   return (parts[0] ?? label).trim();
 }
 
+/** One category when every selected tile is that type, otherwise all. */
+export function chartCategoryForSelectedTiles(labels: readonly string[]): string {
+  const categories = new Set(labels.map(breakdownCategoryFromLabel).filter(Boolean));
+  return categories.size === 1 ? [...categories][0] : 'all';
+}
+
+/** Tile labels for a chart category. All clears the selection. */
+export function tileLabelsForChartCategory(cardLabels: readonly string[], category: string): string[] {
+  if (!category || category === 'all') {
+    return [];
+  }
+  return cardLabels.filter(label => breakdownCategoryFromLabel(label) === category);
+}
+
 export function buildBreakdownCategoryOptions(
   groups: readonly BreakdownGroupLike[],
   displayNames: Record<string, string> = {}

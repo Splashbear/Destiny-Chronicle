@@ -1,5 +1,26 @@
 /* Shared styles for player-search tab child components (extracted from parent encapsulation). */
 
+/* Selected breakdown tile: same flame outline and fill as the active main tab. */
+.breakdown-tile.breakdown-tile-selected {
+  border: 2px solid var(--destiny-flame) !important;
+  background: linear-gradient(180deg, rgba(230, 126, 34, 0.28) 0%, rgba(201, 162, 39, 0.18) 100%) !important;
+  box-shadow:
+    0 0 0 2px rgba(230, 126, 34, 0.55),
+    0 0 16px var(--destiny-flame-glow),
+    inset 0 -1px 0 var(--destiny-ember-glow) !important;
+  color: var(--destiny-parchment);
+
+  &::after {
+    background: linear-gradient(180deg, rgba(230, 126, 34, 0.34) 0%, rgba(201, 162, 39, 0.2) 100%);
+    opacity: 1;
+    animation: none;
+  }
+
+  .destiny-stat-value {
+    color: var(--destiny-gold-bright);
+  }
+}
+
 button.activity-collapse-toggle {
   padding: 0;
   background: transparent;

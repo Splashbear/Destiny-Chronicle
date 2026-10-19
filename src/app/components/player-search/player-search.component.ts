@@ -61,7 +61,7 @@ import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
-import { buildBreakdownCategoryOptions, selectBreakdownChartItems } from '../../utils/breakdown-chart';
+import { buildBreakdownCategoryOptions, chartCategoryForSelectedTiles, selectBreakdownChartItems, tileLabelsForChartCategory } from '../../utils/breakdown-chart';
 import { D1_HISTORY_MODES, dedupeByInstanceId, isSocialActivity } from '../../utils/activity-history-filters';
 import { excludeExistingInstances } from '../../utils/activity-dedupe';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
@@ -1143,9 +1143,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  /** Set chart category and trigger change detection */
+  /** Set chart category and select the matching tiles. All clears the tile selection. */
   setBreakdownChartCategory(value: string) {
     this.breakdownChartCategory = value;
+    const labels = (this.activityBreakdownSummaryCards || []).map(card => card.label);
+    this.selectedBreakdownCardLabels = new Set(tileLabelsForChartCategory(labels, value));
     this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
@@ -9785,6 +9787,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.selectedBreakdownCardLabels.add(label);
     }
     this.selectedBreakdownCardLabels = new Set(this.selectedBreakdownCardLabels);
+    this.breakdownChartCategory = chartCategoryForSelectedTiles([...this.selectedBreakdownCardLabels]);
     this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
