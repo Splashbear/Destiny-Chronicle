@@ -1074,6 +1074,13 @@
   66% { opacity: 0.82; }
 }
 
+.destiny-bg-shell.destiny-bg-still::before,
+.destiny-bg-shell.destiny-bg-still::after,
+.destiny-bg-shell.destiny-bg-still .iron-temple-fire,
+.destiny-bg-shell.destiny-bg-still .siva-projection-sparkles {
+  animation: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .destiny-bg-shell::before,
   .destiny-bg-shell::after,
