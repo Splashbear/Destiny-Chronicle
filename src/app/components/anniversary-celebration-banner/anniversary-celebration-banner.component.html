@@ -39,7 +39,7 @@
             </ng-container>
             <span class="anniversary-item-separator">•</span>
             <span class="anniversary-item-date">
-              {{ anniversary.year }}
+              {{ anniversary.dateLabel || anniversary.year }}
               <ng-container *ngIf="anniversary.yearsAgo > 0">
                 ({{ anniversary.yearsAgo }} {{ anniversary.yearsAgo === 1 ? 'year' : 'years' }} ago)
               </ng-container>

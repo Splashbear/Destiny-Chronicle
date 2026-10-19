@@ -24,7 +24,7 @@
             <p *ngFor="let anniversary of ps.anniversaryFirsts">
               Firsts anniversary — {{ anniversary.yearsAgo }} years ago today:
               <strong>{{ anniversary.activityName }}</strong>
-              ({{ anniversary.completionDate.slice(0, 10) }})
+              ({{ anniversary.dateLabel || ps.formatDate(anniversary.completionDate) }})
             </p>
           </div>
           <p *ngIf="ps.loadingActivities[ps.selectedDate] || ps.profileLoadInProgress" class="text-day-dim">Loading activities…</p>

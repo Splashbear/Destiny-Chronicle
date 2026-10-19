@@ -1,4 +1,4 @@
-import { collectFirstsTabMilestonesOnDate, getFirstsOnCalendarDate } from './anniversary-helper';
+import { collectFirstsTabMilestonesOnDate, getFirstsOnCalendarDate, raidDungeonFirstsShownOnCards } from './anniversary-helper';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
 import { ActivityHistory } from '../models/activity-history.model';
 
@@ -345,5 +345,66 @@ describe('getFirstsOnCalendarDate', () => {
     );
     expect(result.length).toBe(1);
     expect(result[0].type).toBe('first-ever');
+  });
+});
+
+describe('raidDungeonFirstsShownOnCards', () => {
+  function raid(partial: Partial<ActivityFirstCompletion>): ActivityFirstCompletion {
+    return {
+      type: 'raid',
+      name: 'Garden of Salvation: Normal',
+      game: 'D2',
+      period: '2020-01-02T16:26:00Z',
+      completionDate: '2020-01-02T16:26:00Z',
+      instanceId: '1',
+      referenceId: '1',
+      mode: 4,
+      characterId: 'c',
+      membershipId: 'psn',
+      completed: 1,
+      ...partial
+    };
+  }
+
+  it('does not celebrate a later hash of the same raid the card already shows on another day', () => {
+    const cardClear = raid({
+      name: 'Garden of Salvation: Normal',
+      completionDate: '2020-01-02T16:26:00Z',
+      period: '2020-01-02T16:26:00Z',
+      referenceId: '1042180643',
+      instanceId: 'garden-clear'
+    });
+    const laterHash = raid({
+      name: 'Garden of Salvation',
+      completionDate: '2024-10-19T16:26:00Z',
+      period: '2024-10-19T16:26:00Z',
+      referenceId: '2497200493',
+      instanceId: 'garden-later'
+    });
+    const leviathanCard = raid({
+      name: 'Leviathan: Normal',
+      completionDate: '2017-11-13T16:23:00Z',
+      period: '2017-11-13T16:23:00Z',
+      referenceId: '89727599',
+      instanceId: 'leviathan-clear'
+    });
+    const leviathanOtherHash = raid({
+      name: 'Leviathan: Normal',
+      completionDate: '2017-10-19T16:47:00Z',
+      period: '2017-10-19T16:47:00Z',
+      referenceId: '2693136600',
+      instanceId: 'leviathan-other'
+    });
+
+    const milestones = raidDungeonFirstsShownOnCards(
+      [cardClear, laterHash, leviathanCard, leviathanOtherHash],
+      [cardClear, leviathanCard]
+    );
+    const onOctober19 = getFirstsOnCalendarDate(milestones, '2026-10-19');
+    expect(onOctober19).toEqual([]);
+
+    const onGardenDay = getFirstsOnCalendarDate(milestones, '2026-01-02');
+    expect(onGardenDay.length).toBe(1);
+    expect((onGardenDay[0].first as ActivityFirstCompletion).instanceId).toBe('garden-clear');
   });
 });

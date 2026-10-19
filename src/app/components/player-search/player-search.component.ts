@@ -77,7 +77,7 @@ import { pgcrPeriodMatches, pgcrPeriodMatchesForD1, resolvePgcrPeriod } from '..
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { AnniversaryCelebrationBannerComponent, AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
-import { collectFirstsTabMilestonesOnDate } from '../../utils/anniversary-helper';
+import { collectFirstsTabMilestonesOnDate, raidDungeonFirstsShownOnCards } from '../../utils/anniversary-helper';
 import { parseUsernames as splitSearchUsernames, shouldSearchAsSingleUsername } from '../../utils/search-usernames';
 import { characterKey, classFromProfileCharacter, HeatmapCharacterLookup } from '../../utils/heatmap-filters';
 import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
@@ -1374,19 +1374,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const selectedPlayers = this.selectedPlayers;
     if (!selectedPlayers.length) return [];
 
-    const firsts: ActivityFirstCompletion[] = [];
+    const rawFirsts: ActivityFirstCompletion[] = [];
     for (const player of selectedPlayers) {
       const list = this.guardianFirstsMap[this.getPlayerKey(player)] || [];
       for (const first of list) {
         const key = this.guardianFirstsDedupKey(first);
-        const existing = firsts.find(f => this.guardianFirstsDedupKey(f) === key);
+        const existing = rawFirsts.find(f => this.guardianFirstsDedupKey(f) === key);
         if (!existing) {
-          firsts.push(first);
+          rawFirsts.push(first);
         } else if (new Date(first.completionDate) < new Date(existing.completionDate)) {
-          firsts[firsts.indexOf(existing)] = first;
+          rawFirsts[rawFirsts.indexOf(existing)] = first;
         }
       }
     }
+    const firsts = raidDungeonFirstsShownOnCards(rawFirsts, this.displayedRaidDungeonFirsts());
 
     const firstEvers = selectedPlayers
       .map(player => {
@@ -1424,7 +1425,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const yearsAgo = targetYear - completionYear;
       const platform =
         (first as any).platform ||
-        this.selectedPlayers.find(p => p.membershipId === first.membershipId)?.platform ||
+        this.selectedPlayers.find(p => p.membershipId === first.membershipId && (p.game === game || (!p.game && (this.isD1Player(p) ? 'D1' : 'D2') === game)))?.platform ||
         firstEvers.find(fe => fe.activity === match.first)?.platform;
 
       const key = `${match.type}|${game}|${activityName}|${completionDate}`;
@@ -1440,11 +1441,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         game,
         platform,
         completionDate,
+        dateLabel: this.formatDate(completionDate),
         instanceId
       });
     }
 
     return anniversaries;
+  }
+
+  /** One clear per raid or dungeon version, the same records the Firsts cards render. */
+  private displayedRaidDungeonFirsts(): ActivityFirstCompletion[] {
+    const shown: ActivityFirstCompletion[] = [];
+    for (const player of this.selectedPlayers) {
+      const groups = [
+        ...this.getPlayerD2RaidVariants(player),
+        ...this.getPlayerD1RaidVariants(player),
+        ...this.getPlayerD2DungeonVariants(player),
+        ...this.getPlayerPantheonVariants(player),
+        ...this.getPlayerRiteOfTheNineVariants(player),
+      ];
+      for (const group of groups) {
+        for (const variant of group.variants || []) {
+          if (variant.hasClear && variant.first) {
+            shown.push(variant.first);
+          }
+        }
+      }
+    }
+    return shown;
   }
 
   /**
