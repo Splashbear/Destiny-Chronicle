@@ -11,6 +11,8 @@ export interface AnniversaryFirst {
   yearsAgo: number;
   game: 'D1' | 'D2';
   completionDate: string;
+  /** Local calendar date, same formatting as the Firsts cards. */
+  dateLabel?: string;
   instanceId?: string;
   platform?: string; // Xbox, PlayStation, Steam, Epic, Stadia
 }

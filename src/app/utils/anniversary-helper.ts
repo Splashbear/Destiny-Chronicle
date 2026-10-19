@@ -164,6 +164,35 @@ function firstEverCoveredByFirsts(
 }
 
 /**
+ * Raid and dungeon anniversaries use the same one-clear-per-version records the
+ * Firsts cards show. Other hashes of that raid stay in history, but they are
+ * not separate anniversaries.
+ */
+export function raidDungeonFirstsShownOnCards(
+  raw: ActivityFirstCompletion[],
+  shownOnCards: ActivityFirstCompletion[]
+): ActivityFirstCompletion[] {
+  const other = raw.filter((first) => first.type !== 'raid' && first.type !== 'dungeon');
+  const seen = new Set<string>();
+  const raids: ActivityFirstCompletion[] = [];
+  for (const first of shownOnCards) {
+    if (!first || (first.type !== 'raid' && first.type !== 'dungeon')) continue;
+    const key = [
+      first.membershipId || '',
+      first.game,
+      first.type,
+      first.referenceId || '',
+      first.instanceId || '',
+      first.completionDate || ''
+    ].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    raids.push(first);
+  }
+  return [...other, ...raids];
+}
+
+/**
  * Celebration rows come from Firsts-tab milestones for the calendar date.
  * First Ever is included only when it is not already a Firsts-tab activity
  * (e.g. Homecoming as first activity on 9/6 vs story first on 9/20 → no extra 9/6 row).
