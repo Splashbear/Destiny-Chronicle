@@ -1,4 +1,4 @@
-import { buildBreakdownCategoryOptions, selectBreakdownChartItems, breakdownCategoryFromLabel } from './breakdown-chart';
+import { buildBreakdownCategoryOptions, selectBreakdownChartItems, breakdownCategoryFromLabel, chartCategoryForSelectedTiles, tileLabelsForChartCategory } from './breakdown-chart';
 
 const D = '\u2013';
 const groups = [
@@ -28,6 +28,16 @@ describe('breakdown-chart', () => {
   it('category dropdown drills into that category, sorted desc', () => {
     const r = selectBreakdownChartItems(groups, { tilesSelected: false, category: 'Dungeon', game: 'all' });
     expect(r.items.map(i => i.label)).toEqual(['Prophecy', 'Duality (Standard)']);
+  });
+
+  it('links a selected tile to the chart category, and the category back to its tiles', () => {
+    const cards = groups.map(g => g.label);
+    expect(chartCategoryForSelectedTiles([`Dungeon ${D} D2`])).toBe('Dungeon');
+    expect(chartCategoryForSelectedTiles([`Dungeon ${D} D2`, `Dungeon ${D} D1`])).toBe('Dungeon');
+    expect(chartCategoryForSelectedTiles([`Dungeon ${D} D2`, `Raid ${D} D2`])).toBe('all');
+    expect(chartCategoryForSelectedTiles([])).toBe('all');
+    expect(tileLabelsForChartCategory(cards, 'Dungeon')).toEqual([`Dungeon ${D} D2`]);
+    expect(tileLabelsForChartCategory(cards, 'all')).toEqual([]);
   });
 
   it('tile selection still honours game and category filters', () => {
