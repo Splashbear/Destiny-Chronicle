@@ -28,13 +28,14 @@ describe('per-account Played With merge', () => {
     expect(m.games).toBe(3);
     expect(x.activitiesTogether).toBe(3);
     expect(x.timeTogetherSeconds).toBe(100 + 200 + 50); // longest own duration for the shared game
+    expect(x.firstPlayedTogether).toBe('2026-01-01T00:00:00Z');
     expect(x.lastPlayedTogether).toBe('2026-10-11T20:00:00Z');
     expect(x.displayName).toBe('Xan#0001');
     expect(m.partners.map((p) => p.membershipId)).not.toContain('A');
     expect(m.partners.map((p) => p.membershipId)).not.toContain('B');
     expect(x.perAccount).toEqual([
-      { id: 'A', activitiesTogether: 2, timeTogetherSeconds: 300, lastPlayedTogether: '2026-02-01T00:00:00Z' },
-      { id: 'B', activitiesTogether: 2, timeTogetherSeconds: 250, lastPlayedTogether: '2026-10-11T20:00:00Z' },
+      { id: 'A', activitiesTogether: 2, timeTogetherSeconds: 300, firstPlayedTogether: '2026-01-01T00:00:00Z', lastPlayedTogether: '2026-02-01T00:00:00Z' },
+      { id: 'B', activitiesTogether: 2, timeTogetherSeconds: 250, firstPlayedTogether: '2026-02-01T00:00:00Z', lastPlayedTogether: '2026-10-11T20:00:00Z' },
     ]);
   });
 
@@ -116,7 +117,7 @@ describe('queue + route', () => {
       const j: any = await r.json();
       expect(j.source).toBe('accounts'); expect(j.partial).toBe(true);
       expect(j.accounts.map((a: any) => [a.id, a.status, a.platform])).toEqual([['11', 'ready', 'PSN'], ['12', 'queued', null]]);
-      expect(j.partners[0]).toMatchObject({ membershipId: '99', displayName: 'Kaiser#4896', lastPlayedTogether: '2026-10-11T00:00:00Z' });
+      expect(j.partners[0]).toMatchObject({ membershipId: '99', displayName: 'Kaiser#4896', firstPlayedTogether: '2026-10-11T00:00:00Z', lastPlayedTogether: '2026-10-11T00:00:00Z' });
       expect(fs.readFileSync(s.requestsPath, 'utf8')).toContain('"12"');
     } finally { srv.close(); }
   });

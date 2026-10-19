@@ -29,6 +29,7 @@ import { ActivityIconService } from '../../services/activity-icon.service';
 import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../models/guardian-firsts.model';
 import { getStoryAnchorSortOrder } from '../../config/story-first-missions';
 import { pickFirstEverFromFirsts } from '../../utils/first-ever-from-firsts';
+import { d2PlayedWithAccounts, PlayedWithAccountChoice } from '../../utils/played-with-accounts';
 import {
   PantheonEventId,
   getPantheonConfig,
@@ -645,6 +646,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   private heatmapIdCacheKey = '';
   private heatmapIdCache: string[] = [];
+  private playedWithAccountCacheKey = '';
+  private playedWithAccountCache: PlayedWithAccountChoice[] = [];
+
+  /** Destiny 2 accounts for the Played With menu. A Destiny 1-only membership is left out. */
+  get playedWithAccounts(): PlayedWithAccountChoice[] {
+    const accounts = d2PlayedWithAccounts(this.selectedPlayers);
+    const key = accounts.map(account => `${account.id}\t${account.label}`).join('\n');
+    if (key === this.playedWithAccountCacheKey) {
+      return this.playedWithAccountCache;
+    }
+    this.playedWithAccountCacheKey = key;
+    this.playedWithAccountCache = accounts;
+    return accounts;
+  }
 
   get heatmapMembershipIds(): string[] {
     const ids = this.selectedPlayers.map(p => p.membershipId);

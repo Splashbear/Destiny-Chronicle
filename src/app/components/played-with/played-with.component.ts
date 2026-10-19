@@ -22,7 +22,8 @@ import { SiteAnalyticsService } from '../../services/site-analytics.service';
 import { PrunedPgcr } from '../../utils/pgcr-prune';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { UiI18nService } from '../../services/ui-i18n.service';
-import { PlayedWithAccount, PlayedWithBuildProgress } from '../../services/pgcr-api.service';
+import { PlayedWithBuildProgress } from '../../services/pgcr-api.service';
+import { PlayedWithAccountChoice } from '../../utils/played-with-accounts';
 import { TextViewService } from '../../services/text-view.service';
 import { pageSections, playedWithDisplayName } from '../../utils/text-tab-rows';
 
@@ -86,7 +87,9 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   readonly text = inject(TextViewService);
   readonly pageSize = 40;
   textPages = 1;
-  @Input() membershipIds: string[] = [];
+  /** Destiny 2 accounts the parent loaded. The dropdown selects one; the list is that account only. */
+  @Input() accounts: PlayedWithAccountChoice[] = [];
+  selectedId = '';
 
   session: FireteamStatsSession | null = null;
   coverage: FireteamCoverage | null = null;
@@ -101,13 +104,6 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   buildTimedOut = false;
   prefetchActive = false;
   prefetchRemaining = 0;
-
-  /** Looked-up accounts (server v2) and which ones are counted. */
-  accounts: PlayedWithAccount[] = [];
-  included = new Set<string>();
-  /** '' = sort by total, else one account id. */
-  sortAccount = '';
-  expanded = new Set<string>();
 
   sortColumn: PlayedWithSortColumn = 'activities';
   sortDirection: 'asc' | 'desc' = 'desc';
@@ -129,22 +125,23 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['membershipIds']) {
+    if (changes['accounts']) {
       // Parent passes a fresh array each change-detection pass; only reload when the set
       // of ids actually changes. Otherwise every CD cycle restarted the load and discarded
       // the in-flight result, leaving the tab blank forever.
-      const key = membershipIdsKey(this.membershipIds);
-      if (key === this.idsKey && !changes['membershipIds'].firstChange) {
+      const key = membershipIdsKey((this.accounts || []).map(account => account.id));
+      if (key === this.idsKey && !changes['accounts'].firstChange) {
         return;
       }
+      const keepSelection = this.accounts.some(account => account.id === this.selectedId);
       this.idsKey = key;
-      this.included = new Set(this.membershipIds.map(String));
-      this.sortAccount = '';
-      this.expanded.clear();
+      if (!keepSelection) {
+        this.selectedId = this.accounts[0]?.id || '';
+      }
       this.buildWaitStartedAt = null;
       this.buildTimedOut = false;
       // Count views when the feature is shown with accounts; never send the IDs.
-      if (Array.isArray(this.membershipIds) && this.membershipIds.length > 0) {
+      if (this.accounts.length > 0) {
         this.siteAnalytics.trackFeatureView('played_with');
       }
       void this.reload();
@@ -196,7 +193,7 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       this.sortDirection = this.sortDirection === 'desc' ? 'asc' : 'desc';
     } else {
       this.sortColumn = column;
-      this.sortDirection = column === 'lastPlayed' ? 'desc' : 'desc';
+      this.sortDirection = column === 'firstPlayed' ? 'asc' : 'desc';
     }
     this.applySort();
     this.cdr.markForCheck();
@@ -215,51 +212,14 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     return pageSections([{ title: 'Played with', rows: this.sortedPartners }], this.pageSize, this.textPages);
   }
 
-  accountLabel(a: PlayedWithAccount): string {
-    const name = a.name || `Account …${a.id.slice(-4)}`;
-    return a.platform ? `${name} (${a.platform})` : name;
-  }
-
-  accountName(id: string): string {
-    const a = this.accounts.find(x => x.id === id);
-    return a ? this.accountLabel(a) : id;
-  }
-
-  /** Toggle one account in or out of the merged list (at least one stays on). */
-  toggleAccount(id: string): void {
-    if (this.included.has(id)) {
-      if (this.included.size <= 1) {
-        return;
-      }
-      this.included.delete(id);
-      if (this.sortAccount === id) {
-        this.sortAccount = '';
-      }
-    } else {
-      this.included.add(id);
+  selectAccount(id: string): void {
+    if (!id || id === this.selectedId || !this.accounts.some(account => account.id === id)) {
+      return;
     }
+    this.selectedId = id;
     this.buildWaitStartedAt = null;
+    this.buildTimedOut = false;
     void this.reload();
-  }
-
-  setSortAccount(id: string): void {
-    this.sortAccount = id;
-    this.sortColumn = 'activities';
-    this.sortDirection = 'desc';
-    void this.reload();
-  }
-
-  toggleExpanded(id: string): void {
-    if (this.expanded.has(id)) {
-      this.expanded.delete(id);
-    } else {
-      this.expanded.add(id);
-    }
-    this.cdr.markForCheck();
-  }
-
-  get includedAccounts(): PlayedWithAccount[] {
-    return this.accounts.filter(a => this.included.has(a.id));
   }
 
   sortIndicator(column: PlayedWithSortColumn): string {
@@ -276,7 +236,7 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     this.prefetch.cancel();
     this.clearPoll();
 
-    if (!this.membershipIds.length) {
+    if (!this.selectedId) {
       this.session = null;
       this.coverage = null;
       this.sortedPartners = [];
@@ -306,19 +266,13 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       })
     );
 
-    const all = this.membershipIds.map(String);
-    const include = all.filter(id => this.included.has(id));
     const session = await this.fireteamStats.createSession(
-      this.membershipIds,
+      [this.selectedId],
       s => {
         if (token !== this.reloadToken) {
           return;
         }
         this.applySession(s);
-      },
-      {
-        include: include.length && include.length < all.length ? include : undefined,
-        sortBy: this.sortAccount || undefined
       }
     );
 
@@ -359,7 +313,7 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       return;
     }
 
-    void this.prefetch.prefetchForMemberships(this.membershipIds, (pgcrs: PrunedPgcr[]) => {
+    void this.prefetch.prefetchForMemberships([this.selectedId], (pgcrs: PrunedPgcr[]) => {
       if (token !== this.reloadToken || !this.session) {
         return;
       }
@@ -372,9 +326,6 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
 
   private applySession(session: FireteamStatsSession): void {
     this.session = session;
-    if (session.accounts?.length) {
-      this.accounts = session.accounts;
-    }
     this.coverage = session.coverage;
     this.applySort();
     this.loading = false;
@@ -391,6 +342,6 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
       this.sortedPartners = [];
       return;
     }
-    this.sortedPartners = this.session.sortPartners(this.sortColumn, this.sortDirection, this.sortAccount || undefined);
+    this.sortedPartners = this.session.sortPartners(this.sortColumn, this.sortDirection);
   }
 }

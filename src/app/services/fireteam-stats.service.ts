@@ -10,6 +10,7 @@ export interface FireteamPartnerRow {
   displayName: string;
   activitiesTogether: number;
   timeTogetherSeconds: number;
+  firstPlayedTogether?: string;
   lastPlayedTogether?: string;
   perAccount?: PlayedWithPerAccount[];
 }
@@ -26,7 +27,7 @@ export interface MissingPgcrEntry {
   period: string;
 }
 
-export type PlayedWithSortColumn = 'activities' | 'time' | 'lastPlayed';
+export type PlayedWithSortColumn = 'activities' | 'time' | 'firstPlayed' | 'lastPlayed';
 
 /** Games together with one account (0 when the partner never played with it). */
 export function perAccountGames(row: FireteamPartnerRow, accountId: string): number {
@@ -113,6 +114,9 @@ export class FireteamStatsSession {
       row.activitiesTogether++;
       row.timeTogetherSeconds += player.timeSeconds || fallbackDuration;
       row.displayName = pickBestPlayerDisplayName(row.displayName, player.name);
+      if (period && (!row.firstPlayedTogether || period < row.firstPlayedTogether)) {
+        row.firstPlayedTogether = period;
+      }
       if (period && (!row.lastPlayedTogether || period > row.lastPlayedTogether)) {
         row.lastPlayedTogether = period;
       }
@@ -151,6 +155,11 @@ export class FireteamStatsSession {
       switch (column) {
         case 'time':
           return (a.timeTogetherSeconds - b.timeTogetherSeconds) * dir;
+        case 'firstPlayed': {
+          const aT = a.firstPlayedTogether ? Date.parse(a.firstPlayedTogether) : 0;
+          const bT = b.firstPlayedTogether ? Date.parse(b.firstPlayedTogether) : 0;
+          return (aT - bT) * dir;
+        }
         case 'lastPlayed': {
           const aT = a.lastPlayedTogether ? Date.parse(a.lastPlayedTogether) : 0;
           const bT = b.lastPlayedTogether ? Date.parse(b.lastPlayedTogether) : 0;
@@ -215,6 +224,7 @@ export class FireteamStatsService {
             displayName: p.displayName,
             activitiesTogether: p.activitiesTogether,
             timeTogetherSeconds: p.timeTogetherSeconds,
+            firstPlayedTogether: p.firstPlayedTogether,
             lastPlayedTogether: p.lastPlayedTogether,
             perAccount: p.perAccount
           }))

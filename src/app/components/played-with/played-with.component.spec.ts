@@ -1,13 +1,21 @@
 import { SimpleChange } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { TextViewService } from '../../services/text-view.service';
 import { PlayedWithComponent, membershipIdsKey } from './played-with.component';
 
 describe('PlayedWithComponent reload guard', () => {
   function makeComponent(createSession: jasmine.Spy) {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [{ provide: TextViewService, useValue: { enabled: () => false } }]
+    });
     const cdr = { markForCheck: () => {} } as any;
     const prefetch = { cancel: () => {}, progress$: { subscribe: () => ({ unsubscribe() {} }) } } as any;
     const analytics = { trackFeatureView: () => {} } as any;
     const i18n = { t: (k: string) => k } as any;
-    return new PlayedWithComponent(i18n, { createSession } as any, prefetch, cdr, analytics);
+    return TestBed.runInInjectionContext(
+      () => new PlayedWithComponent(i18n, { createSession } as any, prefetch, cdr, analytics)
+    );
   }
 
   function readySession() {
@@ -27,20 +35,22 @@ describe('PlayedWithComponent reload guard', () => {
   it('does not restart loading when the parent passes a new array with the same ids', async () => {
     const createSession = jasmine.createSpy('createSession').and.callFake(async () => readySession());
     const c = makeComponent(createSession);
-    const ids = ['4611686018429785995', '4611686018452484164'];
+    const ids = ['4611686018429785995', '4611686018465122437'];
+    const choices = (list: string[]) => list.map(id => ({ id, label: id }));
 
-    c.membershipIds = [...ids];
-    c.ngOnChanges({ membershipIds: new SimpleChange(undefined, c.membershipIds, true) });
+    c.accounts = choices(ids);
+    c.ngOnChanges({ accounts: new SimpleChange(undefined, c.accounts, true) });
     // Simulate repeated change detection with a fresh getter array.
     for (let i = 0; i < 5; i++) {
-      const prev = c.membershipIds;
-      c.membershipIds = [...ids].reverse();
-      c.ngOnChanges({ membershipIds: new SimpleChange(prev, c.membershipIds, false) });
+      const prev = c.accounts;
+      c.accounts = choices([...ids].reverse());
+      c.ngOnChanges({ accounts: new SimpleChange(prev, c.accounts, false) });
     }
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
 
     expect(createSession).toHaveBeenCalledTimes(1);
+    expect(createSession.calls.mostRecent().args[0]).toEqual([ids[0]]);
     expect(c.loading).toBeFalse();
     expect(c.sortedPartners.length).toBe(1);
     c.ngOnDestroy();
@@ -53,13 +63,29 @@ describe('PlayedWithComponent reload guard', () => {
       fromApi: true, pendingBuild: true, pendingStatus: 'queued', coverage: null, sortPartners: () => []
     }));
     const c = makeComponent(createSession);
-    c.membershipIds = ['a'];
-    c.ngOnChanges({ membershipIds: new SimpleChange(undefined, c.membershipIds, true) });
+    c.accounts = [{ id: 'a', label: 'A' }];
+    c.ngOnChanges({ accounts: new SimpleChange(undefined, c.accounts, true) });
     await new Promise(r => setTimeout(r, 0));
     await new Promise(r => setTimeout(r, 0));
     expect(c.buildTimedOut).toBeTrue();
     expect(c.building).toBeFalse();
     PlayedWithComponent.MAX_BUILD_WAIT_MS = original;
+    c.ngOnDestroy();
+  });
+
+  it('loads only the account chosen in the dropdown', async () => {
+    const createSession = jasmine.createSpy('createSession').and.callFake(async () => readySession());
+    const c = makeComponent(createSession);
+    c.accounts = [
+      { id: 'xbox', label: 'Splashbear#1078 (Xbox)' },
+      { id: 'psn', label: 'Splashbear#1078 (PSN)' }
+    ];
+    c.ngOnChanges({ accounts: new SimpleChange(undefined, c.accounts, true) });
+    await new Promise(r => setTimeout(r, 0));
+    c.selectAccount('psn');
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    expect(createSession.calls.allArgs().map(args => args[0])).toEqual([['xbox'], ['psn']]);
     c.ngOnDestroy();
   });
 });
