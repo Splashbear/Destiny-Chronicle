@@ -111,9 +111,17 @@ describe('usage log lines', () => {
     const bot = await oneLine('discord-bot');
     expect(bot.source).toBe('bot');
     const junk = await oneLine('<script>alert(1)</script>');
+    const upper = await oneLine('<SCRIPT>alert(1)</SCRIPT>');
+    const spaced = await oneLine('</script >');
+    const nested = await oneLine('<scr<script>ipt>');
     expect(junk.source).toBe('other');
-    const raw = JSON.stringify([web, bot, junk]);
-    expect(raw).not.toMatch(/discord-bot|<script>|not-a-client/);
+    expect(upper.source).toBe('other');
+    expect(spaced.source).toBe('other');
+    expect(nested.source).toBe('other');
+    const raw = JSON.stringify([web, bot, junk, upper, spaced, nested]);
+    for (const needle of ['discord-bot', '<script>', '<SCRIPT>', '</script >', '<scr', 'not-a-client']) {
+      expect(raw.includes(needle)).toBe(false);
+    }
     expect(Object.keys(junk).filter((k) => /^(ip|remote|addr|user_agent|ua|referer|forwarded|headers)/i.test(k))).toEqual([]);
   });
 });
