@@ -16,6 +16,8 @@ export interface UsageLine {
   status?: number;
   ms?: number;
   self?: boolean;
+  /** web, bot, or other. Older lines may still say archive or bungie; those count as other. */
+  source?: string;
 }
 
 export interface UsageSummary {
@@ -32,6 +34,7 @@ export interface UsageSummary {
   ms_p95: number | null;
   by_route: Record<string, number>;
   by_game: Record<string, number>;
+  lookups_by_source: { web: number; bot: number; other: number };
   top_accounts: Array<{ membership_id: string; lookups: number }>;
 }
 
@@ -50,6 +53,7 @@ export function summarize(lines: UsageLine[], from: string, to: string, topN = 1
   const perAcct = new Map<string, number>();
   const byRoute: Record<string, number> = {};
   const byGame: Record<string, number> = {};
+  const lookupsBySource = { web: 0, bot: 0, other: 0 };
   const ms: number[] = [];
   let requests = 0, self = 0, e4 = 0, e5 = 0, lookups = 0;
   for (const l of lines) {
@@ -63,8 +67,10 @@ export function summarize(lines: UsageLine[], from: string, to: string, topN = 1
     byRoute[rk] = (byRoute[rk] || 0) + 1;
     const g = l.game || 'none';
     byGame[g] = (byGame[g] || 0) + 1;
+    const src = l.source === 'web' || l.source === 'bot' ? l.source : 'other';
     for (const id of l.membership_ids || []) {
       lookups++;
+      lookupsBySource[src]++;
       perAcct.set(id, (perAcct.get(id) || 0) + 1);
     }
   }
@@ -76,7 +82,8 @@ export function summarize(lines: UsageLine[], from: string, to: string, topN = 1
   return {
     from, to, generated_utc: new Date().toISOString(), requests, self_requests_excluded: self,
     errors_4xx: e4, errors_5xx: e5, unique_accounts: perAcct.size, account_lookups: lookups,
-    ms_p50: pct(ms, 50), ms_p95: pct(ms, 95), by_route: byRoute, by_game: byGame, top_accounts: top,
+    ms_p50: pct(ms, 50), ms_p95: pct(ms, 95), by_route: byRoute, by_game: byGame,
+    lookups_by_source: lookupsBySource, top_accounts: top,
   };
 }
 
@@ -160,6 +167,10 @@ export function toMarkdown(title: string, s: UsageSummary): string {
     `- Account lookups: ${s.account_lookups}, unique accounts: ${s.unique_accounts}`,
     `- Errors: 4xx ${s.errors_4xx}, 5xx ${s.errors_5xx}`,
     `- Latency ms: p50 ${s.ms_p50 ?? '-'}, p95 ${s.ms_p95 ?? '-'}`, '',
+    '## Lookups by source',
+    `- web: ${s.lookups_by_source.web}`,
+    `- bot: ${s.lookups_by_source.bot}`,
+    `- other: ${s.lookups_by_source.other}`, '',
     '## By route', ...Object.entries(s.by_route).sort((a, b) => b[1] - a[1]).map(([k, v]) => `- ${k}: ${v}`), '',
     '## Top accounts', '| membership_id | lookups |', '|---|---|',
     ...s.top_accounts.map((a) => `| ${a.membership_id} | ${a.lookups} |`), '',

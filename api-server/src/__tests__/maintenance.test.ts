@@ -25,6 +25,22 @@ describe('summarize', () => {
     expect(s.errors_5xx).toBe(1);
     expect(s.ms_p50).toBe(20);
     expect(s.by_route['GET /players/:id/activities']).toBe(2);
+    expect(s.lookups_by_source).toEqual({ web: 0, bot: 0, other: 4 });
+  });
+  it('splits account lookups by web, bot, and other', () => {
+    const s = summarize(
+      [
+        { membership_ids: ['111111111'], status: 200, source: 'web' },
+        { membership_ids: ['111111111', '222222222'], status: 200, source: 'bot' },
+        { membership_ids: ['333333333'], status: 200, source: 'archive' },
+        { membership_ids: ['444444444'], status: 200, source: 'discord-bot' },
+        { membership_ids: ['555555555'], status: 200, self: true, source: 'web' },
+      ],
+      '2026-10-05',
+      '2026-10-11'
+    );
+    expect(s.lookups_by_source).toEqual({ web: 1, bot: 2, other: 2 });
+    expect(s.account_lookups).toBe(5);
   });
   it('groups numeric route segments', () => {
     expect(routeKey('GET /pgcr/15994814966')).toBe('GET /pgcr/:id');

@@ -147,7 +147,7 @@ export class PgcrApiService {
   }
 
   private headers(): HttpHeaders {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    const h: Record<string, string> = { 'Content-Type': 'application/json', 'X-DC-Client': 'web' };
     const key = environment.pgcrApiKey?.trim();
     if (key) {
       h['X-API-Key'] = key;
