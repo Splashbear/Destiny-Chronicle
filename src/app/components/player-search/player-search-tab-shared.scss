@@ -400,8 +400,35 @@ img[src*='class-'] {
   padding: 8px 0;
   border-bottom: 1px solid #15191e;
 }
-.text-frow { grid-template-columns: 1fr 110px 70px 140px; }
+.text-frow { grid-template-columns: 1.2fr 1fr 110px 70px 140px; }
+.text-accounts { margin: 0 0 16px; }
+.text-account {
+  margin: 0 8px 8px 0;
+  padding: 6px 10px;
+  color: #d5dbe3;
+  background: transparent;
+  border: 1px solid #c9a227;
+  cursor: pointer;
+  font: inherit;
+}
+.text-account.on {
+  color: var(--destiny-parchment, #f4efe4);
+  border: 2px solid var(--destiny-flame, #e67e22);
+  background: linear-gradient(180deg, rgba(230, 126, 34, 0.28), rgba(20, 16, 12, 0.9));
+}
 .text-trow, .text-prow { grid-template-columns: 1fr auto; }
+.text-brow {
+  display: grid;
+  grid-template-columns: 180px minmax(12ch, 1fr) 48px 90px;
+  gap: 4px 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid #15191e;
+}
+.text-bbar {
+  color: #e4c04a;
+  letter-spacing: 0;
+  white-space: pre;
+}
 @media (max-width: 640px) {
   .text-day-row, .text-frow, .text-trow, .text-prow { grid-template-columns: 1fr 1fr; }
   .text-day-name { grid-column: 1 / -1; font-weight: 700; }

@@ -25,6 +25,12 @@ export function pickFirstEverFromFirsts(
     new Date(a.completionDate || a.period).getTime() -
     new Date(b.completionDate || b.period).getTime();
 
+  const named = (items: ActivityFirstCompletion[]) =>
+    items.filter(f => {
+      const name = (f.name || '').trim();
+      return !!name && name !== 'Unknown Activity';
+    });
+
   const tutorials = scoped.filter(
     f =>
       (f.storyReleaseId && FIRST_EVER_STORY_RELEASE_IDS.has(f.storyReleaseId)) ||
@@ -32,6 +38,19 @@ export function pickFirstEverFromFirsts(
       tutorialRefs.has(String(f.referenceId))
   );
   const stories = scoped.filter(f => f.type === 'story');
-  const pool = tutorials.length ? tutorials : stories.length ? stories : scoped;
+  const namedTutorials = named(tutorials);
+  const namedStories = named(stories);
+  const namedAny = named(scoped);
+  const pool = namedTutorials.length
+    ? namedTutorials
+    : tutorials.length
+      ? tutorials
+      : namedStories.length
+        ? namedStories
+        : stories.length
+          ? stories
+          : namedAny.length
+            ? namedAny
+            : scoped;
   return [...pool].sort(byDate)[0];
 }

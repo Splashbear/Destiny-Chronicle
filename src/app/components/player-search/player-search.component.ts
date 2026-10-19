@@ -5367,8 +5367,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    */
   getActivityName(activity: ActivityHistory, isD1: boolean): string {
     const referenceId = activity.activityDetails?.referenceId;
-    if (!referenceId) return 'Unknown Activity';
-    return this.manifest.getActivityName(referenceId, isD1) || 'Unknown Activity';
+    const stored = (activity as ActivityHistory & { name?: string }).name?.trim();
+    if (referenceId) {
+      const lookedUp = this.manifest.getActivityName(referenceId, isD1);
+      if (lookedUp && lookedUp !== 'Unknown Activity') {
+        return lookedUp;
+      }
+    }
+    if (stored && stored !== 'Unknown Activity') {
+      return stored;
+    }
+    return 'Unknown Activity';
   }
 
   async calculateAccountStats() {
@@ -8306,11 +8315,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     event?.stopPropagation();
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) return;
+    const row = activity as ActivityHistory & { membershipId?: string; displayName?: string };
+    if (row.membershipId && !row.displayName) {
+      const match = this.selectedPlayers.find(player =>
+        String(player.membershipId) === String(row.membershipId) &&
+        (!activity.game || player.game === activity.game)
+      );
+      if (match) {
+        row.displayName = match.displayName;
+      }
+    }
+    const d1 = activity.game === 'D1' ? true : activity.game === 'D2' ? false : isD1;
     if (this.activeTab === 'activities' || this.activeTab === 'firsts' || this.activeTab === 'breakdown') {
-      this.pgcrModalService.openPgcrLiteFromActivity(activity, isD1);
+      this.pgcrModalService.openPgcrLiteFromActivity(activity, d1, this.getActivityName(activity, d1));
       return;
     }
-    this.openFullPgcrInNewTab(instanceId, isD1);
+    this.openFullPgcrInNewTab(instanceId, d1);
   }
 
   private openFullPgcrInNewTab(instanceId: string | number, isD1: boolean): void {
@@ -9251,8 +9271,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       },
       game: f.game,
       membershipType: f.membershipType,
-      characterClass: f.characterClass
-    };
+      characterClass: f.characterClass,
+      membershipId: f.membershipId,
+      name: f.name
+    } as ActivityHistory;
   }
 
   /**
@@ -10011,7 +10033,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   expandAllBreakdownGroups(): void {
     this.filteredActivityBreakdownGroups;
     this.breakdownView.expandAll();
-    this.cdr.markForCheck();
+    this.cdr.detectChanges();
+  }
+
+  collapseAllBreakdownGroups(): void {
+    this.filteredActivityBreakdownGroups;
+    this.breakdownView.collapseAll();
+    this.cdr.detectChanges();
   }
 
   visibleBreakdownRows(group: BreakdownGroup): ActivityCountRow[] {

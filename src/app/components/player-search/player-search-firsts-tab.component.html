@@ -3,12 +3,41 @@
     <p *ngIf="ps.archiveCoverage as cov" class="text-day-cov">{{ ps.coverageLine(cov) }}</p>
     <h2>Guardian Firsts</h2>
     <p class="text-day-dim">Your first completed clear of each activity. Completions only. {{ ps.activeFirstsGame === 'D1' ? 'Destiny 1' : 'Destiny 2' }}.</p>
+    <div class="flex flex-wrap gap-2 mb-4">
+      <button *ngFor="let g of ps.guardianGames"
+              type="button"
+              dcKind="game" [dcPayload]="g"
+              class="d2-tab" [ngClass]="{'d2-tab-active-blue': ps.activeFirstsGame===g}">
+        {{ g === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
+      </button>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <label class="text-sm text-slate-400 whitespace-nowrap" for="firsts-section-filter-text">Show</label>
+      <select id="firsts-section-filter-text"
+              name="ps.firstsSectionFilter"
+              class="destiny-input text-sm py-1.5 max-w-[240px]"
+              [(ngModel)]="ps.firstsSectionFilter">
+        <option *ngFor="let opt of ps.firstsSectionFilterOptions" [value]="opt.value">{{ opt.label }}</option>
+      </select>
+    </div>
+    <div *ngIf="ps.perPlatformStats.length > 0" class="text-accounts">
+      <p class="text-day-dim">Accounts. Select one or more. No selection = all accounts.</p>
+      <button *ngFor="let plat of ps.perPlatformStats"
+              type="button"
+              class="text-account"
+              [class.on]="ps.selectedAccountKeysForFirsts.has(plat.accountKey)"
+              dcKind="account"
+              [dcPayload]="plat.accountKey">
+        {{ plat.displayName || plat.platform }} · {{ plat.platform }} · {{ plat.game }}
+      </button>
+    </div>
     <p *ngIf="ps.loadingGuardianFirsts" class="text-day-dim">Loading firsts…</p>
     <ng-container *ngIf="!ps.loadingGuardianFirsts && textFirsts() as page">
       <section *ngFor="let section of page.sections">
         <h2>{{ section.title }}</h2>
         <div *ngFor="let row of section.rows" class="text-frow">
           <span class="text-day-name">{{ row.name }}</span>
+          <span class="text-day-dim">{{ row.who }}</span>
           <button *ngIf="row.first || row.activity" type="button" class="text-day-link" dcKind="text-first" [dcPayload]="row">{{ row.when }}</button>
           <span *ngIf="!row.first && !row.activity">{{ row.when }}</span>
           <span class="text-day-dim">{{ row.years }}</span>

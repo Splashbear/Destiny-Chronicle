@@ -3,6 +3,7 @@ import {
   BREAKDOWN_PAGE_SIZE,
   BreakdownView,
   breakdownCreatesInLastSecond,
+  breakdownTextBars,
   breakdownGroupKey,
   breakdownRowFromEvent,
   breakdownRowKey,
@@ -65,6 +66,13 @@ describe('breakdown view', () => {
     view.expandAll();
     expect(view.visibleRows(source[1]).length).toBe(1);
     expect(view.visibleRows(source[0]).length).toBe(60);
+    const replaced = groups();
+    view.sync(replaced, new Set(), null);
+    expect(view.isExpanded(replaced[1])).toBe(true);
+    expect(view.visibleRows(replaced[0]).length).toBe(60);
+    view.collapseAll();
+    expect(view.isExpanded(replaced[0])).toBe(false);
+    expect(view.visibleRows(replaced[1]).length).toBe(0);
   });
 
   it('keeps the open groups when a later count replaces the list', () => {
@@ -108,6 +116,19 @@ describe('breakdown view', () => {
 
     const plain = { closest: () => null };
     expect(breakdownRowFromEvent({ target: plain } as unknown as { target: EventTarget | null }, rows)).toBeUndefined();
+  });
+
+  it('draws a text bar from each category share of total time', () => {
+    const bars = breakdownTextBars([
+      { label: 'Raid – D2', runs: 10, clears: 8, timeSeconds: 75, clearRate: 80 },
+      { label: 'Patrol – D2', runs: 40, clears: 40, timeSeconds: 25, clearRate: 100 },
+      { label: 'Empty', runs: 0, clears: 0, timeSeconds: 0, clearRate: 0 },
+    ], 4);
+    expect(bars.map(bar => bar.label)).toEqual(['Raid – D2', 'Patrol – D2']);
+    expect(bars[0].bar).toBe('███░');
+    expect(bars[0].pct).toBe(75);
+    expect(bars[1].bar).toBe('█░░░');
+    expect(bars[1].pct).toBe(25);
   });
 
   it('counts row and tile creation only when a node is built', () => {

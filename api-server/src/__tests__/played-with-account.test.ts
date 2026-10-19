@@ -29,7 +29,9 @@ describe('per-account Played With merge', () => {
     expect(x.activitiesTogether).toBe(3);
     expect(x.timeTogetherSeconds).toBe(100 + 200 + 50); // longest own duration for the shared game
     expect(x.firstPlayedTogether).toBe('2026-01-01T00:00:00Z');
+    expect(x.firstInstanceId).toBe('1');
     expect(x.lastPlayedTogether).toBe('2026-10-11T20:00:00Z');
+    expect(x.lastInstanceId).toBe('3');
     expect(x.displayName).toBe('Xan#0001');
     expect(m.partners.map((p) => p.membershipId)).not.toContain('A');
     expect(m.partners.map((p) => p.membershipId)).not.toContain('B');

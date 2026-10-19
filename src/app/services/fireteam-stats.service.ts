@@ -12,6 +12,8 @@ export interface FireteamPartnerRow {
   timeTogetherSeconds: number;
   firstPlayedTogether?: string;
   lastPlayedTogether?: string;
+  firstInstanceId?: string;
+  lastInstanceId?: string;
   perAccount?: PlayedWithPerAccount[];
 }
 
@@ -116,9 +118,11 @@ export class FireteamStatsSession {
       row.displayName = pickBestPlayerDisplayName(row.displayName, player.name);
       if (period && (!row.firstPlayedTogether || period < row.firstPlayedTogether)) {
         row.firstPlayedTogether = period;
+        row.firstInstanceId = pgcr.id || row.firstInstanceId;
       }
       if (period && (!row.lastPlayedTogether || period > row.lastPlayedTogether)) {
         row.lastPlayedTogether = period;
+        row.lastInstanceId = pgcr.id || row.lastInstanceId;
       }
     }
 
@@ -226,6 +230,8 @@ export class FireteamStatsService {
             timeTogetherSeconds: p.timeTogetherSeconds,
             firstPlayedTogether: p.firstPlayedTogether,
             lastPlayedTogether: p.lastPlayedTogether,
+            firstInstanceId: p.firstInstanceId,
+            lastInstanceId: p.lastInstanceId,
             perAccount: p.perAccount
           }))
         );

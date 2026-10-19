@@ -64,6 +64,32 @@ describe('pickFirstEverFromFirsts', () => {
     expect(picked?.name).toBe('A Guardian Rises');
   });
 
+  it('skips an unnamed earlier activity when Homecoming is present', () => {
+    const picked = pickFirstEverFromFirsts(
+      [
+        stub({
+          name: 'Unknown Activity',
+          game: 'D2',
+          completionDate: '2017-09-06T04:20:02Z',
+          type: 'story',
+          referenceId: '1',
+          instanceId: '303555'
+        }),
+        stub({
+          name: 'Homecoming',
+          game: 'D2',
+          completionDate: '2017-09-06T18:00:00Z',
+          storyReleaseId: 'd2-red-war',
+          referenceId: '1658347443',
+          instanceId: '88001'
+        })
+      ],
+      'D2'
+    );
+    expect(picked?.name).toBe('Homecoming');
+    expect(picked?.instanceId).toBe('88001');
+  });
+
   it('ignores the other game when membership ids are shared', () => {
     const picked = pickFirstEverFromFirsts(
       [

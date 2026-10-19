@@ -1060,6 +1060,26 @@ export class ActivityDbService extends Dexie {
     }
   }
 
+  /** Destiny 2 row for this account whose period matches the Played With date. */
+  async findD2ActivityByMembershipPeriod(membershipId: string, period: string): Promise<StoredActivity | undefined> {
+    await this.initPromise;
+    const ms = Date.parse(period);
+    if (!membershipId || Number.isNaN(ms)) {
+      return undefined;
+    }
+    try {
+      const start = new Date(ms - 2000).toISOString();
+      const end = new Date(ms + 2000).toISOString();
+      const rows = await this.activities.where('period').between(start, end, true, true).toArray();
+      return rows.find(row =>
+        String(row.membershipId) === String(membershipId) && (row.game || 'D2') === 'D2'
+      );
+    } catch (error) {
+      console.error('[Dexie] Error finding activity by period:', error);
+      return undefined;
+    }
+  }
+
   /** D1 and D2 instance ids overlap: pass `game` to get the right row. */
   async getActivityByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<StoredActivity | undefined> {
     await this.initPromise;

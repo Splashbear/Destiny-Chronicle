@@ -26,6 +26,8 @@ import { PlayedWithBuildProgress } from '../../services/pgcr-api.service';
 import { PlayedWithAccountChoice } from '../../utils/played-with-accounts';
 import { TextViewService } from '../../services/text-view.service';
 import { pageSections, playedWithDisplayName } from '../../utils/text-tab-rows';
+import { ActivityDbService } from '../../services/activity-db.service';
+import { PGCRModalService } from '../../services/pgcr-modal.service';
 
 /**
  * Stable key for a set of membership ids. The parent binds a getter that returns a new
@@ -85,6 +87,8 @@ export function membershipIdsKey(ids: readonly string[] | null | undefined): str
 })
 export class PlayedWithComponent implements OnChanges, OnDestroy {
   readonly text = inject(TextViewService);
+  private readonly activityDb = inject(ActivityDbService);
+  private readonly pgcrModal = inject(PGCRModalService);
   readonly pageSize = 40;
   textPages = 1;
   /** Destiny 2 accounts the parent loaded. The dropdown selects one; the list is that account only. */
@@ -206,6 +210,28 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
 
   partnerName(name: string | null | undefined): string {
     return playedWithDisplayName(name);
+  }
+
+  async openPartnerGame(row: FireteamPartnerRow, which: 'first' | 'last'): Promise<void> {
+    const period = which === 'first' ? row.firstPlayedTogether : row.lastPlayedTogether;
+    if (!period) {
+      return;
+    }
+    let instanceId = which === 'first' ? row.firstInstanceId : row.lastInstanceId;
+    if (!instanceId && this.selectedId) {
+      const activity = await this.activityDb.findD2ActivityByMembershipPeriod(this.selectedId, period);
+      instanceId = activity?.activityDetails?.instanceId || activity?.instanceId;
+    }
+    if (!instanceId) {
+      return;
+    }
+    this.pgcrModal.openPgcrLite({
+      instanceId: String(instanceId),
+      isD1: false,
+      membershipId: this.selectedId || undefined,
+      period,
+      activityLabel: which === 'first' ? 'First played together' : 'Last played together',
+    });
   }
 
   textPartners(): { sections: Array<{ title: string; rows: FireteamPartnerRow[] }>; total: number; shown: number } {

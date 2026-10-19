@@ -6,7 +6,8 @@ import { ChangeDetectionStrategy, Component, Directive, inject, Input, OnInit } 
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { PlayerSearchComponent } from './player-search.component';
 import { environment } from '../../../environments/environment';
-import { breakdownCreateCounts, breakdownCreatesInLastSecond, noteBreakdownCreate } from '../../utils/breakdown-view';
+import { breakdownCreateCounts, breakdownCreatesInLastSecond, breakdownTextBars, noteBreakdownCreate } from '../../utils/breakdown-view';
+import { TextViewService } from '../../services/text-view.service';
 
 if (!environment.production && typeof window !== 'undefined') {
   (window as unknown as { __dcBreakdownCreates?: () => unknown }).__dcBreakdownCreates = () => ({
@@ -40,4 +41,9 @@ export class BreakdownCreateProbe implements OnInit {
 })
 export class PlayerSearchBreakdownTabComponent {
   readonly ps = inject(PlayerSearchComponent);
+  readonly text = inject(TextViewService);
+
+  textBars() {
+    return breakdownTextBars(this.ps.activityBreakdownSummaryCards || []);
+  }
 }

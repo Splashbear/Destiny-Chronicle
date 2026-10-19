@@ -172,6 +172,9 @@ export class PgcrLiteComponent implements OnInit {
     if (!isUsablePrunedPgcr(pruned)) {
       return false;
     }
+    if (this.data.membershipId && !this.anchorInRawEntries(raw?.entries)) {
+      return false;
+    }
     if (!this.data.period) {
       return true;
     }
@@ -233,6 +236,9 @@ export class PgcrLiteComponent implements OnInit {
       return true;
     }
     const anchorId = this.resolveAnchorMembershipId(players);
+    if (this.data.membershipId && anchorId && !players.some(p => String(p.id) === anchorId)) {
+      return true;
+    }
     if (this.data.isD1 && anchorId) {
       if (!players.some(p => String(p.id) === anchorId)) {
         return true;

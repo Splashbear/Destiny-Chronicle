@@ -10,6 +10,8 @@ export interface ExternalPgcrPartner {
   timeTogetherSeconds: number;
   firstPlayedTogether?: string;
   lastPlayedTogether?: string;
+  firstInstanceId?: string;
+  lastInstanceId?: string;
   /** Split by the looked-up account (only accounts that shared at least one game). */
   perAccount?: PlayedWithPerAccount[];
 }
