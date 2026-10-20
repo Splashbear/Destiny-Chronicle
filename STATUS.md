@@ -7,7 +7,7 @@
 
 ### Website
 - **W63 docs merged:** PR #61 → `docs/specs/ACCOMPLISHMENTS_SPEC.md` on master.
-- **Building:** Accomplishments tab — Medals (D2) first on `feature/accomplishments-medals`. Lean list UI (paginated rows, no Braytech-style cards). Not merged yet.
+- **Building:** [PR #62](https://github.com/Splashbear/Destiny-Chronicle/pull/62) at `87489b5` — Accomplishments tab, D2 Medals first. Lean paginated rows (no Braytech-style cards). Not merged until user says yes.
 
 ## Ship note (2026-10-20 ~12:20 ET) — W63
 
