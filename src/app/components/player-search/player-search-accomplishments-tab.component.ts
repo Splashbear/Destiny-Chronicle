@@ -5,9 +5,17 @@ import { AccountCardGridComponent } from '../account-card-grid/account-card-grid
 import { PlayerSearchComponent } from './player-search.component';
 import { TextViewService } from '../../services/text-view.service';
 import { AccomplishmentsMedalsService } from '../../services/accomplishments-medals.service';
+import { AccomplishmentsCollectionsService } from '../../services/accomplishments-collections.service';
 import { AccountMedalsResult, MedalModeGroupId } from '../../models/accomplishments-medals.model';
+import {
+  AccomplishmentBadge,
+  AccomplishmentEmblem,
+  AccountCollectionsResult,
+} from '../../models/accomplishments-collections.model';
 import { pageSections } from '../../utils/text-tab-rows';
 import { PlayerSearchDisplay } from '../../models/player-search-display.model';
+
+type AccompSection = 'medals' | 'badges' | 'emblems';
 
 @Component({
   selector: 'app-player-search-accomplishments-tab',
@@ -20,29 +28,39 @@ import { PlayerSearchDisplay } from '../../models/player-search-display.model';
 export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   readonly ps = inject(PlayerSearchComponent);
   readonly text = inject(TextViewService);
-  private readonly medals = inject(AccomplishmentsMedalsService);
+  private readonly medalsSvc = inject(AccomplishmentsMedalsService);
+  private readonly collectionsSvc = inject(AccomplishmentsCollectionsService);
   private readonly cdr = inject(ChangeDetectorRef);
 
+  activeSection: AccompSection = 'medals';
   loading = false;
   asOf: string | null = null;
-  /** Active mode filter; null = all groups. */
   activeMode: MedalModeGroupId | null = null;
-  /** Paginate full-view rows for weaker devices. */
   readonly pageSize = 48;
   visibleCount = 48;
   textPages = 1;
 
-  /** membershipKey → result */
-  results: Record<string, AccountMedalsResult> = {};
+  medalResults: Record<string, AccountMedalsResult> = {};
+  collectionResults: Record<string, AccountCollectionsResult> = {};
 
   ngOnInit(): void {
+    void this.refresh();
+  }
+
+  setSection(section: AccompSection): void {
+    if (this.activeSection === section) return;
+    this.activeSection = section;
+    this.visibleCount = this.pageSize;
+    this.textPages = 1;
+    this.cdr.markForCheck();
     void this.refresh();
   }
 
   async refresh(): Promise<void> {
     const players = this.ps.getAccomplishmentsFilteredPlayers();
     if (!players.length) {
-      this.results = {};
+      this.medalResults = {};
+      this.collectionResults = {};
       this.asOf = null;
       this.loading = false;
       this.cdr.markForCheck();
@@ -52,34 +70,60 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     this.loading = true;
     this.cdr.markForCheck();
 
-    const next: Record<string, AccountMedalsResult> = { ...this.results };
     let latestAsOf: string | null = this.asOf;
+    const d2 = players.filter((p) => !this.ps.isD1Player(p));
 
-    for (const player of players) {
-      if (this.ps.isD1Player(player)) {
-        continue;
-      }
-      const key = this.ps.getPlayerKey(player);
-      try {
-        const result = await this.medals.loadAccountMedals(player.membershipType, player.membershipId);
-        next[key] = result;
-        if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
-          latestAsOf = result.fetchedAt;
+    if (this.activeSection === 'medals') {
+      const next = { ...this.medalResults };
+      for (const player of d2) {
+        const key = this.ps.getPlayerKey(player);
+        try {
+          const result = await this.medalsSvc.loadAccountMedals(player.membershipType, player.membershipId);
+          next[key] = result;
+          if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
+            latestAsOf = result.fetchedAt;
+          }
+        } catch (e: any) {
+          next[key] = {
+            membershipId: player.membershipId,
+            membershipType: player.membershipType,
+            fetchedAt: new Date().toISOString(),
+            groups: [],
+            totalEarned: 0,
+            status: 'error',
+            message: e?.message || 'Could not load medals',
+          };
         }
-      } catch (e: any) {
-        next[key] = {
-          membershipId: player.membershipId,
-          membershipType: player.membershipType,
-          fetchedAt: new Date().toISOString(),
-          groups: [],
-          totalEarned: 0,
-          status: 'error',
-          message: e?.message || 'Could not load medals',
-        };
       }
+      this.medalResults = next;
+    } else {
+      const next = { ...this.collectionResults };
+      for (const player of d2) {
+        const key = this.ps.getPlayerKey(player);
+        try {
+          const result = await this.collectionsSvc.loadAccountCollections(
+            player.membershipType,
+            player.membershipId
+          );
+          next[key] = result;
+          if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
+            latestAsOf = result.fetchedAt;
+          }
+        } catch (e: any) {
+          next[key] = {
+            membershipId: player.membershipId,
+            membershipType: player.membershipType,
+            fetchedAt: new Date().toISOString(),
+            badges: [],
+            emblems: [],
+            status: 'error',
+            message: e?.message || 'Could not load collections',
+          };
+        }
+      }
+      this.collectionResults = next;
     }
 
-    this.results = next;
     this.asOf = latestAsOf;
     this.loading = false;
     this.visibleCount = this.pageSize;
@@ -91,23 +135,18 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     return this.ps.getAccomplishmentsFilteredPlayers().filter((p) => !this.ps.isD1Player(p));
   }
 
-  d1PlayersSelected(): boolean {
-    return this.ps.getAccomplishmentsFilteredPlayers().some((p) => this.ps.isD1Player(p));
-  }
-
-  aggregated(): AccountMedalsResult | null {
+  aggregatedMedals(): AccountMedalsResult | null {
     const players = this.d2Players();
     if (!players.length) return null;
     if (players.length === 1) {
-      return this.results[this.ps.getPlayerKey(players[0])] || null;
+      return this.medalResults[this.ps.getPlayerKey(players[0])] || null;
     }
-    // Aggregate: max count per medal across selected accounts (same platform key space)
     const byId = new Map<string, { medal: AccountMedalsResult['groups'][0]['medals'][0]; count: number }>();
     let status: AccountMedalsResult['status'] = 'empty';
     let message: string | undefined;
     let fetchedAt = '';
     for (const player of players) {
-      const r = this.results[this.ps.getPlayerKey(player)];
+      const r = this.medalResults[this.ps.getPlayerKey(player)];
       if (!r) continue;
       if (r.fetchedAt > fetchedAt) fetchedAt = r.fetchedAt;
       if (r.status === 'hidden' && status !== 'ok') {
@@ -143,7 +182,6 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     }
     const medals = [...byId.values()].map(({ medal, count }) => ({ ...medal, count }));
     medals.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-    // Reuse service grouping by reconstructing via modeGroup field
     const groupMap = new Map<MedalModeGroupId, typeof medals>();
     for (const m of medals) {
       const list = groupMap.get(m.modeGroup) || [];
@@ -159,6 +197,72 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
       totalEarned: medals.reduce((s, m) => s + m.count, 0),
       status: medals.length ? 'ok' : 'empty',
       message: medals.length ? undefined : 'No medals earned on the selected accounts',
+    };
+  }
+
+  aggregatedCollections(): AccountCollectionsResult | null {
+    const players = this.d2Players();
+    if (!players.length) return null;
+    if (players.length === 1) {
+      return this.collectionResults[this.ps.getPlayerKey(players[0])] || null;
+    }
+    const badgeMap = new Map<string, AccomplishmentBadge>();
+    const emblemMap = new Map<string, AccomplishmentEmblem>();
+    let status: AccountCollectionsResult['status'] = 'empty';
+    let message: string | undefined;
+    let fetchedAt = '';
+    for (const player of players) {
+      const r = this.collectionResults[this.ps.getPlayerKey(player)];
+      if (!r) continue;
+      if (r.fetchedAt > fetchedAt) fetchedAt = r.fetchedAt;
+      if (r.status === 'hidden' && status !== 'ok') {
+        status = 'hidden';
+        message = r.message;
+        continue;
+      }
+      if (r.status === 'error' && status !== 'ok' && status !== 'hidden') {
+        status = 'error';
+        message = r.message;
+        continue;
+      }
+      if (r.status === 'ok') status = 'ok';
+      for (const b of r.badges) {
+        const cur = badgeMap.get(b.hash);
+        if (!cur || b.acquired > cur.acquired || (b.complete && !cur.complete)) {
+          badgeMap.set(b.hash, b);
+        }
+      }
+      for (const e of r.emblems) {
+        emblemMap.set(e.hash, e);
+      }
+    }
+    if (status !== 'ok') {
+      return {
+        membershipId: 'aggregate',
+        membershipType: 0,
+        fetchedAt: fetchedAt || new Date().toISOString(),
+        badges: [],
+        emblems: [],
+        status,
+        message,
+      };
+    }
+    const badges = [...badgeMap.values()].sort((a, b) => {
+      if (a.complete !== b.complete) return a.complete ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    const emblems = [...emblemMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      membershipId: 'aggregate',
+      membershipType: 0,
+      fetchedAt: fetchedAt || new Date().toISOString(),
+      badges,
+      emblems,
+      status: badges.length || emblems.length ? 'ok' : 'empty',
+      message:
+        badges.length || emblems.length
+          ? undefined
+          : 'No badges or emblems on the selected accounts',
     };
   }
 
@@ -182,12 +286,24 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     return flat.slice(0, this.visibleCount);
   }
 
-  totalVisible(result: AccountMedalsResult | null): number {
+  totalVisibleMedals(result: AccountMedalsResult | null): number {
     if (!result) return 0;
     const groups = this.activeMode
       ? result.groups.filter((g) => g.id === this.activeMode)
       : result.groups;
     return groups.reduce((n, g) => n + g.medals.length, 0);
+  }
+
+  completedBadgeCount(cols: AccountCollectionsResult | null): number {
+    return (cols?.badges || []).filter((b) => b.complete).length;
+  }
+
+  visibleBadges(cols: AccountCollectionsResult | null): AccomplishmentBadge[] {
+    return (cols?.badges || []).slice(0, this.visibleCount);
+  }
+
+  visibleEmblems(cols: AccountCollectionsResult | null): AccomplishmentEmblem[] {
+    return (cols?.emblems || []).slice(0, this.visibleCount);
   }
 
   showMore(): void {
@@ -197,15 +313,50 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
   textMedals(result: AccountMedalsResult | null) {
     if (!result || result.status !== 'ok') {
-      return { sections: [] as Array<{ title: string; rows: { name: string; count: number }[] }>, total: 0, shown: 0 };
+      return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
     }
     const groups = this.activeMode
       ? result.groups.filter((g) => g.id === this.activeMode)
       : result.groups;
     const sections = groups.map((g) => ({
       title: `${g.id} (${g.medals.length})`,
-      rows: g.medals.map((m) => ({ name: m.name, count: m.count })),
+      rows: g.medals.map((m) => ({ name: m.name, detail: String(m.count) })),
     }));
+    return pageSections(sections, 40, this.textPages);
+  }
+
+  textBadges(cols: AccountCollectionsResult | null) {
+    if (!cols || cols.status !== 'ok') {
+      return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
+    }
+    const complete = cols.badges.filter((b) => b.complete);
+    const progress = cols.badges.filter((b) => !b.complete);
+    const sections = [
+      {
+        title: `Complete (${complete.length})`,
+        rows: complete.map((b) => ({ name: b.name, detail: `${b.acquired}/${b.total}` })),
+      },
+      {
+        title: `In progress (${progress.length})`,
+        rows: progress.map((b) => ({
+          name: b.name,
+          detail: `${b.acquired}/${b.total} · ${b.remaining} left`,
+        })),
+      },
+    ].filter((s) => s.rows.length);
+    return pageSections(sections, 40, this.textPages);
+  }
+
+  textEmblems(cols: AccountCollectionsResult | null) {
+    if (!cols || cols.status !== 'ok') {
+      return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
+    }
+    const sections = [
+      {
+        title: `Owned emblems (${cols.emblems.length})`,
+        rows: cols.emblems.map((e) => ({ name: e.name, detail: '' })),
+      },
+    ];
     return pageSections(sections, 40, this.textPages);
   }
 
@@ -216,5 +367,13 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
   trackMedal(_: number, m: { statId: string }): string {
     return m.statId;
+  }
+
+  trackBadge(_: number, b: AccomplishmentBadge): string {
+    return b.hash;
+  }
+
+  trackEmblem(_: number, e: AccomplishmentEmblem): string {
+    return e.hash;
   }
 }
