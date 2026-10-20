@@ -19,6 +19,8 @@ export interface ActivityFirstCompletion {
   isFlawless?: boolean;
   /** Optional fireteam size from PGCR data */
   fireteamSize?: number;
+  /** Unique fireteam display names from the first-clear PGCR (short names, entry order) */
+  fireteamNames?: string[];
   /** Story milestone: stable release id from story-first-missions config */
   storyReleaseId?: string;
   /** Story milestone: expansion / season label */

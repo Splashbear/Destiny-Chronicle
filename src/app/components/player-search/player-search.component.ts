@@ -78,6 +78,8 @@ import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { AnniversaryCelebrationBannerComponent, AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
 import { collectFirstsTabMilestonesOnDate, raidDungeonFirstsShownOnCards } from '../../utils/anniversary-helper';
+import { lookupActivityReleaseDate } from '../../utils/activity-release-lookup';
+import { formatReleaseElapsed } from '../../utils/release-elapsed';
 import { parseUsernames as splitSearchUsernames, shouldSearchAsSingleUsername } from '../../utils/search-usernames';
 import { characterKey, classFromProfileCharacter, HeatmapCharacterLookup } from '../../utils/heatmap-filters';
 import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
@@ -6083,6 +6085,22 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   formatDateTime(dateString: string): string {
     return this.timezoneService.formatDateTime(dateString);
+  }
+
+  /** Days/months/years from the activity's release to this first clear (not "ago from today"). */
+  getFirstClearElapsed(first: ActivityFirstCompletion | null | undefined, baseName?: string): string | null {
+    if (!first) return null;
+    const name = (baseName || first.name || '').replace(/: .*$/, '').trim();
+    const release = lookupActivityReleaseDate(name, first.game || 'D2');
+    if (!release) return null;
+    return formatReleaseElapsed(release, first.completionDate || first.period);
+  }
+
+  /** Short fireteam names from the first-clear PGCR, joined like the spreadsheet. */
+  getFirstClearFireteam(first: ActivityFirstCompletion | null | undefined): string | null {
+    const names = first?.fireteamNames?.filter(Boolean);
+    if (!names?.length) return null;
+    return names.join(', ');
   }
 
   onActivityTypeChange(event: Event): void {

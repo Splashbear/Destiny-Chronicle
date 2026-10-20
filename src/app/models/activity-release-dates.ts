@@ -29,5 +29,5 @@ export const ACTIVITY_RELEASE_DATES: Record<string, string> = {
   "Ghosts of the Deep": "2023-05-26",
   "Warlord's Ruin": "2023-12-01",
   "Vesper's Host": "2024-10-01",
-  "Sundered Doctrine": "2024-02-07"
+  "Sundered Doctrine": "2025-02-07"
 };

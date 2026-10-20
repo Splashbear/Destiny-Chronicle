@@ -170,22 +170,28 @@
     <div class="pgcr-image-caption px-3 py-2">
       <h5 [ngClass]="titleClass || 'text-lg sm:text-xl font-bold text-white mb-1'">{{ item.baseName }}</h5>
       <div class="space-y-1">
-        <div *ngFor="let variant of item.variants" class="flex flex-wrap items-center gap-2 whitespace-normal text-xs">
-          <span class="text-white shrink-0">{{ variant.version }}</span>
-          <a *ngIf="variant.hasClear" dcKind="pgcr-first" [dcPayload]="variant.first!" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors shrink-0">
-            {{ ps.formatDateTime(variant.first!.completionDate) }}
-          </a>
-          <span *ngIf="!variant.hasClear" class="text-slate-400">No clears found</span>
-          <img *ngIf="variant.hasClear" [src]="ps.getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
-          <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
-          <ng-container *ngIf="showSoloFlawless && variant.first as vf">
-            <ng-container *ngIf="ps.getSoloFirstForFirst(vf) as sf">
-              <a *ngIf="sf.firstSolo" dcKind="pgcr-stored" [dcPayload]="sf.firstSolo" class="text-blue-400 hover:text-blue-300 underline text-[11px]">Solo – {{ ps.formatDate(sf.firstSolo.period) }}</a>
-              <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
-              <a *ngIf="sf.firstFlawless" dcKind="pgcr-stored" [dcPayload]="sf.firstFlawless" class="text-green-400 hover:text-green-300 underline text-[11px]">Solo Flawless – {{ ps.formatDate(sf.firstFlawless.period) }}</a>
-              <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+        <div *ngFor="let variant of item.variants" class="space-y-0.5">
+          <div class="flex flex-wrap items-center gap-2 whitespace-normal text-xs">
+            <span class="text-white shrink-0">{{ variant.version }}</span>
+            <a *ngIf="variant.hasClear" dcKind="pgcr-first" [dcPayload]="variant.first!" class="text-yellow-400 hover:text-amber-200 underline cursor-pointer transition-colors shrink-0">
+              {{ ps.formatDateTime(variant.first!.completionDate) }}
+            </a>
+            <span *ngIf="!variant.hasClear" class="text-slate-400">No clears found</span>
+            <img *ngIf="variant.hasClear" [src]="ps.getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
+            <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+            <ng-container *ngIf="showSoloFlawless && variant.first as vf">
+              <ng-container *ngIf="ps.getSoloFirstForFirst(vf) as sf">
+                <a *ngIf="sf.firstSolo" dcKind="pgcr-stored" [dcPayload]="sf.firstSolo" class="text-blue-400 hover:text-blue-300 underline text-[11px]">Solo – {{ ps.formatDate(sf.firstSolo.period) }}</a>
+                <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+                <a *ngIf="sf.firstFlawless" dcKind="pgcr-stored" [dcPayload]="sf.firstFlawless" class="text-green-400 hover:text-green-300 underline text-[11px]">Solo Flawless – {{ ps.formatDate(sf.firstFlawless.period) }}</a>
+                <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
+              </ng-container>
             </ng-container>
-          </ng-container>
+          </div>
+          <div *ngIf="variant.hasClear && ps.getFirstClearElapsed(variant.first, item.baseName) as elapsed"
+               class="text-[11px] text-slate-400 pl-0.5">{{ elapsed }} after release</div>
+          <div *ngIf="variant.hasClear && ps.getFirstClearFireteam(variant.first) as fireteam"
+               class="text-[11px] text-slate-400 pl-0.5 truncate" [title]="fireteam">Fireteam: {{ fireteam }}</div>
         </div>
       </div>
     </div>

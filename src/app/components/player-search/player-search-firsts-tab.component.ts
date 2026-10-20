@@ -343,10 +343,17 @@ export class PlayerSearchFirstsTabComponent {
       return '-';
     }
     const extra = solo ? this.ps.getSoloFirstForFirst(first) : null;
-    return firstTags({
-      isSolo: !!first.isSolo || !!extra?.firstSolo,
-      isFlawless: !!first.isFlawless || !!extra?.firstFlawless,
-      isSoloFlawless: !!first.isSoloFlawless,
-    });
+    const bits = [
+      firstTags({
+        isSolo: !!first.isSolo || !!extra?.firstSolo,
+        isFlawless: !!first.isFlawless || !!extra?.firstFlawless,
+        isSoloFlawless: !!first.isSoloFlawless,
+      }),
+    ];
+    const elapsed = this.ps.getFirstClearElapsed(first);
+    if (elapsed) bits.push(elapsed);
+    const fireteam = this.ps.getFirstClearFireteam(first);
+    if (fireteam) bits.push(fireteam);
+    return bits.filter(bit => bit && bit !== '-').join(' · ') || '-';
   }
 }
