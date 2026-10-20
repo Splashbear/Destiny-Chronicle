@@ -4,6 +4,8 @@ import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
 import { TitleItem } from './title.service';
 import { TimezoneService } from './timezone.service';
 import { DestinyManifestService } from './destiny-manifest.service';
+import { lookupActivityReleaseDate } from '../utils/activity-release-lookup';
+import { formatReleaseElapsed } from '../utils/release-elapsed';
 
 export interface ArchiveHtmlReportData {
   displayName: string;
@@ -331,6 +333,9 @@ export class ArchiveHtmlReportService {
         
         if (first.isSoloFlawless) badges.push('<span class="badge badge-completed">Solo Flawless</span>');
         else if (first.isSolo) badges.push('<span class="badge badge-completed">Solo</span>');
+
+        const elapsed = this.firstClearElapsedLabel(first, name);
+        const fireteam = (first.fireteamNames || []).filter(Boolean).join(', ');
         
         return `
           <tr>
@@ -338,6 +343,8 @@ export class ArchiveHtmlReportService {
             <td>${this.escapeHtml(name)}</td>
             <td><span class="badge badge-${type}">${type}</span></td>
             <td>${badges.join(' ')}</td>
+            <td>${elapsed ? this.escapeHtml(elapsed) : ''}</td>
+            <td>${fireteam ? this.escapeHtml(fireteam) : ''}</td>
           </tr>`;
       }).join('');
 
@@ -351,6 +358,8 @@ export class ArchiveHtmlReportService {
                         <th>Activity</th>
                         <th>Type</th>
                         <th>Achievement</th>
+                        <th>After release</th>
+                        <th>Fireteam</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -358,6 +367,42 @@ export class ArchiveHtmlReportService {
                 </tbody>
             </table>
         </div>`;
+  }
+
+  /** Release → first clear label, matching Firsts tab elapsed when a release date is known. */
+  private firstClearElapsedLabel(first: ActivityFirstCompletion, displayName: string): string {
+    const game: 'D1' | 'D2' = first.game === 'D1' ? 'D1' : 'D2';
+    const when = first.completionDate || first.period;
+    if (!when) return '';
+
+    const candidates: string[] = [];
+    const push = (v?: string) => {
+      const t = String(v || '').trim();
+      if (t && !candidates.includes(t)) candidates.push(t);
+    };
+    push(first.name);
+    push(displayName);
+    push(first.storySubtitle);
+    if (this.isRiteOfTheNineName(first.name || displayName)) {
+      push('Rite of the Nine');
+    }
+    for (const n of [...candidates]) {
+      const stripped = n.replace(/: .*$/, '').trim();
+      if (stripped && stripped !== n) push(stripped);
+    }
+
+    for (const name of candidates) {
+      const release = lookupActivityReleaseDate(name, game);
+      if (!release) continue;
+      const elapsed = formatReleaseElapsed(release, when);
+      if (elapsed) return `${elapsed} after release`;
+    }
+    return '';
+  }
+
+  private isRiteOfTheNineName(name: string): boolean {
+    return /:\s*(Explorer|Eternity|Ultimatum)\b/i.test(name)
+      && /(Ghosts of the Deep|Spire of the Watcher|Prophecy)/i.test(name);
   }
 
   private generateTitlesTable(account: ArchiveHtmlReportData): string {
