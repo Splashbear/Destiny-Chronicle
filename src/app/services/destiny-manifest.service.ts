@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { Destiny1ManifestService } from './destiny1-manifest.service';
 import { ActivityDbService } from './activity-db.service';
 import { LocaleService } from './locale.service';
@@ -19,8 +20,13 @@ export class DestinyManifestService {
   private titleDefs: { [key: string]: any } = {};
   private presentationNodes: { [key: string]: any } = {};
   private activityFamilyDefs: { [key: string]: any } = {};
+  /** Lazy — only for Accomplishments Badges/Emblems. */
+  private collectibleDefs: { [key: string]: any } = {};
+  private collectibleDefsLoaded = false;
+  private collectibleDefsPromise: Promise<void> | null = null;
   private manifestLoaded = new BehaviorSubject<boolean>(false);
   private loadedCulture: string | null = null;
+  private lastManifestMeta: { version: string; culture: string; culturePath: any } | null = null;
   
 
 
@@ -116,6 +122,10 @@ export class DestinyManifestService {
       if (!this.presentationNodes || Object.keys(this.presentationNodes).length === 0) {
         throw new Error('Presentation nodes failed to load');
       }
+      this.lastManifestMeta = { version, culture, culturePath };
+      this.collectibleDefsLoaded = false;
+      this.collectibleDefsPromise = null;
+      this.collectibleDefs = {};
       (window as any).titleDefs = this.titleDefs; // Expose for browser debugging
       (window as any).presentationNodes = this.presentationNodes; // Expose for browser debugging
       this.loadedCulture = culture;
@@ -784,6 +794,52 @@ export class DestinyManifestService {
    */
   public getPresentationNodes(): any {
     return this.presentationNodes;
+  }
+
+  /**
+   * Lazy-load DestinyCollectibleDefinition (Accomplishments Badges/Emblems only).
+   * Keeps the initial manifest payload lean for weaker devices.
+   */
+  async ensureCollectibleDefs(): Promise<Record<string, any>> {
+    if (this.collectibleDefsLoaded && Object.keys(this.collectibleDefs).length > 0) {
+      return this.collectibleDefs;
+    }
+    if (!this.manifestLoaded.value) {
+      await firstValueFrom(this.isLoaded().pipe(filter((v) => !!v)));
+    }
+    if (!this.collectibleDefsPromise) {
+      this.collectibleDefsPromise = (async () => {
+        let meta = this.lastManifestMeta;
+        if (!meta?.culturePath?.DestinyCollectibleDefinition) {
+          const manifestMeta: any = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net/Platform/Destiny2/Manifest/')));
+          const contentPaths = manifestMeta.Response?.jsonWorldComponentContentPaths ?? {};
+          const culture = this.locale.culture;
+          const culturePath = contentPaths[culture] ?? contentPaths.en;
+          meta = {
+            version: String(manifestMeta.Response?.version ?? 'unknown'),
+            culture,
+            culturePath,
+          };
+          this.lastManifestMeta = meta;
+        }
+        const path = meta!.culturePath.DestinyCollectibleDefinition;
+        if (!path) {
+          throw new Error('DestinyCollectibleDefinition path missing from manifest metadata');
+        }
+        const raw = await this.fetchDefinition(meta!.version, meta!.culture, 'DestinyCollectibleDefinition', path);
+        this.collectibleDefs = (raw as any).DestinyCollectibleDefinition || raw || {};
+        this.collectibleDefsLoaded = true;
+      })().catch((err) => {
+        this.collectibleDefsPromise = null;
+        throw err;
+      });
+    }
+    await this.collectibleDefsPromise;
+    return this.collectibleDefs;
+  }
+
+  getCollectibleDef(hash: string | number): any | null {
+    return this.collectibleDefs[String(hash)] || null;
   }
 
   /**

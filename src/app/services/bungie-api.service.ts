@@ -164,6 +164,26 @@ export class BungieApiService {
   }
 
   /**
+   * GetProfile with an explicit component list (e.g. 100,200,800 for collectibles).
+   * Used by Accomplishments Badges / Emblems — one call per account per session.
+   */
+  getProfileComponents(
+    membershipType: number,
+    membershipId: string,
+    components: number[]
+  ): Observable<BungieResponse<any>> {
+    const csv = components.join(',');
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=${csv}`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching profile components:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
    * Account-wide historical stats. `groups=3` = Medals (DestinyStatsGroupType.Medals).
    * See Destiny2.GetHistoricalStatsForAccount.
    */
