@@ -3,6 +3,14 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~13:15 ET) — W63 Accomplishments complete
+
+### Website
+- **Shipped:** [PR #65](https://github.com/Splashbear/Destiny-Chronicle/pull/65) — D1 Record Books, D1 medals, Save snapshot (lean IDs/counts) + `data/accomplishments-snapshot.json` in `.chronicle.zip`.
+- Prior same day: #64 Seal Triumphs, #63 Badges/Emblems, #62 Medals, #61 spec.
+- W63 build order done (Medals → Badges → Emblems → Seal Triumphs → D1 → snapshot). Snapshot compare is later/not now.
+- Live via GitHub Pages. Bot restart not required.
+
 ## Ship note (2026-10-20 ~13:00 ET) — W63 D1 + snapshot
 
 ### Website
