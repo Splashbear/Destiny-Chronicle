@@ -3,6 +3,12 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~11:42 ET)
+
+### Website
+- **Shipping:** Restore `#share=` daily links (consume `pendingShare`, YYYY-MM-DD in payload) + HTML archive Firsts columns for after-release elapsed and fireteam.
+- Prior ship (same day): PR #59 Firsts fireteam wrap + release elapsed across sections.
+
 ## Ship note (2026-10-20 ~11:28 ET)
 
 ### Website

@@ -61,6 +61,7 @@ import { ExportService, ExportRequest } from '../../services/export.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
+import { SharedStateService } from '../../services/shared-state.service';
 import { buildBreakdownCategoryOptions, chartCategoryForSelectedTiles, selectBreakdownChartItems, tileLabelsForChartCategory } from '../../utils/breakdown-chart';
 import { D1_HISTORY_MODES, dedupeByInstanceId, isSocialActivity } from '../../utils/activity-history-filters';
 import { excludeExistingInstances } from '../../utils/activity-dedupe';
@@ -1716,6 +1717,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private selectedAccounts: SelectedAccountsService,
     private exportService: ExportService,
     private shareService: ShareService,
+    private sharedState: SharedStateService,
     private firstActivityService: FirstActivityService,
     private activityBreakdownService: ActivityBreakdownService,
     private seasonService: SeasonService,
@@ -1799,6 +1801,21 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const pathname = window.location.pathname;
     const dateMatch = pathname.match(/\/date\/(\d{4}-\d{2}-\d{2})/);
     const playersMatch = pathname.match(/\/players\/(.+)$/);
+
+    // #share= hash (parsed in AppComponent) — restore before clean-load clear.
+    const pendingShare = this.sharedState.pendingShare;
+    if (pendingShare) {
+      this.sharedState.pendingShare = null;
+      const normalized = this.shareService.normalizeShareState(pendingShare);
+      if (normalized) {
+        const [year, month, day] = normalized.date.split('-').map(Number);
+        this.selectedYear = year;
+        this.selectedMonth = month;
+        this.selectedDay = day;
+        this.selectedDate = normalized.date;
+        this.pendingPlayerData = normalized.players;
+      }
+    }
     
     // Check both route params and query params for date
     const dateParam = params['date'] || queryParams['date'] || dateMatch?.[1];
@@ -1828,8 +1845,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       } catch (e) {
         console.warn('Invalid player data in URL:', e);
       }
-    } else {
-      // Clean page load (no players in URL) - clear any leftover data from previous sessions
+    } else if (!this.pendingPlayerData) {
+      // Clean page load (no players in URL or #share=) - clear leftover data from previous sessions
       console.log('[INIT] Clean page load detected, clearing leftover database entries');
       await this.activityDb.clearAllActivities();
       const remainingCount = await this.activityDb.activities.count();
@@ -11017,9 +11034,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   async shareDailyView(): Promise<void> {
     if (!this.selectedPlayers.length) return;
-    const players = this.selectedPlayers.map(p => [p.membershipId, p.membershipType, p.game]);
-    const dateStr = `${this.selectedMonth}-${this.selectedDay}`;
-    const state = { d: dateStr, p: players };
+    const state = this.shareService.buildDailyShareState(this.selectedPlayers, this.selectedDate);
     const link = this.shareService.buildLink(state);
     try {
       await navigator.clipboard.writeText(link);
