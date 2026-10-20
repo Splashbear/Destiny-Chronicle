@@ -7,6 +7,8 @@ import { TextViewService } from '../../services/text-view.service';
 import { AccomplishmentsMedalsService } from '../../services/accomplishments-medals.service';
 import { AccomplishmentsCollectionsService } from '../../services/accomplishments-collections.service';
 import { AccomplishmentsSealTriumphsService } from '../../services/accomplishments-seal-triumphs.service';
+import { AccomplishmentsD1Service } from '../../services/accomplishments-d1.service';
+import { AccomplishmentsSnapshotService } from '../../services/accomplishments-snapshot.service';
 import { AccountMedalsResult, MedalModeGroupId } from '../../models/accomplishments-medals.model';
 import {
   AccomplishmentBadge,
@@ -17,10 +19,14 @@ import {
   AccomplishmentCompletedSeal,
   AccountSealTriumphsResult,
 } from '../../models/accomplishments-seal-triumphs.model';
+import {
+  AccomplishmentD1RecordBook,
+  AccountD1RecordBooksResult,
+} from '../../models/accomplishments-d1.model';
 import { pageSections } from '../../utils/text-tab-rows';
 import { PlayerSearchDisplay } from '../../models/player-search-display.model';
 
-type AccompSection = 'medals' | 'badges' | 'emblems' | 'seals';
+type AccompSection = 'medals' | 'badges' | 'emblems' | 'seals' | 'd1-books' | 'd1-medals';
 
 @Component({
   selector: 'app-player-search-accomplishments-tab',
@@ -36,21 +42,28 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   private readonly medalsSvc = inject(AccomplishmentsMedalsService);
   private readonly collectionsSvc = inject(AccomplishmentsCollectionsService);
   private readonly sealsSvc = inject(AccomplishmentsSealTriumphsService);
+  private readonly d1Svc = inject(AccomplishmentsD1Service);
+  private readonly snapshotSvc = inject(AccomplishmentsSnapshotService);
   private readonly cdr = inject(ChangeDetectorRef);
 
   activeSection: AccompSection = 'medals';
   loading = false;
+  savingSnapshot = false;
+  snapshotMessage: string | null = null;
   asOf: string | null = null;
   activeMode: MedalModeGroupId | null = null;
   readonly pageSize = 48;
-  /** Fewer seals per page — each expands to many triumph rows. */
   readonly sealPageSize = 12;
   visibleCount = 48;
   textPages = 1;
+  /** Expanded D1 record book hashes for completed-record lists. */
+  expandedBookHashes = new Set<string>();
 
   medalResults: Record<string, AccountMedalsResult> = {};
   collectionResults: Record<string, AccountCollectionsResult> = {};
   sealResults: Record<string, AccountSealTriumphsResult> = {};
+  d1BookResults: Record<string, AccountD1RecordBooksResult> = {};
+  d1MedalResults: Record<string, AccountMedalsResult> = {};
 
   ngOnInit(): void {
     void this.refresh();
@@ -60,6 +73,16 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     if (this.activeSection === section) return;
     this.activeSection = section;
     this.visibleCount = section === 'seals' ? this.sealPageSize : this.pageSize;
+    this.textPages = 1;
+    this.snapshotMessage = null;
+    this.cdr.markForCheck();
+    void this.refresh();
+  }
+
+  onGameChange(game: 'D1' | 'D2'): void {
+    this.ps.setActiveAccomplishmentsGame(game);
+    this.activeSection = game === 'D1' ? 'd1-books' : 'medals';
+    this.visibleCount = this.pageSize;
     this.textPages = 1;
     this.cdr.markForCheck();
     void this.refresh();
@@ -71,6 +94,8 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
       this.medalResults = {};
       this.collectionResults = {};
       this.sealResults = {};
+      this.d1BookResults = {};
+      this.d1MedalResults = {};
       this.asOf = null;
       this.loading = false;
       this.cdr.markForCheck();
@@ -82,81 +107,33 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
     let latestAsOf: string | null = this.asOf;
     const d2 = players.filter((p) => !this.ps.isD1Player(p));
+    const d1 = players.filter((p) => this.ps.isD1Player(p));
 
     if (this.activeSection === 'medals') {
-      const next = { ...this.medalResults };
-      for (const player of d2) {
-        const key = this.ps.getPlayerKey(player);
-        try {
-          const result = await this.medalsSvc.loadAccountMedals(player.membershipType, player.membershipId);
-          next[key] = result;
-          if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
-            latestAsOf = result.fetchedAt;
-          }
-        } catch (e: any) {
-          next[key] = {
-            membershipId: player.membershipId,
-            membershipType: player.membershipType,
-            fetchedAt: new Date().toISOString(),
-            groups: [],
-            totalEarned: 0,
-            status: 'error',
-            message: e?.message || 'Could not load medals',
-          };
-        }
-      }
-      this.medalResults = next;
+      this.medalResults = await this.loadD2Medals(d2, latestAsOf).then((r) => {
+        latestAsOf = r.asOf;
+        return r.map;
+      });
     } else if (this.activeSection === 'seals') {
-      const next = { ...this.sealResults };
-      for (const player of d2) {
-        const key = this.ps.getPlayerKey(player);
-        try {
-          const result = await this.sealsSvc.loadAccountSealTriumphs(
-            player.membershipType,
-            player.membershipId
-          );
-          next[key] = result;
-          if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
-            latestAsOf = result.fetchedAt;
-          }
-        } catch (e: any) {
-          next[key] = {
-            membershipId: player.membershipId,
-            membershipType: player.membershipType,
-            fetchedAt: new Date().toISOString(),
-            seals: [],
-            status: 'error',
-            message: e?.message || 'Could not load seal triumphs',
-          };
-        }
-      }
-      this.sealResults = next;
-    } else {
-      const next = { ...this.collectionResults };
-      for (const player of d2) {
-        const key = this.ps.getPlayerKey(player);
-        try {
-          const result = await this.collectionsSvc.loadAccountCollections(
-            player.membershipType,
-            player.membershipId
-          );
-          next[key] = result;
-          if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
-            latestAsOf = result.fetchedAt;
-          }
-        } catch (e: any) {
-          next[key] = {
-            membershipId: player.membershipId,
-            membershipType: player.membershipType,
-            fetchedAt: new Date().toISOString(),
-            badges: [],
-            emblems: [],
-            status: 'error',
-            message: e?.message || 'Could not load collections',
-          };
-        }
-      }
-      this.collectionResults = next;
+      this.sealResults = await this.loadSeals(d2, latestAsOf).then((r) => {
+        latestAsOf = r.asOf;
+        return r.map;
+      });
+    } else if (this.activeSection === 'badges' || this.activeSection === 'emblems') {
+      this.collectionResults = await this.loadCollections(d2, latestAsOf).then((r) => {
+        latestAsOf = r.asOf;
+        return r.map;
+      });
+    } else if (this.activeSection === 'd1-books') {
+      this.d1BookResults = await this.loadD1Books(d1, latestAsOf).then((r) => {
+        latestAsOf = r.asOf;
+        return r.map;
+      });
+    } else if (this.activeSection === 'd1-medals') {
+      this.d1MedalResults = await this.loadD1Medals(d1, latestAsOf).then((r) => {
+        latestAsOf = r.asOf;
+        return r.map;
+      });
     }
 
     this.asOf = latestAsOf;
@@ -166,22 +143,184 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
+  async saveSnapshot(): Promise<void> {
+    const players = this.ps.getAccomplishmentsFilteredPlayers();
+    if (!players.length) {
+      this.snapshotMessage = 'Select at least one account.';
+      this.cdr.markForCheck();
+      return;
+    }
+    this.savingSnapshot = true;
+    this.snapshotMessage = null;
+    this.cdr.markForCheck();
+    try {
+      const snap = await this.snapshotSvc.saveSnapshot(
+        players.map((p) => ({
+          membershipId: p.membershipId,
+          membershipType: p.membershipType,
+          game: this.ps.isD1Player(p) ? 'D1' : 'D2',
+        }))
+      );
+      this.snapshotMessage = `Snapshot saved (${snap.accounts.length} account${snap.accounts.length === 1 ? '' : 's'}).`;
+    } catch (e: any) {
+      this.snapshotMessage = e?.message || 'Could not save snapshot';
+    }
+    this.savingSnapshot = false;
+    this.cdr.markForCheck();
+  }
+
+  private async loadD2Medals(d2: PlayerSearchDisplay[], asOf: string | null) {
+    const next = { ...this.medalResults };
+    let latest = asOf;
+    for (const player of d2) {
+      const key = this.ps.getPlayerKey(player);
+      try {
+        const result = await this.medalsSvc.loadAccountMedals(player.membershipType, player.membershipId);
+        next[key] = result;
+        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
+      } catch (e: any) {
+        next[key] = {
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          fetchedAt: new Date().toISOString(),
+          groups: [],
+          totalEarned: 0,
+          status: 'error',
+          message: e?.message || 'Could not load medals',
+        };
+      }
+    }
+    return { map: next, asOf: latest };
+  }
+
+  private async loadSeals(d2: PlayerSearchDisplay[], asOf: string | null) {
+    const next = { ...this.sealResults };
+    let latest = asOf;
+    for (const player of d2) {
+      const key = this.ps.getPlayerKey(player);
+      try {
+        const result = await this.sealsSvc.loadAccountSealTriumphs(
+          player.membershipType,
+          player.membershipId
+        );
+        next[key] = result;
+        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
+      } catch (e: any) {
+        next[key] = {
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          fetchedAt: new Date().toISOString(),
+          seals: [],
+          status: 'error',
+          message: e?.message || 'Could not load seal triumphs',
+        };
+      }
+    }
+    return { map: next, asOf: latest };
+  }
+
+  private async loadCollections(d2: PlayerSearchDisplay[], asOf: string | null) {
+    const next = { ...this.collectionResults };
+    let latest = asOf;
+    for (const player of d2) {
+      const key = this.ps.getPlayerKey(player);
+      try {
+        const result = await this.collectionsSvc.loadAccountCollections(
+          player.membershipType,
+          player.membershipId
+        );
+        next[key] = result;
+        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
+      } catch (e: any) {
+        next[key] = {
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          fetchedAt: new Date().toISOString(),
+          badges: [],
+          emblems: [],
+          status: 'error',
+          message: e?.message || 'Could not load collections',
+        };
+      }
+    }
+    return { map: next, asOf: latest };
+  }
+
+  private async loadD1Books(d1: PlayerSearchDisplay[], asOf: string | null) {
+    const next = { ...this.d1BookResults };
+    let latest = asOf;
+    for (const player of d1) {
+      const key = this.ps.getPlayerKey(player);
+      try {
+        const result = await this.d1Svc.loadRecordBooks(player.membershipType, player.membershipId);
+        next[key] = result;
+        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
+      } catch (e: any) {
+        next[key] = {
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          fetchedAt: new Date().toISOString(),
+          books: [],
+          status: 'error',
+          message: e?.message || 'Could not load D1 record books',
+        };
+      }
+    }
+    return { map: next, asOf: latest };
+  }
+
+  private async loadD1Medals(d1: PlayerSearchDisplay[], asOf: string | null) {
+    const next = { ...this.d1MedalResults };
+    let latest = asOf;
+    for (const player of d1) {
+      const key = this.ps.getPlayerKey(player);
+      try {
+        const result = await this.d1Svc.loadMedals(player.membershipType, player.membershipId);
+        next[key] = result;
+        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
+      } catch (e: any) {
+        next[key] = {
+          membershipId: player.membershipId,
+          membershipType: player.membershipType,
+          fetchedAt: new Date().toISOString(),
+          groups: [],
+          totalEarned: 0,
+          status: 'error',
+          message: e?.message || 'Could not load D1 medals',
+        };
+      }
+    }
+    return { map: next, asOf: latest };
+  }
+
   d2Players(): PlayerSearchDisplay[] {
     return this.ps.getAccomplishmentsFilteredPlayers().filter((p) => !this.ps.isD1Player(p));
   }
 
+  d1Players(): PlayerSearchDisplay[] {
+    return this.ps.getAccomplishmentsFilteredPlayers().filter((p) => this.ps.isD1Player(p));
+  }
+
   aggregatedMedals(): AccountMedalsResult | null {
-    const players = this.d2Players();
+    return this.aggregateMedals(this.d2Players(), this.medalResults);
+  }
+
+  aggregatedD1Medals(): AccountMedalsResult | null {
+    return this.aggregateMedals(this.d1Players(), this.d1MedalResults);
+  }
+
+  private aggregateMedals(
+    players: PlayerSearchDisplay[],
+    source: Record<string, AccountMedalsResult>
+  ): AccountMedalsResult | null {
     if (!players.length) return null;
-    if (players.length === 1) {
-      return this.medalResults[this.ps.getPlayerKey(players[0])] || null;
-    }
+    if (players.length === 1) return source[this.ps.getPlayerKey(players[0])] || null;
     const byId = new Map<string, { medal: AccountMedalsResult['groups'][0]['medals'][0]; count: number }>();
     let status: AccountMedalsResult['status'] = 'empty';
     let message: string | undefined;
     let fetchedAt = '';
     for (const player of players) {
-      const r = this.medalResults[this.ps.getPlayerKey(player)];
+      const r = source[this.ps.getPlayerKey(player)];
       if (!r) continue;
       if (r.fetchedAt > fetchedAt) fetchedAt = r.fetchedAt;
       if (r.status === 'hidden' && status !== 'ok') {
@@ -198,9 +337,7 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
       for (const g of r.groups) {
         for (const m of g.medals) {
           const cur = byId.get(m.statId);
-          if (!cur || m.count > cur.count) {
-            byId.set(m.statId, { medal: m, count: m.count });
-          }
+          if (!cur || m.count > cur.count) byId.set(m.statId, { medal: m, count: m.count });
         }
       }
     }
@@ -267,9 +404,7 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
           badgeMap.set(b.hash, b);
         }
       }
-      for (const e of r.emblems) {
-        emblemMap.set(e.hash, e);
-      }
+      for (const e of r.emblems) emblemMap.set(e.hash, e);
     }
     if (status !== 'ok') {
       return {
@@ -299,46 +434,6 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
           ? undefined
           : 'No badges or emblems on the selected accounts',
     };
-  }
-
-  modeIds(result: AccountMedalsResult | null): MedalModeGroupId[] {
-    return (result?.groups || []).map((g) => g.id);
-  }
-
-  setMode(mode: MedalModeGroupId | null): void {
-    this.activeMode = mode;
-    this.visibleCount = this.pageSize;
-    this.textPages = 1;
-    this.cdr.markForCheck();
-  }
-
-  visibleMedals(result: AccountMedalsResult | null) {
-    if (!result) return [];
-    const groups = this.activeMode
-      ? result.groups.filter((g) => g.id === this.activeMode)
-      : result.groups;
-    const flat = groups.flatMap((g) => g.medals.map((m) => ({ ...m, groupLabel: g.id })));
-    return flat.slice(0, this.visibleCount);
-  }
-
-  totalVisibleMedals(result: AccountMedalsResult | null): number {
-    if (!result) return 0;
-    const groups = this.activeMode
-      ? result.groups.filter((g) => g.id === this.activeMode)
-      : result.groups;
-    return groups.reduce((n, g) => n + g.medals.length, 0);
-  }
-
-  completedBadgeCount(cols: AccountCollectionsResult | null): number {
-    return (cols?.badges || []).filter((b) => b.complete).length;
-  }
-
-  visibleBadges(cols: AccountCollectionsResult | null): AccomplishmentBadge[] {
-    return (cols?.badges || []).slice(0, this.visibleCount);
-  }
-
-  visibleEmblems(cols: AccountCollectionsResult | null): AccomplishmentEmblem[] {
-    return (cols?.emblems || []).slice(0, this.visibleCount);
   }
 
   aggregatedSeals(): AccountSealTriumphsResult | null {
@@ -391,8 +486,114 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     };
   }
 
+  aggregatedD1Books(): AccountD1RecordBooksResult | null {
+    const players = this.d1Players();
+    if (!players.length) return null;
+    if (players.length === 1) {
+      return this.d1BookResults[this.ps.getPlayerKey(players[0])] || null;
+    }
+    const bookMap = new Map<string, AccomplishmentD1RecordBook>();
+    let status: AccountD1RecordBooksResult['status'] = 'empty';
+    let message: string | undefined;
+    let fetchedAt = '';
+    for (const player of players) {
+      const r = this.d1BookResults[this.ps.getPlayerKey(player)];
+      if (!r) continue;
+      if (r.fetchedAt > fetchedAt) fetchedAt = r.fetchedAt;
+      if (r.status === 'hidden' && status !== 'ok') {
+        status = 'hidden';
+        message = r.message;
+        continue;
+      }
+      if (r.status === 'error' && status !== 'ok' && status !== 'hidden') {
+        status = 'error';
+        message = r.message;
+        continue;
+      }
+      if (r.status === 'ok') status = 'ok';
+      for (const b of r.books) {
+        const cur = bookMap.get(b.hash);
+        if (!cur || b.completed > cur.completed) bookMap.set(b.hash, b);
+      }
+    }
+    if (status !== 'ok') {
+      return {
+        membershipId: 'aggregate',
+        membershipType: 0,
+        fetchedAt: fetchedAt || new Date().toISOString(),
+        books: [],
+        status,
+        message,
+      };
+    }
+    const books = [...bookMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      membershipId: 'aggregate',
+      membershipType: 0,
+      fetchedAt: fetchedAt || new Date().toISOString(),
+      books,
+      status: books.length ? 'ok' : 'empty',
+      message: books.length ? undefined : 'No D1 record books on the selected accounts',
+    };
+  }
+
+  modeIds(result: AccountMedalsResult | null): MedalModeGroupId[] {
+    return (result?.groups || []).map((g) => g.id);
+  }
+
+  setMode(mode: MedalModeGroupId | null): void {
+    this.activeMode = mode;
+    this.visibleCount = this.pageSize;
+    this.textPages = 1;
+    this.cdr.markForCheck();
+  }
+
+  visibleMedals(result: AccountMedalsResult | null) {
+    if (!result) return [];
+    const groups = this.activeMode
+      ? result.groups.filter((g) => g.id === this.activeMode)
+      : result.groups;
+    const flat = groups.flatMap((g) => g.medals.map((m) => ({ ...m, groupLabel: g.id })));
+    return flat.slice(0, this.visibleCount);
+  }
+
+  totalVisibleMedals(result: AccountMedalsResult | null): number {
+    if (!result) return 0;
+    const groups = this.activeMode
+      ? result.groups.filter((g) => g.id === this.activeMode)
+      : result.groups;
+    return groups.reduce((n, g) => n + g.medals.length, 0);
+  }
+
+  completedBadgeCount(cols: AccountCollectionsResult | null): number {
+    return (cols?.badges || []).filter((b) => b.complete).length;
+  }
+
+  visibleBadges(cols: AccountCollectionsResult | null): AccomplishmentBadge[] {
+    return (cols?.badges || []).slice(0, this.visibleCount);
+  }
+
+  visibleEmblems(cols: AccountCollectionsResult | null): AccomplishmentEmblem[] {
+    return (cols?.emblems || []).slice(0, this.visibleCount);
+  }
+
   visibleSeals(result: AccountSealTriumphsResult | null): AccomplishmentCompletedSeal[] {
     return (result?.seals || []).slice(0, this.visibleCount);
+  }
+
+  visibleBooks(result: AccountD1RecordBooksResult | null): AccomplishmentD1RecordBook[] {
+    return (result?.books || []).slice(0, this.visibleCount);
+  }
+
+  toggleBook(hash: string): void {
+    if (this.expandedBookHashes.has(hash)) this.expandedBookHashes.delete(hash);
+    else this.expandedBookHashes.add(hash);
+    this.expandedBookHashes = new Set(this.expandedBookHashes);
+    this.cdr.markForCheck();
+  }
+
+  isBookExpanded(hash: string): boolean {
+    return this.expandedBookHashes.has(hash);
   }
 
   showMore(): void {
@@ -440,13 +641,16 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     if (!cols || cols.status !== 'ok') {
       return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
     }
-    const sections = [
-      {
-        title: `Owned emblems (${cols.emblems.length})`,
-        rows: cols.emblems.map((e) => ({ name: e.name, detail: '' })),
-      },
-    ];
-    return pageSections(sections, 40, this.textPages);
+    return pageSections(
+      [
+        {
+          title: `Owned emblems (${cols.emblems.length})`,
+          rows: cols.emblems.map((e) => ({ name: e.name, detail: '' })),
+        },
+      ],
+      40,
+      this.textPages
+    );
   }
 
   textSeals(result: AccountSealTriumphsResult | null) {
@@ -456,6 +660,17 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     const sections = result.seals.map((s) => ({
       title: `${s.name} (${s.triumphs.length})${s.legacy ? ' · legacy' : ''}`,
       rows: s.triumphs.map((t) => ({ name: t.name, detail: '' })),
+    }));
+    return pageSections(sections, 40, this.textPages);
+  }
+
+  textD1Books(result: AccountD1RecordBooksResult | null) {
+    if (!result || result.status !== 'ok') {
+      return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
+    }
+    const sections = result.books.map((b) => ({
+      title: `${b.name} (${b.completed}/${b.total})`,
+      rows: b.completedRecords.map((r) => ({ name: r.name, detail: '' })),
     }));
     return pageSections(sections, 40, this.textPages);
   }
@@ -483,5 +698,13 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
   trackTriumph(_: number, t: { hash: string }): string {
     return t.hash;
+  }
+
+  trackBook(_: number, b: AccomplishmentD1RecordBook): string {
+    return b.hash;
+  }
+
+  trackRecord(_: number, r: { hash: string }): string {
+    return r.hash;
   }
 }
