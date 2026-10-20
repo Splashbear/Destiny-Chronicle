@@ -1,6 +1,7 @@
 export interface AccomplishmentSealTriumph {
   hash: string;
   name: string;
+  description: string;
   iconPath: string;
 }
 

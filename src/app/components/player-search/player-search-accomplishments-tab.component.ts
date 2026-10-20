@@ -9,7 +9,13 @@ import { AccomplishmentsCollectionsService } from '../../services/accomplishment
 import { AccomplishmentsSealTriumphsService } from '../../services/accomplishments-seal-triumphs.service';
 import { AccomplishmentsD1Service } from '../../services/accomplishments-d1.service';
 import { AccomplishmentsSnapshotService } from '../../services/accomplishments-snapshot.service';
-import { AccountMedalsResult, MedalModeGroupId } from '../../models/accomplishments-medals.model';
+import {
+  AccountMedalsResult,
+  MEDAL_SUBTYPE_ORDER,
+  MedalModeGroupId,
+  MedalSubtypeId,
+} from '../../models/accomplishments-medals.model';
+import { SnapshotDownloadFormat } from '../../services/accomplishments-snapshot.service';
 import {
   AccomplishmentBadge,
   AccomplishmentEmblem,
@@ -52,12 +58,16 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   snapshotMessage: string | null = null;
   asOf: string | null = null;
   activeMode: MedalModeGroupId | null = null;
+  activeSubtype: MedalSubtypeId | null = null;
+  snapshotFormat: SnapshotDownloadFormat = 'xlsx';
   readonly pageSize = 48;
   readonly sealPageSize = 12;
   visibleCount = 48;
   textPages = 1;
   /** Expanded D1 record book hashes for completed-record lists. */
   expandedBookHashes = new Set<string>();
+  /** Expanded seal hashes (collapsed by default). */
+  expandedSealHashes = new Set<string>();
 
   medalResults: Record<string, AccountMedalsResult> = {};
   collectionResults: Record<string, AccountCollectionsResult> = {};
@@ -143,6 +153,11 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
+  setSnapshotFormat(format: SnapshotDownloadFormat): void {
+    this.snapshotFormat = format;
+    this.cdr.markForCheck();
+  }
+
   async saveSnapshot(): Promise<void> {
     const players = this.ps.getAccomplishmentsFilteredPlayers();
     if (!players.length) {
@@ -159,9 +174,14 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
           membershipId: p.membershipId,
           membershipType: p.membershipType,
           game: this.ps.isD1Player(p) ? 'D1' : 'D2',
-        }))
+          displayName: p.displayName,
+          platform: p.platform,
+        })),
+        { format: this.snapshotFormat }
       );
-      this.snapshotMessage = `Snapshot saved (${snap.accounts.length} account${snap.accounts.length === 1 ? '' : 's'}).`;
+      const kind =
+        this.snapshotFormat === 'xlsx' ? 'Excel' : this.snapshotFormat === 'txt' ? 'text' : 'JSON';
+      this.snapshotMessage = `Snapshot saved as ${kind} (${snap.accounts.length} account${snap.accounts.length === 1 ? '' : 's'}). Opens in Excel or Google Sheets.`;
     } catch (e: any) {
       this.snapshotMessage = e?.message || 'Could not save snapshot';
     }
@@ -543,26 +563,43 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
   setMode(mode: MedalModeGroupId | null): void {
     this.activeMode = mode;
+    this.activeSubtype = null;
     this.visibleCount = this.pageSize;
     this.textPages = 1;
     this.cdr.markForCheck();
   }
 
-  visibleMedals(result: AccountMedalsResult | null) {
+  setSubtype(subtype: MedalSubtypeId | null): void {
+    this.activeSubtype = subtype;
+    this.visibleCount = this.pageSize;
+    this.textPages = 1;
+    this.cdr.markForCheck();
+  }
+
+  subtypeIds(result: AccountMedalsResult | null): MedalSubtypeId[] {
+    const flat = this.filteredMedalList(result);
+    const present = new Set(flat.map((m) => m.subtype));
+    return MEDAL_SUBTYPE_ORDER.filter((id) => present.has(id));
+  }
+
+  private filteredMedalList(result: AccountMedalsResult | null) {
     if (!result) return [];
     const groups = this.activeMode
       ? result.groups.filter((g) => g.id === this.activeMode)
       : result.groups;
-    const flat = groups.flatMap((g) => g.medals.map((m) => ({ ...m, groupLabel: g.id })));
-    return flat.slice(0, this.visibleCount);
+    let flat = groups.flatMap((g) => g.medals.map((m) => ({ ...m, groupLabel: g.id })));
+    if (this.activeSubtype) {
+      flat = flat.filter((m) => m.subtype === this.activeSubtype);
+    }
+    return flat;
+  }
+
+  visibleMedals(result: AccountMedalsResult | null) {
+    return this.filteredMedalList(result).slice(0, this.visibleCount);
   }
 
   totalVisibleMedals(result: AccountMedalsResult | null): number {
-    if (!result) return 0;
-    const groups = this.activeMode
-      ? result.groups.filter((g) => g.id === this.activeMode)
-      : result.groups;
-    return groups.reduce((n, g) => n + g.medals.length, 0);
+    return this.filteredMedalList(result).length;
   }
 
   completedBadgeCount(cols: AccountCollectionsResult | null): number {
@@ -596,6 +633,28 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     return this.expandedBookHashes.has(hash);
   }
 
+  toggleSeal(hash: string): void {
+    if (this.expandedSealHashes.has(hash)) this.expandedSealHashes.delete(hash);
+    else this.expandedSealHashes.add(hash);
+    this.expandedSealHashes = new Set(this.expandedSealHashes);
+    this.cdr.markForCheck();
+  }
+
+  isSealExpanded(hash: string): boolean {
+    return this.expandedSealHashes.has(hash);
+  }
+
+  expandAllSeals(result: AccountSealTriumphsResult | null): void {
+    for (const s of result?.seals || []) this.expandedSealHashes.add(s.hash);
+    this.expandedSealHashes = new Set(this.expandedSealHashes);
+    this.cdr.markForCheck();
+  }
+
+  collapseAllSeals(): void {
+    this.expandedSealHashes = new Set();
+    this.cdr.markForCheck();
+  }
+
   showMore(): void {
     this.visibleCount += this.activeSection === 'seals' ? this.sealPageSize : this.pageSize;
     this.cdr.markForCheck();
@@ -605,12 +664,20 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     if (!result || result.status !== 'ok') {
       return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
     }
-    const groups = this.activeMode
-      ? result.groups.filter((g) => g.id === this.activeMode)
-      : result.groups;
-    const sections = groups.map((g) => ({
-      title: `${g.id} (${g.medals.length})`,
-      rows: g.medals.map((m) => ({ name: m.name, detail: String(m.count) })),
+    const flat = this.filteredMedalList(result);
+    const bySubtype = new Map<string, typeof flat>();
+    for (const m of flat) {
+      const key = this.activeMode ? m.subtype : `${m.groupLabel} · ${m.subtype}`;
+      const list = bySubtype.get(key) || [];
+      list.push(m);
+      bySubtype.set(key, list);
+    }
+    const sections = [...bySubtype.entries()].map(([title, medals]) => ({
+      title: `${title} (${medals.length})`,
+      rows: medals.map((m) => ({
+        name: m.description ? `${m.name} — ${m.description}` : m.name,
+        detail: String(m.count),
+      })),
     }));
     return pageSections(sections, 40, this.textPages);
   }
@@ -659,7 +726,10 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     }
     const sections = result.seals.map((s) => ({
       title: `${s.name} (${s.triumphs.length})${s.legacy ? ' · legacy' : ''}`,
-      rows: s.triumphs.map((t) => ({ name: t.name, detail: '' })),
+      rows: s.triumphs.map((t) => ({
+        name: t.description ? `${t.name} — ${t.description}` : t.name,
+        detail: '',
+      })),
     }));
     return pageSections(sections, 40, this.textPages);
   }

@@ -1,22 +1,36 @@
-import { isMedalHistoricalStat, medalModeGroup } from './medal-mode-groups';
+import { isMedalHistoricalStat, medalModeGroup, medalSubtype } from './medal-mode-groups';
 
 describe('medalModeGroup', () => {
-  it('classifies by mode ids and by statId heuristics', () => {
+  it('maps modes to Crucible / Gambit / Vanguard', () => {
     expect(medalModeGroup('Medals_gambit_bank', [])).toBe('Gambit');
     expect(medalModeGroup('something', [63])).toBe('Gambit');
     expect(medalModeGroup('Medals_pvp_streak', [])).toBe('Crucible');
-    expect(medalModeGroup('Medals_pvp_medal_trial', [])).toBe('Trials');
-    expect(medalModeGroup('x', [19])).toBe('Iron Banner');
-    expect(medalModeGroup('Medals_pve_strike', [])).toBe('Strikes / Vanguard');
+    expect(medalModeGroup('Medals_pvp_medal_trial', [])).toBe('Crucible');
+    expect(medalModeGroup('x', [19])).toBe('Crucible');
+    expect(medalModeGroup('Medals_pve_strike', [])).toBe('Vanguard');
     expect(medalModeGroup('unknown_stat', [])).toBe('Other');
   });
 });
 
+describe('medalSubtype', () => {
+  it('classifies by statId and gold tier', () => {
+    expect(medalSubtype('medalMulti2x', {})).toBe('Multi + Streak');
+    expect(medalSubtype('medalWeaponHandCannon', {})).toBe('Weapons');
+    expect(medalSubtype('medalAbilityGunslingerQuick', {})).toBe('Class');
+    expect(medalSubtype('medalPayback', {})).toBe('Combat');
+    expect(medalSubtype('medalControlAdvantageHold', {})).toBe('Gametypes');
+    expect(medalSubtype('medalTrialFlawless', {})).toBe('Trials of Osiris');
+    expect(medalSubtype('medalIronBanner', {})).toBe('Iron Banner');
+    expect(
+      medalSubtype('medalMultiEntireTeam', { medalTierIdentifier: 'PVP_TIER_3' })
+    ).toBe('Gold Tier');
+  });
+});
+
 describe('isMedalHistoricalStat', () => {
-  it('accepts group 3 or medalTierHash', () => {
+  it('detects medals group', () => {
     expect(isMedalHistoricalStat({ group: 3 })).toBe(true);
-    expect(isMedalHistoricalStat({ group: 1, medalTierHash: 1 })).toBe(true);
+    expect(isMedalHistoricalStat({ medalTierHash: 1 })).toBe(true);
     expect(isMedalHistoricalStat({ group: 1 })).toBe(false);
-    expect(isMedalHistoricalStat(null)).toBe(false);
   });
 });

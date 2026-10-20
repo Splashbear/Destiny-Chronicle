@@ -183,10 +183,12 @@ export class AccomplishmentsSealTriumphsService {
       const def = recordDefs[h];
       const name = String(def?.displayProperties?.name || h).trim();
       if (!name || /^classif/i.test(name)) continue;
+      const description = String(def?.displayProperties?.description || '').trim();
       const iconRaw = def?.displayProperties?.icon || '';
       out.push({
         hash: h,
         name,
+        description,
         iconPath: iconRaw ? this.assetUrl.resolve(iconRaw) : '',
       });
     }

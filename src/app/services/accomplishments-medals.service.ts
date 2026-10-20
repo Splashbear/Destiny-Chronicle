@@ -9,7 +9,7 @@ import {
   MedalModeGroup,
   MedalModeGroupId,
 } from '../models/accomplishments-medals.model';
-import { isMedalHistoricalStat, medalModeGroup } from '../utils/medal-mode-groups';
+import { isMedalHistoricalStat, medalModeGroup, medalSubtype } from '../utils/medal-mode-groups';
 
 @Injectable({ providedIn: 'root' })
 export class AccomplishmentsMedalsService {
@@ -109,6 +109,7 @@ export class AccomplishmentsMedalsService {
           iconPath: iconRaw ? this.assetUrl.resolve(iconRaw) : '',
           count,
           modeGroup: medalModeGroup(statId, def?.modes),
+          subtype: medalSubtype(statId, def),
         });
       }
 

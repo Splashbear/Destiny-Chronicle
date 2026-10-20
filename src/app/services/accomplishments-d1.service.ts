@@ -14,7 +14,7 @@ import {
   MedalModeGroup,
   MedalModeGroupId,
 } from '../models/accomplishments-medals.model';
-import { isMedalHistoricalStat, medalModeGroup } from '../utils/medal-mode-groups';
+import { isMedalHistoricalStat, medalModeGroup, medalSubtype } from '../utils/medal-mode-groups';
 
 /** D1 record status: redeemed / complete (community + DIM convention). */
 const D1_RECORD_COMPLETE = 1;
@@ -140,6 +140,7 @@ export class AccomplishmentsD1Service {
           iconPath: iconRaw ? this.assetUrl.resolve(iconRaw) : '',
           count,
           modeGroup: medalModeGroup(statId, def?.modes),
+          subtype: medalSubtype(statId, def),
         });
       }
 

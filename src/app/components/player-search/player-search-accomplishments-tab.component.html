@@ -97,12 +97,22 @@
         <button type="button" class="main-tab text-sm" [ngClass]="{ 'main-tab--active': ps.activeAccomplishmentsGame==='D2' }" (click)="onGameChange('D2')">D2</button>
         <button type="button" class="main-tab text-sm" [ngClass]="{ 'main-tab--active': ps.activeAccomplishmentsGame==='D1' }" (click)="onGameChange('D1')">D1</button>
       </div>
-      <button type="button"
-              class="ml-auto px-3 py-1.5 text-sm rounded border border-slate-600 text-slate-200 hover:border-yellow-400"
-              [disabled]="savingSnapshot"
-              (click)="saveSnapshot()">
-        {{ savingSnapshot ? 'Saving…' : 'Save snapshot' }}
-      </button>
+      <div class="ml-auto flex flex-wrap items-center gap-2">
+        <div class="flex gap-1 text-xs">
+          <button type="button" class="px-2 py-1 rounded border border-slate-600"
+                  [class.border-yellow-400]="snapshotFormat==='xlsx'" [class.text-yellow-300]="snapshotFormat==='xlsx'"
+                  (click)="setSnapshotFormat('xlsx')">Excel</button>
+          <button type="button" class="px-2 py-1 rounded border border-slate-600"
+                  [class.border-yellow-400]="snapshotFormat==='txt'" [class.text-yellow-300]="snapshotFormat==='txt'"
+                  (click)="setSnapshotFormat('txt')">Text</button>
+        </div>
+        <button type="button"
+                class="px-3 py-1.5 text-sm rounded border border-slate-600 text-slate-200 hover:border-yellow-400"
+                [disabled]="savingSnapshot"
+                (click)="saveSnapshot()">
+          {{ savingSnapshot ? 'Saving…' : 'Save snapshot' }}
+        </button>
+      </div>
     </div>
     <p class="text-xs text-slate-500" *ngIf="asOf">Data from Bungie as of {{ asOf | date:'medium' }}</p>
     <p class="text-xs text-yellow-300/80" *ngIf="snapshotMessage">{{ snapshotMessage }}</p>
@@ -152,12 +162,12 @@
     <section *ngIf="!loading && activeSection==='medals'" class="destiny-surface-panel p-4 space-y-4">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <h4 class="text-md font-semibold text-yellow-300">Medals</h4>
-        <span class="text-xs text-slate-500">Earned only · paginated</span>
+        <span class="text-xs text-slate-500">Earned only · by mode &amp; type · paginated</span>
       </div>
       <ng-container *ngIf="aggregatedMedals() as agg">
         <p *ngIf="agg.status!=='ok'" class="text-slate-400">{{ agg.message }}</p>
         <ng-container *ngIf="agg.status==='ok'">
-          <p class="text-sm text-slate-300">{{ agg.totalEarned }} medals earned · {{ totalVisibleMedals(agg) }} types</p>
+          <p class="text-sm text-slate-300">{{ agg.totalEarned }} medals earned · {{ totalVisibleMedals(agg) }} shown</p>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="px-2 py-1 text-xs rounded border border-slate-600 text-slate-200"
                     [class.border-yellow-400]="!activeMode" [class.text-yellow-300]="!activeMode"
@@ -167,14 +177,28 @@
                     [class.border-yellow-400]="activeMode===id" [class.text-yellow-300]="activeMode===id"
                     (click)="setMode(id)">{{ id }}</button>
           </div>
+          <div class="flex flex-wrap gap-2" *ngIf="subtypeIds(agg).length">
+            <button type="button" class="px-2 py-1 text-xs rounded border border-slate-700 text-slate-300"
+                    [class.border-yellow-400]="!activeSubtype" [class.text-yellow-300]="!activeSubtype"
+                    (click)="setSubtype(null)">All types</button>
+            <button *ngFor="let sid of subtypeIds(agg)" type="button"
+                    class="px-2 py-1 text-xs rounded border border-slate-700 text-slate-300"
+                    [class.border-yellow-400]="activeSubtype===sid" [class.text-yellow-300]="activeSubtype===sid"
+                    (click)="setSubtype(sid)">{{ sid }}</button>
+          </div>
           <ul class="divide-y divide-slate-700/80 border border-slate-700/60 rounded-md overflow-hidden">
             <li *ngFor="let m of visibleMedals(agg); trackBy: trackMedal"
                 class="flex items-center gap-3 px-3 py-2 bg-slate-900/40">
               <img *ngIf="m.iconPath" [src]="m.iconPath" width="28" height="28" class="w-7 h-7 shrink-0 object-contain" loading="lazy" alt="" />
               <span *ngIf="!m.iconPath" class="w-7 h-7 shrink-0 rounded bg-slate-700"></span>
-              <div class="min-w-0 flex-1">
-                <div class="text-sm text-white truncate">{{ m.name }}</div>
-                <div class="text-[11px] text-slate-500 truncate" *ngIf="!activeMode">{{ m.groupLabel }}</div>
+              <div class="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                <div class="text-sm text-white shrink-0 max-w-full sm:max-w-[40%] truncate">{{ m.name }}</div>
+                <div class="text-[11px] text-slate-400 min-w-0 flex-1 truncate" *ngIf="m.description">{{ m.description }}</div>
+                <div class="text-[11px] text-slate-500 shrink-0" *ngIf="!activeMode || !activeSubtype">
+                  <span *ngIf="!activeMode">{{ m.groupLabel }}</span>
+                  <span *ngIf="!activeMode && !activeSubtype"> · </span>
+                  <span *ngIf="!activeSubtype">{{ m.subtype }}</span>
+                </div>
               </div>
               <div class="text-sm font-mono text-yellow-300 tabular-nums shrink-0">{{ m.count }}</div>
             </li>
@@ -245,36 +269,45 @@
       </ng-container>
     </section>
 
-    <!-- Seal Triumphs -->
+    <!-- Seal Triumphs (collapsible per seal) -->
     <section *ngIf="!loading && activeSection==='seals'" class="destiny-surface-panel p-4 space-y-4">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <h4 class="text-md font-semibold text-yellow-300">Seal Triumphs</h4>
-        <span class="text-xs text-slate-500">Completed seals only · triumphs listed</span>
+        <span class="text-xs text-slate-500">Completed seals only · click to expand</span>
       </div>
       <ng-container *ngIf="aggregatedSeals() as seals">
         <p *ngIf="seals.status!=='ok'" class="text-slate-400">{{ seals.message }}</p>
         <ng-container *ngIf="seals.status==='ok'">
-          <p class="text-sm text-slate-300">{{ seals.seals.length }} completed seals</p>
-          <div class="space-y-4">
-            <div *ngFor="let s of visibleSeals(seals); trackBy: trackSeal" class="space-y-2">
-              <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-3">
+            <p class="text-sm text-slate-300 m-0">{{ seals.seals.length }} completed seals</p>
+            <button type="button" class="text-xs text-yellow-400 underline" (click)="expandAllSeals(seals)">Expand all</button>
+            <button type="button" class="text-xs text-slate-400 underline" (click)="collapseAllSeals()">Collapse all</button>
+          </div>
+          <ul class="divide-y divide-slate-700/80 border border-slate-700/60 rounded-md overflow-hidden">
+            <li *ngFor="let s of visibleSeals(seals); trackBy: trackSeal" class="bg-slate-900/40">
+              <button type="button" class="w-full flex items-center gap-3 px-3 py-2 text-left"
+                      (click)="toggleSeal(s.hash)">
                 <img *ngIf="s.iconPath" [src]="s.iconPath" width="28" height="28" class="w-7 h-7 shrink-0 object-contain" loading="lazy" alt="" />
-                <div class="min-w-0">
+                <div class="min-w-0 flex-1">
                   <div class="text-sm font-semibold text-white truncate">{{ s.name }}</div>
                   <div class="text-[11px] text-slate-500">
                     {{ s.triumphs.length }} triumphs<span *ngIf="s.legacy"> · legacy</span>
+                    · {{ isSealExpanded(s.hash) ? 'hide' : 'show' }}
                   </div>
                 </div>
-              </div>
-              <ul class="divide-y divide-slate-700/60 border border-slate-700/50 rounded-md overflow-hidden ml-0 sm:ml-9">
+              </button>
+              <ul *ngIf="isSealExpanded(s.hash)" class="border-t border-slate-700/50 divide-y divide-slate-800/80">
                 <li *ngFor="let t of s.triumphs; trackBy: trackTriumph"
-                    class="flex items-center gap-2 px-3 py-1.5 bg-slate-900/30">
+                    class="flex items-center gap-2 px-3 py-1.5 pl-12 bg-slate-950/40">
                   <img *ngIf="t.iconPath" [src]="t.iconPath" width="20" height="20" class="w-5 h-5 shrink-0 object-contain" loading="lazy" alt="" />
-                  <span class="text-xs text-slate-200 truncate">{{ t.name }}</span>
+                  <div class="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                    <span class="text-xs text-slate-200 shrink-0 max-w-full sm:max-w-[40%] truncate">{{ t.name }}</span>
+                    <span class="text-[11px] text-slate-400 min-w-0 flex-1 truncate" *ngIf="t.description">{{ t.description }}</span>
+                  </div>
                 </li>
               </ul>
-            </div>
-          </div>
+            </li>
+          </ul>
           <button *ngIf="visibleCount < seals.seals.length" type="button"
                   class="text-sm text-yellow-400 underline" (click)="showMore()">
             Show more seals ({{ visibleSeals(seals).length }} / {{ seals.seals.length }})
@@ -327,12 +360,12 @@
     <section *ngIf="!loading && activeSection==='d1-medals'" class="destiny-surface-panel p-4 space-y-4">
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <h4 class="text-md font-semibold text-yellow-300">D1 Medals</h4>
-        <span class="text-xs text-slate-500">From D1 historical stats · earned only</span>
+        <span class="text-xs text-slate-500">From D1 historical stats · by mode &amp; type</span>
       </div>
       <ng-container *ngIf="aggregatedD1Medals() as agg">
         <p *ngIf="agg.status!=='ok'" class="text-slate-400">{{ agg.message }}</p>
         <ng-container *ngIf="agg.status==='ok'">
-          <p class="text-sm text-slate-300">{{ agg.totalEarned }} medals earned · {{ totalVisibleMedals(agg) }} types</p>
+          <p class="text-sm text-slate-300">{{ agg.totalEarned }} medals earned · {{ totalVisibleMedals(agg) }} shown</p>
           <div class="flex flex-wrap gap-2">
             <button type="button" class="px-2 py-1 text-xs rounded border border-slate-600 text-slate-200"
                     [class.border-yellow-400]="!activeMode" [class.text-yellow-300]="!activeMode"
@@ -342,14 +375,23 @@
                     [class.border-yellow-400]="activeMode===id" [class.text-yellow-300]="activeMode===id"
                     (click)="setMode(id)">{{ id }}</button>
           </div>
+          <div class="flex flex-wrap gap-2" *ngIf="subtypeIds(agg).length">
+            <button type="button" class="px-2 py-1 text-xs rounded border border-slate-700 text-slate-300"
+                    [class.border-yellow-400]="!activeSubtype" [class.text-yellow-300]="!activeSubtype"
+                    (click)="setSubtype(null)">All types</button>
+            <button *ngFor="let sid of subtypeIds(agg)" type="button"
+                    class="px-2 py-1 text-xs rounded border border-slate-700 text-slate-300"
+                    [class.border-yellow-400]="activeSubtype===sid" [class.text-yellow-300]="activeSubtype===sid"
+                    (click)="setSubtype(sid)">{{ sid }}</button>
+          </div>
           <ul class="divide-y divide-slate-700/80 border border-slate-700/60 rounded-md overflow-hidden">
             <li *ngFor="let m of visibleMedals(agg); trackBy: trackMedal"
                 class="flex items-center gap-3 px-3 py-2 bg-slate-900/40">
               <img *ngIf="m.iconPath" [src]="m.iconPath" width="28" height="28" class="w-7 h-7 shrink-0 object-contain" loading="lazy" alt="" />
               <span *ngIf="!m.iconPath" class="w-7 h-7 shrink-0 rounded bg-slate-700"></span>
-              <div class="min-w-0 flex-1">
-                <div class="text-sm text-white truncate">{{ m.name }}</div>
-                <div class="text-[11px] text-slate-500 truncate" *ngIf="!activeMode">{{ m.groupLabel }}</div>
+              <div class="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+                <div class="text-sm text-white shrink-0 max-w-full sm:max-w-[40%] truncate">{{ m.name }}</div>
+                <div class="text-[11px] text-slate-400 min-w-0 flex-1 truncate" *ngIf="m.description">{{ m.description }}</div>
               </div>
               <div class="text-sm font-mono text-yellow-300 tabular-nums shrink-0">{{ m.count }}</div>
             </li>

@@ -6,22 +6,44 @@ export interface AccomplishmentMedal {
   iconPath: string;
   count: number;
   modeGroup: MedalModeGroupId;
+  subtype: MedalSubtypeId;
 }
 
-export type MedalModeGroupId =
-  | 'Crucible'
-  | 'Gambit'
-  | 'Strikes / Vanguard'
-  | 'Trials'
-  | 'Iron Banner'
-  | 'Other';
+/** Top-level mode buckets (UI: Crucible / Gambit / Vanguard). */
+export type MedalModeGroupId = 'Crucible' | 'Gambit' | 'Vanguard' | 'Other';
 
 export const MEDAL_MODE_GROUP_ORDER: MedalModeGroupId[] = [
   'Crucible',
   'Gambit',
-  'Strikes / Vanguard',
-  'Trials',
+  'Vanguard',
+  'Other',
+];
+
+/** Braytech-style subtype within a mode. */
+export type MedalSubtypeId =
+  | 'Multi + Streak'
+  | 'Combat'
+  | 'Weapons'
+  | 'Class'
+  | 'Gold Tier'
+  | 'Gametypes'
+  | 'Iron Banner'
+  | 'Crimson Days'
+  | 'Trials of Osiris'
+  | 'Elemental'
+  | 'Other';
+
+export const MEDAL_SUBTYPE_ORDER: MedalSubtypeId[] = [
+  'Multi + Streak',
+  'Combat',
+  'Weapons',
+  'Class',
+  'Gold Tier',
+  'Gametypes',
   'Iron Banner',
+  'Crimson Days',
+  'Trials of Osiris',
+  'Elemental',
   'Other',
 ];
 
