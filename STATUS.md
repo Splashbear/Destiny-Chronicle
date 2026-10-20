@@ -3,6 +3,11 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~12:50 ET) — W63 Seal Triumphs
+
+### Website
+- **Building:** Seal Triumphs on Accomplishments — completed seals only (same Redeemed check as Titles & Seals); list child triumphs. Incomplete seals stay on Titles. Not merged until user says yes.
+
 ## Ship note (2026-10-20 ~12:45 ET) — W63 Badges/Emblems shipped
 
 ### Website

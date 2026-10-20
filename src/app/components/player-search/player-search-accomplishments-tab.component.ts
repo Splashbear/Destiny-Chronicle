@@ -6,16 +6,21 @@ import { PlayerSearchComponent } from './player-search.component';
 import { TextViewService } from '../../services/text-view.service';
 import { AccomplishmentsMedalsService } from '../../services/accomplishments-medals.service';
 import { AccomplishmentsCollectionsService } from '../../services/accomplishments-collections.service';
+import { AccomplishmentsSealTriumphsService } from '../../services/accomplishments-seal-triumphs.service';
 import { AccountMedalsResult, MedalModeGroupId } from '../../models/accomplishments-medals.model';
 import {
   AccomplishmentBadge,
   AccomplishmentEmblem,
   AccountCollectionsResult,
 } from '../../models/accomplishments-collections.model';
+import {
+  AccomplishmentCompletedSeal,
+  AccountSealTriumphsResult,
+} from '../../models/accomplishments-seal-triumphs.model';
 import { pageSections } from '../../utils/text-tab-rows';
 import { PlayerSearchDisplay } from '../../models/player-search-display.model';
 
-type AccompSection = 'medals' | 'badges' | 'emblems';
+type AccompSection = 'medals' | 'badges' | 'emblems' | 'seals';
 
 @Component({
   selector: 'app-player-search-accomplishments-tab',
@@ -30,6 +35,7 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   readonly text = inject(TextViewService);
   private readonly medalsSvc = inject(AccomplishmentsMedalsService);
   private readonly collectionsSvc = inject(AccomplishmentsCollectionsService);
+  private readonly sealsSvc = inject(AccomplishmentsSealTriumphsService);
   private readonly cdr = inject(ChangeDetectorRef);
 
   activeSection: AccompSection = 'medals';
@@ -37,11 +43,14 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   asOf: string | null = null;
   activeMode: MedalModeGroupId | null = null;
   readonly pageSize = 48;
+  /** Fewer seals per page — each expands to many triumph rows. */
+  readonly sealPageSize = 12;
   visibleCount = 48;
   textPages = 1;
 
   medalResults: Record<string, AccountMedalsResult> = {};
   collectionResults: Record<string, AccountCollectionsResult> = {};
+  sealResults: Record<string, AccountSealTriumphsResult> = {};
 
   ngOnInit(): void {
     void this.refresh();
@@ -50,7 +59,7 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   setSection(section: AccompSection): void {
     if (this.activeSection === section) return;
     this.activeSection = section;
-    this.visibleCount = this.pageSize;
+    this.visibleCount = section === 'seals' ? this.sealPageSize : this.pageSize;
     this.textPages = 1;
     this.cdr.markForCheck();
     void this.refresh();
@@ -61,6 +70,7 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     if (!players.length) {
       this.medalResults = {};
       this.collectionResults = {};
+      this.sealResults = {};
       this.asOf = null;
       this.loading = false;
       this.cdr.markForCheck();
@@ -96,6 +106,31 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
         }
       }
       this.medalResults = next;
+    } else if (this.activeSection === 'seals') {
+      const next = { ...this.sealResults };
+      for (const player of d2) {
+        const key = this.ps.getPlayerKey(player);
+        try {
+          const result = await this.sealsSvc.loadAccountSealTriumphs(
+            player.membershipType,
+            player.membershipId
+          );
+          next[key] = result;
+          if (result.fetchedAt && (!latestAsOf || result.fetchedAt > latestAsOf)) {
+            latestAsOf = result.fetchedAt;
+          }
+        } catch (e: any) {
+          next[key] = {
+            membershipId: player.membershipId,
+            membershipType: player.membershipType,
+            fetchedAt: new Date().toISOString(),
+            seals: [],
+            status: 'error',
+            message: e?.message || 'Could not load seal triumphs',
+          };
+        }
+      }
+      this.sealResults = next;
     } else {
       const next = { ...this.collectionResults };
       for (const player of d2) {
@@ -126,7 +161,7 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
     this.asOf = latestAsOf;
     this.loading = false;
-    this.visibleCount = this.pageSize;
+    this.visibleCount = this.activeSection === 'seals' ? this.sealPageSize : this.pageSize;
     this.textPages = 1;
     this.cdr.markForCheck();
   }
@@ -306,8 +341,62 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     return (cols?.emblems || []).slice(0, this.visibleCount);
   }
 
+  aggregatedSeals(): AccountSealTriumphsResult | null {
+    const players = this.d2Players();
+    if (!players.length) return null;
+    if (players.length === 1) {
+      return this.sealResults[this.ps.getPlayerKey(players[0])] || null;
+    }
+    const sealMap = new Map<string, AccomplishmentCompletedSeal>();
+    let status: AccountSealTriumphsResult['status'] = 'empty';
+    let message: string | undefined;
+    let fetchedAt = '';
+    for (const player of players) {
+      const r = this.sealResults[this.ps.getPlayerKey(player)];
+      if (!r) continue;
+      if (r.fetchedAt > fetchedAt) fetchedAt = r.fetchedAt;
+      if (r.status === 'hidden' && status !== 'ok') {
+        status = 'hidden';
+        message = r.message;
+        continue;
+      }
+      if (r.status === 'error' && status !== 'ok' && status !== 'hidden') {
+        status = 'error';
+        message = r.message;
+        continue;
+      }
+      if (r.status === 'ok') status = 'ok';
+      for (const s of r.seals) {
+        if (!sealMap.has(s.hash)) sealMap.set(s.hash, s);
+      }
+    }
+    if (status !== 'ok') {
+      return {
+        membershipId: 'aggregate',
+        membershipType: 0,
+        fetchedAt: fetchedAt || new Date().toISOString(),
+        seals: [],
+        status,
+        message,
+      };
+    }
+    const seals = [...sealMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return {
+      membershipId: 'aggregate',
+      membershipType: 0,
+      fetchedAt: fetchedAt || new Date().toISOString(),
+      seals,
+      status: seals.length ? 'ok' : 'empty',
+      message: seals.length ? undefined : 'No completed seals on the selected accounts',
+    };
+  }
+
+  visibleSeals(result: AccountSealTriumphsResult | null): AccomplishmentCompletedSeal[] {
+    return (result?.seals || []).slice(0, this.visibleCount);
+  }
+
   showMore(): void {
-    this.visibleCount += this.pageSize;
+    this.visibleCount += this.activeSection === 'seals' ? this.sealPageSize : this.pageSize;
     this.cdr.markForCheck();
   }
 
@@ -360,6 +449,17 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     return pageSections(sections, 40, this.textPages);
   }
 
+  textSeals(result: AccountSealTriumphsResult | null) {
+    if (!result || result.status !== 'ok') {
+      return { sections: [] as Array<{ title: string; rows: { name: string; detail: string }[] }>, total: 0, shown: 0 };
+    }
+    const sections = result.seals.map((s) => ({
+      title: `${s.name} (${s.triumphs.length})${s.legacy ? ' · legacy' : ''}`,
+      rows: s.triumphs.map((t) => ({ name: t.name, detail: '' })),
+    }));
+    return pageSections(sections, 40, this.textPages);
+  }
+
   showMoreText(): void {
     this.textPages += 1;
     this.cdr.markForCheck();
@@ -375,5 +475,13 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
 
   trackEmblem(_: number, e: AccomplishmentEmblem): string {
     return e.hash;
+  }
+
+  trackSeal(_: number, s: AccomplishmentCompletedSeal): string {
+    return s.hash;
+  }
+
+  trackTriumph(_: number, t: { hash: string }): string {
+    return t.hash;
   }
 }
