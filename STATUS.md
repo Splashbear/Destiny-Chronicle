@@ -3,10 +3,15 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~12:20 ET) — W63
+
+### Website
+- **W63 (open, not merged):** [PR #61](https://github.com/Splashbear/Destiny-Chronicle/pull/61) at `fd30c47` — docs-only `docs/specs/ACCOMPLISHMENTS_SPEC.md` (Chronicle Lab Accomplishments tab). Includes Splashbear lean/clean notes for weaker devices. Do not build the tab until user says go. Do not merge until user says yes.
+
 ## Ship note (2026-10-20 ~11:42 ET)
 
 ### Website
-- **Shipping:** Restore `#share=` daily links (consume `pendingShare`, YYYY-MM-DD in payload) + HTML archive Firsts columns for after-release elapsed and fireteam.
+- **Shipped:** PR #60 — restore `#share=` daily links + HTML archive Firsts after-release/fireteam columns.
 - Prior ship (same day): PR #59 Firsts fireteam wrap + release elapsed across sections.
 
 ## Ship note (2026-10-20 ~11:28 ET)
