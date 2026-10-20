@@ -3,11 +3,12 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
-## Ship note (2026-10-20 ~12:40 ET) — W63 Badges/Emblems
+## Ship note (2026-10-20 ~12:45 ET) — W63 Badges/Emblems shipped
 
 ### Website
-- **Medals shipped:** PR #62 merged — Accomplishments tab + lean D2 medals.
-- **Building:** Badges + Emblems (Collections via GetProfile 100/200/800, lazy DestinyCollectibleDefinition). Lean rows / owned-only emblem grid. Not merged until user says yes.
+- **Shipped:** [PR #63](https://github.com/Splashbear/Destiny-Chronicle/pull/63) merged — Accomplishments Badges + Emblems (Collections GetProfile 100/200/800, lazy DestinyCollectibleDefinition). Lean rows / owned-only emblem grid.
+- Live via GitHub Pages on merge to `master`. Next: Seal Triumphs → D1 Record Books → snapshot.
+- Bot restart not required.
 
 ## Ship note (2026-10-20 ~12:30 ET) — W63 build
 
