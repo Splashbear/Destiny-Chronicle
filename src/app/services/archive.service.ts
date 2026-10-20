@@ -22,8 +22,10 @@ import {
   ArchiveImportResult,
   ArchiveManifest,
   ArchiveTitlesSnapshot,
+  ArchiveAccomplishmentsSnapshot,
   ArchiveBuildResult,
 } from '../models/archive.types';
+import { AccomplishmentsSnapshotService } from './accomplishments-snapshot.service';
 import {
   bungieAbsoluteUrl,
   extensionFromBungiePath,
@@ -40,6 +42,7 @@ interface ArchiveGatherResult {
   favorites: FavoriteAccount[];
   activities: StoredActivity[];
   titlesSnapshot: ArchiveTitlesSnapshot;
+  accomplishmentsSnapshot: ArchiveAccomplishmentsSnapshot;
   d2ActivityDefs: Record<string, unknown>;
   d2PresentationNodes: Record<string, unknown>;
   pgcrEntries: PrunedPgcr[];
@@ -57,6 +60,7 @@ export class ArchiveService {
     private manifest: DestinyManifestService,
     private d1Manifest: Destiny1ManifestService,
     private titleService: TitleService,
+    private accomplishmentsSnapshot: AccomplishmentsSnapshotService,
     private archiveMedia: ArchiveMediaService,
     private archiveRuntime: ArchiveRuntimeService,
     private locale: LocaleService,
@@ -108,6 +112,10 @@ export class ArchiveService {
     onProgress(this.progress('archive.progress.activatingOffline'), 90);
     this.manifest.loadFromArchive(gathered.d2ActivityDefs, gathered.d2PresentationNodes);
     localStorage.setItem('destinyChronicle.titlesSnapshot', JSON.stringify(gathered.titlesSnapshot));
+    localStorage.setItem(
+      'destinyChronicle.accomplishmentsSnapshot',
+      JSON.stringify(gathered.accomplishmentsSnapshot)
+    );
     this.archiveRuntime.activateOffline(gathered.manifest, gathered.assetMap);
     localStorage.setItem('destinyChronicle.lastExportManifest', JSON.stringify(gathered.manifest));
     localStorage.setItem(DEVICE_READY_KEY, gathered.manifest.frozenAt);
@@ -128,13 +136,25 @@ export class ArchiveService {
 
     onProgress(this.progress('archive.progress.buildingZip'), 85);
     const zip = new JSZip();
-    const { manifest, assetMap, favorites, activities, titlesSnapshot, d2ActivityDefs, d2PresentationNodes, pgcrEntries, mediaByBungiePath } = gathered;
+    const {
+      manifest,
+      assetMap,
+      favorites,
+      activities,
+      titlesSnapshot,
+      accomplishmentsSnapshot,
+      d2ActivityDefs,
+      d2PresentationNodes,
+      pgcrEntries,
+      mediaByBungiePath,
+    } = gathered;
 
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
     zip.file('asset-map.json', JSON.stringify(assetMap, null, 2));
     zip.file('data/favorites.json', JSON.stringify(favorites, null, 2));
     zip.file('data/activities.json', JSON.stringify(activities));
     zip.file('data/titles-snapshot.json', JSON.stringify(titlesSnapshot, null, 2));
+    zip.file('data/accomplishments-snapshot.json', JSON.stringify(accomplishmentsSnapshot, null, 2));
     zip.file('manifest/d2-activity-defs.json', JSON.stringify(d2ActivityDefs));
     zip.file('manifest/d2-presentation-nodes.json', JSON.stringify(d2PresentationNodes));
 
@@ -224,6 +244,24 @@ export class ArchiveService {
       }
     }
 
+    onProgress(this.progress('archive.progress.snapshottingTitles'), 25);
+    let accomplishmentsSnapshot: ArchiveAccomplishmentsSnapshot = {
+      savedAt: new Date().toISOString(),
+      accounts: [],
+    };
+    try {
+      const snapPlayers = accounts
+        .filter((a) => !membershipFilter || membershipFilter.has(a.membershipId))
+        .map((a) => ({
+          membershipId: a.membershipId,
+          membershipType: a.membershipType,
+          game: a.game,
+        }));
+      accomplishmentsSnapshot = await this.accomplishmentsSnapshot.buildForArchive(snapPlayers);
+    } catch {
+      /* keep empty lean snapshot — titles archive still succeeds */
+    }
+
     onProgress(this.progress('archive.progress.collectingPgcr'), 30);
     const pgcrEntries: PrunedPgcr[] = includePgcr ? await this.pgcrCache.getAllEntries() : [];
 
@@ -284,6 +322,7 @@ export class ArchiveService {
       favorites,
       activities,
       titlesSnapshot,
+      accomplishmentsSnapshot,
       d2ActivityDefs,
       d2PresentationNodes,
       pgcrEntries,
@@ -394,6 +433,13 @@ export class ArchiveService {
     if (titlesRaw) {
       localStorage.setItem('destinyChronicle.titlesSnapshot', await titlesRaw.async('string'));
     }
+    const accompRaw = zip.file('data/accomplishments-snapshot.json');
+    if (accompRaw) {
+      localStorage.setItem(
+        'destinyChronicle.accomplishmentsSnapshot',
+        await accompRaw.async('string')
+      );
+    }
     localStorage.setItem(DEVICE_READY_KEY, manifest.frozenAt);
     localStorage.setItem('destinyChronicle.lastExportManifest', JSON.stringify(manifest));
 
@@ -449,6 +495,7 @@ export class ArchiveService {
     this.archiveRuntime.deactivateOffline();
     localStorage.removeItem(DEVICE_READY_KEY);
     localStorage.removeItem('destinyChronicle.titlesSnapshot');
+    localStorage.removeItem('destinyChronicle.accomplishmentsSnapshot');
   }
 
   private membershipKey(acct: ArchiveAccount): string {

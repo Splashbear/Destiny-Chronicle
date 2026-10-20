@@ -246,6 +246,75 @@ export class BungieApiService {
     );
   }
 
+  /**
+   * Account-level D1 advisors (includes recordBooks when present).
+   * GET /Destiny/{membershipType}/Account/{membershipId}/Advisors/
+   */
+  getD1AccountAdvisors(membershipType: number, membershipId: string): Observable<BungieResponse<any>> {
+    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Advisors/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D1 account advisors:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Character-level D1 advisors V2 (recordBooks live here for most accounts).
+   * GET /Destiny/{membershipType}/Account/{membershipId}/Character/{characterId}/Advisors/V2/
+   */
+  getD1CharacterAdvisorsV2(
+    membershipType: number,
+    membershipId: string,
+    characterId: string
+  ): Observable<BungieResponse<any>> {
+    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Advisors/V2/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D1 character advisors:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * D1 historical stats. characterId `0` = account aggregate across characters.
+   * GET /Destiny/Stats/{membershipType}/{membershipId}/{characterId}/
+   */
+  getD1HistoricalStats(
+    membershipType: number,
+    membershipId: string,
+    characterId: string | number = 0,
+    modes: string = 'None'
+  ): Observable<BungieResponse<any>> {
+    const url = `${this.D1_BASE_URL}/Destiny/Stats/${membershipType}/${membershipId}/${characterId}/?modes=${encodeURIComponent(modes)}`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D1 historical stats:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * D1 historical stats definitions (medal names/icons).
+   * GET /Destiny/Stats/Definition/
+   */
+  getD1HistoricalStatsDefinitions(): Observable<BungieResponse<Record<string, any>>> {
+    const url = `${this.D1_BASE_URL}/Destiny/Stats/Definition/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<Record<string, any>>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D1 historical stats definitions:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
   getActivityHistory(membershipType: BungieMembershipType, membershipId: string, characterId: string, mode?: number, page: number = 0): Observable<any> {
     const count = 250; // Max activities per request
     const params: any = {

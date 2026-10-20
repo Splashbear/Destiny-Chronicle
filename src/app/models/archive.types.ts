@@ -31,6 +31,9 @@ export interface ArchiveTitlesSnapshot {
   [membershipKey: string]: unknown[];
 }
 
+/** Lean Accomplishments IDs/counts (see AccomplishmentsSnapshot). */
+export type ArchiveAccomplishmentsSnapshot = import('./accomplishments-d1.model').AccomplishmentsSnapshot;
+
 export interface ArchiveExportOptions {
   includePgcr?: boolean;
   membershipIds?: string[];

@@ -3,6 +3,12 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~13:00 ET) — W63 D1 + snapshot
+
+### Website
+- **Seal Triumphs shipped:** [PR #64](https://github.com/Splashbear/Destiny-Chronicle/pull/64) merged.
+- **Building:** D1 Record Books + D1 medals + Save snapshot (lean IDs/counts) + include in `.chronicle.zip`. Completes W63 spec build order.
+
 ## Ship note (2026-10-20 ~12:50 ET) — W63 Seal Triumphs
 
 ### Website

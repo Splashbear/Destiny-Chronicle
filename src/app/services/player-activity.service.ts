@@ -185,6 +185,7 @@ export class PlayerActivityService {
     return {
       displayName: result.displayName,
       membershipId: result.membershipId,
+      membershipType: Number(result.membershipType) || 0,
       platform: result.platform || 'Unknown',
       game: game,
       iconPath: result.iconPath || undefined,
