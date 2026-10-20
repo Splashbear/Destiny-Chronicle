@@ -1888,6 +1888,7 @@ export class ActivityDbService extends Dexie {
       characterId,
       storyGame
     );
+    await this.enrichFirstCompletionsWithPgcr(storyFirsts, membershipId, gameResolved);
     const firstCompletions: ActivityFirstCompletion[] = [...filteredFirsts, ...storyFirsts];
 
     if (traceFirsts) {
@@ -1954,12 +1955,35 @@ export class ActivityDbService extends Dexie {
       });
     }
 
-    return this.computeStoryMilestoneFirstCompletions(
+    const storyFirsts = this.computeStoryMilestoneFirstCompletions(
       storyInput,
       membershipId,
       'membership-scope',
       game
     );
+    await this.enrichFirstCompletionsWithPgcr(storyFirsts, membershipId, game);
+    return storyFirsts;
+  }
+
+  /**
+   * Optional PGCR pass for non-raid firsts (e.g. story) so fireteam names / class can populate.
+   * Does not drop entries when PGCR is missing.
+   */
+  private async enrichFirstCompletionsWithPgcr(
+    firsts: ActivityFirstCompletion[],
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<void> {
+    if (!firsts.length) return;
+    const byKey: { [key: string]: ActivityFirstCompletion } = {};
+    for (const first of firsts) {
+      const id = first.instanceId ? String(first.instanceId) : '';
+      if (!id || id === '0') continue;
+      (first as any).needsPgcrProcessing = true;
+      byKey[`${first.storyReleaseId || first.type || 'first'}|${id}`] = first;
+    }
+    if (Object.keys(byKey).length === 0) return;
+    await this.batchProcessPGCRData(byKey, membershipId, game);
   }
 
   async validateAllActivities() {

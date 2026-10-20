@@ -6088,17 +6088,40 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /** Days/months/years from the activity's release to this first clear (not "ago from today"). */
-  getFirstClearElapsed(first: ActivityFirstCompletion | null | undefined, baseName?: string): string | null {
+  getFirstClearElapsed(first: any, baseName?: string): string | null {
     if (!first) return null;
-    const name = (baseName || first.name || '').replace(/: .*$/, '').trim();
-    const release = lookupActivityReleaseDate(name, first.game || 'D2');
-    if (!release) return null;
-    return formatReleaseElapsed(release, first.completionDate || first.period);
+    const game: 'D1' | 'D2' = first.game === 'D1' ? 'D1' : 'D2';
+    const when = first.completionDate || first.period;
+    if (!when) return null;
+
+    const names: string[] = [];
+    const push = (v?: string) => {
+      const t = String(v || '').trim();
+      if (t && !names.includes(t)) names.push(t);
+    };
+    // Prefer the specific activity name (e.g. Desert Perpetual Epic) before the card baseName.
+    push(first.name);
+    if (!first.name) {
+      push(String(this.getActivityName(first, game === 'D1') || ''));
+    }
+    push(first.storySubtitle);
+    push(baseName);
+    // Raid/dungeon cards pass baseName without difficulty; also try stripping ": Master" etc.
+    for (const n of [...names]) {
+      const stripped = n.replace(/: .*$/, '').trim();
+      if (stripped && stripped !== n) push(stripped);
+    }
+
+    for (const name of names) {
+      const release = lookupActivityReleaseDate(name, game);
+      if (release) return formatReleaseElapsed(release, when);
+    }
+    return null;
   }
 
   /** Short fireteam names from the first-clear PGCR, joined like the spreadsheet. */
-  getFirstClearFireteam(first: ActivityFirstCompletion | null | undefined): string | null {
-    const names = first?.fireteamNames?.filter(Boolean);
+  getFirstClearFireteam(first: any): string | null {
+    const names = (first?.fireteamNames as string[] | undefined)?.filter(Boolean);
     if (!names?.length) return null;
     return names.join(', ');
   }

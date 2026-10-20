@@ -31,6 +31,23 @@ describe('lookupActivityReleaseDate', () => {
     expect(lookupActivityReleaseDate('Vault of Glass', 'D1')).toBe('2014-09-16');
     expect(lookupActivityReleaseDate("Warlord's Ruin", 'D2')).toBe('2023-12-01');
   });
+
+  it('finds story expansion, season, Pantheon, and Rite dates', () => {
+    expect(lookupActivityReleaseDate('Red War', 'D2')).toBe('2017-09-06');
+    expect(lookupActivityReleaseDate('Season of the Wish', 'D2')).toBe('2023-11-28');
+    expect(lookupActivityReleaseDate('Episode: Heresy', 'D2')).toBe('2025-02-04');
+    expect(lookupActivityReleaseDate('The Pantheon: Atraks Sovereign', 'D2')).toBe('2024-04-30');
+    expect(lookupActivityReleaseDate('Atraks Sovereign', 'D2')).toBe('2024-04-30');
+    expect(lookupActivityReleaseDate('Pantheon: Calus Resplendent', 'D2')).toBe('2026-06-09');
+    expect(lookupActivityReleaseDate('Rite of the Nine', 'D2')).toBe('2025-05-06');
+    expect(lookupActivityReleaseDate('The Dark Below', 'D1')).toBe('2014-12-09');
+    expect(lookupActivityReleaseDate('The Edge of Fate', 'D2')).toBe('2025-07-15');
+    expect(lookupActivityReleaseDate('Season of Reclamation', 'D2')).toBe('2025-07-15');
+    expect(lookupActivityReleaseDate('Renegades', 'D2')).toBe('2025-12-02');
+    expect(lookupActivityReleaseDate('The Desert Perpetual', 'D2')).toBe('2025-07-19');
+    expect(lookupActivityReleaseDate('The Desert Perpetual: Epic', 'D2')).toBe('2025-09-27');
+    expect(lookupActivityReleaseDate('The Desert Perpetual (Epic): Contest', 'D2')).toBe('2025-09-27');
+  });
 });
 
 describe('fireteamNamesFromPgcr', () => {
