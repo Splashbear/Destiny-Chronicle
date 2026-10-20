@@ -23,6 +23,7 @@ import { AccountWriteIndex, placeholderIdsToDrop } from '../utils/account-write-
 import { matchesCalendarDay, scanYears, utcDayWindow } from '../utils/calendar-day-query';
 import { noteIdbRead } from '../utils/idb-read-log';
 import { MembershipRowCache } from '../utils/membership-row-cache';
+import { fireteamNamesFromPgcr } from '../utils/firsts-fireteam';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -1887,6 +1888,7 @@ export class ActivityDbService extends Dexie {
       characterId,
       storyGame
     );
+    await this.enrichFirstCompletionsWithPgcr(storyFirsts, membershipId, gameResolved);
     const firstCompletions: ActivityFirstCompletion[] = [...filteredFirsts, ...storyFirsts];
 
     if (traceFirsts) {
@@ -1953,12 +1955,35 @@ export class ActivityDbService extends Dexie {
       });
     }
 
-    return this.computeStoryMilestoneFirstCompletions(
+    const storyFirsts = this.computeStoryMilestoneFirstCompletions(
       storyInput,
       membershipId,
       'membership-scope',
       game
     );
+    await this.enrichFirstCompletionsWithPgcr(storyFirsts, membershipId, game);
+    return storyFirsts;
+  }
+
+  /**
+   * Optional PGCR pass for non-raid firsts (e.g. story) so fireteam names / class can populate.
+   * Does not drop entries when PGCR is missing.
+   */
+  private async enrichFirstCompletionsWithPgcr(
+    firsts: ActivityFirstCompletion[],
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<void> {
+    if (!firsts.length) return;
+    const byKey: { [key: string]: ActivityFirstCompletion } = {};
+    for (const first of firsts) {
+      const id = first.instanceId ? String(first.instanceId) : '';
+      if (!id || id === '0') continue;
+      (first as any).needsPgcrProcessing = true;
+      byKey[`${first.storyReleaseId || first.type || 'first'}|${id}`] = first;
+    }
+    if (Object.keys(byKey).length === 0) return;
+    await this.batchProcessPGCRData(byKey, membershipId, game);
   }
 
   async validateAllActivities() {
@@ -2605,32 +2630,36 @@ export class ActivityDbService extends Dexie {
           .filter(Boolean)
       );
       const playerCount = uniquePlayers.size;
-      
+      const names = fireteamNamesFromPgcr(pgcr);
+      if (names.length) {
+        first.fireteamNames = names;
+      }
+      first.fireteamSize = playerCount;
+
       // For dungeons, check solo and flawless status
       if (first.type === 'dungeon') {
-        (first as any).isSolo = playerCount === 1;
-        
-        if ((first as any).isSolo) {
+        first.isSolo = playerCount === 1;
+
+        if (first.isSolo) {
           // Check if all entries have 0 deaths for solo flawless
           const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
           const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
-          (first as any).isSoloFlawless = totalDeaths === 0;
+          first.isSoloFlawless = totalDeaths === 0;
         }
       }
-      
+
       // For raids, check flawless status (all players with 0 deaths)
       if (first.type === 'raid') {
         const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
         const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
-        (first as any).isFlawless = totalDeaths === 0;
-        (first as any).fireteamSize = playerCount;
+        first.isFlawless = totalDeaths === 0;
       }
-      
+
       // Attach class and membershipType for per-character view (membershipId match is sufficient)
       const me = pgcr.entries.find((e: any) => e.player?.destinyUserInfo?.membershipId === membershipId);
       if (me) {
-        (first as any).characterClass = me.player?.characterClass;
-        (first as any).membershipType = me.player?.destinyUserInfo?.membershipType;
+        first.characterClass = me.player?.characterClass;
+        first.membershipType = me.player?.destinyUserInfo?.membershipType;
       }
     }
     // Method 2: Fallback to PGCR players array (alternative format)
@@ -2639,34 +2668,38 @@ export class ActivityDbService extends Dexie {
         pgcr.players.map((p: any) => p.id).filter(Boolean)
       );
       const playerCount = uniquePlayers.size;
-      
+      const names = fireteamNamesFromPgcr(pgcr);
+      if (names.length) {
+        first.fireteamNames = names;
+      }
+      first.fireteamSize = playerCount;
+
       // For dungeons, check solo and flawless status
       if (first.type === 'dungeon') {
-        (first as any).isSolo = playerCount === 1;
-        
-        if ((first as any).isSolo) {
+        first.isSolo = playerCount === 1;
+
+        if (first.isSolo) {
           const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
-          (first as any).isSoloFlawless = totalDeaths === 0;
+          first.isSoloFlawless = totalDeaths === 0;
         }
       }
-      
+
       // For raids, check flawless status
       if (first.type === 'raid') {
         const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
-        (first as any).isFlawless = totalDeaths === 0;
-        (first as any).fireteamSize = playerCount;
+        first.isFlawless = totalDeaths === 0;
       }
-      
+
       // Try to find player info from players array
       const me = pgcr.players.find((p: any) => p.id === membershipId);
       if (me && pgcr.entries && Array.isArray(pgcr.entries)) {
-        const meEntry = pgcr.entries.find((e: any) => 
-          e.player?.destinyUserInfo?.membershipId === membershipId || 
+        const meEntry = pgcr.entries.find((e: any) =>
+          e.player?.destinyUserInfo?.membershipId === membershipId ||
           e.characterId === me.charId
         );
         if (meEntry) {
-          (first as any).characterClass = meEntry.player?.characterClass;
-          (first as any).membershipType = meEntry.player?.destinyUserInfo?.membershipType;
+          first.characterClass = meEntry.player?.characterClass;
+          first.membershipType = meEntry.player?.destinyUserInfo?.membershipType;
         }
       }
     }

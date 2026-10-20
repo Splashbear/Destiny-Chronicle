@@ -78,6 +78,8 @@ import { UiI18nService } from '../../services/ui-i18n.service';
 import { LocaleService } from '../../services/locale.service';
 import { AnniversaryCelebrationBannerComponent, AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
 import { collectFirstsTabMilestonesOnDate, raidDungeonFirstsShownOnCards } from '../../utils/anniversary-helper';
+import { lookupActivityReleaseDate } from '../../utils/activity-release-lookup';
+import { formatReleaseElapsed } from '../../utils/release-elapsed';
 import { parseUsernames as splitSearchUsernames, shouldSearchAsSingleUsername } from '../../utils/search-usernames';
 import { characterKey, classFromProfileCharacter, HeatmapCharacterLookup } from '../../utils/heatmap-filters';
 import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
@@ -6083,6 +6085,45 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   formatDateTime(dateString: string): string {
     return this.timezoneService.formatDateTime(dateString);
+  }
+
+  /** Days/months/years from the activity's release to this first clear (not "ago from today"). */
+  getFirstClearElapsed(first: any, baseName?: string): string | null {
+    if (!first) return null;
+    const game: 'D1' | 'D2' = first.game === 'D1' ? 'D1' : 'D2';
+    const when = first.completionDate || first.period;
+    if (!when) return null;
+
+    const names: string[] = [];
+    const push = (v?: string) => {
+      const t = String(v || '').trim();
+      if (t && !names.includes(t)) names.push(t);
+    };
+    // Prefer the specific activity name (e.g. Desert Perpetual Epic) before the card baseName.
+    push(first.name);
+    if (!first.name) {
+      push(String(this.getActivityName(first, game === 'D1') || ''));
+    }
+    push(first.storySubtitle);
+    push(baseName);
+    // Raid/dungeon cards pass baseName without difficulty; also try stripping ": Master" etc.
+    for (const n of [...names]) {
+      const stripped = n.replace(/: .*$/, '').trim();
+      if (stripped && stripped !== n) push(stripped);
+    }
+
+    for (const name of names) {
+      const release = lookupActivityReleaseDate(name, game);
+      if (release) return formatReleaseElapsed(release, when);
+    }
+    return null;
+  }
+
+  /** Short fireteam names from the first-clear PGCR, joined like the spreadsheet. */
+  getFirstClearFireteam(first: any): string | null {
+    const names = (first?.fireteamNames as string[] | undefined)?.filter(Boolean);
+    if (!names?.length) return null;
+    return names.join(', ');
   }
 
   onActivityTypeChange(event: Event): void {

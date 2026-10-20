@@ -3,6 +3,14 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~11:28 ET)
+
+### Website
+- **Shipped:** PR #59 — Guardian Firsts fireteam names (wrap) + elapsed from release→first clear.
+- Covers Raid/Dungeon, Story, Pantheon, Rite of the Nine, First Ever (when data exists).
+- Story PGCR enrichment for fireteam; release dates include expansions/seasons/Pantheon/Rite/Desert Perpetual (Epic Sept 27).
+- Live via GitHub Pages on merge to `master`. Bot restart not required.
+
 ## Current state (2026-10-08 ~00:10 ET)
 
 ### Website
