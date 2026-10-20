@@ -6,7 +6,7 @@
 ## Ship note (2026-10-20 ~12:20 ET) — W63
 
 ### Website
-- **W63 (open, not merged):** [PR #61](https://github.com/Splashbear/Destiny-Chronicle/pull/61) at `fd30c47` — docs-only `docs/specs/ACCOMPLISHMENTS_SPEC.md` (Chronicle Lab Accomplishments tab). Includes Splashbear lean/clean notes for weaker devices. Do not build the tab until user says go. Do not merge until user says yes.
+- **W63 (open, not merged):** [PR #61](https://github.com/Splashbear/Destiny-Chronicle/pull/61) at `615973f` — docs-only `docs/specs/ACCOMPLISHMENTS_SPEC.md` (Chronicle Lab Accomplishments tab). Includes Splashbear lean/clean notes for weaker devices. Do not build the tab until user says go. Do not merge until user says yes.
 
 ## Ship note (2026-10-20 ~11:42 ET)
 
