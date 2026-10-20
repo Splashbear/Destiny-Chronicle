@@ -349,6 +349,16 @@
            </button>
            <button
              type="button"
+             (click)="onTabChange('accomplishments')"
+             class="main-tab"
+             [ngClass]="{ 'main-tab--active': activeTab === 'accomplishments' }"
+             role="tab"
+             [attr.aria-selected]="activeTab === 'accomplishments'"
+             [title]="uiI18n.t('tab.accomplishments')">
+             🏅 {{ uiI18n.t('tab.accomplishments') }}
+           </button>
+           <button
+             type="button"
              (click)="onTabChange('breakdown')"
              class="main-tab"
              [ngClass]="{ 'main-tab--active': activeTab === 'breakdown' }"
@@ -413,6 +423,11 @@
         <!-- Titles Tab -->
         <div *ngIf="activeTab === 'titles'">
           <app-player-search-titles-tab></app-player-search-titles-tab>
+        </div>
+
+        <!-- Accomplishments Tab (Medals first; more sections follow) -->
+        <div *ngIf="activeTab === 'accomplishments' && selectedPlayers.length > 0">
+          <app-player-search-accomplishments-tab></app-player-search-accomplishments-tab>
         </div>
 
         <!-- Heatmap Tab -->

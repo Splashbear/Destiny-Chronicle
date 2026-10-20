@@ -45,6 +45,7 @@ import { PlayerSearchActivitiesTabComponent } from './player-search-activities-t
 import { PlayerSearchBreakdownTabComponent } from './player-search-breakdown-tab.component';
 import { PlayerSearchFirstsTabComponent } from './player-search-firsts-tab.component';
 import { PlayerSearchTitlesTabComponent } from './player-search-titles-tab.component';
+import { PlayerSearchAccomplishmentsTabComponent } from './player-search-accomplishments-tab.component';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 // Removed new summary/list components to revert to previous display
 import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from '../../services/stats.service';
@@ -627,6 +628,7 @@ interface PlatformStats {
     PlayerSearchBreakdownTabComponent,
     PlayerSearchFirstsTabComponent,
     PlayerSearchTitlesTabComponent,
+    PlayerSearchAccomplishmentsTabComponent,
     DestinyLoaderComponent,
     ActivityHeatmapComponent,
     PlayedWithComponent
@@ -903,7 +905,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** True while favorites (or any multi-profile sync) is still running. */
   profileLoadInProgress = false;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' | 'playedWith' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith' = 'activities';
   readonly enablePlayedWith = environment.enablePlayedWith;
   
   // Anniversary celebration banner state
@@ -1505,6 +1507,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   selectedAccountKeysForBreakdown: Set<string> = new Set();
   /** When non-empty, Guardian Firsts shows only these accounts. Toggle via account cards on Firsts tab. */
   selectedAccountKeysForFirsts: Set<string> = new Set();
+  /** Account card filter for Accomplishments tab (same semantics as Firsts). */
+  selectedAccountKeysForAccomplishments: Set<string> = new Set();
+  activeAccomplishmentsGame: 'D1' | 'D2' = 'D2';
   activityTypeIcons: { [key: string]: SafeHtml } = {};
   public GILDED_SEAL_IMAGE_MAP = GILDED_SEAL_IMAGE_MAP;
   public normalizeTitleName = normalizeTitleName;
@@ -10013,6 +10018,40 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return this.selectedPlayers.filter(p => this.selectedAccountKeysForFirsts.has(this.getAccountKeyForPlayer(p)));
   }
 
+  onAccomplishmentsAccountCardToggle(accountKey: string): void {
+    if (this.selectedAccountKeysForAccomplishments.has(accountKey)) {
+      this.selectedAccountKeysForAccomplishments.delete(accountKey);
+    } else {
+      this.selectedAccountKeysForAccomplishments.add(accountKey);
+    }
+    this.selectedAccountKeysForAccomplishments = new Set(this.selectedAccountKeysForAccomplishments);
+    this.cdr.markForCheck();
+  }
+
+  getAccomplishmentsFilteredPlayers(): PlayerSearchDisplay[] {
+    if (!this.selectedPlayers?.length) return [];
+    if (this.selectedAccountKeysForAccomplishments.size === 0) return this.selectedPlayers;
+    return this.selectedPlayers.filter(p =>
+      this.selectedAccountKeysForAccomplishments.has(this.getAccountKeyForPlayer(p))
+    );
+  }
+
+  setActiveAccomplishmentsGame(game: 'D1' | 'D2'): void {
+    if (this.activeAccomplishmentsGame !== game) {
+      this.activeAccomplishmentsGame = game;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private syncActiveAccomplishmentsGameWithPlayers(): void {
+    const players = this.selectedPlayers || [];
+    if (!players.length) return;
+    const allD1 = players.every((p) => this.isD1Player(p));
+    const allD2 = players.every((p) => !this.isD1Player(p));
+    if (allD1) this.activeAccomplishmentsGame = 'D1';
+    else if (allD2) this.activeAccomplishmentsGame = 'D2';
+  }
+
   /**
    * Rough "weight" of how much Guardian Firsts content a player has.
    * Used only for layout purposes to pick the primary (full-width) card.
@@ -10593,12 +10632,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
   }
 
-  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'breakdown' | 'heatmap' | 'playedWith') {
+  async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith') {
     this.activeTab = tab;
     // Drop the previous tab's cards in this turn. A later await must not leave them mounted.
     this.cdr.detectChanges();
-    if (tab === 'heatmap' || tab === 'breakdown' || tab === 'titles' || tab === 'firsts' || tab === 'activities') {
-      this.siteAnalytics.trackFeatureView(tab);
+    if (tab === 'heatmap' || tab === 'breakdown' || tab === 'titles' || tab === 'firsts' || tab === 'activities' || tab === 'accomplishments') {
+      this.siteAnalytics.trackFeatureView(tab === 'accomplishments' ? 'accomplishments' : tab);
     } else if (tab === 'playedWith') {
       this.siteAnalytics.trackFeatureView('played_with');
     }
@@ -10608,6 +10647,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (tab === 'firsts' && this.selectedPlayers.length > 0) {
       this.syncActiveFirstsGameWithPlayers();
       this.updatePlatformTabs();
+    }
+    if (tab === 'accomplishments' && this.selectedPlayers.length > 0) {
+      this.syncActiveAccomplishmentsGameWithPlayers();
     }
     if (tab === 'breakdown' && this.selectedPlayers.length > 0) {
       await this.loadActivityBreakdown();

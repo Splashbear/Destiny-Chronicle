@@ -163,6 +163,41 @@ export class BungieApiService {
     );
   }
 
+  /**
+   * Account-wide historical stats. `groups=3` = Medals (DestinyStatsGroupType.Medals).
+   * See Destiny2.GetHistoricalStatsForAccount.
+   */
+  getHistoricalStatsForAccount(
+    membershipType: number,
+    membershipId: string,
+    groups: number[] = [3]
+  ): Observable<BungieResponse<any>> {
+    const groupsParam = groups.join(',');
+    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Account/${membershipId}/Stats/?groups=${groupsParam}`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching account historical stats:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Dictionary of DestinyHistoricalStatsDefinition (includes medals).
+   * Separate from the world manifest JSON — lean to load only when Accomplishments needs it.
+   */
+  getHistoricalStatsDefinitions(): Observable<BungieResponse<Record<string, any>>> {
+    const url = `${this.D2_BASE_URL}/Destiny2/Stats/Definition/`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<Record<string, any>>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching historical stats definitions:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
   getPlayerTitles(membershipType: number, membershipId: string): Observable<BungieResponse<TitleResponse>> {
     const cacheBuster = Math.floor(Math.random() * 1e9);
     const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900&_cb=${cacheBuster}`;

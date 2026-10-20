@@ -3,10 +3,16 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~12:30 ET) — W63 build
+
+### Website
+- **W63 docs merged:** PR #61 → `docs/specs/ACCOMPLISHMENTS_SPEC.md` on master.
+- **Building:** Accomplishments tab — Medals (D2) first on `feature/accomplishments-medals`. Lean list UI (paginated rows, no Braytech-style cards). Not merged yet.
+
 ## Ship note (2026-10-20 ~12:20 ET) — W63
 
 ### Website
-- **W63 (open, not merged):** [PR #61](https://github.com/Splashbear/Destiny-Chronicle/pull/61) at `615973f` — docs-only `docs/specs/ACCOMPLISHMENTS_SPEC.md` (Chronicle Lab Accomplishments tab). Includes Splashbear lean/clean notes for weaker devices. Do not build the tab until user says go. Do not merge until user says yes.
+- **W63 docs:** [PR #61](https://github.com/Splashbear/Destiny-Chronicle/pull/61) merged — `docs/specs/ACCOMPLISHMENTS_SPEC.md`.
 
 ## Ship note (2026-10-20 ~11:42 ET)
 

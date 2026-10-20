@@ -1,0 +1,123 @@
+<ng-container *ngIf="text.enabled(); else fullAccomplishments">
+  <div class="text-day space-y-3">
+    <p *ngIf="ps.archiveCoverage as cov" class="text-day-cov">{{ ps.coverageLine(cov) }}</p>
+    <p class="text-xs text-slate-500" *ngIf="asOf">Data from Bungie as of {{ asOf | date:'medium' }}</p>
+    <div class="flex flex-wrap gap-2 text-sm">
+      <button type="button" class="underline" [class.text-yellow-300]="ps.activeAccomplishmentsGame==='D2'" (click)="ps.setActiveAccomplishmentsGame('D2')">D2</button>
+      <button type="button" class="underline" [class.text-yellow-300]="ps.activeAccomplishmentsGame==='D1'" (click)="ps.setActiveAccomplishmentsGame('D1')">D1</button>
+    </div>
+
+    <ng-container *ngIf="ps.activeAccomplishmentsGame==='D1'">
+      <p class="text-slate-400">D1 Record Books and medals are next in the build order. Medals for Destiny 2 are available on the D2 view.</p>
+    </ng-container>
+
+    <ng-container *ngIf="ps.activeAccomplishmentsGame==='D2'">
+      <div *ngIf="loading" class="flex items-center gap-2 text-slate-400"><app-destiny-loader size="sm"></app-destiny-loader> Loading medals…</div>
+      <ng-container *ngIf="!loading && aggregated() as agg">
+        <p *ngIf="agg.status==='hidden'" class="text-amber-300">{{ agg.message }}</p>
+        <p *ngIf="agg.status==='error'" class="text-red-300">{{ agg.message }}</p>
+        <p *ngIf="agg.status==='empty'" class="text-slate-400">{{ agg.message }}</p>
+        <ng-container *ngIf="agg.status==='ok'">
+          <p class="text-slate-300">Medals · {{ agg.totalEarned }} earned across {{ totalVisible(agg) }} types</p>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <button type="button" class="underline" [class.text-yellow-300]="!activeMode" (click)="setMode(null)">All</button>
+            <button *ngFor="let id of modeIds(agg)" type="button" class="underline" [class.text-yellow-300]="activeMode===id" (click)="setMode(id)">{{ id }}</button>
+          </div>
+          <ng-container *ngIf="textMedals(agg) as page">
+            <div *ngFor="let section of page.sections" class="space-y-1">
+              <div class="text-yellow-300 font-semibold">{{ section.title }}</div>
+              <div *ngFor="let row of section.rows" class="text-trow font-mono text-sm text-slate-200">{{ row.name }} · {{ row.count }}</div>
+            </div>
+            <button *ngIf="page.shown < page.total" type="button" class="text-sm text-yellow-400 underline" (click)="showMoreText()">Show more ({{ page.shown }} / {{ page.total }})</button>
+          </ng-container>
+        </ng-container>
+      </ng-container>
+      <p *ngIf="!loading && !d2Players().length" class="text-slate-400">Select a Destiny 2 account to load medals.</p>
+    </ng-container>
+  </div>
+</ng-container>
+
+<ng-template #fullAccomplishments>
+  <div class="space-y-6">
+    <div class="flex flex-wrap items-center gap-3">
+      <h3 class="text-lg font-semibold text-white">Accomplishments</h3>
+      <div class="flex gap-2">
+        <button type="button" class="main-tab text-sm" [ngClass]="{ 'main-tab--active': ps.activeAccomplishmentsGame==='D2' }" (click)="ps.setActiveAccomplishmentsGame('D2')">D2</button>
+        <button type="button" class="main-tab text-sm" [ngClass]="{ 'main-tab--active': ps.activeAccomplishmentsGame==='D1' }" (click)="ps.setActiveAccomplishmentsGame('D1')">D1</button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-500" *ngIf="asOf">Data from Bungie as of {{ asOf | date:'medium' }}</p>
+
+    <app-account-card-grid
+      *ngIf="ps.perPlatformStats.length > 0"
+      [perPlatformStats]="ps.perPlatformStats"
+      [selectedAccountKeys]="ps.selectedAccountKeysForAccomplishments"
+      [hint]="'Click a card to show only that account. Click again to include it again. No selection = all accounts.'"
+      (accountKeyToggle)="ps.onAccomplishmentsAccountCardToggle($event); refresh()">
+    </app-account-card-grid>
+
+    <ng-container *ngIf="ps.activeAccomplishmentsGame==='D1'">
+      <div class="destiny-surface-panel p-4 text-slate-300 text-sm">
+        Destiny 1 Record Books and medals come next (build order). Switch to D2 for medals.
+      </div>
+    </ng-container>
+
+    <ng-container *ngIf="ps.activeAccomplishmentsGame==='D2'">
+      <section class="destiny-surface-panel p-4 space-y-4">
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h4 class="text-md font-semibold text-yellow-300">Medals</h4>
+          <span class="text-xs text-slate-500">Earned only · no rarity % · paginated</span>
+        </div>
+
+        <div *ngIf="loading" class="flex items-center gap-2 text-slate-400 py-6 justify-center">
+          <app-destiny-loader size="sm"></app-destiny-loader>
+          <span>Loading medals from Bungie…</span>
+        </div>
+
+        <ng-container *ngIf="!loading && aggregated() as agg">
+          <p *ngIf="agg.status==='hidden'" class="text-amber-200">{{ agg.message }}</p>
+          <p *ngIf="agg.status==='error'" class="text-red-300">{{ agg.message }}</p>
+          <p *ngIf="agg.status==='empty'" class="text-slate-400">{{ agg.message }}</p>
+
+          <ng-container *ngIf="agg.status==='ok'">
+            <p class="text-sm text-slate-300">{{ agg.totalEarned }} medals earned · {{ totalVisible(agg) }} types<span *ngIf="activeMode"> · {{ activeMode }}</span></p>
+            <div class="flex flex-wrap gap-2">
+              <button type="button" class="px-2 py-1 text-xs rounded border border-slate-600 text-slate-200"
+                      [class.border-yellow-400]="!activeMode" [class.text-yellow-300]="!activeMode"
+                      (click)="setMode(null)">All</button>
+              <button *ngFor="let id of modeIds(agg)" type="button"
+                      class="px-2 py-1 text-xs rounded border border-slate-600 text-slate-200"
+                      [class.border-yellow-400]="activeMode===id" [class.text-yellow-300]="activeMode===id"
+                      (click)="setMode(id)">{{ id }}</button>
+            </div>
+
+            <!-- Lean rows: icon + name + count. No card chrome / rarity. -->
+            <ul class="divide-y divide-slate-700/80 border border-slate-700/60 rounded-md overflow-hidden">
+              <li *ngFor="let m of visibleMedals(agg); trackBy: trackMedal"
+                  class="flex items-center gap-3 px-3 py-2 bg-slate-900/40 hover:bg-slate-800/50">
+                <img *ngIf="m.iconPath" [src]="m.iconPath" width="28" height="28" class="w-7 h-7 shrink-0 object-contain" loading="lazy" alt="" />
+                <span *ngIf="!m.iconPath" class="w-7 h-7 shrink-0 rounded bg-slate-700"></span>
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm text-white truncate">{{ m.name }}</div>
+                  <div class="text-[11px] text-slate-500 truncate" *ngIf="!activeMode">{{ m.groupLabel }}</div>
+                </div>
+                <div class="text-sm font-mono text-yellow-300 tabular-nums shrink-0">{{ m.count }}</div>
+              </li>
+            </ul>
+            <button *ngIf="visibleCount < totalVisible(agg)" type="button"
+                    class="text-sm text-yellow-400 hover:text-yellow-200 underline"
+                    (click)="showMore()">
+              Show more ({{ visibleMedals(agg).length }} / {{ totalVisible(agg) }})
+            </button>
+          </ng-container>
+        </ng-container>
+
+        <p *ngIf="!loading && !d2Players().length" class="text-slate-400 text-sm py-4 text-center">
+          Select a Destiny 2 account to load medals.
+        </p>
+      </section>
+
+      <p class="text-xs text-slate-500">Badges, Emblems, and Seal Triumphs come next.</p>
+    </ng-container>
+  </div>
+</ng-template>
