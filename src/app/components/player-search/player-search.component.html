@@ -72,17 +72,61 @@
       <!-- Top Row: Account and Date Pickers (Horizontal) -->
       <div class="w-full flex flex-col xl:flex-row gap-6">
         <!-- Account Picker -->
-        <div class="flex-1 xl:w-80 flex flex-row gap-4 items-end min-w-0">
-          <div class="destiny-surface-panel p-4 flex-1 min-w-0">
+        <div class="flex-1 min-w-0 flex flex-row gap-4 items-end">
+          <!-- Compact profile chip after load (tap to edit search) -->
+          <div *ngIf="selectedPlayers.length > 0 && !searchPanelExpanded"
+               class="destiny-surface-panel p-3 flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button"
+                      class="flex flex-wrap items-center gap-2 flex-1 min-w-0 text-left rounded-md hover:bg-white/5 px-1 py-0.5 -mx-1"
+                      (click)="expandSearchPanel()"
+                      aria-label="Edit search">
+                <span *ngFor="let player of selectedPlayers"
+                      class="destiny-chip"
+                      [title]="player.platform + ' · ' + player.membershipId">
+                  <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-3.5 h-3.5" alt="" />
+                  <img [src]="getGameIconUrl(player.game)" class="w-3.5 h-3.5" alt="" />
+                  <span class="truncate max-w-[10rem]">{{ player.displayName }}</span>
+                </span>
+              </button>
+              <button type="button"
+                      (click)="toggleAddMode()"
+                      class="chronicle-toolbar-btn text-xs px-3 py-1.5 shrink-0"
+                      [class.chronicle-toolbar-btn--primary]="addMode"
+                      [attr.title]="addMode ? 'Add mode — new searches add profiles' : 'Replace mode — new searches replace profiles'"
+                      [attr.aria-pressed]="addMode">
+                {{ addMode ? '✓ Add' : '⚠ Replace' }}
+              </button>
+              <button type="button" (click)="expandSearchPanel()" class="chronicle-toolbar-btn text-xs px-3 py-1.5 shrink-0">
+                Edit search
+              </button>
+              <button type="button" (click)="openFavoritesModal()" class="chronicle-toolbar-btn chronicle-toolbar-btn--primary text-xs px-3 py-1.5 shrink-0">
+                ★ Favorites
+              </button>
+            </div>
+            <p class="text-xs text-slate-300 mt-2 mb-0">
+              {{ addMode ? 'Add mode — new searches add profiles' : 'Replace mode — new searches replace profiles' }}
+              · {{ selectedPlayers.length }}/10 profiles
+            </p>
+          </div>
+
+          <div *ngIf="selectedPlayers.length === 0 || searchPanelExpanded" class="destiny-surface-panel p-4 flex-1 min-w-0">
             <div class="flex items-center justify-between mb-6">
               <h2 class="text-xl font-bold font-d2-headline text-gradient">Search for your Destiny Account</h2>
-              <!-- Prominent Favorites Button -->
-              <button (click)="openFavoritesModal()" 
-                      class="chronicle-toolbar-btn chronicle-toolbar-btn--primary">
-                <span>★</span>
-                <span>Favorites</span>
-                <span *ngIf="favoriteAccounts.length > 0" class="text-xs opacity-80">({{ favoriteAccounts.length }})</span>
-              </button>
+              <div class="flex items-center gap-2">
+                <button *ngIf="selectedPlayers.length > 0"
+                        type="button"
+                        (click)="collapseSearchPanel()"
+                        class="chronicle-toolbar-btn text-xs px-3 py-1.5">
+                  Collapse
+                </button>
+                <button (click)="openFavoritesModal()" 
+                        class="chronicle-toolbar-btn chronicle-toolbar-btn--primary">
+                  <span>★</span>
+                  <span>Favorites</span>
+                  <span *ngIf="favoriteAccounts.length > 0" class="text-xs opacity-80">({{ favoriteAccounts.length }})</span>
+                </button>
+              </div>
             </div>
             <!-- API Unavailable Message -->
             <div *ngIf="!apiAvailable && !d1ApiIssue && !d2ApiIssue" class="bg-red-900 text-red-200 p-2 rounded mb-4 text-sm">
@@ -129,19 +173,13 @@
               </div>
             </div>
             <!-- User guidance: how to use the app (dismissible) -->
-            <div *ngIf="selectedPlayers.length === 0 && !hideGetStartedBanner" class="destiny-banner-info mb-4 text-sm relative">
+            <div *ngIf="selectedPlayers.length === 0 && !hideGetStartedBanner" class="destiny-banner-info mb-4 text-sm relative pr-9">
               <button (click)="dismissGetStartedBanner()" class="absolute top-2 right-2 p-1 rounded text-slate-400 hover:text-white hover:bg-white/10" aria-label="Dismiss">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
-              <p class="font-medium mb-1 pr-6" style="color: var(--destiny-gold)">How to get started</p>
-              <ul class="list-disc list-inside space-y-0.5 text-slate-300">
-                <li>Search by your <strong>Bungie Account</strong> (e.g. Splashbear#1078 or Splashbear or 4611686018465122437)</li>
-                <li>For more than one person, type a name, press <strong>Enter</strong> to save it, then repeat — click Search when the list is ready</li>
-                <li>Select profiles from the search results to add them</li>
-                <li>Initial load fetches activity history (PGCRs) – this can take a some time for multiple characters</li>
-                <li><strong>Activities</strong> tab shows your day-by-day history for the selected date</li>
-                <li><strong>Activity Breakdown</strong> shows total time spent across all accounts, all time</li>
-              </ul>
+              <p class="text-slate-200">
+                Search by Bungie name (e.g. Splashbear#1078), pick your accounts, then browse Activities by date — Guardian Firsts, Titles, and Breakdown cover the rest.
+              </p>
             </div>
             <!-- Selected profiles ribbon -->
             <div *ngIf="selectedPlayers.length > 0" class="mb-4">
@@ -207,9 +245,6 @@
                 </button>
                 <div id="search-help" class="sr-only">Press Enter after each name to save it, then click Search to look up accounts.</div>
               </div>
-              <div class="text-xs text-slate-400">
-                Press <strong class="text-slate-300">Enter</strong> after each name to save it, then click Search. Do this once per person you want to look up.
-              </div>
             </div>
             <!-- Add Mode Controls -->
             <div *ngIf="selectedPlayers.length > 0" class="mt-3">
@@ -261,21 +296,21 @@
         </div>
       </div>
 
-      <!-- Compact loading strip — full width, below account/date row -->
-      <div *ngIf="showLoadingModal" class="loading-profiles-strip w-full">
-        <div class="flex items-center gap-2 min-w-0">
-          <app-destiny-loader *ngIf="!isLoadingComplete" size="sm"></app-destiny-loader>
-          <span *ngIf="isLoadingComplete" class="text-green-400 text-sm shrink-0">✓</span>
-          <div class="flex-1 min-w-0 text-sm">
-            <span class="font-medium text-[var(--destiny-parchment)]">{{ isLoadingComplete ? 'Profiles loaded' : 'Loading profiles' }}</span>
-            <span class="text-slate-400 ml-1">
-              — {{ getCompletedCount() }}/{{ accountLoadingStatuses.length }}
-              <ng-container *ngIf="!isLoadingComplete && getCurrentLoadingProfile() as p"> · {{ p.displayName }}</ng-container>
-            </span>
-          </div>
-          <div class="w-24 sm:w-32 shrink-0 destiny-progress-track h-1.5">
-            <div class="destiny-progress-fill h-full rounded-full" [style.width.%]="getOverallProgress()"></div>
-          </div>
+      <!-- Engram loading strip — full width, below account/date row -->
+      <div *ngIf="showLoadingModal" class="loading-profiles-strip loading-profiles-strip--engram w-full">
+        <div class="flex items-center gap-3 min-w-0">
+          <dc-load-engram
+            layout="row"
+            size="md"
+            [centered]="false"
+            [hasProjected]="true"
+            [progress]="getOverallProgress()"
+            [caption]="decryptingCaption"
+            [subline]="decryptingSubline">
+            <div class="engram-decrypt-bar destiny-progress-track h-1.5 mt-2 max-w-xs">
+              <div class="destiny-progress-fill h-full rounded-full" [style.width.%]="getOverallProgress()"></div>
+            </div>
+          </dc-load-engram>
           <button type="button" (click)="loadingPanelExpanded = !loadingPanelExpanded"
                   class="chronicle-toolbar-btn px-2 py-1 text-xs shrink-0"
                   [attr.aria-expanded]="loadingPanelExpanded">
@@ -310,9 +345,11 @@
       </div>
        
        <!-- Main Content Area with Right Sidebar -->
-       <div class="flex-1 min-w-0 flex flex-col xl:flex-row gap-8">
-      <!-- Main Content: Yearly Activity Cards -->
-         <div class="flex-1 min-w-0">
+       <div class="flex-1 min-w-0 flex flex-col xl:flex-row gap-8"
+            [class.justify-center]="activeTab !== 'heatmap' && activeTab !== 'activities'">
+      <!-- Main Content: Yearly Activity Cards (~1200px on wide screens; Heatmap uses full width) -->
+         <div class="flex-1 min-w-0"
+              [ngClass]="activeTab === 'heatmap' ? 'w-full' : 'w-full max-w-[1200px] mx-auto'">
         <!-- Tab Navigation -->
          <div class="mb-8">
          <nav class="destiny-tab-nav md:gap-1" role="tablist" aria-label="Activity views">
@@ -407,32 +444,32 @@
 
         <!-- Activities Tab -->
         <div *ngIf="activeTab === 'activities'">
-          <app-player-search-activities-tab></app-player-search-activities-tab>
+          <app-activities-tab></app-activities-tab>
         </div>
 
         <!-- Activity breakdown tab -->
         <div *ngIf="activeTab === 'breakdown'">
-          <app-player-search-breakdown-tab></app-player-search-breakdown-tab>
+          <app-breakdown-tab></app-breakdown-tab>
         </div>
 
         <!-- Guardian Firsts Tab -->
         <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0">
-          <app-player-search-firsts-tab></app-player-search-firsts-tab>
+          <app-firsts-tab></app-firsts-tab>
         </div>
 
         <!-- Titles Tab -->
         <div *ngIf="activeTab === 'titles'">
-          <app-player-search-titles-tab></app-player-search-titles-tab>
+          <app-titles-tab></app-titles-tab>
         </div>
 
         <!-- Accomplishments Tab (Medals first; more sections follow) -->
         <div *ngIf="activeTab === 'accomplishments' && selectedPlayers.length > 0">
-          <app-player-search-accomplishments-tab></app-player-search-accomplishments-tab>
+          <app-accomplishments-tab></app-accomplishments-tab>
         </div>
 
         <!-- Heatmap Tab -->
         <div *ngIf="activeTab === 'heatmap'">
-          <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
+          <dc-coverage-chip *ngIf="textView.enabled()" [coverage]="archiveCoverage"></dc-coverage-chip>
           <app-activity-heatmap
             [membershipIds]="heatmapMembershipIds"
             [characterMeta]="heatmapCharacterMeta"
@@ -441,7 +478,7 @@
 
         <!-- Played With Tab -->
         <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0">
-          <p *ngIf="textView.enabled() && archiveCoverage as cov" class="text-day-cov">{{ coverageLine(cov) }}</p>
+          <dc-coverage-chip *ngIf="textView.enabled()" [coverage]="archiveCoverage"></dc-coverage-chip>
           <app-played-with *ngIf="playedWithAccounts.length; else playedWithD2Only" [accounts]="playedWithAccounts"></app-played-with>
           <ng-template #playedWithD2Only>
             <p class="text-sm text-slate-400">{{ uiI18n.t('playedWith.d2Only') }}</p>
@@ -453,13 +490,13 @@
         <!-- Analytics view temporarily removed -->
       </div>
          
-         <!-- Right Sidebar: On This Day -->
-       <div class="xl:w-80 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">
-        <!-- On This Day Section -->
+         <!-- Right Sidebar: On This Day (Activities tab only) -->
+       <div *ngIf="activeTab === 'activities'"
+            class="xl:w-80 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">
         <div class="destiny-surface-panel p-4">
           <div class="mb-4">
             <h3 class="destiny-section-title text-lg mb-1">📅 On This Day</h3>
-            <p class="text-xs text-slate-400">
+            <p class="text-sm text-slate-300">
               Activities from {{ selectedMonth }}/{{ selectedDay }} across all years in your Destiny history
             </p>
           </div>
@@ -467,9 +504,9 @@
             <div class="space-y-4">
               <div *ngFor="let gameGroup of groupedActivitiesByAccount" class="destiny-year-block rounded-lg p-4 mt-2">
                 <h4 class="text-white font-medium mb-2">{{ gameGroup.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</h4>
-                <div class="text-sm text-slate-400">
+                <div class="text-base text-slate-300">
                   <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-2">
-                    <div class="font-medium text-slate-300">{{ yearGroup.year }}<span *ngIf="getSeasonForYear(gameGroup.game, yearGroup.year) as season" class="text-slate-400"> ({{ season }})</span></div>
+                    <div class="font-medium text-slate-200">{{ yearGroup.year }}<span *ngIf="getSeasonForYear(gameGroup.game, yearGroup.year) as season" class="text-slate-300"> ({{ season }})</span></div>
                     <div *ngFor="let typeGroup of yearGroup.typeGroups" class="ml-2">
                       {{ typeGroup.name }}: {{ typeGroup.activities.length }} activities
                     </div>
@@ -479,10 +516,10 @@
             </div>
           </div>
           <div *ngIf="!loadingActivities[selectedDate] && (!groupedActivitiesByAccount || groupedActivitiesByAccount.length === 0)" 
-               class="text-slate-400 text-center py-4">
+               class="text-slate-300 text-center py-4 text-sm">
             No activities found for this date.
           </div>
-          <div *ngIf="loadingActivities[selectedDate]" class="text-slate-400 text-center py-4">
+          <div *ngIf="loadingActivities[selectedDate]" class="text-slate-300 text-center py-4 text-sm">
             Loading activities...
           </div>
           </div>
@@ -492,9 +529,11 @@
   </div>
 
 <!-- Favorites Modal -->
-<div *ngIf="showFavoritesModal" class="destiny-modal-overlay" (click)="closeModalOnBackdrop($event)"
+<div *ngIf="showFavoritesModal" class="destiny-modal-overlay"
+     (pointerdown)="onModalOverlayPointerDown($event)"
+     (click)="closeModalOnBackdrop($event)"
      role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
-  <div class="destiny-modal-panel max-w-2xl" (click)="$event.stopPropagation()">
+  <div class="destiny-modal-panel max-w-2xl" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation()">
     <div class="flex items-center justify-between mb-4">
       <h2 id="favorites-modal-title" class="text-xl font-bold text-white">Favorites</h2>
       <button (click)="showFavoritesModal = false" class="text-slate-400 hover:text-white text-xl"
@@ -544,12 +583,14 @@
 </div>
 
 <!-- Search Results Modal -->
-<div *ngIf="showPlatformPicker" class="destiny-modal-overlay" (click)="closeModalOnBackdrop($event)"
+<div *ngIf="showPlatformPicker" class="destiny-modal-overlay"
+     (pointerdown)="onModalOverlayPointerDown($event)"
+     (click)="closeModalOnBackdrop($event)"
      role="dialog" aria-modal="true" aria-labelledby="search-modal-title">
-  <div class="destiny-modal-panel max-w-2xl" (click)="$event.stopPropagation()">
+  <div class="destiny-modal-panel max-w-2xl" (pointerdown)="$event.stopPropagation()" (click)="$event.stopPropagation()">
     <div class="flex items-center justify-between mb-4">
       <h2 id="search-modal-title" class="text-xl font-bold text-white">Select Accounts</h2>
-      <button (click)="showPlatformPicker = false" class="text-slate-400 hover:text-white text-xl"
+      <button type="button" (click)="showPlatformPicker = false" class="text-slate-400 hover:text-white text-xl"
               aria-label="Close modal">
         ✕
       </button>
@@ -600,7 +641,7 @@
                 class="modal-account-pick"
                 [class.modal-account-pick--selected]="isPlayerSelected(crossSavePlayer)"
                 [attr.aria-pressed]="isPlayerSelected(crossSavePlayer)"
-                (click)="togglePlayerSelection(crossSavePlayer)">
+                (click)="togglePlayerSelection(crossSavePlayer, $event)">
           <img [src]="getPlatformIconUrl(crossSavePlayer.membershipType)" class="w-5 h-5 shrink-0" alt="" />
           <div class="modal-account-pick-body">
             <div class="modal-account-pick-name">{{ crossSavePlayer.displayName }}</div>
@@ -610,16 +651,16 @@
         </button>
       </div>
       
-      <!-- D2 Results -->
-      <div *ngIf="d2SearchResults.length > 0" class="destiny-modal-section">
+      <!-- D2 Results (exclude Cross Save primary — already listed above) -->
+      <div *ngIf="d2ModalAccounts.length > 0" class="destiny-modal-section">
         <h3 class="text-lg font-semibold text-blue-300 mb-2">Destiny 2 Accounts</h3>
         <div class="space-y-2">
           <button type="button"
-                  *ngFor="let player of d2SearchResults"
+                  *ngFor="let player of d2ModalAccounts"
                   class="modal-account-pick"
                   [class.modal-account-pick--selected]="isPlayerSelected(player)"
                   [attr.aria-pressed]="isPlayerSelected(player)"
-                  (click)="togglePlayerSelection(player)">
+                  (click)="togglePlayerSelection(player, $event)">
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
@@ -639,7 +680,7 @@
                   class="modal-account-pick"
                   [class.modal-account-pick--selected]="isPlayerSelected(player)"
                   [attr.aria-pressed]="isPlayerSelected(player)"
-                  (click)="togglePlayerSelection(player)">
+                  (click)="togglePlayerSelection(player, $event)">
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
@@ -653,11 +694,11 @@
     
     <!-- Action Buttons -->
     <div class="flex items-center justify-between mt-6 pt-4 border-t border-slate-600">
-      <button (click)="showPlatformPicker = false" 
+      <button type="button" (click)="showPlatformPicker = false" 
               class="px-4 py-2 destiny-btn-secondary">
         Cancel
       </button>
-      <button (click)="loadSelectedPlayers()" 
+      <button type="button" (click)="loadSelectedPlayers()" 
               [disabled]="getSelectedCount() === 0"
               class="px-4 py-2 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed font-medium">
         Load Selected ({{ getSelectedCount() }})
@@ -746,3 +787,10 @@
 
   <!-- Export Options Dialog -->
   <app-export-options-dialog *ngIf="showExportDialog" [selectedDate]="selectedDate" (close)="showExportDialog = false" (export)="handleExportOptions($event)"></app-export-options-dialog>
+
+  <app-decrypted-share-card
+    [open]="shareMemoryOpen"
+    [memory]="shareMemoryItem"
+    [flavorLine]="shareMemoryFlavor"
+    (close)="closeShareMemoryCard()">
+  </app-decrypted-share-card>
