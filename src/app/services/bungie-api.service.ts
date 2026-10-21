@@ -251,7 +251,8 @@ export class BungieApiService {
    * GET /Destiny/{membershipType}/Account/{membershipId}/Advisors/
    */
   getD1AccountAdvisors(membershipType: number, membershipId: string): Observable<BungieResponse<any>> {
-    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Advisors/`;
+    // definitions=true returns DestinyRecordBookDefinition / DestinyRecordDefinition alongside progress
+    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Advisors/?definitions=true`;
     const finalUrl = this.buildUrl(url);
     return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
       catchError(error => {
@@ -270,7 +271,7 @@ export class BungieApiService {
     membershipId: string,
     characterId: string
   ): Observable<BungieResponse<any>> {
-    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Advisors/V2/`;
+    const url = `${this.D1_BASE_URL}/Destiny/${membershipType}/Account/${membershipId}/Character/${characterId}/Advisors/V2/?definitions=true`;
     const finalUrl = this.buildUrl(url);
     return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
       catchError(error => {
@@ -284,17 +285,40 @@ export class BungieApiService {
    * D1 historical stats. characterId `0` = account aggregate across characters.
    * GET /Destiny/Stats/{membershipType}/{membershipId}/{characterId}/
    */
+  /**
+   * D1 historical stats. characterId `0` = account aggregate.
+   * Prefer Stats/Account for medals when possible. Do not include Mayhem — Bungie
+   * returns ParameterParseFailure (ErrorCode 7) when Mayhem is in the modes list.
+   */
   getD1HistoricalStats(
     membershipType: number,
     membershipId: string,
     characterId: string | number = 0,
-    modes: string = 'None'
+    modes: string = 'AllPvP,AllPvE,AllStrikes,IronBanner,TrialsOfOsiris,Supremacy,Rift,ZoneControl,Racing'
   ): Observable<BungieResponse<any>> {
-    const url = `${this.D1_BASE_URL}/Destiny/Stats/${membershipType}/${membershipId}/${characterId}/?modes=${encodeURIComponent(modes)}`;
+    const url = `${this.D1_BASE_URL}/Destiny/Stats/${membershipType}/${membershipId}/${characterId}/?modes=${encodeURIComponent(modes)}&groups=Medals&periodType=AllTime`;
     const finalUrl = this.buildUrl(url);
     return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
       catchError(error => {
         console.error('Error fetching D1 historical stats:', error);
+        return throwError(() => error);
+      })
+    );
+  }
+
+  /**
+   * Account-wide D1 historical stats (alternate to per-character Stats).
+   * GET /Destiny/Stats/Account/{membershipType}/{destinyMembershipId}/
+   */
+  getD1HistoricalStatsForAccount(
+    membershipType: number,
+    membershipId: string
+  ): Observable<BungieResponse<any>> {
+    const url = `${this.D1_BASE_URL}/Destiny/Stats/Account/${membershipType}/${membershipId}/?groups=Medals`;
+    const finalUrl = this.buildUrl(url);
+    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+      catchError(error => {
+        console.error('Error fetching D1 account historical stats:', error);
         return throwError(() => error);
       })
     );

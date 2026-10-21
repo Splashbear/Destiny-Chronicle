@@ -1,7 +1,11 @@
 export interface AccomplishmentSealTriumph {
   hash: string;
   name: string;
+  description: string;
   iconPath: string;
+  /** From TRIUMPHS_LIST when the record appears in the triumphs tree. */
+  category?: string;
+  catalogOrder?: number;
 }
 
 export interface AccomplishmentCompletedSeal {

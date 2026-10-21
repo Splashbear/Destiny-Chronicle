@@ -1,3 +1,22 @@
+/** One D1 record (triumph) within a record book page. */
+export interface AccomplishmentD1Record {
+  hash: string;
+  name: string;
+  description: string;
+  iconPath: string;
+  /** Page title within the book (from catalog or Manifest). */
+  page?: string;
+  complete: boolean;
+  /** Progress label when known (e.g. "8 / 8"). */
+  progressText?: string;
+}
+
+/** One page / section within a D1 record book. */
+export interface AccomplishmentD1RecordBookPage {
+  name: string;
+  records: AccomplishmentD1Record[];
+}
+
 /** One D1 record book with completed-record expansion. */
 export interface AccomplishmentD1RecordBook {
   hash: string;
@@ -6,13 +25,10 @@ export interface AccomplishmentD1RecordBook {
   completed: number;
   total: number;
   percentComplete: number;
+  /** Flat list (completed only) for text view / snapshot. */
   completedRecords: AccomplishmentD1Record[];
-}
-
-export interface AccomplishmentD1Record {
-  hash: string;
-  name: string;
-  iconPath: string;
+  /** Pages with completed records grouped (catalog / Manifest order). */
+  pages: AccomplishmentD1RecordBookPage[];
 }
 
 export interface AccountD1RecordBooksResult {

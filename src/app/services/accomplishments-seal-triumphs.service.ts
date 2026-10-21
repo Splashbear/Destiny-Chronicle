@@ -9,6 +9,7 @@ import {
   AccomplishmentSealTriumph,
   AccountSealTriumphsResult,
 } from '../models/accomplishments-seal-triumphs.model';
+import { TRIUMPHS_BY_HASH } from '../data/triumphs-catalog';
 
 /** DestinyRecordState.RecordRedeemed — matches Titles & Seals completion check. */
 const RECORD_REDEEMED = 1;
@@ -181,16 +182,26 @@ export class AccomplishmentsSealTriumphsService {
     const out: AccomplishmentSealTriumph[] = [];
     for (const h of hashes) {
       const def = recordDefs[h];
-      const name = String(def?.displayProperties?.name || h).trim();
+      const catalog = TRIUMPHS_BY_HASH[h];
+      const name = String(catalog?.name || def?.displayProperties?.name || h).trim();
       if (!name || /^classif/i.test(name)) continue;
+      const description = String(
+        catalog?.description || def?.displayProperties?.description || ''
+      ).trim();
       const iconRaw = def?.displayProperties?.icon || '';
       out.push({
         hash: h,
         name,
+        description,
         iconPath: iconRaw ? this.assetUrl.resolve(iconRaw) : '',
+        category: catalog?.category,
+        catalogOrder: catalog?.order,
       });
     }
-    out.sort((a, b) => a.name.localeCompare(b.name));
+    out.sort(
+      (a, b) =>
+        (a.catalogOrder ?? 1e9) - (b.catalogOrder ?? 1e9) || a.name.localeCompare(b.name)
+    );
     return out;
   }
 

@@ -3,6 +3,12 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-20 ~21:20 ET) — Accomplishments medals organize live
+
+### Website
+- **Shipped:** [PR #66](https://github.com/Splashbear/Destiny-Chronicle/pull/66) — D2 medals from MEDALS_LIST records (Crucible/Gambit/Vanguard + subtype tabs with earned/total); D1 Record Books pages collapsible + 2-col; D1 medals flat 2-col; snapshot Excel/Text; lean snapshot in `.chronicle.zip`.
+- Live via GitHub Pages. Bot restart not required.
+
 ## Ship note (2026-10-20 ~13:15 ET) — W63 Accomplishments complete
 
 ### Website
