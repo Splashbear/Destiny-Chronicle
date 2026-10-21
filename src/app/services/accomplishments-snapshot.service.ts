@@ -150,6 +150,7 @@ export class AccomplishmentsSnapshotService {
         if (medals.status === 'ok') {
           for (const g of medals.groups) {
             for (const m of g.medals) {
+              if (m.count <= 0) continue;
               rows.push({
                 account: label,
                 platform,
@@ -261,7 +262,9 @@ export class AccomplishmentsSnapshotService {
     const medalMap: Record<string, number> = {};
     if (medals.status === 'ok') {
       for (const g of medals.groups) {
-        for (const m of g.medals) medalMap[m.statId] = m.count;
+        for (const m of g.medals) {
+          if (m.count > 0) medalMap[m.statId] = m.count;
+        }
       }
     }
 

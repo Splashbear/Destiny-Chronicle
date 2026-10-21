@@ -1,90 +1,281 @@
 import {
   MedalModeGroupId,
   MedalSubtypeId,
+  MEDAL_SUBTYPE_ORDER,
 } from '../models/accomplishments-medals.model';
+import { D2_MEDALS_BY_NAME } from '../data/d2-medals-catalog';
+import { D1_MEDALS_BY_STAT_ID } from '../data/d1-medals-catalog';
+
+const MODE_SET = new Set<MedalModeGroupId>(['Crucible', 'Gambit', 'Vanguard', 'Other']);
+const SUBTYPE_SET = new Set<string>(MEDAL_SUBTYPE_ORDER);
+
+/** Subtypes that belong under each D2 mode (MEDALS_LIST only — no D1 tiers / Other). */
+export const MODE_SUBTYPES: Record<'Crucible' | 'Gambit' | 'Vanguard', MedalSubtypeId[]> = {
+  Crucible: [
+    'Multi + Streak',
+    'Combat',
+    'Weapons',
+    'Class',
+    'Gold Tier',
+    'Gametypes',
+    'Iron Banner',
+    'Crimson Days',
+    'Trials of Osiris',
+  ],
+  Gambit: ['Prowess', 'Invading', 'Speed', 'Team', 'Supers'],
+  Vanguard: ['Multi + Streak', 'Weapons', 'Elemental'],
+};
+
+/** Aggregate / summary stats that are not individual medals. */
+const AGGREGATE_MEDAL_STAT_IDS = new Set(
+  [
+    'medalsearned',
+    'allmedalsearned',
+    'medalsunknown',
+    'unknownmedals',
+    'medalscore',
+    'allmedalscore',
+    'precisionkills', // sometimes leaked; not a medal
+  ].map((s) => s.toLowerCase())
+);
+
+export function normalizeMedalName(name: string): string {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[''`]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function asMode(raw: string | undefined): MedalModeGroupId | null {
+  if (!raw) return null;
+  return MODE_SET.has(raw as MedalModeGroupId) ? (raw as MedalModeGroupId) : null;
+}
+
+function asSubtype(raw: string | undefined): MedalSubtypeId | null {
+  if (!raw) return null;
+  return SUBTYPE_SET.has(raw) ? (raw as MedalSubtypeId) : null;
+}
+
+/** True for summary rows like "Medals Earned" / "Unknown Medals". */
+export function isAggregateMedalStat(statId: string, name?: string): boolean {
+  const id = String(statId || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  if (!id) return true;
+  if (AGGREGATE_MEDAL_STAT_IDS.has(id)) return true;
+  if (/^(all)?medals?(earned|unknown|score)$/i.test(id)) return true;
+  if (/^medals?earned$/i.test(id) || /^unknownmedals?$/i.test(id)) return true;
+  const n = normalizeMedalName(name || '');
+  if (n === 'medals earned' || n === 'unknown medals' || n === 'all medals earned') return true;
+  return false;
+}
 
 /**
- * Top-level mode: Crucible / Gambit / Vanguard (user-facing).
- * Trials & Iron Banner fold into Crucible as subtypes.
+ * Look up D2 medal placement from MEDALS_LIST (by display name).
+ * A few names appear in more than one mode — pass description or heuristicMode to disambiguate.
  */
-export function medalModeGroup(statId: string, modes: number[] | null | undefined): MedalModeGroupId {
-  const id = String(statId || '').toLowerCase();
-  const m = Array.isArray(modes) ? modes : [];
+export function lookupD2MedalCatalog(
+  name: string,
+  opts?: { description?: string; heuristicMode?: MedalModeGroupId }
+): {
+  mode: MedalModeGroupId;
+  subtype: MedalSubtypeId;
+  description: string;
+  order: number;
+  hash: string;
+} | null {
+  const list = D2_MEDALS_BY_NAME[normalizeMedalName(name)];
+  if (!list?.length) return null;
 
-  if (id.includes('gambit') || m.includes(63) || m.includes(75) || m.includes(89)) {
+  let entry = list[0];
+  if (list.length > 1) {
+    const desc = normalizeMedalName(opts?.description || '');
+    const byDesc = desc
+      ? list.find((e) => normalizeMedalName(e.description) === desc)
+      : undefined;
+    const byMode = opts?.heuristicMode
+      ? list.find((e) => e.mode === opts.heuristicMode)
+      : undefined;
+    entry = byDesc || byMode || list[0];
+  }
+
+  const mode = asMode(entry.mode);
+  const subtype = asSubtype(entry.subtype);
+  if (!mode || !subtype) return null;
+  return {
+    mode,
+    subtype,
+    description: entry.description,
+    order: entry.order,
+    hash: entry.hash,
+  };
+}
+
+/** Look up D1 medal placement from D1_MEDALS_LIST (by historical statId). */
+export function lookupD1MedalCatalog(statId: string): {
+  mode: MedalModeGroupId;
+  subtype: MedalSubtypeId;
+  description: string;
+  name: string;
+  order: number;
+} | null {
+  const key = String(statId || '')
+    .toLowerCase()
+    .trim();
+  if (!key) return null;
+  const alt = key.startsWith('medal') && !key.startsWith('medals') ? `medals${key.slice(5)}` : '';
+  const alt2 = key.startsWith('medals') ? `medal${key.slice(6)}` : '';
+  const entry =
+    D1_MEDALS_BY_STAT_ID[key] ||
+    (alt ? D1_MEDALS_BY_STAT_ID[alt] : undefined) ||
+    (alt2 ? D1_MEDALS_BY_STAT_ID[alt2] : undefined);
+  if (!entry) return null;
+  const mode = asMode(entry.mode);
+  const subtype = asSubtype(entry.subtype);
+  if (!mode || !subtype) return null;
+  return {
+    mode,
+    subtype,
+    description: entry.description,
+    name: entry.name,
+    order: entry.order,
+  };
+}
+
+export type MedalDefHints = {
+  medalTierIdentifier?: string;
+  medalTierHash?: number;
+  category?: number;
+  contentIconOverrideId?: string;
+  modes?: number[] | null;
+};
+
+/**
+ * Heuristic mode WITHOUT trusting bloated modes[] arrays (Bungie often lists ~48 modes
+ * on every medal, including Gambit, which previously mis-filed Crucible medals).
+ */
+function heuristicModeGroup(statId: string, def?: MedalDefHints | null): MedalModeGroupId {
+  const id = String(statId || '').toLowerCase();
+  const icon = String(def?.contentIconOverrideId || '').toLowerCase();
+  const tier = String(def?.medalTierIdentifier || '').toUpperCase();
+
+  if (
+    id.includes('gambit') ||
+    icon.includes('gambit') ||
+    tier.includes('GAMBIT')
+  ) {
     return 'Gambit';
   }
+
   if (
+    tier.startsWith('STRIKE') ||
+    tier.includes('PVE') ||
     id.includes('strike') ||
     id.includes('vanguard') ||
     id.includes('nightfall') ||
-    id.includes('pve') ||
-    id.includes('patrol') ||
-    m.includes(3) ||
-    m.includes(16) ||
-    m.includes(17) ||
-    m.includes(18) ||
-    m.includes(46) ||
-    m.includes(86)
+    icon.includes('pve') ||
+    icon.includes('strike') ||
+    icon.includes('vanguard')
   ) {
     return 'Vanguard';
   }
-  // Crucible + Trials / Iron Banner / Crimson (subtyped separately)
+
   if (
+    tier.startsWith('PVP') ||
     id.includes('pvp') ||
     id.includes('crucible') ||
-    id.includes('control') ||
-    id.includes('clash') ||
     id.includes('trial') ||
     id.includes('ironbanner') ||
     id.includes('iron_banner') ||
     id.includes('crimson') ||
-    id.includes('ib_') ||
-    m.includes(5) ||
-    m.includes(10) ||
-    m.includes(12) ||
-    m.includes(15) ||
-    m.includes(19) ||
-    m.includes(25) ||
-    m.includes(31) ||
-    m.includes(32) ||
-    m.includes(37) ||
-    m.includes(38) ||
-    m.includes(39) ||
-    m.includes(41) ||
-    m.includes(48) ||
-    m.includes(59) ||
-    m.includes(62) ||
-    m.includes(65) ||
-    m.includes(80) ||
-    m.includes(84)
+    icon.includes('pvp') ||
+    icon.includes('crucible') ||
+    icon.includes('trial') ||
+    icon.includes('iron')
   ) {
     return 'Crucible';
   }
+
+  // Do NOT use modes[] — too many medals list every mode including Gambit.
   return 'Other';
 }
 
 /**
- * Braytech-style subtype within a mode (Weapons, Class, Gold Tier, …).
- * Gold Tier wins when medalTierIdentifier is *_TIER_3.
+ * Top-level mode: prefer MEDALS_LIST / D1 list, then heuristic (never bloated modes[]).
+ */
+export function medalModeGroup(
+  statId: string,
+  modes: number[] | null | undefined,
+  opts?: {
+    name?: string;
+    description?: string;
+    game?: 'D1' | 'D2';
+    def?: MedalDefHints | null;
+  }
+): MedalModeGroupId {
+  if (opts?.game === 'D1') {
+    const d1 = lookupD1MedalCatalog(statId);
+    if (d1) return d1.mode;
+  } else if (opts?.name) {
+    const heur = heuristicModeGroup(statId, opts.def);
+    const d2 = lookupD2MedalCatalog(opts.name, {
+      description: opts.description,
+      heuristicMode: heur === 'Other' ? undefined : heur,
+    });
+    if (d2) return d2.mode;
+  }
+
+  const mode = heuristicModeGroup(statId, opts?.def ?? { modes });
+  // Unclassified → Crucible "Other" rather than inventing a 4th tab
+  return mode === 'Other' ? 'Crucible' : mode;
+}
+
+/**
+ * Subtype within a mode from catalog first, then heuristics.
  */
 export function medalSubtype(
   statId: string,
-  def: { medalTierIdentifier?: string; medalTierHash?: number; category?: number } | null | undefined
+  def: MedalDefHints | null | undefined,
+  opts?: { name?: string; description?: string; game?: 'D1' | 'D2' }
 ): MedalSubtypeId {
+  if (opts?.game === 'D1') {
+    const d1 = lookupD1MedalCatalog(statId);
+    if (d1) return d1.subtype;
+  } else if (opts?.name) {
+    const heur = heuristicModeGroup(statId, def);
+    const d2 = lookupD2MedalCatalog(opts.name, {
+      description: opts.description,
+      heuristicMode: heur === 'Other' ? undefined : heur,
+    });
+    if (d2) return d2.subtype;
+  }
+
   const id = String(statId || '');
   const low = id.toLowerCase();
   const tier = String(def?.medalTierIdentifier || '').toUpperCase();
+  const icon = String(def?.contentIconOverrideId || '').toLowerCase();
 
-  if (tier.includes('TIER_3') || /_tier_3$/i.test(tier)) {
+  if (tier.includes('TIER_3') || /_tier_3$/i.test(tier) || icon.includes('gold')) {
     return 'Gold Tier';
   }
 
-  if (low.includes('trial') || low.includes('osiris')) return 'Trials of Osiris';
-  if (low.includes('ironbanner') || low.includes('iron_banner') || low.includes('ib_')) {
+  if (low.includes('trial') || low.includes('osiris') || icon.includes('trial')) {
+    return 'Trials of Osiris';
+  }
+  if (low.includes('ironbanner') || low.includes('iron_banner') || low.includes('ib_') || icon.includes('iron')) {
     return 'Iron Banner';
   }
-  if (low.includes('crimson')) return 'Crimson Days';
+  if (low.includes('crimson') || icon.includes('crimson')) return 'Crimson Days';
+
+  if (low.includes('gambit')) {
+    if (low.includes('invade') || low.includes('invader')) return 'Invading';
+    if (low.includes('primeval') || low.includes('mote') || low.includes('bank')) return 'Prowess';
+    if (low.includes('super')) return 'Supers';
+    if (low.includes('team') || low.includes('ally')) return 'Team';
+    if (low.includes('speed') || low.includes('fast')) return 'Speed';
+    return 'Prowess';
+  }
 
   if (
     /medalmulti/i.test(id) ||
@@ -112,8 +303,6 @@ export function medalSubtype(
     low.includes('stormcaller') ||
     low.includes('dawnblade') ||
     low.includes('voidwalker') ||
-    low.includes('flowwalker') ||
-    low.includes('juggernaut') ||
     low.includes('hunter') ||
     low.includes('titan') ||
     low.includes('warlock') ||
@@ -124,18 +313,10 @@ export function medalSubtype(
 
   if (
     low.includes('elemental') ||
-    low.includes('arc') ||
-    low.includes('solar') ||
-    low.includes('void') ||
-    low.includes('stasis') ||
-    low.includes('strand') ||
-    low.includes('thermal') ||
-    low.includes('prism')
+    ((low.includes('arc') || low.includes('solar') || low.includes('void') || low.includes('stasis') || low.includes('strand')) &&
+      (tier.startsWith('STRIKE') || icon.includes('pve')))
   ) {
-    // Prefer Class/Weapons when already matched; Elemental is mainly Vanguard PvE
-    if (!/medalability/i.test(id) && !/medalweapon/i.test(id)) {
-      return 'Elemental';
-    }
+    return 'Elemental';
   }
 
   if (
@@ -156,10 +337,8 @@ export function medalSubtype(
     low.includes('showdown') ||
     low.includes('clash') ||
     low.includes('mayhem') ||
-    low.includes('momentum') ||
     low.includes('breakthrough') ||
-    low.includes('lockdown') ||
-    low.includes('scored')
+    low.includes('lockdown')
   ) {
     return 'Gametypes';
   }
