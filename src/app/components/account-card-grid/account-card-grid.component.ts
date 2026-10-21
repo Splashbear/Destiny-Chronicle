@@ -1,7 +1,8 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AssetUrlService } from '../../services/asset-url.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
+import { ActivityStore } from '../../core/state/activity.store';
 
 export interface AccountCardPlatformStats {
   accountKey: string;
@@ -22,12 +23,12 @@ export interface AccountCardPlatformStats {
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div *ngIf="perPlatformStats && perPlatformStats.length > 0" class="platform-breakdown">
-      <p *ngIf="hint" class="text-xs text-slate-400 mb-2">{{ hint }}</p>
+    <div *ngIf="displayStats.length > 0" class="platform-breakdown">
+      <p *ngIf="hint" class="text-sm text-slate-300 mb-2">{{ hint }}</p>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
            (click)="onGridClick($event)"
            (keydown)="onGridKey($event)">
-        <div *ngFor="let plat of perPlatformStats; trackBy: trackAccount"
+        <div *ngFor="let plat of displayStats; trackBy: trackAccount"
              class="emblem-card relative rounded-lg overflow-hidden shadow-lg h-24 cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-yellow-400/80"
              [class.ring-2]="selectedAccountKeys?.has(plat.accountKey)"
              [class.ring-yellow-400]="selectedAccountKeys?.has(plat.accountKey)"
@@ -51,8 +52,9 @@ export interface AccountCardPlatformStats {
               <span *ngIf="plat.className">· {{ plat.className }}</span>
               <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
             </div>
-            <div class="text-yellow-300 font-mono text-sm">{{ formatDuration(plat.totalTime) }}</div>
-            <div class="text-xs text-slate-400">{{ plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
+            <div class="text-yellow-300 font-mono text-sm"
+                 title="Time in activities (excludes orbit / social)">{{ displayPending ? '—' : formatDuration(plat.totalTime) }}</div>
+            <div class="text-xs text-slate-400">{{ displayPending ? '—' : plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
           </div>
         </div>
       </div>
@@ -60,15 +62,37 @@ export interface AccountCardPlatformStats {
   `,
 })
 export class AccountCardGridComponent {
+  private readonly activityStore = inject(ActivityStore);
+
   @Input() perPlatformStats: AccountCardPlatformStats[] = [];
   @Input() selectedAccountKeys: Set<string> | null = null;
   @Input() hint: string | null = null;
+  /** While true, show placeholders instead of 0 for count/time. */
+  @Input() statsPending = false;
   @Output() accountKeyToggle = new EventEmitter<string>();
 
   constructor(
     private assetUrl: AssetUrlService,
     private activityIcons: ActivityIconService,
   ) {}
+
+  /** Prefer ActivityStore when accounts are selected (CODE_CLEANUP_SPEC Step 3). */
+  get displayStats(): AccountCardPlatformStats[] {
+    if (this.activityStore.selectedPlayerCount() > 0) {
+      const fromStore = this.activityStore.perPlatformStats();
+      if (fromStore.length > 0) {
+        return fromStore as AccountCardPlatformStats[];
+      }
+    }
+    return this.perPlatformStats || [];
+  }
+
+  get displayPending(): boolean {
+    if (this.activityStore.selectedPlayerCount() > 0) {
+      return this.activityStore.statsPending();
+    }
+    return this.statsPending;
+  }
 
   getGameIconUrl(game: 'D1' | 'D2'): string {
     return this.activityIcons.getGameIconPath(game);
