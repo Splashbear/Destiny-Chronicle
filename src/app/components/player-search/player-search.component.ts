@@ -30,6 +30,14 @@ import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../model
 import { getStoryAnchorSortOrder } from '../../config/story-first-missions';
 import { pickFirstEverFromFirsts } from '../../utils/first-ever-from-firsts';
 import { d2PlayedWithAccounts, PlayedWithAccountChoice } from '../../utils/played-with-accounts';
+import { type RegressionBaseline } from '../../utils/regression-baseline';
+import {
+  installRegressionProbe as installRegressionProbeFn,
+  uninstallRegressionProbe as uninstallRegressionProbeFn,
+  ensureTitlesForRegression as ensureTitlesForRegressionFn,
+  isRegressionSnapshotReady as isRegressionSnapshotReadyFn,
+  getRegressionSnapshot as getRegressionSnapshotFn,
+} from './player-search-regression';
 import {
   PantheonEventId,
   getPantheonConfig,
@@ -1921,12 +1929,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this.visibilityChangeHandler);
     }
+
+    // CODE_CLEANUP_SPEC Step 1 — Playwright reads window.__dcRegression
+    this.installRegressionProbe();
   }
 
   ngOnDestroy() {
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
     }
+    this.uninstallRegressionProbe();
     // Clean up any subscriptions or timers
     this.statsDebounce$.complete();
     this.filteredActivities$.complete();
@@ -1934,6 +1946,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       clearTimeout(this.breakdownRefreshTimer);
       this.breakdownRefreshTimer = null;
     }
+  }
+
+  private installRegressionProbe(): void {
+    installRegressionProbeFn(this);
+  }
+
+  private uninstallRegressionProbe(): void {
+    uninstallRegressionProbeFn();
+  }
+
+  async ensureTitlesForRegression(): Promise<void> {
+    await ensureTitlesForRegressionFn(this);
+  }
+
+  isRegressionSnapshotReady(): boolean {
+    return isRegressionSnapshotReadyFn(this);
+  }
+
+  getRegressionSnapshot(): RegressionBaseline {
+    return getRegressionSnapshotFn(this);
   }
 
   /** Page Visibility API: track when user leaves during loading so we can show a tip on return. */

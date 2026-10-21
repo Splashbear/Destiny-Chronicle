@@ -14,6 +14,9 @@
     "clean": "rimraf dist .angular node_modules/.cache",
     "e2e:splashbear": "playwright test e2e/splashbear-load.spec.ts",
     "e2e:background-tab": "playwright test e2e/background-tab-loading.spec.ts",
+    "e2e:regression": "playwright test e2e/regression-baseline.spec.ts",
+    "e2e:regression:schema": "playwright test e2e/regression-baseline-schema.spec.ts",
+    "e2e:regression:update": "node scripts/e2e-regression-update.mjs",
     "archive:download-images": "node tools/archive-builder/download-images.mjs"
   },
   "private": true,
