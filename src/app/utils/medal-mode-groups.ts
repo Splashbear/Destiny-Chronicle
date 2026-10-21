@@ -3,11 +3,25 @@ import {
   MedalSubtypeId,
   MEDAL_SUBTYPE_ORDER,
 } from '../models/accomplishments-medals.model';
-import { D2_MEDALS_BY_NAME } from '../data/d2-medals-catalog';
+import { D2_MEDALS_ORDER, D2MedalCatalogEntry } from '../data/d2-medals-catalog';
 import { D1_MEDALS_BY_STAT_ID } from '../data/d1-medals-catalog';
 
 const MODE_SET = new Set<MedalModeGroupId>(['Crucible', 'Gambit', 'Vanguard', 'Other']);
 const SUBTYPE_SET = new Set<string>(MEDAL_SUBTYPE_ORDER);
+
+/** Built once from D2_MEDALS_ORDER (avoids shipping a duplicate BY_NAME table). */
+let d2MedalsByName: Record<string, D2MedalCatalogEntry[]> | null = null;
+function getD2MedalsByName(): Record<string, D2MedalCatalogEntry[]> {
+  if (d2MedalsByName) return d2MedalsByName;
+  const map: Record<string, D2MedalCatalogEntry[]> = {};
+  for (const entry of D2_MEDALS_ORDER) {
+    const key = normalizeMedalName(entry.name);
+    if (!map[key]) map[key] = [];
+    map[key].push(entry);
+  }
+  d2MedalsByName = map;
+  return map;
+}
 
 /** Subtypes that belong under each D2 mode (MEDALS_LIST only — no D1 tiers / Other). */
 export const MODE_SUBTYPES: Record<'Crucible' | 'Gambit' | 'Vanguard', MedalSubtypeId[]> = {
@@ -85,7 +99,7 @@ export function lookupD2MedalCatalog(
   order: number;
   hash: string;
 } | null {
-  const list = D2_MEDALS_BY_NAME[normalizeMedalName(name)];
+  const list = getD2MedalsByName()[normalizeMedalName(name)];
   if (!list?.length) return null;
 
   let entry = list[0];
