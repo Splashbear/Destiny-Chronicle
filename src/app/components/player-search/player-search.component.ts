@@ -1801,11 +1801,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     this.selectedYear = today.getFullYear();
     this.selectedDate = `${this.selectedYear}-${this.selectedMonth.toString().padStart(2, '0')}-${this.selectedDay.toString().padStart(2, '0')}`;
     
-    // Handle URL parameters for permalinks - process synchronously
+    // Handle URL parameters for permalinks - process synchronously.
+    // PlayerSearch is embedded in AppComponent (no router-outlet), so
+    // ActivatedRoute.snapshot can be empty at bootstrap — always read
+    // window.location.search as well.
     const params = this.route.snapshot.params;
     const queryParams = this.route.snapshot.queryParams;
-    
-    // Try manual URL parsing as fallback
+    const searchParams = new URLSearchParams(window.location.search);
     const pathname = window.location.pathname;
     const dateMatch = pathname.match(/\/date\/(\d{4}-\d{2}-\d{2})/);
     const playersMatch = pathname.match(/\/players\/(.+)$/);
@@ -1824,11 +1826,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.pendingPlayerData = normalized.players;
       }
     }
-    
-    // Check both route params and query params for date
-    const dateParam = params['date'] || queryParams['date'] || dateMatch?.[1];
+
+    const dateParam =
+      params['date'] || queryParams['date'] || searchParams.get('date') || dateMatch?.[1];
     if (dateParam) {
-      // Validate date format (YYYY-MM-DD)
       if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
         const [year, month, day] = dateParam.split('-').map(Number);
         if (year >= 2014 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
@@ -1839,13 +1840,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       }
     }
-    
-    // Check both route params and query params for players
-    const playersParam = params['players'] || queryParams['players'] || playersMatch?.[1];
+
+    const playersParam =
+      params['players'] ||
+      queryParams['players'] ||
+      searchParams.get('players') ||
+      playersMatch?.[1];
     if (playersParam) {
       const playerData = parsePlayersParam(playersParam);
       if (playerData) {
-        // Store player data to load after favorites are loaded
         this.pendingPlayerData = playerData as any[];
       } else {
         console.warn('Invalid player data in URL');
@@ -1861,32 +1864,29 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         console.log('[INIT] Database cleared on initial load - verified 0 activities remaining');
       }
     }
-    
-    // Also subscribe to future route changes
-    this.route.params.subscribe(params => {
-      if (params['date']) {
-        const dateParam = params['date'];
-        // Validate date format (YYYY-MM-DD)
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-          const [year, month, day] = dateParam.split('-').map(Number);
-          if (year >= 2014 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-            this.selectedYear = year;
-            this.selectedMonth = month;
-            this.selectedDay = day;
-            this.selectedDate = dateParam;
-          }
+
+    const applyPermalinkParams = (p: { date?: string; players?: string }) => {
+      if (p.date && /^\d{4}-\d{2}-\d{2}$/.test(p.date)) {
+        const [year, month, day] = p.date.split('-').map(Number);
+        if (year >= 2014 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          this.selectedYear = year;
+          this.selectedMonth = month;
+          this.selectedDay = day;
+          this.selectedDate = p.date;
         }
       }
-      
-      if (params['players']) {
-        const playerData = parsePlayersParam(params['players']);
+      if (p.players) {
+        const playerData = parsePlayersParam(p.players);
         if (playerData) {
           this.pendingPlayerData = playerData as any[];
         } else {
           console.warn('Invalid player data in URL');
         }
       }
-    });
+    };
+
+    this.route.params.subscribe(p => applyPermalinkParams(p));
+    this.route.queryParams.subscribe(p => applyPermalinkParams(p));
     
     // Clear firstEverActivities cache to ensure new filtering logic takes effect
     this.firstEverActivities = {};
