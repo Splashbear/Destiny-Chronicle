@@ -5,6 +5,13 @@ on:
     branches:
       - master
 
+# Rapid merges used to race on gh-pages (non-fast-forward push reject, or
+# an older deploy finishing after a newer one). One deploy at a time; cancel
+# superseded runs so the newest master tip wins.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -32,4 +39,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: dist/destiny-chronicle/browser
-          cname: destinychronicle.com 
+          cname: destinychronicle.com
+          # Avoid non-fast-forward rejects when another deploy pushed mid-run.
+          force_orphan: true
