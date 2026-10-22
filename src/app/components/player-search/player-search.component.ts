@@ -604,6 +604,9 @@ const RELEASE_ORDER: { [normalized: string]: number } = Object.fromEntries(
 interface PlatformStats {
   accountKey: string;   // unique key for filtering: game-platform-membershipId
   platform: string;
+  /** Sum of stored activity / PGCR durations (excludes orbit, Tower, social). */
+  totalActivityTime: number;
+  /** Bungie character minutesPlayedTotal (includes orbit / Tower / AFK). */
   totalTime: number;
   totalActivities: number;
   totalSeals: number;
@@ -1188,9 +1191,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return cards.reduce((sum, c) => sum + (c.timeSeconds ?? 0), 0);
   }
 
-  /** Total playtime in seconds for the current Breakdown view, from profile data. */
-  private getBreakdownProfileTotalTimeSeconds(): number {
-    // Prefer per-platform stats when available
+  /** Total time in game (Bungie profile) for the current Breakdown account filter. */
+  get breakdownProfileTotalTimeSeconds(): number {
     if (this.perPlatformStats && this.perPlatformStats.length) {
       if (!this.hasBreakdownAccountFilter) {
         return this.perPlatformStats.reduce(
@@ -1202,8 +1204,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         .filter(s => this.selectedAccountKeysForBreakdown.has(s.accountKey))
         .reduce((sum, s) => sum + (s.totalTime ?? 0), 0);
     }
-
-    // Fallback: use overall accountStats when perPlatformStats is not yet populated
     return this.accountStats?.totalTime ?? 0;
   }
 
@@ -1219,7 +1219,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
       const cardTotalFormatted = this.formatSecondsToHoursMinutes(cardTotalSeconds);
 
-      const profileSeconds = this.getBreakdownProfileTotalTimeSeconds();
+      const profileSeconds = this.breakdownProfileTotalTimeSeconds;
       const profileFormatted = this.formatSecondsToHoursMinutes(profileSeconds);
 
       const perPlatformDebug = (this.perPlatformStats || []).map(s => ({
@@ -5566,7 +5566,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       
       this.cdr.detectChanges();
 
-      // Build per-type stats from all stored activities
+      // Build per-type + per-account activity time from stored history (PGCR durations).
+      const activityTimeByAccount: { [accountKey: string]: number } = {};
       for (const key of Object.keys(this.activities)) {
         const list = this.activities[key] || [];
         for (const act of list) {
@@ -5574,14 +5575,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           const allowedTypes = ['raid','dungeon','strike','nightfall','crucible','gambit','sparrow-racing-league','other'];
           const safeType = allowedTypes.includes(typeName) ? typeName : 'other';
           if (!perType[safeType]) perType[safeType] = { count: 0, time: 0 };
+          const dur = this.getActivityDurationSeconds(act);
           perType[safeType].count++;
-          perType[safeType].time += this.getActivityDurationSeconds(act);
+          perType[safeType].time += dur;
+          const accountKey = this.getActivityAccountKey(act as any);
+          activityTimeByAccount[accountKey] = (activityTimeByAccount[accountKey] || 0) + dur;
         }
       }
 
-      // Pull total playtime (seconds) from Bungie character data only.
-      // We sum `minutesPlayedTotal` / `minutesPlayed` (or D1 equivalents) across all characters
-      // for all selected players.
+      // Total time in game: Bungie character minutesPlayedTotal (orbit / Tower / AFK included).
       for (const pl of this.selectedPlayers) {
         const chars = this.characters[this.getPlayerKey(pl)] as any[] | undefined;
         if (!chars || chars.length === 0) continue;
@@ -5591,11 +5593,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         totalTime += minutes * 60; // convert to seconds
       }
 
-      // Total activity time: if we have actual duration from stored activities use it, otherwise fall back to totalTime
+      // Time in activities: sum of stored activity durations only (no profile fallback).
       totalActivityTime = Object.values(perType).reduce((sum, s) => sum + s.time, 0);
-      if (!totalActivityTime) {
-        totalActivityTime = totalTime;
-      }
 
       // Total activities — count directly from IndexedDB for accuracy, per account/game
       let totalActivities = 0;
@@ -5655,6 +5654,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             accountKey: key,
             platform: platformName,
             game: pl.game as 'D1' | 'D2',
+            totalActivityTime: 0,
             totalTime: 0,
             totalActivities: 0,
             totalSeals: 0
@@ -5663,6 +5663,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
         const s = platformStatsMap[key];
         s.totalTime += time;
+        s.totalActivityTime = activityTimeByAccount[key] || 0;
         s.totalActivities += acts;
         s.totalSeals += sealsForPlatform;
 
