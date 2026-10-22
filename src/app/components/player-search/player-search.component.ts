@@ -16,6 +16,8 @@ import { ArchiveService } from '../../services/archive.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
 import { ArchiveHtmlReportService, ArchiveHtmlReportData } from '../../services/archive-html-report.service';
 import { AssetUrlService } from '../../services/asset-url.service';
+import { ActivityStore } from '../../core/state/activity.store';
+import { ProfileStore } from '../../core/state/profile.store';
 import { ArchiveAccount } from '../../models/archive.types';
 
 import { ActivityHistory, Character } from '../../models/activity-history.model';
@@ -1745,7 +1747,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private archiveHtmlReportService: ArchiveHtmlReportService,
     private assetUrl: AssetUrlService,
     private pgcrApiService: PgcrApiService,
-    private siteAnalytics: SiteAnalyticsService
+    private siteAnalytics: SiteAnalyticsService,
+    private activityStore: ActivityStore,
+    private profileStore: ProfileStore
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
@@ -5464,6 +5468,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     const token = ++this.statsCalcToken; // capture token for this invocation
     this.loadingAccountStats = true;
     this.loadingGuardianFirsts = true;
+    this.syncActivityStore();
     let totalTime = 0;
     let totalActivityTime = 0;
     const perType: { [type: string]: { count: number, time: number } } = {};
@@ -5747,10 +5752,30 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.loadingAccountStats = false;
       }
       this.loadingGuardianFirsts = false;
+      this.syncActivityStore();
       console.log('[🎯 CALLING] checkAndShowAnniversaryBanner from calculateAccountStats');
       this.checkAndShowAnniversaryBanner();
       this.cdr.detectChanges();
     }
+  }
+
+  /** Keep ActivityStore / ProfileStore in sync (CODE_CLEANUP_SPEC Step 3). */
+  private syncActivityStore(): void {
+    this.activityStore.setSelectedPlayerCount(this.selectedPlayers.length);
+    this.activityStore.setProfileLoadInProgress(this.profileLoadInProgress);
+    this.activityStore.setLoadingStats(this.loadingAccountStats);
+    this.activityStore.setFromAccountStats(this.accountStats, this.perPlatformStats);
+    this.syncProfileStore();
+  }
+
+  private syncProfileStore(): void {
+    this.profileStore.syncFromHost({
+      selectedPlayers: this.selectedPlayers,
+      profileLoadInProgress: this.profileLoadInProgress,
+      archiveCoverage: this.archiveCoverage,
+      showLoadingModal: this.showLoadingModal,
+      loadingProgress: this.loadingProgress,
+    });
   }
 
   // Helper method to format duration
@@ -6796,6 +6821,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       totalSeals: 0,
       perType: {}
     };
+    this.perPlatformStats = [];
+    this.activityStore.reset();
+    this.profileStore.reset();
     
     // Clear all loading statuses
     this.accountLoadingStatus.clear();
@@ -8492,6 +8520,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       totalSeals: 0,
       perType: {}
     };
+    this.perPlatformStats = [];
+    this.syncActivityStore();
     this.cdr.detectChanges();
     alert('All activities have been cleared from the database.');
   }
