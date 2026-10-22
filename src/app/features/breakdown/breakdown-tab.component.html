@@ -1,0 +1,255 @@
+<ng-container *ngIf="text.enabled(); else fullBreakdown">
+  <div class="text-day">
+    <h2>Activity Breakdown</h2>
+    <p class="text-day-dim">Share of time played. Each bar is that activity type's percentage of the total.</p>
+    <div *ngIf="ps.perPlatformStats.length > 0" class="text-accounts">
+      <p class="text-day-dim">Accounts. Select one or more. No selection = all accounts.</p>
+      <button *ngFor="let plat of ps.perPlatformStats"
+              type="button"
+              class="text-account"
+              [class.on]="ps.selectedAccountKeysForBreakdown.has(plat.accountKey)"
+              (click)="ps.onBreakdownAccountCardToggle(plat.accountKey)">
+        {{ plat.displayName || plat.platform }} · {{ plat.platform }} · {{ plat.game }}
+      </button>
+    </div>
+    <p *ngIf="ps.loadingActivityBreakdown" class="text-day-dim">Loading activity breakdown…</p>
+    <ng-container *ngIf="!ps.loadingActivityBreakdown">
+      <p title="Activity time only — excludes orbit, Tower, and social spaces.">Total in activities <strong>{{ ps.accountStatsPending ? '—' : ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}</strong></p>
+      <ng-container *ngIf="textBars() as bars">
+        <div *ngFor="let bar of bars" class="text-brow">
+          <span class="text-day-name">{{ bar.label }}</span>
+          <span class="text-bbar">{{ bar.bar }}</span>
+          <span>{{ bar.pct | number:'1.0-0' }}%</span>
+          <span class="text-day-dim">{{ ps.formatSecondsToHoursMinutes(bar.timeSeconds) }}</span>
+        </div>
+        <p *ngIf="bars.length === 0" class="text-day-dim">No activity time for this selection.</p>
+      </ng-container>
+    </ng-container>
+  </div>
+</ng-container>
+<ng-template #fullBreakdown>
+<div class="space-y-6">
+<dc-empty-state *ngIf="ps.selectedPlayers.length === 0">
+  Search for and select at least one profile to see activity counts.
+</dc-empty-state>
+<div *ngIf="ps.selectedPlayers.length > 0 && ps.loadingActivityBreakdown" class="flex items-center justify-center gap-2 py-8 text-slate-400">
+  <app-destiny-loader size="sm"></app-destiny-loader>
+  <span>Loading activity breakdown…</span>
+</div>
+<div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown" class="space-y-6">
+  <details class="tab-filters">
+    <summary>Filters</summary>
+    <div class="tab-filters-body">
+      <app-account-card-grid
+        [perPlatformStats]="ps.perPlatformStats"
+        [selectedAccountKeys]="ps.selectedAccountKeysForBreakdown"
+        [statsPending]="ps.accountStatsPending"
+        [hint]="'Click a card to show only that account in the breakdown below. Click again to include it again. No selection = all accounts.'"
+        (accountKeyToggle)="ps.onBreakdownAccountCardToggle($event)">
+      </app-account-card-grid>
+    </div>
+  </details>
+  <div *ngIf="!ps.hasBreakdownAccountFilter" class="destiny-surface-panel p-4 mb-4">
+    <h3 class="text-lg font-semibold text-white mb-1">{{ ps.selectedPlayers[0].displayName }}'s Activity Breakdown (All Accounts)</h3>
+    <p class="text-slate-300 text-sm">All-time totals across {{ ps.selectedPlayers.length }} {{ ps.selectedPlayers.length === 1 ? 'profile' : 'profiles' }}. Open Filters to narrow by account.</p>
+  </div>
+  <div *ngIf="ps.hasBreakdownAccountFilter" class="flex items-center gap-2 mb-4">
+    <h3 class="text-xl font-bold text-white">Activity Breakdown ({{ ps.selectedAccountKeysForBreakdown.size }} selected)</h3>
+  </div>
+</div>
+<div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.activityBreakdownGroups.length > 0" class="space-y-8">
+  <!-- Total time card: wording depends on All vs per-account -->
+  <div class="destiny-stat-highlight">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+      <h3 class="text-lg font-semibold text-white">
+        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size > 0">Total Time (Filtered)</ng-container>
+        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">Total Time Across All Accounts</ng-container>
+        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">Total Time (Selected Accounts)</ng-container>
+      </h3>
+      <button (click)="ps.exportBreakdownToExcel()"
+              [disabled]="!ps.activityBreakdownGroups.length"
+              class="px-3 py-1.5 text-sm destiny-btn-primary disabled:opacity-50 transition-colors flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+        Export to Excel
+      </button>
+    </div>
+    <p class="text-slate-300 text-sm mb-3">
+      <span *ngIf="ps.selectedBreakdownCardLabels.size > 0">Showing selected activity types only.</span>
+      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">All-time aggregate across {{ ps.selectedPlayers.length }} {{ ps.selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
+      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">All-time activity for selected account(s) – not limited to the selected date.</span>
+    </p>
+    <div class="destiny-stat-value"
+         title="Sum of time in activities only — excludes orbit, Tower, and social spaces.">{{ ps.accountStatsPending ? '—' : ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}</div>
+  </div>
+  <p class="text-slate-300 text-sm">
+    <ng-container *ngIf="!ps.hasBreakdownAccountFilter">Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date).</ng-container>
+    <ng-container *ngIf="ps.hasBreakdownAccountFilter">Counts and time for selected account(s) across all characters (all time, not just the selected date).</ng-container>
+    Time is activity time only (same scope as Account Summary) — not Bungie minutesPlayed. Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
+  </p>
+  
+  <!-- Charts Section (collapsible) -->
+  <div *ngIf="ps.activityBreakdownSummaryCards.length > 0" class="destiny-surface-panel p-4 mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+      <div class="flex items-center gap-2">
+        <h3 class="text-lg font-semibold text-white">Activity Distribution</h3>
+        <button (click)="ps.breakdownChartCollapsed = !ps.breakdownChartCollapsed"
+                class="flex items-center gap-1 px-2 py-1 text-sm text-slate-300 hover:text-white destiny-btn-secondary text-sm"
+                [attr.aria-expanded]="!ps.breakdownChartCollapsed">
+          <span>{{ ps.breakdownChartCollapsed ? 'Show' : 'Hide' }} Chart</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+               [class.rotate-180]="!ps.breakdownChartCollapsed">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div *ngIf="!ps.breakdownChartCollapsed" class="space-y-4">
+      <div class="flex flex-wrap items-center gap-3">
+        <label class="text-slate-400 text-sm">Chart by:</label>
+        <select [(ngModel)]="ps.breakdownChartCategory" 
+                (ngModelChange)="ps.setBreakdownChartCategory($event)"
+                class="destiny-input text-sm py-1.5 max-w-none w-auto">
+          <option *ngFor="let opt of ps.breakdownChartCategoryOptions; trackBy: ps.trackBreakdownCard" [value]="opt.value">{{ opt.label }}</option>
+        </select>
+        <select *ngIf="ps.showBreakdownGameDropdown"
+                [(ngModel)]="ps.breakdownChartGame" 
+                (ngModelChange)="ps.setBreakdownChartGame($event)"
+                class="destiny-input text-sm py-1.5 max-w-none w-auto">
+          <option *ngFor="let g of ps.breakdownChartGameOptions" [value]="g.value">{{ g.label }}</option>
+        </select>
+        <div class="flex gap-2">
+          <button (click)="ps.setBreakdownChartType('pie')" 
+                  class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+                  [ngClass]="ps.breakdownChartType === 'pie' ? 'destiny-btn-primary text-sm py-1.5' : 'destiny-btn-secondary text-sm py-1.5'">
+            Pie
+          </button>
+          <button (click)="ps.setBreakdownChartType('bar')" 
+                  class="px-3 py-1.5 text-sm rounded-lg transition-colors"
+                  [ngClass]="ps.breakdownChartType === 'bar' ? 'destiny-btn-primary text-sm py-1.5' : 'destiny-btn-secondary text-sm py-1.5'">
+            Bar
+          </button>
+        </div>
+      </div>
+      <div class="h-64 sm:h-80 min-h-[320px]">
+        <canvas baseChart
+                [data]="ps.breakdownChartData"
+                [options]="ps.breakdownChartType === 'pie' ? ps.breakdownChartOptions : ps.breakdownBarChartOptions"
+                [type]="ps.breakdownChartType">
+        </canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary cards: click to filter; selected cards show only their activity in the table below -->
+  <div class="mb-4">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-slate-400 text-sm">Click a card to filter the table below. Click again to deselect. When none are selected, all activities are shown.</p>
+      <div class="flex items-center gap-2">
+        <button type="button" (click)="ps.expandAllBreakdownGroups()" class="px-3 py-1.5 text-sm text-slate-300 hover:text-white destiny-btn-secondary">Expand all</button>
+        <button type="button" (click)="ps.collapseAllBreakdownGroups()" class="px-3 py-1.5 text-sm text-slate-300 hover:text-white destiny-btn-secondary">Collapse all</button>
+        <button type="button" (click)="ps.breakdownTilesCollapsed = !ps.breakdownTilesCollapsed"
+              class="flex items-center gap-1 px-3 py-1.5 text-sm text-slate-300 hover:text-white destiny-btn-secondary">
+        <span>{{ ps.breakdownTilesCollapsed ? 'Show' : 'Hide' }} Tiles</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+             [class.rotate-180]="!ps.breakdownTilesCollapsed">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      </div>
+    </div>
+    <div *ngIf="!ps.breakdownTilesCollapsed"
+         class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3"
+         (click)="ps.onBreakdownTilesClick($event)"
+         (keydown)="ps.onBreakdownTilesKey($event)">
+    <div *ngFor="let card of ps.activityBreakdownSummaryCards; trackBy: ps.trackBreakdownCard"
+         appBreakdownCreate="tile"
+         role="button"
+         tabindex="0"
+         [attr.data-card-label]="card.label"
+         [attr.aria-pressed]="ps.isBreakdownCardSelected(card.label)"
+         class="breakdown-tile destiny-surface-panel rounded-lg p-2 sm:p-3 border text-left transition-all cursor-pointer flex flex-col items-stretch gap-0.5"
+         [ngClass]="{
+           'breakdown-tile-default': !ps.isBreakdownCardSelected(card.label),
+           'breakdown-tile-selected': ps.isBreakdownCardSelected(card.label)
+         }">
+      <div class="font-medium text-slate-200 text-sm truncate" [title]="card.label">{{ card.label }}</div>
+      <div class="destiny-stat-value text-lg">{{ ps.formatSecondsToHoursMinutes(card.timeSeconds) }}</div>
+      <div class="text-xs text-slate-400">{{ card.runs | number }} runs, {{ card.clears | number }} clears ({{ card.clearRate | number:'1.0-0' }}%)</div>
+    </div>
+    </div>
+  </div>
+  <div *ngFor="let group of ps.filteredActivityBreakdownGroups; trackBy: ps.trackBreakdownGroup" class="destiny-surface-panel overflow-hidden p-4">
+    <button type="button" class="w-full text-left mb-4" (click)="ps.toggleBreakdownGroup(group)">
+      <h3 class="text-lg font-semibold text-white">
+        {{ group.label }}
+        <span class="text-sm font-normal text-slate-400">
+          {{ ps.breakdownView.isExpanded(group) ? 'Hide' : 'Show' }}
+          · {{ group.rows.length | number }} activities
+          · {{ ps.breakdownGroupTotals(group).runs | number }} runs
+          · {{ ps.formatSecondsToHoursMinutes(ps.breakdownGroupTotals(group).timeSeconds) }}
+        </span>
+      </h3>
+    </button>
+    <div class="overflow-x-auto" *ngIf="ps.breakdownView.isExpanded(group)">
+      <table class="w-full text-sm text-left">
+        <thead>
+          <tr class="text-slate-400 border-b border-slate-600">
+            <th class="py-2 pr-2 sm:pr-4 font-medium">{{ ps.uiI18n.t('breakdown.activity') }}</th>
+            <th class="py-2 pr-2 sm:pr-4 font-medium hidden sm:table-cell">{{ ps.uiI18n.t('breakdown.variant') }}</th>
+            <th class="py-2 pr-2 sm:pr-4 font-medium">{{ ps.uiI18n.t('breakdown.game') }}</th>
+            <th class="py-2 pr-2 sm:pr-4 font-medium hidden md:table-cell cursor-pointer select-none hover:text-slate-200 text-left"
+                (click)="ps.toggleBreakdownLastPlayedSort()"
+                [title]="ps.breakdownLastPlayedSort === 'desc' ? 'Newest first' : ps.breakdownLastPlayedSort === 'asc' ? 'Oldest first' : 'Click to sort'">
+              {{ ps.uiI18n.t('breakdown.lastActivityDate') }}
+              <span *ngIf="ps.breakdownLastPlayedSort" class="text-yellow-400/80">{{ ps.breakdownLastPlayedSort === 'desc' ? ' ↓' : ' ↑' }}</span>
+            </th>
+            <th class="py-2 pr-2 sm:pr-4 font-medium hidden lg:table-cell text-left">{{ ps.uiI18n.t('breakdown.elapsedSince') }}</th>
+            <th class="py-2 pl-2 sm:pl-4 pr-0 font-medium text-right min-w-[120px]">{{ ps.uiI18n.t('breakdown.runsClearsTime') }}</th>
+          </tr>
+        </thead>
+        <tbody (click)="ps.onBreakdownRowsClick(group, $event)">
+          <tr *ngFor="let row of ps.visibleBreakdownRows(group); trackBy: ps.trackBreakdownRow"
+              appBreakdownCreate="row"
+              class="border-b border-slate-700/50 hover:bg-white/5"
+              [attr.data-row-key]="ps.trackBreakdownRow(0, row)">
+            <td class="py-2 pr-2 sm:pr-4 text-slate-200">{{ row.baseName }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-slate-300 hidden sm:table-cell">
+              <span *ngIf="row.variantName; else noVariant">{{ row.variantName }}</span>
+              <ng-template #noVariant><span class="text-slate-500">—</span></ng-template>
+            </td>
+            <td class="py-2 pr-2 sm:pr-4 text-slate-400">{{ row.game }}</td>
+            <td class="py-2 pr-2 sm:pr-4 text-xs hidden md:table-cell whitespace-nowrap text-left align-middle">
+              <button *ngIf="row.lastPlayedInstanceId; else breakdownLastActivityPlain"
+                      type="button"
+                      [title]="ps.uiI18n.t('pgcr.openReportHint')"
+                      class="activity-pgcr-link breakdown-date-pgcr-link text-xs font-mono">
+                {{ ps.formatBreakdownLastPlayedDate(row.lastPlayed) }}
+              </button>
+              <ng-template #breakdownLastActivityPlain>
+                <span class="text-slate-400">{{ ps.formatBreakdownLastPlayedDate(row.lastPlayed) }}</span>
+              </ng-template>
+            </td>
+            <td class="py-2 pr-2 sm:pr-4 text-xs hidden lg:table-cell whitespace-nowrap text-left align-middle">
+              <span class="breakdown-elapsed">{{ ps.formatBreakdownElapsedSince(row.lastPlayed) }}</span>
+            </td>
+            <td class="py-2 pl-2 sm:pl-4 pr-0 text-right font-mono text-xs sm:text-sm break-words" style="color: var(--destiny-gold)">
+              <span class="inline-block">Runs: {{ row.runs | number }} ({{ row.clears | number }}c/{{ row.fails | number }}f) · {{ ps.formatSecondsToHoursMinutes(row.timeSeconds) }}</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <button *ngIf="ps.breakdownView.hiddenCount(group) > 0"
+              type="button"
+              class="mt-3 text-sm text-yellow-400 hover:text-yellow-200"
+              (click)="ps.showMoreBreakdownRows(group)">
+        Show more ({{ ps.visibleBreakdownRows(group).length | number }} of {{ group.rows.length | number }})
+      </button>
+    </div>
+  </div>
+</div>
+<dc-empty-state *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.activityBreakdownRows !== null && ps.activityBreakdownRows.length === 0">
+  <ng-container *ngIf="!ps.hasBreakdownAccountFilter">No activities in database for selected profiles. Load activities for a date first so data is synced.</ng-container>
+  <ng-container *ngIf="ps.hasBreakdownAccountFilter">No activities in database for selected account(s). Load activities for a date first so data is synced.</ng-container>
+</dc-empty-state>
+</div>
+</ng-template>

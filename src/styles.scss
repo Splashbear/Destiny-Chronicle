@@ -1,5 +1,6 @@
 @use 'styles/d2-theme.scss' as d2Theme;
 @use 'styles/destiny-components.scss';
+@use 'styles/hardlight-dossier.scss';
 
 /* Helvetica Neue is a system face on macOS/iOS; fall back to Helvetica/Arial elsewhere. */
 
@@ -32,6 +33,22 @@
   --destiny-purple: #7a6b8a;
   --destiny-font-ui: 'Helvetica Neue', Helvetica, Arial, 'Segoe UI', sans-serif;
   --destiny-font-display: 'Helvetica Neue', Helvetica, Arial, 'Segoe UI', sans-serif;
+
+  /* CODE_CLEANUP_SPEC Step 5/7 — shared UI aliases (same computed colors) */
+  --dc-bg: var(--destiny-blue);
+  --dc-surface: var(--destiny-iron-dark);
+  --dc-surface-border: var(--destiny-iron-dark);
+  --dc-gold: var(--destiny-gold);
+  --dc-gold-bright: var(--destiny-gold-bright);
+  --dc-ember: var(--destiny-ember);
+  --dc-muted: #98a2b0;
+  --dc-cov-full-bg: #1d2a1b;
+  --dc-cov-full-fg: #8fbf84;
+  --dc-cov-full-border: #3b5a36;
+  --dc-cov-partial-bg: #2b2412;
+  --dc-cov-partial-border: #5a4a1c;
+  --dc-cov-sealed-bg: #1f2227;
+  --dc-cov-sealed-fg: #8a96a3;
 }
 
 /* Base styles */
