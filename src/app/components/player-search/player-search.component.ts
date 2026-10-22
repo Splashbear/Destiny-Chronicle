@@ -5566,20 +5566,53 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       
       this.cdr.detectChanges();
 
-      // Build per-type + per-account activity time from stored history (PGCR durations).
+      // Build per-type + per-account activity time from IndexedDB (same source as activity counts).
+      // Do not use this.activities — that UI cache is often empty when Account Summary runs.
       const activityTimeByAccount: { [accountKey: string]: number } = {};
-      for (const key of Object.keys(this.activities)) {
-        const list = this.activities[key] || [];
-        for (const act of list) {
-          const typeName = this.manifest.getActivityType(act.activityDetails.referenceId, act.activityDetails.mode);
-          const allowedTypes = ['raid','dungeon','strike','nightfall','crucible','gambit','sparrow-racing-league','other'];
+      const activityCountByAccount: { [accountKey: string]: number } = {};
+      const rolledMembershipGame = new Set<string>();
+      let totalActivities = 0;
+      const allowedTypes = [
+        'raid',
+        'dungeon',
+        'strike',
+        'nightfall',
+        'crucible',
+        'gambit',
+        'sparrow-racing-league',
+        'other',
+      ];
+
+      for (const pl of this.selectedPlayers) {
+        const game = (pl.game || 'D2') as 'D1' | 'D2';
+        const dedupeKey = `${game}|${pl.membershipId}`;
+        if (rolledMembershipGame.has(dedupeKey)) {
+          continue;
+        }
+        rolledMembershipGame.add(dedupeKey);
+
+        const stored = await this.activityDb.getActivitiesForMembershipAndGame(
+          pl.membershipId,
+          game
+        );
+        totalActivities += stored.length;
+        const accountKey = this.getAccountKeyForPlayer(pl);
+        activityCountByAccount[accountKey] = stored.length;
+
+        for (const act of stored) {
+          const isD1 = game === 'D1' || act.game === 'D1';
+          const typeName = this.manifest.getActivityType(
+            act.activityDetails?.referenceId,
+            act.activityDetails?.mode,
+            isD1
+          );
           const safeType = allowedTypes.includes(typeName) ? typeName : 'other';
           if (!perType[safeType]) perType[safeType] = { count: 0, time: 0 };
-          const dur = this.getActivityDurationSeconds(act);
+          const dur = this.getActivityDurationSeconds(act as any);
           perType[safeType].count++;
           perType[safeType].time += dur;
-          const accountKey = this.getActivityAccountKey(act as any);
-          activityTimeByAccount[accountKey] = (activityTimeByAccount[accountKey] || 0) + dur;
+          activityTimeByAccount[accountKey] =
+            (activityTimeByAccount[accountKey] || 0) + dur;
         }
       }
 
@@ -5595,15 +5628,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
       // Time in activities: sum of stored activity durations only (no profile fallback).
       totalActivityTime = Object.values(perType).reduce((sum, s) => sum + s.time, 0);
-
-      // Total activities — count directly from IndexedDB for accuracy, per account/game
-      let totalActivities = 0;
-      for (const pl of this.selectedPlayers) {
-        totalActivities += await this.activityDb.countActivitiesForMembershipAndGame(
-          pl.membershipId,
-          pl.game as 'D1' | 'D2'
-        );
-      }
 
       // Aggregate total seals / titles from Bungie title data only.
       // Count earned titles only – i.e. completed/unlocked titles – so
@@ -5644,11 +5668,6 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           }
         }
 
-        const acts = await this.activityDb.countActivitiesForMembershipAndGame(
-          pl.membershipId,
-          pl.game as 'D1' | 'D2'
-        );
-
         if (!platformStatsMap[key]) {
           platformStatsMap[key] = {
             accountKey: key,
@@ -5664,7 +5683,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const s = platformStatsMap[key];
         s.totalTime += time;
         s.totalActivityTime = activityTimeByAccount[key] || 0;
-        s.totalActivities += acts;
+        s.totalActivities = activityCountByAccount[key] || 0;
         s.totalSeals += sealsForPlatform;
 
         // Populate emblem info once per platform using the account with most playtime/activities

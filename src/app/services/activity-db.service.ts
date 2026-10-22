@@ -2323,7 +2323,12 @@ export class ActivityDbService extends Dexie {
     const v = a?.values;
     if (v?.timePlayedSeconds?.basic?.value != null) return Number(v.timePlayedSeconds.basic.value);
     if (v?.secondsPlayed?.basic?.value != null) return Number(v.secondsPlayed.basic.value);
+    if (v?.activityDurationSeconds?.basic?.value != null) {
+      return Number(v.activityDurationSeconds.basic.value);
+    }
     if (typeof v?.secondsPlayed === 'number') return v.secondsPlayed;
+    if (typeof v?.timePlayedSeconds === 'number') return v.timePlayedSeconds;
+    if (typeof v?.activityDurationSeconds === 'number') return v.activityDurationSeconds;
     if (typeof a?.secondsPlayed === 'number') return a.secondsPlayed;
     if (typeof a?.timePlayedSeconds === 'number') return a.timePlayedSeconds;
     return 0;
@@ -3218,6 +3223,44 @@ export class ActivityDbService extends Dexie {
       .equals(membershipId)
       .and(a => a.game === game)
       .count();
+  }
+
+  /**
+   * Sum of stored activity durations for one membership + game (PGCR / history timePlayed).
+   * Used by Account Summary "Time in activities" — must read IndexedDB, not the UI cache.
+   */
+  async sumActivityDurationForMembershipAndGame(
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<number> {
+    await this.initPromise;
+    if (!membershipId) return 0;
+    const acts = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => a.game === game)
+      .toArray();
+    let sum = 0;
+    for (const a of acts) {
+      sum += this.getActivityDurationSeconds(a);
+    }
+    return sum;
+  }
+
+  /**
+   * All stored rows for one membership + game (for Account Summary per-type rollups).
+   */
+  async getActivitiesForMembershipAndGame(
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<StoredActivity[]> {
+    await this.initPromise;
+    if (!membershipId) return [];
+    return this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => a.game === game)
+      .toArray();
   }
 
   /**
