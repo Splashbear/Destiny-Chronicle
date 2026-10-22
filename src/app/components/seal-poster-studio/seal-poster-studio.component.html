@@ -8,6 +8,10 @@
                   [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'browse', 'd2-tab': viewMode !== 'browse'}">
             Browse
           </button>
+          <button (click)="setViewMode('heraldry')"
+                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'heraldry', 'd2-tab': viewMode !== 'heraldry'}">
+            Heraldry
+          </button>
           <button (click)="setViewMode('poster')"
                   [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'poster', 'd2-tab': viewMode !== 'poster'}">
             Poster
@@ -84,6 +88,7 @@
         Showing {{ displaySeals.length }} seal{{ displaySeals.length !== 1 ? 's' : '' }}
         <span *ngIf="hiddenCount > 0"> · {{ hiddenCount }} hidden</span>
         <span *ngIf="viewMode === 'browse'"> · unearned seals are faded · platform icons shown</span>
+        <span *ngIf="viewMode === 'heraldry'"> · Hall of Heraldry · Bungie seal icons in banner frames · {{ heraldrySeals.length }} earned</span>
         <span *ngIf="viewMode === 'poster'"> · poster presentation · full-color seals, no platform icons</span>
         <span *ngIf="sortType !== 'category' && rearrangeSeals"> · drag a seal onto a slot to place it</span>
         <span *ngIf="displaySeals.length === 0"> — adjust filters or restore hidden seals</span>
@@ -91,7 +96,30 @@
     </div>
   </div>
 
-  <div class="poster-container" (click)="onPosterClick($event)">
+  <!-- Hall of Heraldry: banner frames around real Bungie seal icons -->
+  <div *ngIf="isHeraldryView" class="heraldry-hall">
+    <h2 class="heraldry-hall__title">Hall of Heraldry · Titles</h2>
+    <div class="heraldry-banners" *ngIf="heraldrySeals.length > 0">
+      <div *ngFor="let seal of heraldrySeals; trackBy: trackByHash"
+           class="heraldry-banner"
+           [class.heraldry-banner--gilded]="seal.isGilded">
+        <img *ngIf="getSealIcon(seal)"
+             [src]="getSealIcon(seal)"
+             class="heraldry-banner__icon"
+             [alt]="seal.name" />
+        <b class="heraldry-banner__name">{{ sealTitleLine(seal.name) }}</b>
+        <span *ngIf="seal.isGilded" class="heraldry-banner__gild">
+          gilded<span *ngIf="getGildCount(seal) as n"> ×{{ n }}</span>
+        </span>
+      </div>
+    </div>
+    <p class="heraldry-hall__note">
+      {{ heraldrySeals.length }} seals · Bungie has no earn dates, so banners hang in your chosen order.
+    </p>
+    <p *ngIf="heraldrySeals.length === 0" class="text-slate-400 text-sm">No earned seals to hang yet.</p>
+  </div>
+
+  <div class="poster-container" *ngIf="!isHeraldryView" (click)="onPosterClick($event)">
     <div #posterCanvas
          class="poster-canvas canvas-grid"
          [ngClass]="{'is-exporting': isExporting, 'is-poster': isPosterView}">
