@@ -1,57 +1,58 @@
-<div class="anniversary-banner" *ngIf="anniversaries.length > 0">
-  <div class="anniversary-banner-content">
-    <div class="anniversary-banner-header">
-      <div class="anniversary-banner-icon">🎊</div>
-      <div class="anniversary-banner-title">
-        <h3 class="anniversary-banner-heading">
-          {{ anniversaries.length === 1 ? 'Anniversary on This Day!' : anniversaries.length + ' Anniversaries on This Day!' }}
-        </h3>
-        <p class="anniversary-banner-subtitle">
-          {{ anniversaries.length === 1 ? 'Celebrate your Guardian milestone' : 'Celebrate your Guardian milestones' }}
-        </p>
-      </div>
-      <button 
-        type="button"
-        class="anniversary-banner-close" 
-        (click)="onDismiss()"
-        aria-label="Dismiss celebration banner">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+<div class="fireside-hero" *ngIf="anniversaries.length > 0 && featured as hero">
+  <div class="fireside-hero__glow" aria-hidden="true"></div>
+  <span class="fireside-hero__ember" style="left:12%;bottom:18%" aria-hidden="true"></span>
+  <span class="fireside-hero__ember fireside-hero__ember--dim" style="left:40%;bottom:8%" aria-hidden="true"></span>
+  <span class="fireside-hero__ember" style="left:78%;bottom:22%" aria-hidden="true"></span>
+  <span class="fireside-hero__ember fireside-hero__ember--dim" style="left:88%;bottom:10%" aria-hidden="true"></span>
+
+  <button type="button" class="fireside-hero__close" (click)="onDismiss()" aria-label="Dismiss">
+    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  </button>
+
+  <div class="fireside-hero__body">
+    <div class="fireside-hero__art" *ngIf="hero.pgcrImageUrl || hero.iconUrl">
+      <img *ngIf="hero.pgcrImageUrl" [src]="hero.pgcrImageUrl" alt="" class="fireside-hero__pgcr" />
+      <img *ngIf="hero.iconUrl" [src]="hero.iconUrl" alt="" class="fireside-hero__icon" />
     </div>
-    
-    <div class="anniversary-list">
-      <div 
-        *ngFor="let anniversary of anniversaries; trackBy: trackByAnniversary"
-        class="anniversary-item"
-        (click)="onNavigate(anniversary)">
-        <div class="anniversary-item-icon">{{ getAnniversaryIcon(anniversary) }}</div>
-        <div class="anniversary-item-content">
-          <div class="anniversary-item-name">{{ anniversary.activityName }}</div>
-          <div class="anniversary-item-meta">
-            <span class="anniversary-item-type">{{ getAnniversaryTypeLabel(anniversary) }}</span>
-            <span class="anniversary-item-separator">•</span>
-            <span class="anniversary-item-game">{{ anniversary.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</span>
-            <ng-container *ngIf="anniversary.platform">
-              <span class="anniversary-item-separator">•</span>
-              <span class="anniversary-item-platform">{{ anniversary.platform }}</span>
-            </ng-container>
-            <span class="anniversary-item-separator">•</span>
-            <span class="anniversary-item-date">
-              {{ anniversary.dateLabel || anniversary.year }}
-              <ng-container *ngIf="anniversary.yearsAgo > 0">
-                ({{ anniversary.yearsAgo }} {{ anniversary.yearsAgo === 1 ? 'year' : 'years' }} ago)
-              </ng-container>
-            </span>
-          </div>
-        </div>
-        <div class="anniversary-item-arrow">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
+
+    <div class="fireside-hero__copy">
+      <div class="fireside-hero__kicker">On this day · {{ selectedDateLabel }}</div>
+      <h3 class="fireside-hero__headline">{{ flavorLine(hero) }}</h3>
+      <p class="fireside-hero__meta">
+        {{ hero.dateLabel || hero.completionDate | date:'yyyy-MM-dd' }}
+        · {{ getAnniversaryTypeLabel(hero) }}
+        · {{ hero.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
+        <ng-container *ngIf="hero.platform"> · {{ hero.platform }}</ng-container>
+        <ng-container *ngIf="hero.fireteamLabel"> · {{ hero.fireteamLabel }}</ng-container>
+      </p>
+
+      <div class="fireside-hero__chips">
+        <button type="button" class="fireside-hero__chip" (click)="onNavigate(hero)">
+          ⚑ {{ getAnniversaryTypeLabel(hero) }}
+        </button>
+        <button *ngIf="anniversaries.length > 1"
+                type="button"
+                class="fireside-hero__chip"
+                (click)="showAll = !showAll">
+          {{ showAll ? 'Hide list' : '+' + (anniversaries.length - 1) + ' more that night' }}
+        </button>
+        <button type="button" class="fireside-hero__chip" (click)="onShare(hero)">
+          Share this memory ⇪
+        </button>
       </div>
     </div>
+  </div>
+
+  <div class="fireside-hero__list" *ngIf="showAll && anniversaries.length > 1">
+    <button type="button"
+            class="fireside-hero__list-row"
+            *ngFor="let anniversary of anniversaries; trackBy: trackByAnniversary"
+            (click)="onNavigate(anniversary)">
+      <img *ngIf="anniversary.iconUrl" [src]="anniversary.iconUrl" alt="" class="fireside-hero__list-icon" />
+      <span class="fireside-hero__list-name">{{ anniversary.activityName }}</span>
+      <span class="fireside-hero__list-meta">{{ getAnniversaryTypeLabel(anniversary) }} · {{ anniversary.yearsAgo }}y ago</span>
+    </button>
   </div>
 </div>

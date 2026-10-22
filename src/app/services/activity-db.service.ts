@@ -3221,6 +3221,28 @@ export class ActivityDbService extends Dexie {
   }
 
   /**
+   * Count + sum of activity durations for one membership/game from IndexedDB.
+   * Time is PGCR/activity time only (no orbit, Tower, or social spaces).
+   */
+  async summarizeActivitiesForMembershipAndGame(
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<{ count: number; totalTimeSeconds: number }> {
+    await this.initPromise;
+    if (!membershipId) return { count: 0, totalTimeSeconds: 0 };
+    const acts = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => a.game === game)
+      .toArray();
+    let totalTimeSeconds = 0;
+    for (const a of acts) {
+      totalTimeSeconds += this.getActivityDurationSeconds(a);
+    }
+    return { count: acts.length, totalTimeSeconds };
+  }
+
+  /**
    * Returns all activities played on the specified platform (membershipType).
    * 1 = Xbox, 2 = PlayStation, 3 = Steam, 4 = Blizzard, 5 = Stadia, 6 = Epic
    */

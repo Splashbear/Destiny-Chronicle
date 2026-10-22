@@ -1,0 +1,24 @@
+/* Engram / Fireside — coverage chip (tokens via --dc-*) */
+.engram-cov {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+.engram-cov--full {
+  background: var(--dc-cov-full-bg, #1d2a1b);
+  color: var(--dc-cov-full-fg, #8fbf84);
+  border: 1px solid var(--dc-cov-full-border, #3b5a36);
+}
+.engram-cov--partial {
+  background: var(--dc-cov-partial-bg, #2b2412);
+  color: var(--dc-gold-bright, #e4c04a);
+  border: 1px solid var(--dc-cov-partial-border, #5a4a1c);
+}
+.engram-cov--sealed {
+  background: var(--dc-cov-sealed-bg, #1f2227);
+  color: var(--dc-cov-sealed-fg, #8a96a3);
+  border: 1px solid var(--dc-surface-border, #2a2f36);
+}

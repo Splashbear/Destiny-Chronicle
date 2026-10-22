@@ -1,4 +1,4 @@
-﻿/** @deprecated Import from `../core/data/bungie-api.service` (CODE_CLEANUP_SPEC Step 2). */
+/** @deprecated Import from `../core/data/bungie-api.service` (CODE_CLEANUP_SPEC Step 2). */
 export {
   BungieApiService,
   type PlayerSearchResult,
