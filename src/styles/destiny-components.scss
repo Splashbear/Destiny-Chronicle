@@ -402,6 +402,10 @@
       0 0 16px var(--holo-flame-glow);
   }
 
+  .loading-profiles-strip--engram {
+    padding: 0.75rem 1rem;
+  }
+
   /* Toolbar buttons — match activity view segments */
   .chronicle-toolbar-btn {
     @apply inline-flex items-center justify-center gap-1.5;
