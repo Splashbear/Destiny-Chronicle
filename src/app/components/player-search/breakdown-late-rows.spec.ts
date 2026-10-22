@@ -69,7 +69,7 @@ describe('Activity Breakdown late rows', () => {
       breakdownChartGame: 'all',
       breakdownLastPlayedSort: null,
       perPlatformStats: [],
-      accountStats: { totalTime: 0 },
+      accountStats: { totalTime: 0, totalActivityTime: 0, bungieTotalTime: 0 },
     });
 
     let opened = false;
