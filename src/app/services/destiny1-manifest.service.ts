@@ -10,6 +10,9 @@ import { AssetUrlService } from './asset-url.service';
 export class Destiny1ManifestService {
   private manifest: any = {};
   private manifestLoaded = new BehaviorSubject<boolean>(false);
+  /** One warn per missing id — story/firsts call getActivityName in a tight loop. */
+  private readonly missingNameLogged = new Set<string>();
+  private readonly missingIconLogged = new Set<string>();
   private readonly D1_MANIFEST_JSON = 'assets/manifest/d1-activity-definitions.json';
   private readonly D1_RAID_IMAGE_MAP: { [referenceId: string]: string } = {
     '3801607287': 'assets/d1_raid_images/vaultofglass.jpg',        // Vault of Glass
@@ -144,7 +147,11 @@ export class Destiny1ManifestService {
         return def.activityName || def.displayProperties?.name || 'Unknown Activity';
       }
     }
-    console.warn('[Manifest][getActivityName] MISSING', { referenceId, isD1: true });
+    const missKey = String(referenceId);
+    if (!this.missingNameLogged.has(missKey)) {
+      this.missingNameLogged.add(missKey);
+      console.warn('[Manifest][getActivityName] MISSING', { referenceId, isD1: true });
+    }
     return 'Unknown Activity';
   }
 
@@ -186,7 +193,11 @@ export class Destiny1ManifestService {
       if (def) break;
     }
     if (!def) {
-      console.warn('[Manifest][getActivityIcon] MISSING', { referenceId, isD1: true });
+      const missKey = String(referenceId);
+      if (!this.missingIconLogged.has(missKey)) {
+        this.missingIconLogged.add(missKey);
+        console.warn('[Manifest][getActivityIcon] MISSING', { referenceId, isD1: true });
+      }
       return '';
     }
     if (def.icon) {
