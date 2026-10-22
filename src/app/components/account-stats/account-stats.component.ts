@@ -53,23 +53,6 @@ interface PlatformStats {
         </div>
       </div>
 
-      <table class="account-summary-table w-full text-sm text-left" *ngIf="stats.perType">
-        <thead>
-          <tr>
-            <th class="py-2 pr-2">Activity Type</th>
-            <th class="py-2 pr-2 text-right">Count</th>
-            <th class="py-2 text-right">Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let entry of perTypeEntries">
-            <td class="py-1.5 pr-2">{{ entry[0] }}</td>
-            <td class="py-1.5 pr-2 text-right font-mono">{{ entry[1].count }}</td>
-            <td class="py-1.5 text-right font-mono text-[var(--destiny-gold)]">{{ formatDuration(entry[1].time) }}</td>
-          </tr>
-        </tbody>
-      </table>
-
       <div *ngIf="perPlatformStats && perPlatformStats.length > 0" class="platform-breakdown mt-2 pt-4 border-t border-[rgba(201,162,39,0.22)]">
         <h4 class="text-md font-semibold text-[var(--destiny-gold)] mb-1">Per-Platform Breakdown</h4>
         <p class="text-xs text-slate-400 mb-3">Click a card to filter the Activities list below by that account. Click again to include it again.</p>
@@ -96,10 +79,6 @@ export class AccountStatsComponent {
   @Input() onExportActivities?: () => void;
   @Input() onOpenExportOptionsDialog?: () => void;
   @Input() onShareDailyView?: () => void;
-
-  get perTypeEntries() {
-    return this.stats ? Object.entries(this.stats.perType) : [];
-  }
 
   private pad(n: number): string {
     return n.toString().padStart(2, '0');
