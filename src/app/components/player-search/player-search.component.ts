@@ -66,6 +66,8 @@ import { SharedStateService } from '../../services/shared-state.service';
 import { buildBreakdownCategoryOptions, chartCategoryForSelectedTiles, selectBreakdownChartItems, tileLabelsForChartCategory } from '../../utils/breakdown-chart';
 import { D1_HISTORY_MODES, dedupeByInstanceId, isSocialActivity } from '../../utils/activity-history-filters';
 import { excludeExistingInstances } from '../../utils/activity-dedupe';
+import { activityDurationSeconds } from '../../utils/activity-duration-seconds';
+import { accountSummaryTimeIssue } from '../../utils/account-summary-invariants';
 import { AccountStatsComponent } from '../account-stats/account-stats.component';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivityBreakdownService, ActivityCountRow } from '../../services/activity-breakdown.service';
@@ -4854,14 +4856,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   }
   getActivityDurationSeconds(activity: ActivityHistory): number {
-    const values = activity.values as any;
-    let seconds = values?.timePlayedSeconds?.basic?.value ?? values?.secondsPlayed?.basic?.value ?? values?.activityDurationSeconds?.basic?.value;
-    if (typeof values?.secondsPlayed === 'number') seconds = values.secondsPlayed;
-    if (typeof values?.timePlayedSeconds === 'number') seconds = values.timePlayedSeconds;
-    
-    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) return 0;
-    if (seconds > 86400) return 86400; // Cap at 24 hours
-    return seconds;
+    return activityDurationSeconds(activity);
   }
 
   /**
@@ -5727,6 +5722,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         totalSeals,
         perType: { ...perType }
       } as any;
+
+      const summaryIssue = accountSummaryTimeIssue({
+        activityCount: totalActivities,
+        timeInActivitiesSeconds: totalActivityTime,
+        timeInGameSeconds: totalTime,
+      });
+      if (summaryIssue) {
+        console.error('[AccountSummary][ACCURACY]', summaryIssue);
+      }
     } catch (error) {
       console.error('[GuardianFirsts][ERROR] Error in calculateAccountStats:', error);
     } finally {

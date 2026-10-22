@@ -24,6 +24,10 @@ import { matchesCalendarDay, scanYears, utcDayWindow } from '../utils/calendar-d
 import { noteIdbRead } from '../utils/idb-read-log';
 import { MembershipRowCache } from '../utils/membership-row-cache';
 import { fireteamNamesFromPgcr } from '../utils/firsts-fireteam';
+import {
+  activityDurationSeconds,
+  sumActivityDurationSeconds,
+} from '../utils/activity-duration-seconds';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -2320,18 +2324,7 @@ export class ActivityDbService extends Dexie {
    * so D1 time displays correctly in stats and breakdown.
    */
   private getActivityDurationSeconds(a: any): number {
-    const v = a?.values;
-    if (v?.timePlayedSeconds?.basic?.value != null) return Number(v.timePlayedSeconds.basic.value);
-    if (v?.secondsPlayed?.basic?.value != null) return Number(v.secondsPlayed.basic.value);
-    if (v?.activityDurationSeconds?.basic?.value != null) {
-      return Number(v.activityDurationSeconds.basic.value);
-    }
-    if (typeof v?.secondsPlayed === 'number') return v.secondsPlayed;
-    if (typeof v?.timePlayedSeconds === 'number') return v.timePlayedSeconds;
-    if (typeof v?.activityDurationSeconds === 'number') return v.activityDurationSeconds;
-    if (typeof a?.secondsPlayed === 'number') return a.secondsPlayed;
-    if (typeof a?.timePlayedSeconds === 'number') return a.timePlayedSeconds;
-    return 0;
+    return activityDurationSeconds(a);
   }
 
   // Helper to generate a composite key for a favorite account
@@ -3240,11 +3233,7 @@ export class ActivityDbService extends Dexie {
       .equals(membershipId)
       .and(a => a.game === game)
       .toArray();
-    let sum = 0;
-    for (const a of acts) {
-      sum += this.getActivityDurationSeconds(a);
-    }
-    return sum;
+    return sumActivityDurationSeconds(acts);
   }
 
   /**
