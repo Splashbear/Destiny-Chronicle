@@ -122,6 +122,45 @@ describe('AnniversaryCelebrationBannerComponent', () => {
     expect(component.navigateToFirst.emit).toHaveBeenCalledWith(mockAnniversary);
   });
 
+  it('should return correct icon for first-ever type', () => {
+    const anniversary: AnniversaryFirst = {
+      first: {} as any,
+      type: 'first-ever',
+      activityName: 'Test',
+      year: 2021,
+      yearsAgo: 3,
+      game: 'D2',
+      completionDate: '2021-05-22T14:30:00Z'
+    };
+    expect(component.getAnniversaryIcon(anniversary)).toBe('🌟');
+  });
+
+  it('should return correct icon for solo type', () => {
+    const anniversary: AnniversaryFirst = {
+      first: {} as any,
+      type: 'solo',
+      activityName: 'Test',
+      year: 2021,
+      yearsAgo: 3,
+      game: 'D2',
+      completionDate: '2021-05-22T14:30:00Z'
+    };
+    expect(component.getAnniversaryIcon(anniversary)).toBe('🏃');
+  });
+
+  it('should return correct icon for solo-flawless type', () => {
+    const anniversary: AnniversaryFirst = {
+      first: {} as any,
+      type: 'solo-flawless',
+      activityName: 'Test',
+      year: 2021,
+      yearsAgo: 3,
+      game: 'D2',
+      completionDate: '2021-05-22T14:30:00Z'
+    };
+    expect(component.getAnniversaryIcon(anniversary)).toBe('💎');
+  });
+
   it('should return correct label for first-ever type', () => {
     const anniversary: AnniversaryFirst = {
       first: {} as any,

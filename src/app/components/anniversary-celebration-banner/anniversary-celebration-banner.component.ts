@@ -14,13 +14,7 @@ export interface AnniversaryFirst {
   /** Local calendar date, same formatting as the Firsts cards. */
   dateLabel?: string;
   instanceId?: string;
-  platform?: string;
-  /** Bungie activity icon (manifest). */
-  iconUrl?: string | null;
-  /** Bungie PGCR / activity hero art when available. */
-  pgcrImageUrl?: string | null;
-  /** e.g. "Fireteam of 6" or "alone" — facts only. */
-  fireteamLabel?: string | null;
+  platform?: string; // Xbox, PlayStation, Steam, Epic, Stadia
 }
 
 @Component({
@@ -36,20 +30,6 @@ export class AnniversaryCelebrationBannerComponent {
   @Input() selectedDate: string = '';
   @Output() dismiss = new EventEmitter<void>();
   @Output() navigateToFirst = new EventEmitter<AnniversaryFirst>();
-  @Output() shareMemory = new EventEmitter<AnniversaryFirst>();
-
-  showAll = false;
-
-  get featured(): AnniversaryFirst | null {
-    return this.anniversaries[0] || null;
-  }
-
-  get selectedDateLabel(): string {
-    if (!this.selectedDate) return '';
-    const d = new Date(this.selectedDate + 'T12:00:00');
-    if (Number.isNaN(d.getTime())) return this.selectedDate;
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
 
   onDismiss(): void {
     this.dismiss.emit();
@@ -59,37 +39,17 @@ export class AnniversaryCelebrationBannerComponent {
     this.navigateToFirst.emit(anniversary);
   }
 
-  onShare(anniversary: AnniversaryFirst): void {
-    this.shareMemory.emit(anniversary);
-  }
-
-  /** Original Chronicle flavor — never presented as Bungie-written. */
-  flavorLine(anniversary: AnniversaryFirst): string {
-    const name = anniversary.activityName || 'that activity';
-    const years = anniversary.yearsAgo;
-    const when =
-      years <= 0 ? 'Today' :
-      years === 1 ? 'One year ago tonight' :
-      `${this.numberWord(years)} years ago tonight`;
-
+  getAnniversaryIcon(anniversary: AnniversaryFirst): string {
     switch (anniversary.type) {
-      case 'solo-flawless':
-        return `${when}, you solo flawless'd ${name}.`;
-      case 'solo':
-        return `${when}, you cleared ${name} alone.`;
       case 'first-ever':
-        return `${when}, your journey began in ${name}.`;
+        return '🌟';
+      case 'solo':
+        return '🏃';
+      case 'solo-flawless':
+        return '💎';
       default:
-        return `${when}, you stood in ${name}.`;
+        return '🎉';
     }
-  }
-
-  private numberWord(n: number): string {
-    const words = [
-      '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen'
-    ];
-    return words[n] || String(n);
   }
 
   getAnniversaryTypeLabel(anniversary: AnniversaryFirst): string {
@@ -110,7 +70,7 @@ export class AnniversaryCelebrationBannerComponent {
     }
   }
 
-  trackByAnniversary(_index: number, anniversary: AnniversaryFirst): string {
+  trackByAnniversary(index: number, anniversary: AnniversaryFirst): string {
     return `${anniversary.type}-${anniversary.activityName}-${anniversary.completionDate}`;
   }
 }

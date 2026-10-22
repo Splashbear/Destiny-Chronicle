@@ -7,7 +7,7 @@ import { TitleItem } from '../../services/title.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 import { SiteAnalyticsService } from '../../services/site-analytics.service';
 
-type ViewMode = 'browse' | 'poster' | 'heraldry';
+type ViewMode = 'browse' | 'poster';
 type SortType = 'release' | 'alpha' | 'category' | 'gilded';
 type LegacyFilter = 'all' | 'current' | 'legacy';
 
@@ -57,15 +57,6 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
 
   get isPosterView(): boolean {
     return this.viewMode === 'poster' || this.isExporting;
-  }
-
-  get isHeraldryView(): boolean {
-    return this.viewMode === 'heraldry';
-  }
-
-  /** Completed seals for Hall of Heraldry banners (Bungie icons only). */
-  get heraldrySeals(): SealDisplayItem[] {
-    return this.displaySeals.filter((s) => s.completed);
   }
 
   ngOnInit() {

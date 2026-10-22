@@ -355,110 +355,16 @@ img[src*='class-'] {
   margin-bottom: 0.75rem;
 }
 
-/* Collapsible filter chrome for Titles / Accomplishments / Breakdown / Heatmap */
-.tab-filters {
-  margin-bottom: 1rem;
-  border: 1px solid rgba(201, 162, 39, 0.22);
-  border-radius: 0.5rem;
-  background: rgba(15, 20, 28, 0.55);
-}
-
-.tab-filters > summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 0.6rem 0.9rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #e8edf2;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  user-select: none;
-}
-
-.tab-filters > summary::-webkit-details-marker {
-  display: none;
-}
-
-.tab-filters > summary::before {
-  content: '▸';
-  color: var(--destiny-gold, #c9a227);
-  font-size: 0.75rem;
-}
-
-.tab-filters[open] > summary::before {
-  content: '▾';
-}
-
-.tab-filters-body {
-  padding: 0 0.9rem 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.tab-filters-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-}
-
 .text-day {
   max-width: 800px;
   font: 16px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: #d8e4ee;
 }
 
-.text-day-dim { color: #b0bac6; }
+.text-day-dim { color: #98a2b0; }
 .text-day-badge, .text-day-ok { color: #8fbf84; }
 .text-day-no { color: #e85d4c; }
 .text-day-cov { color: #98a2b0; margin: 0 0 12px; }
-
-/* Ledger of Deeds · Firsts */
-.ledger-deeds__title {
-  margin: 0 0 0.75rem;
-  color: #e4c04a;
-  font-size: 0.875rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-.ledger-deeds__rows {
-  display: flex;
-  flex-direction: column;
-}
-.ledger-deeds__row {
-  display: grid;
-  grid-template-columns: 6.5rem 1fr auto;
-  gap: 0.65rem;
-  align-items: center;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid #2a2f36;
-  font-size: 0.875rem;
-}
-.ledger-deeds__date {
-  color: #c9a227;
-  font-family: Georgia, 'Times New Roman', serif;
-}
-.ledger-deeds__body {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-  color: #d8e4ee;
-}
-.ledger-deeds__icon {
-  width: 1.5rem;
-  height: 1.5rem;
-  flex-shrink: 0;
-  border-radius: 3px;
-  object-fit: contain;
-}
-.ledger-deeds__fireteam {
-  color: #8a96a3;
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
 .text-day-date { margin: 16px 0; padding: 8px 0; border-top: 1px dashed #2a2f36; border-bottom: 1px dashed #2a2f36; }
 .text-day-banner { border: 1px solid #c9a227; color: #e4c04a; padding: 12px 14px; margin: 16px 0; }
 .text-day h2 { margin: 28px 0 8px; font-size: 20px; color: #fff; border-bottom: 1px solid #2a2f36; }

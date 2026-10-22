@@ -1,11 +1,9 @@
-import { PlayerSearchResult } from '../core/data/bungie-api.service';
-
-/** Search-result row shown in the platform picker / account list. */
-export interface PlayerSearchDisplay extends PlayerSearchResult {
-  game: 'D1' | 'D2';
+export interface PlayerSearchDisplay {
+  displayName: string;
+  membershipId: string;
+  membershipType: number;
   platform: string;
+  game: 'D1' | 'D2';
   iconPath?: string;
-  isPrimary?: boolean;
   isPublic?: boolean;
-  crossSaveOverride?: number;
 }

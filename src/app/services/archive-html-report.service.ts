@@ -1,21 +1,11 @@
 import { Injectable } from '@angular/core';
-import { ActivityDbService, StoredActivity } from './activity-db.service';
+import { StoredActivity } from './activity-db.service';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
-import { TitleItem, TitleService } from './title.service';
+import { TitleItem } from './title.service';
 import { TimezoneService } from './timezone.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { lookupActivityReleaseDate } from '../utils/activity-release-lookup';
 import { formatReleaseElapsed } from '../utils/release-elapsed';
-import { ActivityHistory } from '../models/activity-history.model';
-import { getCharacterId } from '../utils/character-profile';
-
-export type ArchiveReportPlayer = {
-  displayName: string;
-  membershipId: string;
-  membershipType: number;
-  game: 'D1' | 'D2' | string;
-  platform: string;
-};
 
 export interface ArchiveHtmlReportData {
   displayName: string;
@@ -42,99 +32,8 @@ export interface ArchiveHtmlReportData {
 export class ArchiveHtmlReportService {
   constructor(
     private timezoneService: TimezoneService,
-    private manifest: DestinyManifestService,
-    private activityDb: ActivityDbService,
-    private titleService: TitleService
+    private manifest: DestinyManifestService
   ) {}
-
-  /**
-   * Collect per-player activities / firsts / titles for the offline HTML report.
-   */
-  async collectReportData(
-    players: ArchiveReportPlayer[],
-    opts: {
-      getPlayerKey: (player: ArchiveReportPlayer) => string;
-      getCharacters: (playerKey: string) => any[];
-      firstEverActivity?: ActivityHistory;
-      onProgress?: (percent: number) => void;
-    }
-  ): Promise<ArchiveHtmlReportData[]> {
-    const reportData: ArchiveHtmlReportData[] = [];
-    const step = players.length > 0 ? 20 / players.length : 0;
-    let progress = 10;
-
-    for (const player of players) {
-      progress += step;
-      opts.onProgress?.(progress);
-
-      const activities = await this.activityDb.getAllActivitiesForMembershipOptimized(
-        player.membershipId
-      );
-
-      const characters = opts.getCharacters(opts.getPlayerKey(player)) || [];
-      const charIds = characters
-        .map((c: any) => getCharacterId(c) ?? c.characterId)
-        .filter((id: any) => !!id);
-      const allFirsts: ActivityFirstCompletion[] = [];
-      for (const charId of charIds) {
-        const result = await this.activityDb.getFirstCompletions(
-          player.membershipId,
-          charId,
-          player.game as 'D1' | 'D2'
-        );
-        allFirsts.push(...(result?.firstCompletions || []));
-      }
-
-      const titles = await this.titleService.getPlayerTitles(player as any);
-      const totalTime = activities.reduce((sum, act) => {
-        return sum + ((act as any).values?.timePlayedSeconds?.basic?.value || 0);
-      }, 0);
-
-      const firstEverActivity = opts.firstEverActivity;
-      const firstEverDate = firstEverActivity?.period
-        ? new Date(firstEverActivity.period).toLocaleDateString()
-        : undefined;
-      const firstEverName = firstEverActivity
-        ? this.manifest.getActivityName(
-            firstEverActivity.activityDetails?.referenceId,
-            player.game === 'D1'
-          )
-        : undefined;
-
-      reportData.push({
-        displayName: player.displayName,
-        membershipId: player.membershipId,
-        membershipType: player.membershipType,
-        game: player.game as 'D1' | 'D2',
-        platform: player.platform,
-        generatedAt: new Date().toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        activities,
-        firsts: allFirsts.filter((f) => f.completed === 1),
-        titles,
-        summary: {
-          totalActivities: activities.length,
-          totalTime,
-          totalSeals: titles.filter((t) => t.completed).length,
-          firstEverDate,
-          firstEverActivity: firstEverName,
-        },
-        iconMap: new Map(),
-      });
-    }
-
-    return reportData;
-  }
-
-  /** Trigger browser download of a generated HTML report. */
-  downloadHtmlReport(html: string, filename: string): void {
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }
 
   generateHtmlReport(data: ArchiveHtmlReportData[]): string {
     const now = new Date().toISOString();
