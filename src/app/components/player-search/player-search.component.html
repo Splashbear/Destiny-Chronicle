@@ -1,11 +1,25 @@
 <div class="min-h-0"
      [class.dc-dossier-materialize]="decryptLanding.materialize()">
 
+  <!-- Full-viewport exotic engram gate (empty search) -->
   <dc-decrypt-landing
-    *ngIf="decryptLanding.visible()"
+    *ngIf="selectedPlayers.length === 0 && !textView.enabled()"
+    mode="idle"
+    [searchUsername]="searchUsername"
+    [searching]="!!loading['search']"
+    (searchUsernameChange)="searchUsername = $event; onSearchInput($event)"
+    (search)="addPlayer()"
+    (favorites)="openFavoritesModal()">
+  </dc-decrypt-landing>
+
+  <!-- Load overlay (fresh search decrypt) -->
+  <dc-decrypt-landing
+    *ngIf="decryptLanding.visible() && selectedPlayers.length > 0"
+    mode="loading"
     [progress]="getOverallProgress()"
     [caption]="decryptingCaption"
     [subline]="decryptingSubline"
+    [guardianLabel]="selectedPlayers[0]?.displayName || ''"
     (skip)="onDecryptLandingSkip()">
   </dc-decrypt-landing>
 
@@ -76,7 +90,9 @@
     </div>
   </div>
 
-  <div class="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+  <!-- Dossier UI only after a Guardian is selected (gate covers empty state) -->
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6"
+       *ngIf="selectedPlayers.length > 0 || textView.enabled()">
     <div class="flex flex-col gap-8">
       <!-- Top Row: Account and Date Pickers (Horizontal) -->
       <div class="w-full flex flex-col xl:flex-row gap-6">
@@ -119,14 +135,7 @@
             </p>
           </div>
 
-          <div *ngIf="selectedPlayers.length === 0 || searchPanelExpanded" class="destiny-surface-panel p-4 flex-1 min-w-0">
-            <div *ngIf="selectedPlayers.length === 0 && decryptLanding.hardlightEnabled() && !textView.enabled()"
-                 class="flex flex-col items-center text-center mb-5 gap-2">
-              <dc-engram-3d size="md" [progress]="0" ariaLabel="Encrypted engram"></dc-engram-3d>
-              <p class="text-xs tracking-[0.14em] uppercase text-[color:var(--dc-hardlight,#9fe3ff)] m-0">
-                Encrypted history · search to decrypt
-              </p>
-            </div>
+          <div *ngIf="selectedPlayers.length > 0 && searchPanelExpanded" class="destiny-surface-panel p-4 flex-1 min-w-0">
             <div class="flex items-center justify-between mb-6">
               <h2 class="text-xl font-bold font-d2-headline text-gradient">Search for your Destiny Account</h2>
               <div class="flex items-center gap-2">

@@ -5,6 +5,7 @@ import {
   ChangeDetectorRef,
   Component,
   ElementRef,
+  HostListener,
   Input,
   NgZone,
   OnChanges,
@@ -17,9 +18,8 @@ import { DecryptingEngramComponent } from '../decrypting-engram/decrypting-engra
 type ThreeModule = typeof import('three');
 
 /**
- * 3D decrypting engram (ENGRAM_THEME_SPEC — three.js trial).
- * Progress drives glow / crack emissive from the real load.
- * Falls back to the 2D SVG when WebGL is unavailable or reduced-motion is on.
+ * Destiny-style exotic engram: gold dodecahedron with light seams.
+ * Drag to rotate. Progress brightens the core. Falls back to 2D SVG.
  */
 @Component({
   selector: 'dc-engram-3d',
@@ -30,17 +30,23 @@ type ThreeModule = typeof import('three');
          [class.dc-engram-3d--sm]="size === 'sm'"
          [class.dc-engram-3d--md]="size === 'md'"
          [class.dc-engram-3d--lg]="size === 'lg'"
-         [class.dc-engram-3d--held]="held"
+         [class.dc-engram-3d--hero]="size === 'hero'"
+         [class.dc-engram-3d--held]="held || dragging"
          role="img"
-         [attr.aria-label]="ariaLabel">
+         [attr.aria-label]="ariaLabel"
+         (pointerdown)="onPointerDown($event)"
+         (pointermove)="onPointerMove($event)"
+         (pointerup)="onPointerUp($event)"
+         (pointerleave)="onPointerUp($event)"
+         (pointercancel)="onPointerUp($event)">
       <canvas #canvas
               class="dc-engram-3d__canvas"
               *ngIf="use3d"
               aria-hidden="true"></canvas>
       <app-decrypting-engram
         *ngIf="!use3d"
-        [size]="size"
-        [progress]="progress"
+        [size]="size === 'hero' ? 'lg' : size"
+        [progress]="Math.max(progress, 35)"
         [ariaLabel]="ariaLabel">
       </app-decrypting-engram>
     </div>
@@ -51,47 +57,67 @@ type ThreeModule = typeof import('three');
       align-items: center;
       justify-content: center;
       line-height: 0;
-      transition: transform 0.12s ease;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+      filter: drop-shadow(0 0 28px rgba(228, 192, 74, 0.55))
+              drop-shadow(0 0 60px rgba(255, 230, 150, 0.25));
     }
+    .dc-engram-3d:active { cursor: grabbing; }
     .dc-engram-3d--held {
-      transform: scale(1.05);
+      filter: drop-shadow(0 0 36px rgba(255, 236, 170, 0.75))
+              drop-shadow(0 0 80px rgba(228, 192, 74, 0.4));
     }
     .dc-engram-3d__canvas {
       display: block;
       width: 100%;
       height: 100%;
     }
-    .dc-engram-3d--sm { width: 2.75rem; height: 3.25rem; }
-    .dc-engram-3d--md { width: 5.5rem; height: 6.5rem; }
-    .dc-engram-3d--lg { width: 13.75rem; height: 15.5rem; }
+    .dc-engram-3d--sm { width: 3rem; height: 3rem; }
+    .dc-engram-3d--md { width: 6.5rem; height: 6.5rem; }
+    .dc-engram-3d--lg { width: 14rem; height: 14rem; }
+    .dc-engram-3d--hero {
+      width: min(72vw, 22rem);
+      height: min(72vw, 22rem);
+    }
     @media (prefers-reduced-motion: reduce) {
-      .dc-engram-3d--held { transform: none; }
+      .dc-engram-3d { filter: drop-shadow(0 0 12px rgba(228, 192, 74, 0.35)); }
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
+  readonly Math = Math;
   @ViewChild('canvas') canvasRef?: ElementRef<HTMLCanvasElement>;
 
-  /** 0–100 from real load. */
+  /** 0–100 from real load (idle gate can pass 0 — still looks gold). */
   @Input() progress = 0;
-  @Input() size: 'sm' | 'md' | 'lg' = 'lg';
+  @Input() size: 'sm' | 'md' | 'lg' | 'hero' = 'lg';
   @Input() held = false;
-  @Input() ariaLabel = 'Decrypting engram';
+  @Input() ariaLabel = 'Exotic engram';
+  /** Slow auto-spin when not dragging (landing page). */
+  @Input() autoSpin = true;
 
   use3d = true;
+  dragging = false;
 
   private three: ThreeModule | null = null;
   private renderer: import('three').WebGLRenderer | null = null;
   private scene: import('three').Scene | null = null;
   private camera: import('three').PerspectiveCamera | null = null;
   private crystal: import('three').Object3D | null = null;
-  private coreMat: import('three').MeshStandardMaterial | null = null;
-  private shellMat: import('three').MeshStandardMaterial | null = null;
-  private crackMat: import('three').LineBasicMaterial | null = null;
+  private plateMat: import('three').MeshStandardMaterial | null = null;
+  private glowMat: import('three').MeshBasicMaterial | null = null;
+  private edgeMat: import('three').LineBasicMaterial | null = null;
+  private pointLight: import('three').PointLight | null = null;
   private raf = 0;
   private destroyed = false;
-  private spin = 0;
+  private rotY = 0.35;
+  private rotX = 0.2;
+  private targetRotY = 0.35;
+  private targetRotX = 0.2;
+  private dragLastX = 0;
+  private dragLastY = 0;
   private resizeObs: ResizeObserver | null = null;
 
   constructor(
@@ -111,7 +137,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['progress'] && this.coreMat) {
+    if ((changes['progress'] || changes['held']) && this.plateMat) {
       this.applyProgress(this.clamped);
     }
   }
@@ -121,6 +147,42 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.resizeObs?.disconnect();
     this.teardown();
+  }
+
+  onPointerDown(ev: PointerEvent): void {
+    if (ev.button !== 0) return;
+    this.dragging = true;
+    this.dragLastX = ev.clientX;
+    this.dragLastY = ev.clientY;
+    (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
+  }
+
+  onPointerMove(ev: PointerEvent): void {
+    if (!this.dragging) return;
+    const dx = ev.clientX - this.dragLastX;
+    const dy = ev.clientY - this.dragLastY;
+    this.dragLastX = ev.clientX;
+    this.dragLastY = ev.clientY;
+    this.targetRotY += dx * 0.008;
+    this.targetRotX += dy * 0.008;
+    this.targetRotX = Math.max(-1.1, Math.min(1.1, this.targetRotX));
+  }
+
+  onPointerUp(ev: PointerEvent): void {
+    if (!this.dragging) return;
+    this.dragging = false;
+    try {
+      (ev.currentTarget as HTMLElement).releasePointerCapture?.(ev.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  @HostListener('wheel', ['$event'])
+  onWheel(ev: WheelEvent): void {
+    if (!this.crystal) return;
+    ev.preventDefault();
+    this.targetRotY += ev.deltaY * 0.0015;
   }
 
   private get clamped(): number {
@@ -143,102 +205,95 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
       return;
     }
     if (this.destroyed || !this.three) return;
-
     await Promise.resolve();
     const canvas = this.canvasRef?.nativeElement;
     if (!canvas || this.destroyed) {
       this.fallback2d();
       return;
     }
-
     try {
       this.initScene(canvas, this.three);
     } catch {
       this.fallback2d();
       return;
     }
-
     this.zone.runOutsideAngular(() => this.loop());
   }
 
   private initScene(canvas: HTMLCanvasElement, THREE: ThreeModule): void {
-    const w = Math.max(1, canvas.clientWidth || canvas.parentElement?.clientWidth || 220);
-    const h = Math.max(1, canvas.clientHeight || canvas.parentElement?.clientHeight || 250);
+    const w = Math.max(1, canvas.clientWidth || canvas.parentElement?.clientWidth || 320);
+    const h = Math.max(1, canvas.clientHeight || canvas.parentElement?.clientHeight || 320);
 
     const renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       alpha: true,
-      powerPreference: 'low-power',
+      powerPreference: 'high-performance',
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(w, h, false);
     renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     this.renderer = renderer;
 
     const scene = new THREE.Scene();
     this.scene = scene;
 
-    const camera = new THREE.PerspectiveCamera(32, w / h, 0.1, 40);
-    camera.position.set(0, 0.15, 5.2);
+    const camera = new THREE.PerspectiveCamera(28, w / h, 0.1, 40);
+    camera.position.set(0, 0, 4.6);
     this.camera = camera;
 
-    const key = new THREE.DirectionalLight(0xffe9a8, 1.35);
-    key.position.set(2.2, 3.2, 2.8);
+    scene.add(new THREE.AmbientLight(0xfff0c8, 0.55));
+    const key = new THREE.DirectionalLight(0xfff6d0, 1.6);
+    key.position.set(2.4, 3.5, 3.2);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0x9fe3ff, 0.35);
-    fill.position.set(-2.5, -1, 1.5);
-    scene.add(fill);
-    scene.add(new THREE.AmbientLight(0x6a6048, 0.45));
+    const rim = new THREE.DirectionalLight(0xffe08a, 0.85);
+    rim.position.set(-2.8, -1.2, 2);
+    scene.add(rim);
 
-    const geo = this.buildCrystalGeometry(THREE);
+    const point = new THREE.PointLight(0xffe9a8, 1.4, 12, 2);
+    point.position.set(0, 0, 0);
+    this.pointLight = point;
+    scene.add(point);
 
-    const shellMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1d22,
-      metalness: 0.55,
-      roughness: 0.35,
+    // Solid gold plates (slightly shrunk so seams read)
+    const plateGeo = new THREE.DodecahedronGeometry(1.05, 0);
+    const plateMat = new THREE.MeshStandardMaterial({
+      color: 0xd4a84b,
+      metalness: 0.82,
+      roughness: 0.28,
+      emissive: 0x8a6a20,
+      emissiveIntensity: 0.35,
+    });
+    this.plateMat = plateMat;
+    const plates = new THREE.Mesh(plateGeo, plateMat);
+    plates.scale.setScalar(0.965);
+
+    // Inner glow core (light leaking through seams)
+    const glowGeo = new THREE.DodecahedronGeometry(1.02, 0);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xfff4c2,
       transparent: true,
       opacity: 0.92,
-      side: THREE.DoubleSide,
     });
-    const coreMat = new THREE.MeshStandardMaterial({
-      color: 0xc9a227,
-      emissive: 0x5a4a1c,
-      emissiveIntensity: 0.25,
-      metalness: 0.4,
-      roughness: 0.28,
-      transparent: true,
-      opacity: 0.88,
-    });
-    this.shellMat = shellMat;
-    this.coreMat = coreMat;
+    this.glowMat = glowMat;
+    const glow = new THREE.Mesh(glowGeo, glowMat);
 
-    const shell = new THREE.Mesh(geo, shellMat);
-    shell.scale.setScalar(1.06);
-    const core = new THREE.Mesh(geo.clone(), coreMat);
-    core.scale.setScalar(0.92);
+    // Bright seam lines
+    const edges = new THREE.EdgesGeometry(new THREE.DodecahedronGeometry(1.05, 0), 15);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: 0xfff8e0,
+      transparent: true,
+      opacity: 0.95,
+    });
+    this.edgeMat = edgeMat;
+    const seams = new THREE.LineSegments(edges, edgeMat);
 
     const group = new THREE.Group();
-    group.add(shell);
-    group.add(core);
-
-    const crackGeo = new THREE.BufferGeometry();
-    const crackPts = new Float32Array([
-      0, 1.15, 0, -0.12, 0.15, 0.08,
-      -0.12, 0.15, 0.08, 0.18, -0.05, -0.05,
-      0.18, -0.05, -0.05, -0.08, -1.05, 0.05,
-      0.75, 0.35, 0.2, 0.2, -0.05, -0.02,
-      -0.7, 0.4, -0.15, -0.05, 0.1, 0.05,
-    ]);
-    crackGeo.setAttribute('position', new THREE.BufferAttribute(crackPts, 3));
-    const crackMat = new THREE.LineBasicMaterial({
-      color: 0x0c0e10,
-      transparent: true,
-      opacity: 0.2,
-    });
-    this.crackMat = crackMat;
-    group.add(new THREE.LineSegments(crackGeo, crackMat));
-
+    group.add(glow);
+    group.add(plates);
+    group.add(seams);
     this.crystal = group;
     scene.add(group);
 
@@ -248,72 +303,21 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.resizeObs.observe(canvas.parentElement || canvas);
   }
 
-  /** Hexagonal bipyramid — Destiny-ish engram silhouette. */
-  private buildCrystalGeometry(THREE: ThreeModule): import('three').BufferGeometry {
-    const radius = 1.05;
-    const tip = 1.35;
-    const mid = 0.35;
-    const positions: number[] = [];
-    const indices: number[] = [];
-
-    const ring = (y: number, r: number, startIdx: number): number => {
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-        positions.push(Math.cos(a) * r, y, Math.sin(a) * r);
-      }
-      return startIdx + 6;
-    };
-
-    const top = 0;
-    positions.push(0, tip, 0); // 0
-    let next = 1;
-    const upperStart = next;
-    next = ring(mid, radius, next); // 1..6
-    const lowerStart = next;
-    next = ring(-mid, radius * 0.98, next); // 7..12
-    const bottom = next;
-    positions.push(0, -tip, 0); // 13
-
-    const pushTri = (a: number, b: number, c: number) => {
-      indices.push(a, b, c);
-    };
-
-    for (let i = 0; i < 6; i++) {
-      const u0 = upperStart + i;
-      const u1 = upperStart + ((i + 1) % 6);
-      const l0 = lowerStart + i;
-      const l1 = lowerStart + ((i + 1) % 6);
-      pushTri(top, u1, u0);
-      pushTri(u0, u1, l1);
-      pushTri(u0, l1, l0);
-      pushTri(bottom, l0, l1);
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setIndex(indices);
-    geo.computeVertexNormals();
-    return geo;
-  }
-
   private applyProgress(p: number): void {
-    const t = p / 100;
-    if (this.coreMat) {
-      this.coreMat.emissiveIntensity = 0.2 + t * 1.55;
-      this.coreMat.color.setRGB(
-        0.78 + t * 0.2,
-        0.58 + t * 0.25,
-        0.12 + t * 0.15
-      );
-      this.coreMat.opacity = 0.55 + t * 0.4;
+    // Idle gate at 0 should still look like a lit exotic engram
+    const t = Math.max(0.35, p / 100);
+    if (this.plateMat) {
+      this.plateMat.emissiveIntensity = 0.25 + t * 0.7;
+      this.plateMat.color.setHex(p >= 90 ? 0xe8c56a : 0xd4a84b);
     }
-    if (this.shellMat) {
-      this.shellMat.opacity = 0.95 - t * 0.25;
-      const gold = 0.55 + t * 0.45;
-      this.shellMat.color.setRGB(0.12 + gold * 0.15, 0.12 + gold * 0.12, 0.14);
+    if (this.glowMat) {
+      this.glowMat.opacity = 0.75 + t * 0.2;
     }
-    if (this.crackMat) {
-      this.crackMat.opacity = 0.15 + t * 0.75;
+    if (this.edgeMat) {
+      this.edgeMat.opacity = 0.7 + t * 0.3;
+    }
+    if (this.pointLight) {
+      this.pointLight.intensity = 1.1 + t * 1.4;
     }
   }
 
@@ -332,14 +336,16 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
   private loop = (): void => {
     if (this.destroyed) return;
     this.raf = requestAnimationFrame(this.loop);
-    const group = this.crystal;
-    if (group) {
-      const speed = this.held ? 0.028 : 0.01;
-      this.spin += speed;
-      group.rotation.y = this.spin;
-      group.rotation.x = Math.sin(this.spin * 0.65) * 0.12;
-      const breathe = 1 + Math.sin(this.spin * 1.4) * 0.015 * (0.4 + this.clamped / 100);
-      group.scale.setScalar(breathe);
+    if (this.autoSpin && !this.dragging) {
+      this.targetRotY += 0.004;
+    }
+    this.rotY += (this.targetRotY - this.rotY) * 0.12;
+    this.rotX += (this.targetRotX - this.rotX) * 0.12;
+    if (this.crystal) {
+      this.crystal.rotation.y = this.rotY;
+      this.crystal.rotation.x = this.rotX;
+      const pulse = 1 + Math.sin(performance.now() * 0.0016) * 0.012;
+      this.crystal.scale.setScalar(this.held || this.dragging ? pulse * 1.03 : pulse);
     }
     if (this.renderer && this.scene && this.camera) {
       this.renderer.render(this.scene, this.camera);
@@ -354,12 +360,13 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
     this.resizeObs?.disconnect();
     this.resizeObs = null;
     this.crystal = null;
-    this.coreMat?.dispose();
-    this.shellMat?.dispose();
-    this.crackMat?.dispose();
-    this.coreMat = null;
-    this.shellMat = null;
-    this.crackMat = null;
+    this.plateMat?.dispose();
+    this.glowMat?.dispose();
+    this.edgeMat?.dispose();
+    this.plateMat = null;
+    this.glowMat = null;
+    this.edgeMat = null;
+    this.pointLight = null;
     this.scene?.clear();
     this.scene = null;
     this.camera = null;
