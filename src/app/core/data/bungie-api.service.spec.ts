@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { BungieApiService } from './bungie-api.service';
 import { BungieMembershipType } from 'bungie-api-ts/destiny2';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { environment } from '../../environments/environment';
+import { environment } from '../../../environments/environment';
 
 // Enum mappings for isolated modules
 const MembershipType = {
