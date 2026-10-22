@@ -552,6 +552,50 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   public closeLoadingModal(): void {
     this.showLoadingModal = false;
     this.isLoadingComplete = false;
+    this.decryptLanding.hideQuietly();
+  }
+
+  /** Host adapters call this so the decrypt landing can offer on fresh loads. */
+  public setShowLoadingModal(show: boolean): void {
+    this.showLoadingModal = show;
+    if (show) {
+      this.decryptLanding.offerIfEligible({ fromUrlRestore: this.urlRestoreInFlight });
+    } else if (!show && this.decryptLanding.visible()) {
+      this.decryptLanding.complete();
+    }
+  }
+
+  public setIsLoadingComplete(complete: boolean): void {
+    this.isLoadingComplete = complete;
+    if (complete) {
+      this.decryptLanding.complete();
+    }
+  }
+
+  public onDecryptLandingSkip(): void {
+    this.decryptLanding.skip();
+    this.cdr.markForCheck();
+  }
+
+  /** Dossier strip label when hard-light is on. */
+  get dossierStripLabel(): string {
+    const names = (this.selectedPlayers || [])
+      .map((p: any) => p?.displayName)
+      .filter(Boolean);
+    if (!names.length) return 'DOSSIER · AWAITING GUARDIAN';
+    const who = names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
+    return `DOSSIER · ${who}`;
+  }
+
+  get dossierStripStatus(): string {
+    const cov = this.archiveCoverage;
+    if (!cov) return 'ENGRAM STATUS: · SEALED';
+    if (cov.level === 'full') return 'ENGRAM STATUS: ◆ DECRYPTED';
+    if (cov.level === 'partial') {
+      const through = cov.through ? ` · ARCHIVE THROUGH ${cov.through}` : '';
+      return `ENGRAM STATUS: ◈ PARTIALLY DECRYPTED${through}`;
+    }
+    return 'ENGRAM STATUS: ◇ SEALED';
   }
 
   /**
@@ -1076,7 +1120,12 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   async loadPlayersFromUrlData(playerData: any[]) {
-    await this.favoritesLoad.loadPlayersFromUrlData(this.asFavoritesLoadHost(), playerData);
+    this.urlRestoreInFlight = true;
+    try {
+      await this.favoritesLoad.loadPlayersFromUrlData(this.asFavoritesLoadHost(), playerData);
+    } finally {
+      this.urlRestoreInFlight = false;
+    }
   }
 
   async toggleFavorite(player: any) {

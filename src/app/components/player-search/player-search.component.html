@@ -1,4 +1,13 @@
-<div class="min-h-0">
+<div class="min-h-0"
+     [class.dc-dossier-materialize]="decryptLanding.materialize()">
+
+  <dc-decrypt-landing
+    *ngIf="decryptLanding.visible()"
+    [progress]="getOverallProgress()"
+    [caption]="decryptingCaption"
+    [subline]="decryptingSubline"
+    (skip)="onDecryptLandingSkip()">
+  </dc-decrypt-landing>
 
   <!-- Offline archive banner -->
   <div *ngIf="isOfflineArchiveMode && offlineFrozenLabel" class="w-full px-4 sm:px-6 lg:px-8 pt-4">
@@ -111,6 +120,13 @@
           </div>
 
           <div *ngIf="selectedPlayers.length === 0 || searchPanelExpanded" class="destiny-surface-panel p-4 flex-1 min-w-0">
+            <div *ngIf="selectedPlayers.length === 0 && decryptLanding.hardlightEnabled() && !textView.enabled()"
+                 class="flex flex-col items-center text-center mb-5 gap-2">
+              <app-decrypting-engram size="md" [progress]="0" ariaLabel="Encrypted engram"></app-decrypting-engram>
+              <p class="text-xs tracking-[0.14em] uppercase text-[color:var(--dc-hardlight,#9fe3ff)] m-0">
+                Encrypted history · search to decrypt
+              </p>
+            </div>
             <div class="flex items-center justify-between mb-6">
               <h2 class="text-xl font-bold font-d2-headline text-gradient">Search for your Destiny Account</h2>
               <div class="flex items-center gap-2">
@@ -352,6 +368,11 @@
               [ngClass]="activeTab === 'heatmap' ? 'w-full' : 'w-full max-w-[1200px] mx-auto'">
         <!-- Tab Navigation -->
          <div class="mb-8">
+         <div *ngIf="decryptLanding.hardlightEnabled() && !textView.enabled() && selectedPlayers.length > 0"
+              class="dc-dossier-strip" aria-hidden="true">
+           <span>{{ dossierStripLabel }}</span>
+           <span class="dc-dossier-strip__status">{{ dossierStripStatus }}</span>
+         </div>
          <nav class="destiny-tab-nav md:gap-1" role="tablist" aria-label="Activity views">
            <button
              type="button"

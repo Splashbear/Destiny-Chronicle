@@ -58,7 +58,7 @@ export function build_asFavoritesLoadHost(c: any) {
     },
     syncActivityStore: () => c.syncActivityStore(),
     setShowLoadingModal: (show: boolean) => {
-      c.showLoadingModal = show;
+      c.setShowLoadingModal(show);
     },
     clearAccountLoadingStatuses: () => {
       c.accountLoadingStatuses = [];
@@ -774,10 +774,10 @@ export function build_asAccountLoadingStatusHost(c: any) {
     },
     getAccountLoadingStatuses: () => c.accountLoadingStatuses,
     setShowLoadingModal: (show: boolean) => {
-      c.showLoadingModal = show;
+      c.setShowLoadingModal(show);
     },
     setIsLoadingComplete: (complete: boolean) => {
-      c.isLoadingComplete = complete;
+      c.setIsLoadingComplete(complete);
     },
     getIsLoadingComplete: () => c.isLoadingComplete,
     beginLookupAnalytics: () => c.beginLookupAnalytics(),

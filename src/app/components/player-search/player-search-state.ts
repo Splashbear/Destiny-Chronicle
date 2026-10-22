@@ -6,6 +6,7 @@ import { inject } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { type ChartConfiguration, type ChartData, type ChartType } from 'chart.js';
 import { TextViewService } from '../../services/text-view.service';
+import { DecryptLandingService } from '../../services/decrypt-landing.service';
 import { environment } from '../../../environments/environment';
 import { ACTIVITY_TYPE_OPTIONS, ActivityTypeOption } from '../../models/activity-types';
 import { ActivityHistory } from '../../models/activity-history.model';
@@ -167,6 +168,9 @@ export abstract class PlayerSearchState {
   archiveCoverage: { level: 'full' | 'partial' | 'absent'; through: string; instanceId: string } | null = null;
   protected archiveWatermarkRequested = false;
   readonly textView = inject(TextViewService);
+  readonly decryptLanding = inject(DecryptLandingService);
+  /** True while restoring players from the URL (landing must not show). */
+  protected urlRestoreInFlight = false;
   /** Offer to load saved favorites without blocking a fresh search. */
   showFavoritesLoadPrompt = false;
   /** True while favorites (or any multi-profile sync) is still running. */
