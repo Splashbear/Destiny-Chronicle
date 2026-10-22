@@ -85,6 +85,7 @@ import { collectFirstsTabMilestonesOnDate, raidDungeonFirstsShownOnCards } from 
 import { lookupActivityReleaseDate } from '../../utils/activity-release-lookup';
 import { formatReleaseElapsed } from '../../utils/release-elapsed';
 import { parseUsernames as splitSearchUsernames, shouldSearchAsSingleUsername } from '../../utils/search-usernames';
+import { parsePlayersParam } from '../../utils/url-players-param';
 import { characterKey, classFromProfileCharacter, HeatmapCharacterLookup } from '../../utils/heatmap-filters';
 import { ActivityHeatmapComponent } from '../activity-heatmap/activity-heatmap.component';
 import { PlayedWithComponent } from '../played-with/played-with.component';
@@ -1842,15 +1843,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Check both route params and query params for players
     const playersParam = params['players'] || queryParams['players'] || playersMatch?.[1];
     if (playersParam) {
-      const decodedPlayers = decodeURIComponent(playersParam);
-      try {
-        const playerData = JSON.parse(decodedPlayers);
-        if (Array.isArray(playerData)) {
-          // Store player data to load after favorites are loaded
-          this.pendingPlayerData = playerData;
-        }
-      } catch (e) {
-        console.warn('Invalid player data in URL:', e);
+      const playerData = parsePlayersParam(playersParam);
+      if (playerData) {
+        // Store player data to load after favorites are loaded
+        this.pendingPlayerData = playerData as any[];
+      } else {
+        console.warn('Invalid player data in URL');
       }
     } else if (!this.pendingPlayerData) {
       // Clean page load (no players in URL or #share=) - clear leftover data from previous sessions
@@ -1881,15 +1879,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
       
       if (params['players']) {
-        const playersParam = decodeURIComponent(params['players']);
-        try {
-          const playerData = JSON.parse(playersParam);
-          if (Array.isArray(playerData)) {
-            // Store player data to load after favorites are loaded
-            this.pendingPlayerData = playerData;
-          }
-        } catch (e) {
-          console.warn('Invalid player data in URL:', e);
+        const playerData = parsePlayersParam(params['players']);
+        if (playerData) {
+          this.pendingPlayerData = playerData as any[];
+        } else {
+          console.warn('Invalid player data in URL');
         }
       }
     });
@@ -11239,14 +11233,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Updates the URL to reflect the current state for permalink sharing
    */
   private updateUrlForPermalink() {
-    const params: any = {};
-    
-    // Add date parameter if a date is selected
+    // Root path + query (not /share): GitHub Pages has no /share file, so hard
+    // refresh of /share?... always logs a 404 even when the SPA still loads.
+    // URLSearchParams encodes once — do not encodeURIComponent the JSON first
+    // or players becomes %255B... (double-encoded).
+    const queryParams = new URLSearchParams();
+
     if (this.selectedDate) {
-      params.date = this.selectedDate;
+      queryParams.set('date', this.selectedDate);
     }
-    
-    // Add players parameter if players are selected
+
     if (this.selectedPlayers.length > 0) {
       const playerData = this.selectedPlayers.map(player => ({
         displayName: player.displayName,
@@ -11255,30 +11251,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         game: player.game,
         platform: player.platform
       }));
-      params.players = encodeURIComponent(JSON.stringify(playerData));
+      queryParams.set('players', JSON.stringify(playerData));
     }
-    
-    // Build the new URL using query parameters instead of path parameters
-    let newUrl = '/share';
-    const queryParams = new URLSearchParams();
-    
-    if (params.date) {
-      queryParams.set('date', params.date);
-    }
-      if (params.players) {
-      queryParams.set('players', params.players);
-      }
-    
+
     if (this.textView.enabled()) {
       queryParams.set('view', 'text');
     }
-    if (queryParams.toString()) {
-      newUrl += '?' + queryParams.toString();
-    }
-    
-    
-    // Update the URL without triggering navigation
-    this.location.replaceState(newUrl);
+
+    const qs = queryParams.toString();
+    this.location.replaceState(qs ? `/?${qs}` : '/');
   }
 
   /**
