@@ -11277,14 +11277,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * Updates the URL to reflect the current state for permalink sharing
    */
   private updateUrlForPermalink() {
-    const params: any = {};
-    
-    // Add date parameter if a date is selected
+    // Root path + query (not /share): GitHub Pages has no /share file, so hard
+    // refresh of /share?... always logs a 404 even when the SPA still loads.
+    // URLSearchParams encodes once — do not encodeURIComponent the JSON first
+    // or players becomes %255B... (double-encoded).
+    const queryParams = new URLSearchParams();
+
     if (this.selectedDate) {
-      params.date = this.selectedDate;
+      queryParams.set('date', this.selectedDate);
     }
-    
-    // Add players parameter if players are selected
+
     if (this.selectedPlayers.length > 0) {
       const playerData = this.selectedPlayers.map(player => ({
         displayName: player.displayName,
@@ -11293,30 +11295,15 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         game: player.game,
         platform: player.platform
       }));
-      params.players = encodeURIComponent(JSON.stringify(playerData));
+      queryParams.set('players', JSON.stringify(playerData));
     }
-    
-    // Build the new URL using query parameters instead of path parameters
-    let newUrl = '/share';
-    const queryParams = new URLSearchParams();
-    
-    if (params.date) {
-      queryParams.set('date', params.date);
-    }
-      if (params.players) {
-      queryParams.set('players', params.players);
-      }
-    
+
     if (this.textView.enabled()) {
       queryParams.set('view', 'text');
     }
-    if (queryParams.toString()) {
-      newUrl += '?' + queryParams.toString();
-    }
-    
-    
-    // Update the URL without triggering navigation
-    this.location.replaceState(newUrl);
+
+    const qs = queryParams.toString();
+    this.location.replaceState(qs ? `/?${qs}` : '/');
   }
 
   /**
