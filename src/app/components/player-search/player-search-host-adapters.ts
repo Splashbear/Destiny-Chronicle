@@ -2,7 +2,6 @@
 /** Host adapter factories extracted from PlayerSearchComponent (CODE_CLEANUP_SPEC). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getCharacterId } from "../../utils/character-profile";
-import { baseActivityNameFromVersioned } from "../../utils/date-activity-grouping";
 import type { AccountLoadingStatus } from "../../models/account-loading-status.model";
 
 export function build_asPlayerSearchInitHost(c: any) {
