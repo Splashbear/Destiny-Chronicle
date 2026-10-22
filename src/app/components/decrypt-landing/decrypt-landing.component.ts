@@ -7,7 +7,7 @@ import {
   Input,
   Output,
 } from '@angular/core';
-import { DecryptingEngramComponent } from '../decrypting-engram/decrypting-engram.component';
+import { Engram3dComponent } from '../engram-3d/engram-3d.component';
 
 /**
  * Full-screen engram decrypt landing (ENGRAM_THEME_SPEC / DECRYPT_LANDING_MOCKUP).
@@ -17,7 +17,7 @@ import { DecryptingEngramComponent } from '../decrypting-engram/decrypting-engra
 @Component({
   selector: 'dc-decrypt-landing',
   standalone: true,
-  imports: [CommonModule, DecryptingEngramComponent],
+  imports: [CommonModule, Engram3dComponent],
   template: `
     <div class="dc-decrypt-landing" role="dialog" aria-modal="true" aria-labelledby="dc-decrypt-cap">
       <div class="dc-decrypt-landing__stage"
@@ -25,13 +25,13 @@ import { DecryptingEngramComponent } from '../decrypting-engram/decrypting-engra
            (pointerup)="onHoldEnd()"
            (pointerleave)="onHoldEnd()"
            (pointercancel)="onHoldEnd()">
-        <app-decrypting-engram
+        <dc-engram-3d
           class="dc-decrypt-landing__eng"
-          [class.dc-decrypt-landing__eng--held]="holding"
           size="lg"
+          [held]="holding"
           [progress]="progress"
           [ariaLabel]="caption || 'Decrypting history'">
-        </app-decrypting-engram>
+        </dc-engram-3d>
         <div id="dc-decrypt-cap" class="dc-decrypt-landing__cap">{{ displayCaption }}</div>
         <div class="dc-decrypt-landing__sub" *ngIf="subline">{{ subline }}</div>
         <div class="dc-decrypt-landing__ring" aria-hidden="true">
@@ -65,11 +65,7 @@ import { DecryptingEngramComponent } from '../decrypting-engram/decrypting-engra
       cursor: pointer;
     }
     .dc-decrypt-landing__eng {
-      filter: drop-shadow(0 0 calc(8px + var(--dc-p, 0) * 40px) #e4c04a);
-      transition: transform 0.12s ease;
-    }
-    .dc-decrypt-landing__eng--held {
-      transform: scale(1.04);
+      filter: drop-shadow(0 0 calc(10px + var(--dc-p, 0) * 48px) #e4c04a);
     }
     .dc-decrypt-landing__cap {
       margin-top: 1.35rem;

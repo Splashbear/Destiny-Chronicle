@@ -89,7 +89,7 @@ import { PlayedWithComponent } from '../../features/played-with';
 import { DecryptedShareCardComponent } from '../decrypted-share-card/decrypted-share-card.component';
 import { LoadEngramComponent } from '../../shared/ui/load-engram.component';
 import { DecryptLandingComponent } from '../decrypt-landing/decrypt-landing.component';
-import { DecryptingEngramComponent } from '../decrypting-engram/decrypting-engram.component';
+import { Engram3dComponent } from '../engram-3d/engram-3d.component';
 import {
   installRegressionProbe as installRegressionProbeFn,
   uninstallRegressionProbe as uninstallRegressionProbeFn,
@@ -135,7 +135,7 @@ export type {
     CoverageChipComponent,
     LoadEngramComponent,
     DecryptLandingComponent,
-    DecryptingEngramComponent,
+    Engram3dComponent,
     DecryptedShareCardComponent,
     ActivityHeatmapComponent,
     PlayedWithComponent
