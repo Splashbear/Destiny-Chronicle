@@ -1,0 +1,13 @@
+{
+  "name": "Destiny Chronicle",
+  "short_name": "DestinyChron",
+  "description": "Track your Destiny 1 & 2 activity history across all platforms",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1c",
+  "theme_color": "#0a0f1c",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["games", "entertainment", "utilities"]
+}
