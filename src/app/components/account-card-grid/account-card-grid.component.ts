@@ -6,6 +6,9 @@ import { ActivityIconService } from '../../services/activity-icon.service';
 export interface AccountCardPlatformStats {
   accountKey: string;
   platform: string;
+  /** Sum of stored activity / PGCR durations. */
+  totalActivityTime?: number;
+  /** Bungie profile minutesPlayedTotal (orbit / Tower / AFK included). */
   totalTime: number;
   totalActivities: number;
   totalSeals: number;
@@ -28,7 +31,7 @@ export interface AccountCardPlatformStats {
            (click)="onGridClick($event)"
            (keydown)="onGridKey($event)">
         <div *ngFor="let plat of perPlatformStats; trackBy: trackAccount"
-             class="emblem-card relative rounded-lg overflow-hidden shadow-lg h-24 cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-yellow-400/80"
+             class="emblem-card relative rounded-lg overflow-hidden shadow-lg min-h-[7.5rem] cursor-pointer transition-all duration-200 hover:ring-2 hover:ring-yellow-400/80"
              [class.ring-2]="selectedAccountKeys?.has(plat.accountKey)"
              [class.ring-yellow-400]="selectedAccountKeys?.has(plat.accountKey)"
              [class.opacity-90]="selectedAccountKeys && selectedAccountKeys.size > 0 && !selectedAccountKeys.has(plat.accountKey)"
@@ -51,7 +54,10 @@ export interface AccountCardPlatformStats {
               <span *ngIf="plat.className">· {{ plat.className }}</span>
               <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
             </div>
-            <div class="text-yellow-300 font-mono text-sm">{{ formatDuration(plat.totalTime) }}</div>
+            <div class="text-yellow-300 font-mono text-sm leading-tight">
+              <div>Activities {{ formatDuration(plat.totalActivityTime ?? 0) }}</div>
+              <div class="text-yellow-300/80 text-xs">In game {{ formatDuration(plat.totalTime) }}</div>
+            </div>
             <div class="text-xs text-slate-400">{{ plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
           </div>
         </div>

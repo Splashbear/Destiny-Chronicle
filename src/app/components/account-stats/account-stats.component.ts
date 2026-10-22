@@ -10,6 +10,9 @@ interface PerTypeStat {
 interface PlatformStats {
   accountKey: string;   // unique key for filtering: game-platform-membershipId
   platform: string;
+  /** Sum of stored activity / PGCR durations. */
+  totalActivityTime?: number;
+  /** Bungie profile minutesPlayedTotal (orbit / Tower / AFK included). */
   totalTime: number;
   totalActivities: number;
   totalSeals: number;
@@ -29,10 +32,16 @@ interface PlatformStats {
     <div class="destiny-surface-panel account-summary-panel p-4 flex flex-col gap-4" *ngIf="stats">
       <h3 class="text-lg font-semibold text-[var(--destiny-gold)] font-d2-headline m-0">Account Summary</h3>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="account-summary-stat">
-          <span class="account-summary-stat-label">Total Time Played</span>
+          <span class="account-summary-stat-label">Time in activities</span>
+          <span class="destiny-stat-value text-xl">{{ formatDuration(stats.totalActivityTime ?? 0) }}</span>
+          <span class="account-summary-stat-hint">From activity reports (no orbit / Tower)</span>
+        </div>
+        <div class="account-summary-stat">
+          <span class="account-summary-stat-label">Total time in game</span>
           <span class="destiny-stat-value text-xl">{{ formatDuration(stats.totalTime) }}</span>
+          <span class="account-summary-stat-hint">Bungie profile time (includes orbit / Tower)</span>
         </div>
         <div class="account-summary-stat">
           <span class="account-summary-stat-label">Total Seals</span>
@@ -74,7 +83,13 @@ interface PlatformStats {
   `,
 })
 export class AccountStatsComponent {
-  @Input() stats: { totalTime: number; totalActivityCount: number; totalSeals?: number; perType: { [type: string]: PerTypeStat } } | null = null;
+  @Input() stats: {
+    totalTime: number;
+    totalActivityTime?: number;
+    totalActivityCount: number;
+    totalSeals?: number;
+    perType: { [type: string]: PerTypeStat };
+  } | null = null;
   @Input() perPlatformStats: PlatformStats[] = [];
   @Input() selectedAccountKeys: Set<string> | null = null;
   @Output() accountKeyToggle = new EventEmitter<string>();

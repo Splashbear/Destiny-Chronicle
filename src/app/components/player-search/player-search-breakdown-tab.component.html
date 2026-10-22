@@ -58,9 +58,9 @@
   <div class="destiny-stat-highlight">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
       <h3 class="text-lg font-semibold text-white">
-        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size > 0">Total Time (Filtered)</ng-container>
-        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">Total Time Across All Accounts</ng-container>
-        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">Total Time (Selected Accounts)</ng-container>
+        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size > 0">Time in activities (Filtered)</ng-container>
+        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">Time in activities (All Accounts)</ng-container>
+        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">Time in activities (Selected Accounts)</ng-container>
       </h3>
       <button (click)="ps.exportBreakdownToExcel()"
               [disabled]="!ps.activityBreakdownGroups.length"
@@ -70,11 +70,15 @@
       </button>
     </div>
     <p class="text-slate-300 text-sm mb-3">
-      <span *ngIf="ps.selectedBreakdownCardLabels.size > 0">Showing selected activity types only.</span>
-      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">All-time aggregate across {{ ps.selectedPlayers.length }} {{ ps.selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
-      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">All-time activity for selected account(s) – not limited to the selected date.</span>
+      <span *ngIf="ps.selectedBreakdownCardLabels.size > 0">Showing selected activity types only (report durations — no orbit / Tower).</span>
+      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">All-time sum of activity reports across {{ ps.selectedPlayers.length }} {{ ps.selectedPlayers.length === 1 ? 'profile' : 'profiles' }} — excludes orbit, Tower, and social.</span>
+      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">All-time activity-report time for selected account(s) – not limited to the selected date.</span>
     </p>
     <div class="destiny-stat-value">{{ ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}</div>
+    <p class="text-slate-400 text-sm mt-2" *ngIf="ps.selectedBreakdownCardLabels.size === 0">
+      Total time in game (Bungie profile, includes orbit / Tower):
+      <span class="text-[var(--destiny-gold)] font-mono">{{ ps.formatSecondsToHoursMinutes(ps.breakdownProfileTotalTimeSeconds) }}</span>
+    </p>
   </div>
   <p class="text-slate-300 text-sm">
     <ng-container *ngIf="!ps.hasBreakdownAccountFilter">Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date).</ng-container>

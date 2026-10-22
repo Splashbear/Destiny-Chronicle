@@ -3,7 +3,8 @@
         <div *ngIf="text.enabled()" class="text-day">
           <h2>Account Summary</h2>
           <p *ngIf="ps.accountStats as stats">
-            Time <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalTime) }}</strong>
+            Time in activities <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalActivityTime || 0) }}</strong>
+            · Total time in game <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalTime) }}</strong>
             · Seals <strong>{{ stats.totalSeals || 0 }}</strong>
             · Activities <strong>{{ stats.totalActivityCount }}</strong>
           </p>
