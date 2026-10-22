@@ -250,14 +250,15 @@ export function build_asActivityHistoryLoadHost(c: any) {
   return {
     setCharacterActivityLoading: (k, v) => c.setCharacterActivityLoading(k, v),
     setCharacterActivityError: (k, m) => c.setCharacterActivityError(k, m),
-    beginCharacterActivityFetch: (c) => c.beginCharacterActivityFetch(c),
+    // Param must not be named `c` — that shadows the component host and breaks loads.
+    beginCharacterActivityFetch: (character) => c.beginCharacterActivityFetch(character),
     reportActivityCountDelta: (ctx, game, mt, delta, done) =>
       c.reportActivityCountDeltaFromHost(ctx, game, mt, delta, done),
     noteActivitiesStored: () => c.noteActivitiesStored(),
     invalidateMembershipActivitiesCache: (id) => c.invalidateMembershipActivitiesCache(id),
     addOverallActivitiesProcessed: (n) => c.addOverallActivitiesProcessed(n),
     noteLookupDataSource: (s) => c.noteLookupDataSource(s),
-    noteArchiveCoverage: (c) => c.noteArchiveCoverage(c),
+    noteArchiveCoverage: (cov) => c.noteArchiveCoverage(cov),
     noteDcApiFallback: () => c.noteDcApiFallback(),
     clearDcApiFallbackNotice: () => c.clearDcApiFallbackNotice(),
     hasDcApiFallbackNotice: () => c.hasDcApiFallbackNotice(),
