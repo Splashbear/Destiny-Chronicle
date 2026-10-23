@@ -46,11 +46,14 @@ export class AccomplishmentsCollectionsService {
       if (!this.manifest.isLoadedSync) {
         await firstValueFrom(this.manifest.isLoaded().pipe(filter((v) => !!v)));
       }
-      await this.manifest.ensureCollectibleDefs();
 
-      const profileRes = await firstValueFrom(
-        this.bungie.getProfileComponents(membershipType, membershipId, [100, 200, 800])
-      );
+      // Collectible JSON and profile are independent — overlap wall time.
+      const [, profileRes] = await Promise.all([
+        this.manifest.ensureCollectibleDefs(),
+        firstValueFrom(
+          this.bungie.getProfileComponents(membershipType, membershipId, [100, 200, 800])
+        ),
+      ]);
 
       if (this.isPrivacyBlocked(profileRes)) {
         return this.cacheAndReturn(key, {
