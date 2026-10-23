@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError, of, timer, forkJoin, from } from 'rxjs';
-import { catchError, map, switchMap, retryWhen, delayWhen, retry, mergeMap, reduce } from 'rxjs/operators';
+import { catchError, map, switchMap, retryWhen, delayWhen, retry, mergeMap, reduce, shareReplay } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 import { LocaleService } from './locale.service';
@@ -78,8 +78,13 @@ export class BungieApiService {
   private readonly API_KEY = environment.bungie.API_KEY;
   private readonly D1_BASE_URL = 'https://www.bungie.net/d1/Platform';
   private readonly D2_BASE_URL = 'https://www.bungie.net/Platform';
-  
 
+  /**
+   * Session cache for GetProfile components 900+1000 (medals + seals share one payload).
+   * shareReplay de-dupes in-flight + caches the last success for the session.
+   * Network failures evict the entry so a later call can retry.
+   */
+  private readonly playerRecordsSession = new Map<string, Observable<BungieResponse<any>>>();
 
   constructor(
     private http: HttpClient,
@@ -814,16 +819,25 @@ export class BungieApiService {
     );
   }
 
-  // Fetch both ProfileRecords (900) and CharacterRecords (1000) in a single request – used for titles & triumphs
-  getPlayerRecords(membershipType: number, membershipId: string) {
-    const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900,1000`;
-    const finalUrl = this.buildUrl(url);
-    return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
-      catchError(error => {
-        console.error('Error fetching player records (900/1000):', error);
-        return throwError(() => error);
-      })
-    );
+  // Fetch both ProfileRecords (900) and CharacterRecords (1000) in a single request.
+  // Session-cached so Accomplishments medals and seals share one network round-trip.
+  getPlayerRecords(membershipType: number, membershipId: string): Observable<BungieResponse<any>> {
+    const key = `${membershipType}|${membershipId}`;
+    let cached = this.playerRecordsSession.get(key);
+    if (!cached) {
+      const url = `${this.D2_BASE_URL}/Destiny2/${membershipType}/Profile/${membershipId}/?components=900,1000`;
+      const finalUrl = this.buildUrl(url);
+      cached = this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(
+        catchError((error) => {
+          this.playerRecordsSession.delete(key);
+          console.error('Error fetching player records (900/1000):', error);
+          return throwError(() => error);
+        }),
+        shareReplay({ bufferSize: 1, refCount: false })
+      );
+      this.playerRecordsSession.set(key, cached);
+    }
+    return cached;
   }
 
   private handleError(error: HttpErrorResponse) {

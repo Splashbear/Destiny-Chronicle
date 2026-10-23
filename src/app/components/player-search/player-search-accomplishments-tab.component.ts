@@ -200,128 +200,120 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
-  private async loadD2Medals(d2: PlayerSearchDisplay[], asOf: string | null) {
-    const next: Record<string, AccountMedalsResult> = {};
+  /** Parallel per-account fetch; one failure stays on that key only. */
+  private async loadAccountsParallel<T extends { fetchedAt?: string }>(
+    players: PlayerSearchDisplay[],
+    base: Record<string, T>,
+    asOf: string | null,
+    loadOne: (player: PlayerSearchDisplay) => Promise<T>,
+    errorResult: (player: PlayerSearchDisplay, e: any) => T
+  ): Promise<{ map: Record<string, T>; asOf: string | null }> {
+    const next = { ...base };
     let latest = asOf;
-    for (const player of d2) {
-      const key = this.ps.getPlayerKey(player);
-      try {
-        const result = await this.medalsSvc.loadAccountMedals(player.membershipType, player.membershipId);
-        next[key] = result;
-        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
-      } catch (e: any) {
-        next[key] = {
-          membershipId: player.membershipId,
-          membershipType: player.membershipType,
-          fetchedAt: new Date().toISOString(),
-          groups: [],
-          totalEarned: 0,
-          status: 'error',
-          message: e?.message || 'Could not load medals',
-        };
-      }
+    const settled = await Promise.all(
+      players.map(async (player) => {
+        const key = this.ps.getPlayerKey(player);
+        try {
+          return { key, result: await loadOne(player) };
+        } catch (e: any) {
+          return { key, result: errorResult(player, e) };
+        }
+      })
+    );
+    for (const { key, result } of settled) {
+      next[key] = result;
+      if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
     }
     return { map: next, asOf: latest };
   }
 
-  private async loadSeals(d2: PlayerSearchDisplay[], asOf: string | null) {
-    const next = { ...this.sealResults };
-    let latest = asOf;
-    for (const player of d2) {
-      const key = this.ps.getPlayerKey(player);
-      try {
-        const result = await this.sealsSvc.loadAccountSealTriumphs(
-          player.membershipType,
-          player.membershipId
-        );
-        next[key] = result;
-        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
-      } catch (e: any) {
-        next[key] = {
-          membershipId: player.membershipId,
-          membershipType: player.membershipType,
-          fetchedAt: new Date().toISOString(),
-          seals: [],
-          status: 'error',
-          message: e?.message || 'Could not load seal triumphs',
-        };
-      }
-    }
-    return { map: next, asOf: latest };
+  private loadD2Medals(d2: PlayerSearchDisplay[], asOf: string | null) {
+    return this.loadAccountsParallel<AccountMedalsResult>(
+      d2,
+      {},
+      asOf,
+      (player) => this.medalsSvc.loadAccountMedals(player.membershipType, player.membershipId),
+      (player, e) => ({
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        fetchedAt: new Date().toISOString(),
+        groups: [],
+        totalEarned: 0,
+        status: 'error',
+        message: e?.message || 'Could not load medals',
+      })
+    );
   }
 
-  private async loadCollections(d2: PlayerSearchDisplay[], asOf: string | null) {
-    const next = { ...this.collectionResults };
-    let latest = asOf;
-    for (const player of d2) {
-      const key = this.ps.getPlayerKey(player);
-      try {
-        const result = await this.collectionsSvc.loadAccountCollections(
-          player.membershipType,
-          player.membershipId
-        );
-        next[key] = result;
-        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
-      } catch (e: any) {
-        next[key] = {
-          membershipId: player.membershipId,
-          membershipType: player.membershipType,
-          fetchedAt: new Date().toISOString(),
-          badges: [],
-          emblems: [],
-          status: 'error',
-          message: e?.message || 'Could not load collections',
-        };
-      }
-    }
-    return { map: next, asOf: latest };
+  private loadSeals(d2: PlayerSearchDisplay[], asOf: string | null) {
+    return this.loadAccountsParallel(
+      d2,
+      { ...this.sealResults },
+      asOf,
+      (player) => this.sealsSvc.loadAccountSealTriumphs(player.membershipType, player.membershipId),
+      (player, e) => ({
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        fetchedAt: new Date().toISOString(),
+        seals: [],
+        status: 'error' as const,
+        message: e?.message || 'Could not load seal triumphs',
+      })
+    );
   }
 
-  private async loadD1Books(d1: PlayerSearchDisplay[], asOf: string | null) {
-    const next = { ...this.d1BookResults };
-    let latest = asOf;
-    for (const player of d1) {
-      const key = this.ps.getPlayerKey(player);
-      try {
-        const result = await this.d1Svc.loadRecordBooks(player.membershipType, player.membershipId);
-        next[key] = result;
-        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
-      } catch (e: any) {
-        next[key] = {
-          membershipId: player.membershipId,
-          membershipType: player.membershipType,
-          fetchedAt: new Date().toISOString(),
-          books: [],
-          status: 'error',
-          message: e?.message || 'Could not load D1 record books',
-        };
-      }
-    }
-    return { map: next, asOf: latest };
+  private loadCollections(d2: PlayerSearchDisplay[], asOf: string | null) {
+    return this.loadAccountsParallel(
+      d2,
+      { ...this.collectionResults },
+      asOf,
+      (player) =>
+        this.collectionsSvc.loadAccountCollections(player.membershipType, player.membershipId),
+      (player, e) => ({
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        fetchedAt: new Date().toISOString(),
+        badges: [],
+        emblems: [],
+        status: 'error' as const,
+        message: e?.message || 'Could not load collections',
+      })
+    );
   }
 
-  private async loadD1Medals(d1: PlayerSearchDisplay[], asOf: string | null) {
-    const next: Record<string, AccountMedalsResult> = {};
-    let latest = asOf;
-    for (const player of d1) {
-      const key = this.ps.getPlayerKey(player);
-      try {
-        const result = await this.d1Svc.loadMedals(player.membershipType, player.membershipId);
-        next[key] = result;
-        if (result.fetchedAt && (!latest || result.fetchedAt > latest)) latest = result.fetchedAt;
-      } catch (e: any) {
-        next[key] = {
-          membershipId: player.membershipId,
-          membershipType: player.membershipType,
-          fetchedAt: new Date().toISOString(),
-          groups: [],
-          totalEarned: 0,
-          status: 'error',
-          message: e?.message || 'Could not load D1 medals',
-        };
-      }
-    }
-    return { map: next, asOf: latest };
+  private loadD1Books(d1: PlayerSearchDisplay[], asOf: string | null) {
+    return this.loadAccountsParallel(
+      d1,
+      { ...this.d1BookResults },
+      asOf,
+      (player) => this.d1Svc.loadRecordBooks(player.membershipType, player.membershipId),
+      (player, e) => ({
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        fetchedAt: new Date().toISOString(),
+        books: [],
+        status: 'error' as const,
+        message: e?.message || 'Could not load D1 record books',
+      })
+    );
+  }
+
+  private loadD1Medals(d1: PlayerSearchDisplay[], asOf: string | null) {
+    return this.loadAccountsParallel<AccountMedalsResult>(
+      d1,
+      {},
+      asOf,
+      (player) => this.d1Svc.loadMedals(player.membershipType, player.membershipId),
+      (player, e) => ({
+        membershipId: player.membershipId,
+        membershipType: player.membershipType,
+        fetchedAt: new Date().toISOString(),
+        groups: [],
+        totalEarned: 0,
+        status: 'error',
+        message: e?.message || 'Could not load D1 medals',
+      })
+    );
   }
 
   d2Players(): PlayerSearchDisplay[] {
