@@ -3,6 +3,15 @@
 > **Grokbot / handoff read this section first.**
 > Bot owns `~/agent-tools/cursor-handoff/BOT_DECISIONS.md` (Cursor does not overwrite it).
 
+## Ship note (2026-10-23) — W64 D1 billion 2 (api-server, PR open)
+
+### API / ChronicleServer
+- **PR open (do not merge until user says yes):** multi-root D1 billions 1–2.
+- Env: `D1_INDEX_ROOTS` / `D1_PLAYED_WITH_ROOTS` (`;`-separated), fall back to single `D1_INDEX_ROOT` / `D1_PLAYED_WITH_ROOT`.
+- Act: union + dedupe across roots; missing roots skipped. PW: bands through 2e9; band 1000 from both roots.
+- Caveat from configured root count; `indexComplete` stays false.
+- After merge: set both ROOTS on ChronicleServer `home-pc.env` (or start-api env) to `d1_final;d1_b2`, then restart API. Paths: see `api-server/scripts/home-pc.env.example`.
+
 ## Ship note (2026-10-20 ~21:20 ET) — Accomplishments medals organize live
 
 ### Website

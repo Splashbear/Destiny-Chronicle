@@ -75,7 +75,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
       return res.status(501).json({
         error: 'D1 Played With not supported on per-account route',
         message: 'Per-account Played With for D1 is not available yet. D1 Played With only works via the legacy getPartners path when summaries is unset.',
-        d1CoverageCaveat: 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014).',
+        d1CoverageCaveat: 'D1 coverage: billions 1-2 (IDs 1-2B, Aug 30 2014 to ~Mar 2015). Later D1 history falls back to Bungie live.',
       });
     }
     const include = Array.isArray(body.include) ? ids.filter((x) => (body.include as unknown[]).map(String).includes(x)) : ids;

@@ -26,10 +26,17 @@ export interface ApiConfig {
   gapRelaxComplete: boolean;
   
   // Destiny 1 index paths (off by default; behavior unchanged when unset)
-  /** D1 activity index root: act/mid_bucket=N/instances.parquet */
+  /** D1 activity index root: act/mid_bucket=N/instances.parquet (first of d1IndexRoots). */
   d1IndexRoot: string;
-  /** D1 played-with legacy root: pw/iid_band=N/pw.parquet */
+  /** D1 played-with root: pw/iid_band=N/pw.parquet (first of d1PlayedWithRoots). */
   d1PlayedWithRoot: string;
+  /**
+   * D1 activity index roots (billion 1, billion 2, …). From D1_INDEX_ROOTS (`;`-separated)
+   * or a single D1_INDEX_ROOT when ROOTS is unset.
+   */
+  d1IndexRoots: string[];
+  /** D1 played-with roots from D1_PLAYED_WITH_ROOTS or D1_PLAYED_WITH_ROOT. */
+  d1PlayedWithRoots: string[];
   
   // Bungie API
   bungieApiKey: string;
@@ -65,7 +72,9 @@ export const ENV_KEYS = {
   ENABLE_GAP_LEAN: 'ENABLE_GAP_LEAN',
   GAP_RELAX_COMPLETE: 'GAP_RELAX_COMPLETE',
   D1_INDEX_ROOT: 'D1_INDEX_ROOT',
+  D1_INDEX_ROOTS: 'D1_INDEX_ROOTS',
   D1_PLAYED_WITH_ROOT: 'D1_PLAYED_WITH_ROOT',
+  D1_PLAYED_WITH_ROOTS: 'D1_PLAYED_WITH_ROOTS',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   FLAG_LOOKUP_ROOT: 'FLAG_LOOKUP_ROOT',
