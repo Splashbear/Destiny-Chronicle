@@ -302,6 +302,11 @@ export class PlayedWithService {
     return this.cfg.d1Root ? 1 : 0;
   }
 
+  /** Coverage note from configured D1 played-with root count (for API 501 / client copy). */
+  d1CoverageNote(): string {
+    return d1CoverageCaveat(this.d1ConfiguredRootCount());
+  }
+
   /** Done-marker stems currently present (re-read per request so new W38 files appear without restart). */
   readCompactDoneStems(): Set<string> {
     const out = new Set<string>();

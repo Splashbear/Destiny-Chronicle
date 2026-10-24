@@ -134,7 +134,7 @@ describe('queue + route', () => {
       const j: any = await r.json();
       expect(j.error).toBe('D1 Played With not supported on per-account route');
       expect(j.message).toContain('legacy getPartners path');
-      expect(j.d1CoverageCaveat).toContain('billion 1 only');
+      expect(j.d1CoverageCaveat).toMatch(/D1 coverage: billion/);
     } finally { srv.close(); }
   });
 });
