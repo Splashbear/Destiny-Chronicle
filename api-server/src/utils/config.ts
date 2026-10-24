@@ -1,4 +1,5 @@
 import { ApiConfig, ENV_KEYS } from '../types/config.types';
+import { parseRootList } from './d1-roots';
 
 /**
  * Load configuration from environment variables with sensible defaults.
@@ -6,6 +7,14 @@ import { ApiConfig, ENV_KEYS } from '../types/config.types';
 export function loadConfig(): ApiConfig {
   const leanActivitiesPath = process.env[ENV_KEYS.LEAN_ACTIVITIES_PATH] || '';
   const playerActivitiesLitePath = process.env[ENV_KEYS.PLAYER_ACTIVITIES_LITE_PATH] || '';
+  const d1IndexRoots = parseRootList(
+    process.env[ENV_KEYS.D1_INDEX_ROOTS],
+    process.env[ENV_KEYS.D1_INDEX_ROOT],
+  );
+  const d1PlayedWithRoots = parseRootList(
+    process.env[ENV_KEYS.D1_PLAYED_WITH_ROOTS],
+    process.env[ENV_KEYS.D1_PLAYED_WITH_ROOT],
+  );
   
   const config: ApiConfig = {
     port: parseInt(process.env[ENV_KEYS.PORT] || '3001', 10),
@@ -26,8 +35,10 @@ export function loadConfig(): ApiConfig {
     gapRelaxComplete: process.env[ENV_KEYS.GAP_RELAX_COMPLETE] === 'true',
     
     // Destiny 1 index paths (off by default)
-    d1IndexRoot: process.env[ENV_KEYS.D1_INDEX_ROOT] || '',
-    d1PlayedWithRoot: process.env[ENV_KEYS.D1_PLAYED_WITH_ROOT] || '',
+    d1IndexRoot: d1IndexRoots[0] || '',
+    d1PlayedWithRoot: d1PlayedWithRoots[0] || '',
+    d1IndexRoots,
+    d1PlayedWithRoots,
     
     // Bungie API - REQUIRED via environment variable
     bungieApiKey: process.env[ENV_KEYS.BUNGIE_API_KEY] || '',
