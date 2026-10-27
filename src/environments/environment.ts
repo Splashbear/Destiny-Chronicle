@@ -47,6 +47,8 @@ export const environment = {
    * Requests go through the /dc-archive proxy.
    */
   enablePlayedWith: true,
+  /** Archive name-to-mid search (Bot option 2). Off until Splashbear gate passes. */
+  enableArchiveNameSearch: false,
   /** When true, app runs from an imported offline archive (no Bungie API). */
   offlineMode: false,
   archiveRoot: ''

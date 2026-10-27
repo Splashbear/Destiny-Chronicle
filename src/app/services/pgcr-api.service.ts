@@ -16,6 +16,15 @@ export interface ExternalPgcrPartner {
   perAccount?: PlayedWithPerAccount[];
 }
 
+/** GET /players/search-by-name hit (archive name index). */
+export interface ArchiveNameSearchHit {
+  membershipId: string;
+  displayName: string;
+  lastSeen?: string;
+  nameSource?: string;
+  matchedPriorName?: boolean;
+}
+
 export interface PlayedWithPerAccount {
   id: string;
   activitiesTogether: number;
@@ -258,6 +267,31 @@ export class PgcrApiService {
       if (status === 404) {
         return null;
       }
+      return null;
+    }
+  }
+
+  /**
+   * Bot option 2: GET /players/search-by-name. Requires enableArchiveNameSearch
+   * and a built PLAYED_WITH_NAME_SEARCH_ROOT on the archive API.
+   */
+  async searchPlayersByName(query: string): Promise<ArchiveNameSearchHit[] | null> {
+    if (!environment.enableArchiveNameSearch || !this.enabled) {
+      return null;
+    }
+    const q = String(query || '').trim();
+    if (q.length < 3) {
+      return [];
+    }
+    try {
+      const resp = await firstValueFrom(
+        this.http.get<{ results?: ArchiveNameSearchHit[] }>(this.url('/players/search-by-name'), {
+          headers: this.headers(),
+          params: { q, limit: '10' },
+        }),
+      );
+      return Array.isArray(resp?.results) ? resp.results : [];
+    } catch {
       return null;
     }
   }

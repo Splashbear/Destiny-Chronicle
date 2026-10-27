@@ -48,6 +48,8 @@ export const ACTIVITY_RELEASE_DATES: Record<string, string> = {
   "Warlord's Ruin": "2023-12-01",
   "Vesper's Host": "2024-10-01",
   "Sundered Doctrine": "2025-02-07",
+  Equilibrium: "2025-12-13",
+  "Equilibrium: Contest": "2025-12-13",
 
   // --- D2 story expansions ---
   "Red War": "2017-09-06",

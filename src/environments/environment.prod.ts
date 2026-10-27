@@ -41,6 +41,8 @@ export const environment = {
   enableD1Archive: true,
   /** Played With tab + archive summary API (queued builds for cold accounts). */
   enablePlayedWith: true,
+  /** Archive name-to-mid search. Keep false until name index gate passes. */
+  enableArchiveNameSearch: false,
   offlineMode: false,
   archiveRoot: ''
 }; 

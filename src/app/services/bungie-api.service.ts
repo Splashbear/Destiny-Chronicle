@@ -7,6 +7,7 @@ import { BungieMembershipType } from 'bungie-api-ts/user';
 import { LocaleService } from './locale.service';
 import { unwrapD1PgcrBody } from '../utils/pgcr-prune';
 import { bungieRequestUrl } from '../utils/bungie-request-url';
+import { prefixSearchHasDestinyMemberships } from '../utils/destiny-membership';
 import { PgcrApiService } from './pgcr-api.service';
 
 export interface PlayerSearchResult {
@@ -867,22 +868,35 @@ export class BungieApiService {
     // ---------------------
     // Destiny 2 Search
     // ---------------------
-    // Choose the correct endpoint depending on whether a Bungie Name code is present
-    // Try searchUsersPrefix first (as in 484354a), fall back to searchD2Player if it fails
+    // With #: SearchDestinyPlayerByBungieName.
+    // Without #: GlobalName prefix first; fall back to SearchDestinyPlayer on error OR when
+    // prefix returns zero usable destinyMemberships (common for legacy gamertags like Hollz333
+    // that still resolve on D1 SearchDestinyPlayer / Braytech).
+    const d2SearchFallback$ = this.searchD2Player(searchTerm).pipe(catchError((fallbackError) => {
+      console.error('D2 fallback search error:', fallbackError);
+      return of(null);
+    }));
+
     const d2$ = searchTerm.includes('#')
       ? this.searchD2Player(searchTerm).pipe(catchError((error) => {
           console.error('D2 search error:', error);
           return of(null);
         }))
       : this.searchUsersPrefix(searchTerm).pipe(
+          switchMap((resp) => {
+            if (prefixSearchHasDestinyMemberships(resp)) {
+              return of(resp);
+            }
+            console.warn(
+              'D2 prefix search returned no destiny memberships; falling back to SearchDestinyPlayer',
+              { searchTerm },
+            );
+            return d2SearchFallback$;
+          }),
           catchError((error) => {
             console.error('D2 prefix search error, falling back to SearchDestinyPlayer:', error);
-            // Fallback to SearchDestinyPlayer if searchUsersPrefix fails
-            return this.searchD2Player(searchTerm).pipe(catchError((fallbackError) => {
-              console.error('D2 fallback search error:', fallbackError);
-              return of(null);
-            }));
-          })
+            return d2SearchFallback$;
+          }),
         );
 
     // ---------------------

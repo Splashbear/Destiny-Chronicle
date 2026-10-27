@@ -30,6 +30,13 @@ import { ActivityFirstCompletion, GuardianFirsts, RAID_NAMES } from '../../model
 import { getStoryAnchorSortOrder } from '../../config/story-first-missions';
 import { pickFirstEverFromFirsts } from '../../utils/first-ever-from-firsts';
 import { d2PlayedWithAccounts, PlayedWithAccountChoice } from '../../utils/played-with-accounts';
+import { effectiveMembershipType, mapLinkedProfilesToD2SearchRows } from '../../utils/destiny-membership';
+import {
+  LocalAccountCandidate,
+  localAccountMatchNote,
+  matchLocalAccounts,
+} from '../../utils/local-account-search';
+import { FireteamStatsService } from '../../services/fireteam-stats.service';
 import {
   PantheonEventId,
   getPantheonConfig,
@@ -198,6 +205,8 @@ interface PlayerSearchDisplay extends PlayerSearchResult {
   iconPath?: string;
   isPrimary?: boolean;
   crossSaveOverride?: number;
+  /** Set when the row came from favorites / Played With local match (Bot option 1). */
+  localMatchNote?: string;
 }
 
 // PvP mode name lookup
@@ -743,6 +752,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   d1SearchResults: PlayerSearchDisplay[] = [];
   showPlatformPicker: boolean = false;
   crossSavePlayer: PlayerSearchDisplay | null = null;
+  /** Shown when local name match found a mid but LinkedProfiles could not verify it. */
+  private localSearchUnverifiedMessage = '';
   loadingActivities: { [key: string]: boolean } = {};
   groupedActivitiesByAccount: any[] = [];
   private displayedAccountGroups = new Map<'D1' | 'D2', { source: any[]; preset: string; accounts: string; groups: any[] }>();
@@ -1740,7 +1751,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     private archiveHtmlReportService: ArchiveHtmlReportService,
     private assetUrl: AssetUrlService,
     private pgcrApiService: PgcrApiService,
-    private siteAnalytics: SiteAnalyticsService
+    private siteAnalytics: SiteAnalyticsService,
+    private fireteamStats: FireteamStatsService,
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
@@ -3162,7 +3174,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         return;
       }
       if (!results || results.length === 0) {
-        this.errorMessage = 'No Bungie account found with that name.';
+        // Empty prefix: same gap as searchAllGames — try SearchDestinyPlayer
+        const fallback = await firstValueFrom(this.bungieService.searchD2Player(searchTerm));
+        await this.processExactD2SearchResponse(fallback);
         return;
       }
 
@@ -3172,9 +3186,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
         const memberships = user.destinyMemberships as any[];
         for (const m of memberships) {
-          const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
-            ? m.crossSaveOverride
-            : m.membershipType;
+          const effectiveType = effectiveMembershipType(m);
 
           players.push({
             displayName: bungieName,
@@ -3189,7 +3201,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
 
       if (players.length === 0) {
-        this.errorMessage = 'No Destiny memberships found for that name.';
+        const fallback = await firstValueFrom(this.bungieService.searchD2Player(searchTerm));
+        await this.processExactD2SearchResponse(fallback);
         return;
       }
 
@@ -6407,9 +6420,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             this.d2SearchResults = [];
             
             for (const membership of destinyMemberships) {
-              const effectiveType = (membership.membershipType === 254 && membership.crossSaveOverride && membership.crossSaveOverride > 0)
-                ? membership.crossSaveOverride
-                : membership.membershipType;
+              const effectiveType = effectiveMembershipType(membership);
               
               // Determine if this is D1 or D2 based on membership type and cross-save
               // D1 platforms are 1 (Xbox) and 2 (PlayStation) without cross-save
@@ -6492,13 +6503,17 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         console.log('[Search] D2 Response is array?', Array.isArray(d2Resp.Response), 'Length:', d2Resp.Response?.length);
         if (Array.isArray(d2Resp.Response) && d2Resp.Response.length > 0) {
           console.log('[Search] Processing D2 results:', d2Resp.Response);
-          this.d2SearchResults = d2Resp.Response.map((player: any) => ({
-            ...player,
-            game: 'D2',
-            platform: this.getPlatformName(player.membershipType)
-          })) as PlayerSearchDisplay[];
+          this.d2SearchResults = d2Resp.Response.map((player: any) => {
+            const effectiveType = effectiveMembershipType(player);
+            return {
+              ...player,
+              membershipType: effectiveType,
+              game: 'D2',
+              platform: this.getPlatformName(effectiveType),
+            };
+          }) as PlayerSearchDisplay[];
           console.log('[Search] Mapped D2 results:', this.d2SearchResults);
-          this.crossSavePlayer = this.d2SearchResults.find(p => p.crossSaveOverride && p.crossSaveOverride > 0) || null;
+          this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary || (p.crossSaveOverride && p.crossSaveOverride > 0)) || null;
         } else {
           // Legacy searchUsersPrefix response (Response.searchResults)
           const results = d2Resp?.Response?.searchResults as any[] | undefined;
@@ -6508,9 +6523,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
               const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
               const memberships = user.destinyMemberships as any[];
               for (const m of memberships) {
-                const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
-                  ? m.crossSaveOverride
-                  : m.membershipType;
+                const effectiveType = effectiveMembershipType(m);
 
                 players.push({
                   displayName: bungieName,
@@ -6545,12 +6558,24 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         platform: this.getPlatformName(pl.membershipType)
       }));
 
+      // Legacy gamertags often resolve on D1 SearchDestinyPlayer but not D2 GlobalName /
+      // SearchDestinyPlayer (empty Bungie Name / private net profile). LinkedProfiles still
+      // returns the D2 membership for that mid — same path Braytech uses after knowing an ID.
+      await this.hydrateMissingD2FromLinkedProfiles();
+      if (this.d1SearchResults.length + this.d2SearchResults.length === 0) {
+        await this.hydrateFromLocalKnownAccounts(this.searchUsername.trim());
+      }
+      if (this.d1SearchResults.length + this.d2SearchResults.length === 0) {
+        await this.hydrateFromArchiveNameSearch(this.searchUsername.trim());
+      }
+
       /* --------------------
          Determine next action
       -------------------- */
       const total = this.d1SearchResults.length + this.d2SearchResults.length;
       if (total === 0) {
-        this.errorMessage = 'No Destiny accounts found with that name.';
+        this.errorMessage = this.localSearchUnverifiedMessage
+          || 'No Destiny accounts found with that name.';
       } else if (total === 1) {
         const player = this.d2SearchResults[0] || this.d1SearchResults[0];
         await this.selectPlayer(player);
@@ -6616,19 +6641,41 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.bungieService.searchAllGames(query)
       );
 
-      // D2 results
+      // D2 results (prefix shape, or SearchDestinyPlayer array after empty-prefix fallback)
       if (query.includes('#')) {
         if (accumulate) {
           if (d2Resp && d2Resp.ErrorCode === 1 && Array.isArray(d2Resp.Response)) {
-            const exactPlayers = (d2Resp.Response as any[]).map((player: any) => ({
-              ...player,
-              game: 'D2',
-              platform: this.getPlatformName(player.membershipType)
-            })) as PlayerSearchDisplay[];
+            const exactPlayers = (d2Resp.Response as any[]).map((player: any) => {
+              const effectiveType = effectiveMembershipType(player);
+              return {
+                ...player,
+                membershipType: effectiveType,
+                game: 'D2',
+                platform: this.getPlatformName(effectiveType),
+              };
+            }) as PlayerSearchDisplay[];
             this.d2SearchResults.push(...exactPlayers);
           }
         } else {
           await this.processExactD2SearchResponse(d2Resp);
+        }
+      } else if (d2Resp && d2Resp.ErrorCode === 1 && Array.isArray(d2Resp.Response) && d2Resp.Response.length > 0) {
+        const mapped = (d2Resp.Response as any[]).map((player: any) => {
+          const effectiveType = effectiveMembershipType(player);
+          return {
+            ...player,
+            membershipType: effectiveType,
+            game: 'D2',
+            platform: this.getPlatformName(effectiveType),
+          };
+        }) as PlayerSearchDisplay[];
+        if (accumulate) {
+          this.d2SearchResults.push(...mapped);
+        } else {
+          this.d2SearchResults = mapped;
+          this.crossSavePlayer = this.d2SearchResults.find(
+            p => p.isCrossSavePrimary || (p.crossSaveOverride && p.crossSaveOverride > 0),
+          ) || null;
         }
       } else {
         const results = d2Resp?.Response?.searchResults as any[] | undefined;
@@ -6638,9 +6685,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             const bungieName = `${user.bungieGlobalDisplayName}#${user.bungieGlobalDisplayNameCode}`;
             const memberships = user.destinyMemberships as any[];
             for (const m of memberships) {
-              const effectiveType = (m.membershipType === 254 && m.crossSaveOverride && m.crossSaveOverride > 0)
-                ? m.crossSaveOverride
-                : m.membershipType;
+              const effectiveType = effectiveMembershipType(m);
               players.push({
                 displayName: bungieName,
                 membershipId: m.membershipId,
@@ -6678,6 +6723,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.d1SearchResults = d1Mapped;
       }
 
+      await this.hydrateMissingD2FromLinkedProfiles();
+      if (this.d1SearchResults.length + this.d2SearchResults.length === 0) {
+        await this.hydrateFromLocalKnownAccounts(query);
+      }
+      if (this.d1SearchResults.length + this.d2SearchResults.length === 0) {
+        await this.hydrateFromArchiveNameSearch(query);
+      }
+
       // Handle results for this individual name
       if (!accumulate) {
         const total = this.d1SearchResults.length + this.d2SearchResults.length;
@@ -6685,7 +6738,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           const player = this.d2SearchResults[0] || this.d1SearchResults[0];
           await this.selectPlayer(player);
         } else if (total === 0) {
-          console.warn(`[BulkAdd] No accounts found for "${name}"`);
+          console.warn('[BulkAdd] No accounts found for name');
         } else {
           // Ambiguous – open multi-select modal to let user choose accounts
           this.showPlatformPicker = true;
@@ -6696,9 +6749,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         // The platform picker will be shown at the end after processing all names
         const total = this.d1SearchResults.length + this.d2SearchResults.length;
         if (total === 0) {
-          console.warn(`[BulkAdd] No accounts found for "${name}"`);
+          console.warn('[BulkAdd] No accounts found for name');
         } else if (total > 1) {
-          console.log(`[BulkAdd] Multiple accounts found for "${name}" - will show in platform picker`);
+          console.log('[BulkAdd] Multiple accounts found — will show in platform picker');
         }
       }
     } catch (err) {
@@ -7756,22 +7809,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     }
 
     // Define all possible variants for each raid
-    const raidVariantDefinitions = new Map<string, string[]>([
-      ['Leviathan', ['Normal', 'Prestige']],
-      ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
-      ['Leviathan, Spire of Stars', ['Normal', 'Prestige']],
-      ['Crown of Sorrow', ['Normal']],
-      ['Garden of Salvation', ['Normal']],
-      ['Deep Stone Crypt', ['Normal']],
-      ['Vault of Glass', ['Normal', 'Master', 'Standard']],
-      ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
-      ['King\'s Fall', ['Standard', 'Normal', 'Master', 'Expert']],
-      ['Root of Nightmares', ['Normal', 'Master']],
-      ['Crota\'s End', ['Standard', 'Normal', 'Master', 'Legend']],
-      ['Salvation\'s Edge', ['Standard', 'Master']],
-      ['Last Wish', ['Standard', 'Normal']],
-      ['The Desert Perpetual', ['Standard', 'Normal', 'Contest', 'Epic: Contest', 'Epic: Standard']]
-    ]);
+    const raidVariantDefinitions = this.d2RaidVariantDefinitions();
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
 
@@ -7833,22 +7871,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (!raidVariants.has(baseName)) raidVariants.set(baseName, new Map());
       raidVariants.get(baseName)!.set(version, raid);
     }
-    const defs = new Map<string, string[]>([
-      ['Leviathan', ['Normal', 'Prestige']],
-      ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
-      ['Leviathan, Spire of Stars', ['Normal', 'Prestige']],
-      ['Crown of Sorrow', ['Normal']],
-      ['Garden of Salvation', ['Normal']],
-      ['Deep Stone Crypt', ['Normal']],
-      ['Vault of Glass', ['Normal', 'Master', 'Standard']],
-      ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
-      ["King's Fall", ['Standard', 'Normal', 'Master', 'Expert']],
-      ['Root of Nightmares', ['Normal', 'Master']],
-      ["Crota's End", ['Standard', 'Normal', 'Master', 'Legend']],
-      ["Salvation's Edge", ['Standard', 'Master']],
-      ['Last Wish', ['Standard', 'Normal']],
-      ['The Desert Perpetual', ['Standard', 'Normal', 'Contest', 'Epic: Contest', 'Epic: Standard']]
-    ]);
+    const defs = this.d2RaidVariantDefinitions();
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
     for (const [baseName, possible] of defs) {
       const completed = raidVariants.get(baseName) || new Map();
@@ -7952,20 +7975,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       dungeonVariants.get(baseName)!.set(version, dungeon);
     }
 
-    // Define all possible variants for each dungeon
-    const dungeonVariantDefinitions = new Map<string, string[]>([
-      ['The Shattered Throne', ['Standard']],
-      ['Pit of Heresy', ['Normal']],
-      ['Prophecy', ['Normal']],
-      ['Grasp of Avarice', ['Normal', 'Master']],
-      ['Duality', ['Normal', 'Master']],
-      ['Spire of the Watcher', ['Normal', 'Master']],
-      ['Ghosts of the Deep', ['Normal', 'Master']],
-      ['Warlord\'s Ruin', ['Normal', 'Master']],
-      ['Vesper\'s Host', ['Normal', 'Master']],
-      ['Sundered Doctrine', ['Normal', 'Master']],
-      ['Equilibrium', ['Normal', 'Master']]
-    ]);
+    const dungeonVariantDefinitions = this.d2DungeonVariantDefinitions();
 
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
 
@@ -8025,19 +8035,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (!dungeonVariants.has(baseName)) dungeonVariants.set(baseName, new Map());
       dungeonVariants.get(baseName)!.set(version, d);
     }
-    const defs = new Map<string, string[]>([
-      ['The Shattered Throne', ['Standard']],
-      ['Pit of Heresy', ['Normal']],
-      ['Prophecy', ['Normal']],
-      ['Grasp of Avarice', ['Normal', 'Master']],
-      ['Duality', ['Normal', 'Master']],
-      ['Spire of the Watcher', ['Normal', 'Master']],
-      ['Ghosts of the Deep', ['Normal', 'Master']],
-      ["Warlord's Ruin", ['Normal', 'Master']],
-      ["Vesper's Host", ['Normal', 'Master']],
-      ['Sundered Doctrine', ['Normal', 'Master']],
-      ['Equilibrium', ['Normal', 'Master']]
-    ]);
+    const defs = this.d2DungeonVariantDefinitions();
     const result: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean; }> }> = [];
     for (const [baseName, possible] of defs) {
       const completed = dungeonVariants.get(baseName) || new Map();
@@ -9483,19 +9481,220 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       return;
     }
 
-    this.d2SearchResults = response.Response.map((player: any) => ({
-      ...player,
-      game: 'D2',
-      platform: this.getPlatformName(player.membershipType)
-    })) as PlayerSearchDisplay[];
+    this.d2SearchResults = response.Response.map((player: any) => {
+      const effectiveType = effectiveMembershipType(player);
+      return {
+        ...player,
+        membershipType: effectiveType,
+        game: 'D2',
+        platform: this.getPlatformName(effectiveType),
+      };
+    }) as PlayerSearchDisplay[];
 
     // Identify cross-save primary (if any)
-    this.crossSavePlayer = this.d2SearchResults.find(p => p.crossSaveOverride && p.crossSaveOverride > 0) || null;
+    this.crossSavePlayer = this.d2SearchResults.find(
+      p => p.isCrossSavePrimary || (p.crossSaveOverride && p.crossSaveOverride > 0),
+    ) || null;
 
     if (this.d2SearchResults.length > 1 || this.crossSavePlayer) {
       this.showPlatformPicker = true;
     } else if (this.d2SearchResults.length === 1) {
       await this.selectPlayer(this.d2SearchResults[0]);
+    }
+  }
+
+  /**
+   * Bot option 2: archive name→mid index (enableArchiveNameSearch). Hint only —
+   * LinkedProfiles must confirm; label with last-seen; no auto-load if verify fails.
+   */
+  private async hydrateFromArchiveNameSearch(query: string): Promise<void> {
+    if (!environment.enableArchiveNameSearch) return;
+    const hits = await this.pgcrApiService.searchPlayersByName(query);
+    if (!hits?.length) return;
+
+    let unverified = 0;
+    const knownD2 = new Set(this.d2SearchResults.map((p) => p.membershipId));
+    for (const hit of hits) {
+      try {
+        const linked = await firstValueFrom(
+          this.bungieService.getLinkedProfiles(-1 as any, hit.membershipId),
+        );
+        const profiles = linked?.Response?.profiles as any[] | undefined;
+        const rows = mapLinkedProfilesToD2SearchRows(profiles, hit.displayName);
+        if (!rows.length) {
+          unverified++;
+          continue;
+        }
+        const day = (hit.lastSeen || '').slice(0, 10);
+        const note = day
+          ? `Found in archive, name as of ${day}`
+          : 'Found in archive';
+        for (const row of rows) {
+          if (knownD2.has(row.membershipId)) continue;
+          knownD2.add(row.membershipId);
+          this.d2SearchResults.push({
+            ...row,
+            platform: this.getPlatformName(row.membershipType),
+            localMatchNote: note,
+          } as PlayerSearchDisplay);
+        }
+      } catch {
+        unverified++;
+      }
+    }
+
+    if (!this.d2SearchResults.length && unverified > 0) {
+      this.localSearchUnverifiedMessage =
+        'Found a matching name in the activity archive, but Bungie could not verify the account. Not loading.';
+    } else if (this.d2SearchResults.some((p) => p.localMatchNote?.includes('archive'))) {
+      console.log('[Search] Archive name-search hits verified:', {
+        count: this.d2SearchResults.filter((p) => p.localMatchNote?.includes('archive')).length,
+        unverified,
+      });
+    }
+  }
+
+  /**
+   * Bot option 1 (2026-10-26): when Bungie search is empty, match favorites + last Played With
+   * partners + already-selected accounts. Hits are hints — LinkedProfiles must confirm before load.
+   */
+  private async hydrateFromLocalKnownAccounts(query: string): Promise<void> {
+    this.localSearchUnverifiedMessage = '';
+    const favorites = this.favoriteAccounts.length
+      ? this.favoriteAccounts
+      : await this.activityDb.getFavorites();
+    const candidates: LocalAccountCandidate[] = [
+      ...favorites.map((f) => ({
+        membershipId: f.membershipId,
+        displayName: f.displayName,
+        membershipType: f.membershipType,
+        game: f.game,
+        platform: f.platform,
+        source: 'favorites' as const,
+        lastSeen: f.lastUpdated,
+      })),
+      ...this.selectedPlayers.map((p) => ({
+        membershipId: p.membershipId,
+        displayName: p.displayName,
+        membershipType: p.membershipType,
+        game: p.game,
+        platform: p.platform,
+        source: 'selected' as const,
+      })),
+      ...this.fireteamStats.getLastKnownPartners().map((p) => ({
+        membershipId: p.membershipId,
+        displayName: p.displayName,
+        source: 'played-with' as const,
+        lastSeen: p.lastPlayedTogether,
+      })),
+    ];
+
+    const hits = matchLocalAccounts(query, candidates);
+    if (!hits.length) return;
+
+    let unverified = 0;
+    const knownD2 = new Set(this.d2SearchResults.map((p) => p.membershipId));
+    const knownD1 = new Set(this.d1SearchResults.map((p) => p.membershipId));
+
+    for (const hit of hits) {
+      try {
+        const seedType = (hit.membershipType ?? -1) as any;
+        const linked = await firstValueFrom(
+          this.bungieService.getLinkedProfiles(seedType, hit.membershipId),
+        );
+        const profiles = linked?.Response?.profiles as any[] | undefined;
+        const note = localAccountMatchNote(hit);
+        if (!Array.isArray(profiles) || profiles.length === 0) {
+          unverified++;
+          continue;
+        }
+        const rows = mapLinkedProfilesToD2SearchRows(profiles, hit.displayName);
+        if (!rows.length) {
+          unverified++;
+          continue;
+        }
+        for (const row of rows) {
+          if (knownD2.has(row.membershipId)) continue;
+          knownD2.add(row.membershipId);
+          this.d2SearchResults.push({
+            ...row,
+            platform: this.getPlatformName(row.membershipType),
+            localMatchNote: note,
+          } as PlayerSearchDisplay);
+        }
+        // Favorites tagged D1: keep a D1 row when LinkedProfiles only returns the shared mid
+        if (hit.game === 'D1' && !knownD1.has(hit.membershipId) && hit.membershipType != null) {
+          knownD1.add(hit.membershipId);
+          this.d1SearchResults.push({
+            displayName: hit.displayName,
+            membershipId: hit.membershipId,
+            membershipType: hit.membershipType,
+            game: 'D1',
+            platform: hit.platform || this.getPlatformName(hit.membershipType),
+            localMatchNote: note,
+          } as PlayerSearchDisplay);
+        }
+      } catch {
+        unverified++;
+      }
+    }
+
+    if (this.d2SearchResults.length || this.d1SearchResults.length) {
+      console.log('[Search] Local known-account hits verified:', {
+        d2: this.d2SearchResults.filter((p) => p.localMatchNote).length,
+        d1: this.d1SearchResults.filter((p) => p.localMatchNote).length,
+        unverified,
+      });
+      if (!this.crossSavePlayer) {
+        this.crossSavePlayer = this.d2SearchResults.find(
+          (p) => p.isCrossSavePrimary || (p.crossSaveOverride && p.crossSaveOverride > 0),
+        ) || null;
+      }
+    } else if (unverified > 0) {
+      this.localSearchUnverifiedMessage =
+        'Found a matching name in favorites or Played With, but Bungie could not verify the account. Not loading.';
+    }
+  }
+
+  /**
+   * When D2 name search misses a legacy gamertag that D1 still finds, resolve D2 via
+   * LinkedProfiles on each D1 membership (Bungie still returns the Destiny profile by mid).
+   */
+  private async hydrateMissingD2FromLinkedProfiles(): Promise<void> {
+    if (!this.d1SearchResults.length) return;
+
+    const knownD2 = new Set(this.d2SearchResults.map(p => p.membershipId));
+    const seeds = this.d1SearchResults.filter(d1 => !knownD2.has(d1.membershipId));
+    if (!seeds.length) return;
+
+    const added: PlayerSearchDisplay[] = [];
+    for (const d1 of seeds) {
+      try {
+        const linked = await firstValueFrom(
+          this.bungieService.getLinkedProfiles(d1.membershipType as any, d1.membershipId),
+        );
+        const profiles = linked?.Response?.profiles as any[] | undefined;
+        const rows = mapLinkedProfilesToD2SearchRows(profiles, d1.displayName);
+        for (const row of rows) {
+          if (knownD2.has(row.membershipId)) continue;
+          knownD2.add(row.membershipId);
+          added.push({
+            ...row,
+            platform: this.getPlatformName(row.membershipType),
+          } as PlayerSearchDisplay);
+        }
+      } catch (err) {
+        console.warn('[Search] LinkedProfiles hydrate failed for D1 hit', d1.membershipId, err);
+      }
+    }
+
+    if (!added.length) return;
+    console.log('[Search] Hydrated D2 from LinkedProfiles after D1 hit:', added);
+    this.d2SearchResults = [...this.d2SearchResults, ...added];
+    if (!this.crossSavePlayer) {
+      this.crossSavePlayer = this.d2SearchResults.find(
+        p => p.isCrossSavePrimary || (p.crossSaveOverride && p.crossSaveOverride > 0),
+      ) || null;
     }
   }
   /**
@@ -11781,6 +11980,48 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     'Salvation\'s Edge',
     'The Desert Perpetual'
   ];
+
+  /** Cards shown on Firsts → D2 Raids (must include vaulted raids like Scourge). */
+  private d2RaidVariantDefinitions(): Map<string, string[]> {
+    return new Map<string, string[]>([
+      ['Leviathan', ['Normal', 'Prestige']],
+      ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
+      ['Leviathan, Spire of Stars', ['Normal', 'Prestige']],
+      ['Last Wish', ['Standard', 'Normal']],
+      ['Scourge of the Past', ['Normal']],
+      ['Crown of Sorrow', ['Normal']],
+      ['Garden of Salvation', ['Normal']],
+      ['Deep Stone Crypt', ['Normal']],
+      ['Vault of Glass', ['Normal', 'Master', 'Standard']],
+      ['Vow of the Disciple', ['Standard', 'Legend', 'Master']],
+      ["King's Fall", ['Standard', 'Normal', 'Master', 'Expert']],
+      ['Root of Nightmares', ['Normal', 'Master']],
+      ["Crota's End", ['Standard', 'Normal', 'Master', 'Legend']],
+      ["Salvation's Edge", ['Standard', 'Master']],
+      ['The Desert Perpetual', ['Standard', 'Normal', 'Contest', 'Epic: Contest', 'Epic: Standard']],
+    ]);
+  }
+
+  /**
+   * Cards shown on Firsts → D2 Dungeons.
+   * Does not list Rite of the Nine Explorer/Eternity/Ultimatum — those stay on the Rite card.
+   */
+  private d2DungeonVariantDefinitions(): Map<string, string[]> {
+    return new Map<string, string[]>([
+      ['The Shattered Throne', ['Standard']],
+      ['Pit of Heresy', ['Normal', 'Master', 'Expert', 'Legend']],
+      ['Prophecy', ['Normal', 'Master']],
+      ['Grasp of Avarice', ['Normal', 'Master']],
+      ['Duality', ['Normal', 'Master']],
+      ['Spire of the Watcher', ['Normal', 'Master']],
+      ['Ghosts of the Deep', ['Normal', 'Master']],
+      ["Warlord's Ruin", ['Normal', 'Master']],
+      ["Vesper's Host", ['Normal', 'Master']],
+      ['Sundered Doctrine', ['Normal', 'Master']],
+      // Contest before Master; Normal/Standard merge into the base row
+      ['Equilibrium', ['Normal', 'Contest', 'Master']],
+    ]);
+  }
 
   private readonly D2_DUNGEON_RELEASE_ORDER: string[] = [
     'The Shattered Throne',
