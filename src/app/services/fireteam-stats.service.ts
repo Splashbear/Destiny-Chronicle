@@ -189,11 +189,26 @@ export class FireteamStatsSession {
   providedIn: 'root'
 })
 export class FireteamStatsService {
+  /** Last Played With partner list from a finished session (for local username search). */
+  private lastKnownPartners: FireteamPartnerRow[] = [];
+
   constructor(
     private activityDb: ActivityDbService,
     private pgcrCache: PGCRCacheService,
     private pgcrApi: PgcrApiService
   ) {}
+
+  /** Partners from the most recent Played With session (empty if never loaded). */
+  getLastKnownPartners(): FireteamPartnerRow[] {
+    return this.lastKnownPartners.map(p => ({ ...p }));
+  }
+
+  private rememberPartners(session: FireteamStatsSession): void {
+    const partners = session.getPartners();
+    if (partners.length) {
+      this.lastKnownPartners = partners.map(p => ({ ...p }));
+    }
+  }
 
   async createSession(
     membershipIds: string[],
@@ -235,6 +250,7 @@ export class FireteamStatsService {
             perAccount: p.perAccount
           }))
         );
+        this.rememberPartners(session);
         onChunk?.(session);
         return session;
       }
@@ -264,6 +280,7 @@ export class FireteamStatsService {
       await yieldToUi();
     }
 
+    this.rememberPartners(session);
     return session;
   }
 

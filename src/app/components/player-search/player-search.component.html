@@ -623,7 +623,10 @@
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
-              <div class="modal-account-pick-meta">{{ getPlatformName(player.membershipType) }}</div>
+              <div class="modal-account-pick-meta">
+                {{ getPlatformName(player.membershipType) }}
+                <span *ngIf="player.localMatchNote" class="text-slate-500"> · {{ player.localMatchNote }}</span>
+              </div>
             </div>
             <span class="modal-account-pick-badge">{{ isPlayerSelected(player) ? 'Selected' : 'Select' }}</span>
           </button>
@@ -643,7 +646,10 @@
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
-              <div class="modal-account-pick-meta">{{ getPlatformName(player.membershipType) }}</div>
+              <div class="modal-account-pick-meta">
+                {{ getPlatformName(player.membershipType) }}
+                <span *ngIf="player.localMatchNote" class="text-slate-500"> · {{ player.localMatchNote }}</span>
+              </div>
             </div>
             <span class="modal-account-pick-badge">{{ isPlayerSelected(player) ? 'Selected' : 'Select' }}</span>
           </button>

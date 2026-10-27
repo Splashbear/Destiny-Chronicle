@@ -14,6 +14,8 @@ import { createPgcrRouter } from './routes/pgcr.routes';
 import { createDcPgcrRouter } from './routes/dc-pgcr.routes';
 import { createPlayerActivitiesRouter } from './routes/player-activities.routes';
 import { createPlayedWithRouter } from './routes/played-with.routes';
+import { createUsernameSearchRouter } from './routes/username-search.routes';
+import { loadUsernameSearchRoot, UsernameSearchService } from './services/username-search.service';
 import { loadPlayedWithConfig, PlayedWithService } from './services/played-with.service';
 import { SummaryStore } from './services/played-with-summary.store';
 import { PartnerNameRefresher } from './services/partner-name-refresh.service';
@@ -129,6 +131,17 @@ async function startServer(): Promise<void> {
 
   // Player activities routes (light format for cold-start optimization)
   app.use('/players', createPlayerActivitiesRouter(archiveService, watermarkService));
+
+  // Archive username → mid search (optional; PLAYED_WITH_NAME_SEARCH_ROOT). Gated full build.
+  const usernameSearchRoot = loadUsernameSearchRoot();
+  if (usernameSearchRoot) {
+    const usernameSearch = new UsernameSearchService(usernameSearchRoot);
+    app.use('/players', createUsernameSearchRouter(usernameSearch));
+    logger.info('Username search route enabled', {
+      ready: usernameSearch.isReady(),
+      root: usernameSearchRoot,
+    });
+  }
 
   // Played With (optional): legacy 0-10B + compact 10-16B band indexes, routed by instance id.
   const playedWithConfig = loadPlayedWithConfig();
