@@ -74,7 +74,8 @@ Sections are ordered for UX. Lower order = shown earlier:
 | 5 | 87 | LostSector |
 | 6 | 92, 85, 83, 77, 78, 86 | Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive |
 | 7 | 63, 75, 76, 67 | Gambit |
-| 8 | PvP modes | Control, Clash, IronBanner, TrialsOfOsiris, Survival, etc. |
+| 7.5 | Trials | Trials of Osiris (D2 84 / D1 14), Trials of the Nine (39/41/42), Freelance — see `docs/specs/TRIALS_BREAKDOWN_SPEC.md` |
+| 8 | Crucible (non-Trials PvP) | Control, Clash, IronBanner, Survival, etc. (PvP minus Trials) |
 | 9 | 79, 80, 81, 58, 64, 66 | NightmareHunt, Elimination, Momentum, HeroicAdventure, etc. |
 | 10 | 6, 7, 40 | Patrol, AllPvE, Social |
 | 11 | 0 | None |

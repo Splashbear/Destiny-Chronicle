@@ -33,12 +33,37 @@ export function chartCategoryForSelectedTiles(labels: readonly string[]): string
   return categories.size === 1 ? [...categories][0] : 'all';
 }
 
-/** Tile labels for a chart category. All clears the selection. */
-export function tileLabelsForChartCategory(cardLabels: readonly string[], category: string): string[] {
+/** Tile labels for a chart category. All clears the selection. Optional game keeps D1/D2 tiles from crossing. */
+export function tileLabelsForChartCategory(
+  cardLabels: readonly string[],
+  category: string,
+  game: 'all' | 'D1' | 'D2' = 'all'
+): string[] {
   if (!category || category === 'all') {
     return [];
   }
-  return cardLabels.filter(label => breakdownCategoryFromLabel(label) === category);
+  const byGame =
+    game === 'all'
+      ? cardLabels
+      : cardLabels.filter(label => label.endsWith(`– ${game}`) || label.endsWith(`- ${game}`));
+  // Legacy "Trials" chart category → both Osiris and Nine tiles after the split.
+  if (category === 'Trials') {
+    return byGame.filter(label => breakdownCategoryFromLabel(label).startsWith('Trials'));
+  }
+  return byGame.filter(label => breakdownCategoryFromLabel(label) === category);
+}
+
+/** Keep only groups for the chart/game dropdown (tiles + tables must match the chart). */
+export function filterBreakdownGroupsByGame<T extends BreakdownGroupLike>(
+  groups: readonly T[],
+  game: 'all' | 'D1' | 'D2'
+): T[] {
+  if (game === 'all') return [...groups];
+  return groups.filter(g => g.game === game);
+}
+
+export function labelMatchesBreakdownGame(label: string, game: 'D1' | 'D2'): boolean {
+  return label.endsWith(`– ${game}`) || label.endsWith(`- ${game}`);
 }
 
 export function buildBreakdownCategoryOptions(
@@ -69,7 +94,9 @@ export function selectBreakdownChartItems(
   const byGame = groups.filter(g => opts.game === 'all' || g.game === opts.game);
   const byCat = opts.category === 'all'
     ? byGame
-    : byGame.filter(g => breakdownCategoryFromLabel(g.label) === opts.category);
+    : opts.category === 'Trials'
+      ? byGame.filter(g => breakdownCategoryFromLabel(g.label).startsWith('Trials'))
+      : byGame.filter(g => breakdownCategoryFromLabel(g.label) === opts.category);
   const sortDesc = (xs: ChartItem[]) => xs.sort((a, b) => b.timeSeconds - a.timeSeconds);
   if (!opts.tilesSelected && opts.category === 'all') {
     return {

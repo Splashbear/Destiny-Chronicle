@@ -2085,8 +2085,9 @@ export class ActivityDbService extends Dexie {
       let activities: any[] = [];
       if (isD1) {
         // ---------------- Parallel D1 pagination ----------------
+        // D1 DestinyActivityModeType: TrialsOfOsiris = 14, IronBanner = 19 (not D2's 84).
         const D1_MODES = [
-          0,1,2,3,4,5,6,10,12,15,16,17,18,19,22,24,25,31,32,37,38,39,40,41,42,43,44,45,46,48,49,50,51,52,53
+          0, 2, 3, 4, 5, 6, 7, 10, 12, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 29, 31, 32
         ];
         const pageSize = 250;
         

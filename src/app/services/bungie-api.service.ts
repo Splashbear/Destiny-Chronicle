@@ -498,42 +498,32 @@ export class BungieApiService {
     characterId: string
   ): Observable<any> {
     // D1 activity modes
+    // D1 DestinyActivityModeType (classic D1 enum). TrialsOfOsiris = 14; IronBanner = 19.
+    // Do not reuse D2 mode numbers (D2 TrialsOfOsiris = 84).
     const D1_MODES = [
-      0,   // None (PvE)
-      1,   // Story
-      2,   // Strike
-      3,   // Raid
-      4,   // AllPvP
-      5,   // Patrol
-      6,   // AllPvE
+      0,   // None
+      2,   // Story
+      3,   // Strike
+      4,   // Raid
+      5,   // AllPvP
+      6,   // Patrol
+      7,   // AllPvE
       10,  // Control
-      12,  // Clash
-      15,  // Iron Banner
+      12,  // Team / Clash
+      14,  // TrialsOfOsiris (D1)
+      15,  // Doubles
       16,  // Nightfall
-      17,  // PrestigeNightfall
+      17,  // HeroicNightfall
       18,  // AllStrikes
-      19,  // TrialsOfOsiris
-      22,  // Survival
-      24,  // Rumble
+      19,  // IronBanner
+      21,  // Arena / Prison of Elders
+      22,  // ArenaChallenge
+      23,  // Elimination
+      24,  // Rift
       25,  // AllMayhem
+      29,  // Sparrow Racing League
       31,  // Supremacy
       32,  // PrivateMatchesAll
-      37,  // Survival
-      38,  // Countdown
-      39,  // TrialsOfTheNine
-      40,  // Breakthrough
-      41,  // Doubles
-      42,  // PrivateMatchesClash
-      43,  // PrivateMatchesControl
-      44,  // PrivateMatchesSupremacy
-      45,  // Gambit
-      46,  // AllPvECompetitive
-      48,  // Showdown
-      49,  // Lockdown
-      50,  // Momentum
-      51,  // CountdownClassic
-      52,  // Elimination
-      53   // Rift
     ];
 
     // Create an array of observables for each mode

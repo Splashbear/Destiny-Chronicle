@@ -179,7 +179,13 @@
   </div>
   <div *ngFor="let group of ps.filteredActivityBreakdownGroups; trackBy: ps.trackBreakdownGroup" class="destiny-surface-panel overflow-hidden p-4">
     <button type="button" class="w-full text-left mb-4" (click)="ps.toggleBreakdownGroup(group)">
-      <h3 class="text-lg font-semibold text-white">
+      <h3 class="text-lg font-semibold text-white flex items-center gap-2 flex-wrap">
+        <img *ngIf="ps.isTrialsBreakdownGroup(group)"
+             src="assets/icons/activities/d2/trialsofthenine.png"
+             alt=""
+             class="w-5 h-5 object-contain shrink-0"
+             width="20"
+             height="20" />
         {{ group.label }}
         <span class="text-sm font-normal text-slate-400">
           {{ ps.breakdownView.isExpanded(group) ? 'Hide' : 'Show' }}
@@ -189,7 +195,88 @@
         </span>
       </h3>
     </button>
-    <div class="overflow-x-auto" *ngIf="ps.breakdownView.isExpanded(group)">
+    <div *ngIf="ps.breakdownView.isExpanded(group)">
+      <!-- Trials expanded: matches / W/L / KD from history values only (no flawless inference) -->
+      <ng-container *ngIf="ps.isTrialsBreakdownGroup(group)">
+      <div *ngIf="ps.trialsBreakdownDetail as trials" class="mb-4 space-y-4">
+        <p *ngIf="ps.trialsCoverageLabel()" class="text-sm text-amber-200/90">{{ ps.trialsCoverageLabel() }}</p>
+        <p class="text-xs text-slate-500">Flawless runs, Lighthouse trips, and card win counts are not in game reports and are not shown.</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-sm">
+          <div class="destiny-surface-panel rounded p-2 border border-slate-700/60">
+            <div class="text-slate-400 text-xs">Matches</div>
+            <div class="text-slate-100 font-mono">{{ trials.totals.matches | number }}</div>
+          </div>
+          <div class="destiny-surface-panel rounded p-2 border border-slate-700/60">
+            <div class="text-slate-400 text-xs">W / L</div>
+            <div class="text-slate-100 font-mono">{{ trials.totals.wins | number }} / {{ trials.totals.losses | number }}</div>
+          </div>
+          <div class="destiny-surface-panel rounded p-2 border border-slate-700/60">
+            <div class="text-slate-400 text-xs">Win rate</div>
+            <div class="text-slate-100 font-mono">{{ ps.trialsWinRateDisplay() }}</div>
+          </div>
+          <div class="destiny-surface-panel rounded p-2 border border-slate-700/60">
+            <div class="text-slate-400 text-xs">Kills / Deaths</div>
+            <div class="text-slate-100 font-mono">{{ trials.totals.kills | number }} / {{ trials.totals.deaths | number }}</div>
+          </div>
+          <div class="destiny-surface-panel rounded p-2 border border-slate-700/60">
+            <div class="text-slate-400 text-xs">KD / Eff</div>
+            <div class="text-slate-100 font-mono">{{ ps.trialsKdDisplay() }} / {{ ps.trialsEfficiencyDisplay() }}</div>
+          </div>
+          <div class="destiny-surface-panel rounded p-2 border border-slate-700/60">
+            <div class="text-slate-400 text-xs">Time</div>
+            <div class="text-slate-100 font-mono">{{ ps.formatSecondsToHoursMinutes(trials.totals.timeSeconds) }}</div>
+          </div>
+        </div>
+        <div *ngIf="trials.subRows.length" class="overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead>
+              <tr class="text-slate-400 border-b border-slate-600">
+                <th class="py-2 pr-3 font-medium">Playlist</th>
+                <th class="py-2 pr-3 font-medium">Matches</th>
+                <th class="py-2 pr-3 font-medium">W / L</th>
+                <th class="py-2 pr-3 font-medium hidden sm:table-cell">Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let sub of trials.subRows" class="border-b border-slate-700/50">
+                <td class="py-2 pr-3 text-slate-200">{{ sub.label }}</td>
+                <td class="py-2 pr-3 font-mono text-slate-300">{{ sub.matches | number }}</td>
+                <td class="py-2 pr-3 font-mono text-slate-300">{{ sub.wins | number }} / {{ sub.losses | number }}</td>
+                <td class="py-2 pr-3 font-mono text-slate-400 hidden sm:table-cell">{{ ps.formatSecondsToHoursMinutes(sub.timeSeconds) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div *ngIf="trials.weekends.length">
+          <h4 class="text-sm font-semibold text-slate-200 mb-2">By weekend (Fri–Tue)</h4>
+          <ul class="space-y-1">
+            <li *ngFor="let w of trials.weekends" class="border-b border-slate-700/40">
+              <button type="button"
+                      class="w-full text-left py-2 flex flex-wrap gap-x-3 gap-y-1 text-sm hover:bg-white/5"
+                      (click)="ps.toggleTrialsWeekend(w.key)">
+                <span class="text-slate-200">{{ ps.formatTrialsWeekendRange(w.startIso, w.endIso) }}</span>
+                <span class="text-slate-400">{{ w.mapName }}</span>
+                <span class="font-mono text-slate-300">{{ w.matches | number }} matches · {{ w.wins | number }}W / {{ w.losses | number }}L</span>
+              </button>
+              <div *ngIf="ps.expandedTrialsWeekendKey === w.key" class="pb-2 pl-2 text-xs text-slate-400 font-mono">
+                <div *ngFor="let iid of w.instanceIds">{{ iid }}</div>
+                <p *ngIf="!w.instanceIds.length" class="text-slate-500">No instance ids stored for this weekend.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div *ngIf="ps.trialsTeammates.length">
+          <h4 class="text-sm font-semibold text-slate-200 mb-2">Top Trials teammates</h4>
+          <ul class="text-sm space-y-1">
+            <li *ngFor="let mate of ps.trialsTeammates" class="flex justify-between gap-4 border-b border-slate-700/40 py-1">
+              <span class="text-slate-200 truncate">{{ mate.displayName }}</span>
+              <span class="font-mono text-slate-400 shrink-0">{{ mate.matchesTogether | number }} matches</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+      </ng-container>
+      <div class="overflow-x-auto">
       <table class="w-full text-sm text-left">
         <thead>
           <tr class="text-slate-400 border-b border-slate-600">
@@ -243,6 +330,7 @@
               (click)="ps.showMoreBreakdownRows(group)">
         Show more ({{ ps.visibleBreakdownRows(group).length | number }} of {{ group.rows.length | number }})
       </button>
+      </div>
     </div>
   </div>
 </div>
