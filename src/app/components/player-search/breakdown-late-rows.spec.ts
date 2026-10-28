@@ -29,6 +29,11 @@ describe('Activity Breakdown late rows', () => {
       getAllActivitiesForMembershipOptimized(membershipId: string) {
         return Promise.resolve(this.rows.filter(row => row.membershipId === membershipId));
       },
+      getActivitiesForMembershipAndGame(membershipId: string, game: 'D1' | 'D2') {
+        return Promise.resolve(
+          this.rows.filter(row => row.membershipId === membershipId && row.game === game)
+        );
+      },
     };
     const manifest = {
       getActivityName: () => 'Vault of Glass',
@@ -37,13 +42,13 @@ describe('Activity Breakdown late rows', () => {
     const breakdown = new ActivityBreakdownService(db as any, manifest as any, { getBatch: async () => new Map() } as any);
     let reads = 0;
     let loadingOnSecondRead = true;
-    const realCounts = breakdown.getActivityCounts.bind(breakdown);
-    breakdown.getActivityCounts = async (ids: string[]) => {
+    const realCounts = breakdown.getActivityCountsForScopes.bind(breakdown);
+    breakdown.getActivityCountsForScopes = async (scopes) => {
       reads += 1;
       if (reads === 2) {
         loadingOnSecondRead = ps.loadingActivityBreakdown;
       }
-      return realCounts(ids);
+      return realCounts(scopes);
     };
 
     const unused = {} as any;
@@ -70,6 +75,8 @@ describe('Activity Breakdown late rows', () => {
       breakdownLastPlayedSort: null,
       perPlatformStats: [],
       accountStats: { totalTime: 0 },
+      trialsBreakdownDetail: null,
+      trialsTeammates: [],
     });
 
     let opened = false;

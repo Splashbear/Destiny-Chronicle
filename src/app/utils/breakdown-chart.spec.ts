@@ -38,6 +38,8 @@ describe('breakdown-chart', () => {
     expect(chartCategoryForSelectedTiles([])).toBe('all');
     expect(tileLabelsForChartCategory(cards, 'Dungeon')).toEqual([`Dungeon ${D} D2`]);
     expect(tileLabelsForChartCategory(cards, 'all')).toEqual([]);
+    expect(tileLabelsForChartCategory(cards, 'Raid', 'D1')).toEqual([`Raid ${D} D1`]);
+    expect(tileLabelsForChartCategory(cards, 'Raid', 'D2')).toEqual([`Raid ${D} D2`]);
   });
 
   it('tile selection still honours game and category filters', () => {

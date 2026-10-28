@@ -70,7 +70,13 @@ import { ExportOptionsDialogComponent } from '../export-options-dialog.component
 import { LoadingProgress } from '../../models/loading-progress.model';
 import { ShareService } from '../../services/share.service';
 import { SharedStateService } from '../../services/shared-state.service';
-import { buildBreakdownCategoryOptions, chartCategoryForSelectedTiles, selectBreakdownChartItems, tileLabelsForChartCategory } from '../../utils/breakdown-chart';
+import {
+  buildBreakdownCategoryOptions,
+  chartCategoryForSelectedTiles,
+  filterBreakdownGroupsByGame,
+  selectBreakdownChartItems,
+  tileLabelsForChartCategory,
+} from '../../utils/breakdown-chart';
 import { D1_HISTORY_MODES, dedupeByInstanceId, isSocialActivity } from '../../utils/activity-history-filters';
 import { excludeExistingInstances } from '../../utils/activity-dedupe';
 import { activityDurationSeconds } from '../../utils/activity-duration-seconds';
@@ -214,8 +220,9 @@ export const PVP_MODE_NAMES: { [mode: number]: string } = {
   5: 'Crucible',
   10: 'Control',
   12: 'Clash',
-  15: 'Iron Banner',
-  19: 'Trials of Osiris',
+  14: 'Trials of Osiris', // D1 DestinyActivityModeType; D2 uses 84
+  15: 'Doubles',
+  19: 'Iron Banner',
   24: 'Rumble',
   25: 'All PvP',
   28: 'Supremacy',
@@ -223,8 +230,8 @@ export const PVP_MODE_NAMES: { [mode: number]: string } = {
   38: 'Countdown',
   39: 'Trials of the Nine',
   40: 'Breakthrough',
-  41: 'Doubles',
-  42: 'Private Match',
+  41: 'Trials Countdown',
+  42: 'Trials Survival',
   43: 'Scorched',
   44: 'Scorched Team',
   45: 'Gambit',
@@ -234,6 +241,7 @@ export const PVP_MODE_NAMES: { [mode: number]: string } = {
   51: 'Countdown Classic',
   52: 'Elimination',
   53: 'Rift',
+  84: 'Trials of Osiris',
 };
 
 // Update the type where we need the game property
@@ -944,6 +952,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   activityBreakdownRows: ActivityCountRow[] | null = null;
   loadingActivityBreakdown = false;
   activityBreakdownGroups: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
+  /**
+   * Trials expanded panel (W/L, KD, weekends, teammates) from history values only.
+   * Flawless / Lighthouse / card wins are not derived — see docs/specs/TRIALS_BREAKDOWN_SPEC.md
+   */
+  trialsBreakdownDetail: import('../../utils/trials-breakdown').TrialsBreakdownDetail | null = null;
+  trialsTeammates: import('../../utils/trials-breakdown').TrialsTeammateRow[] = [];
+  expandedTrialsWeekendKey: string | null = null;
   /** Selected activity card labels for filtering; empty = show all */
   selectedBreakdownCardLabels = new Set<string>();
   /** Whether the tile selection area is collapsed */
@@ -1080,7 +1095,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   private categoryOptionsCache: { groups: unknown; options: { value: string; label: string }[] } | null = null;
 
   get breakdownChartCategoryOptions(): { value: string; label: string }[] {
-    const groups = this.activityBreakdownGroups || [];
+    // Options follow the Chart game filter so D1 cannot list D2-only categories as selected.
+    const groups = this.gameFilteredActivityBreakdownGroups;
     if (this.categoryOptionsCache?.groups === groups) {
       return this.categoryOptionsCache.options;
     }
@@ -1103,10 +1119,12 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Recompute chart data based on current breakdown groups, filters, and chart type. */
   private recomputeBreakdownChartData(): void {
+    // Groups are already game-filtered via filteredActivityBreakdownGroups; pass game 'all' here
+    // so we don't double-filter. Category + tile selection still apply.
     const sel = selectBreakdownChartItems(this.filteredActivityBreakdownGroups, {
       tilesSelected: this.selectedBreakdownCardLabels.size > 0,
       category: this.breakdownChartCategory,
-      game: this.breakdownChartGame as 'all' | 'D1' | 'D2',
+      game: 'all',
     });
     if (!sel.items.length) {
       this.breakdownChartDataState = { labels: [], datasets: [] };
@@ -1169,14 +1187,29 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   setBreakdownChartCategory(value: string) {
     this.breakdownChartCategory = value;
     const labels = (this.activityBreakdownSummaryCards || []).map(card => card.label);
-    this.selectedBreakdownCardLabels = new Set(tileLabelsForChartCategory(labels, value));
+    this.selectedBreakdownCardLabels = new Set(
+      tileLabelsForChartCategory(labels, value, this.breakdownChartGame as 'all' | 'D1' | 'D2')
+    );
     this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
 
-  /** Set chart game filter and trigger change detection */
+  /** Set chart game filter — also filters tiles/tables and drops wrong-game tile selection. */
   setBreakdownChartGame(value: 'all' | 'D1' | 'D2') {
     this.breakdownChartGame = value;
+    const labels = (this.activityBreakdownSummaryCards || []).map(card => card.label);
+    if (this.breakdownChartCategory && this.breakdownChartCategory !== 'all') {
+      this.selectedBreakdownCardLabels = new Set(
+        tileLabelsForChartCategory(labels, this.breakdownChartCategory, value)
+      );
+    } else if (this.selectedBreakdownCardLabels.size > 0 && value !== 'all') {
+      // Keep only selected tiles that belong to the chosen game.
+      this.selectedBreakdownCardLabels = new Set(
+        [...this.selectedBreakdownCardLabels].filter(
+          label => label.endsWith(`– ${value}`) || label.endsWith(`- ${value}`)
+        )
+      );
+    }
     this.recomputeBreakdownChartData();
     this.cdr.markForCheck();
   }
@@ -10157,10 +10190,18 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   readonly breakdownView = new BreakdownView();
 
+  /** Groups after the Chart game dropdown (D1/D2/All) — tiles and tables use this. */
+  get gameFilteredActivityBreakdownGroups(): BreakdownGroup[] {
+    return filterBreakdownGroupsByGame(
+      this.activityBreakdownGroups || [],
+      this.breakdownChartGame as 'all' | 'D1' | 'D2'
+    );
+  }
+
   /** Filtered groups for display: when cards are selected, only those; otherwise all */
   get filteredActivityBreakdownGroups(): BreakdownGroup[] {
     this.breakdownView.sync(
-      this.activityBreakdownGroups || [],
+      this.gameFilteredActivityBreakdownGroups,
       this.selectedBreakdownCardLabels,
       this.breakdownLastPlayedSort,
       this.breakdownRetainExpansion
@@ -10178,17 +10219,33 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   /** Membership IDs to load for the current Breakdown view: when account cards are selected, only those; otherwise all. */
   getBreakdownMembershipIds(): string[] {
+    return Array.from(new Set(this.getBreakdownMembershipScopes().map(s => s.membershipId)));
+  }
+
+  /**
+   * Membership + game scopes for Breakdown. Always pairs each selected player with their game
+   * so a shared mid cannot pull the other game's activities into the tiles/chart.
+   */
+  getBreakdownMembershipScopes(): { membershipId: string; game: 'D1' | 'D2' }[] {
     if (!this.selectedPlayers?.length) return [];
-    if (this.selectedAccountKeysForBreakdown.size > 0) {
-      return Array.from(
-        new Set(
-          this.selectedPlayers
-            .filter(p => this.selectedAccountKeysForBreakdown.has(this.getAccountKeyForPlayer(p)))
-            .map(p => p.membershipId)
-        )
-      );
+    const players =
+      this.selectedAccountKeysForBreakdown.size > 0
+        ? this.selectedPlayers.filter(p =>
+            this.selectedAccountKeysForBreakdown.has(this.getAccountKeyForPlayer(p))
+          )
+        : this.selectedPlayers;
+    const seen = new Set<string>();
+    const scopes: { membershipId: string; game: 'D1' | 'D2' }[] = [];
+    for (const p of players) {
+      const game: 'D1' | 'D2' = p.game === 'D1' ? 'D1' : 'D2';
+      const mid = p.membershipId;
+      if (!mid) continue;
+      const key = `${game}|${mid}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      scopes.push({ membershipId: mid, game });
     }
-    return Array.from(new Set(this.selectedPlayers.map(p => p.membershipId)));
+    return scopes;
   }
 
   /** Toggle account card selection for Breakdown tab; reloads breakdown data. */
@@ -10346,10 +10403,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     return Array.from(set);
   }
 
-  /** Summary cards for Activity Breakdown: aggregated stats per category */
+  /** Summary cards for Activity Breakdown: aggregated stats per category (respects Chart game). */
   get activityBreakdownSummaryCards() {
     this.breakdownView.sync(
-      this.activityBreakdownGroups || [],
+      this.gameFilteredActivityBreakdownGroups,
       this.selectedBreakdownCardLabels,
       this.breakdownLastPlayedSort,
       this.breakdownRetainExpansion
@@ -10394,6 +10451,64 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       timeSeconds += row.timeSeconds ?? 0;
     }
     return { runs, clears, timeSeconds };
+  }
+
+  isTrialsBreakdownGroup(group: { type?: string; label?: string }): boolean {
+    const type = group?.type || '';
+    if (type === 'trials-osiris' || type === 'trials-nine' || type === 'trials') return true;
+    return (group?.label || '').startsWith('Trials');
+  }
+
+  /** Coverage honesty: when history is still loading, prefer "Trials through <date>". */
+  trialsCoverageLabel(): string {
+    const detail = this.trialsBreakdownDetail;
+    if (!detail?.totals?.matches) {
+      return this.isLoadingComplete ? 'No Trials matches in loaded history' : 'Trials loading…';
+    }
+    if (!this.isLoadingComplete && detail.throughDate) {
+      const d = new Date(detail.throughDate);
+      const formatted = Number.isNaN(d.getTime())
+        ? detail.throughDate
+        : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      return `Trials through ${formatted}`;
+    }
+    return '';
+  }
+
+  trialsWinRateDisplay(): string {
+    const t = this.trialsBreakdownDetail?.totals;
+    if (!t) return '—';
+    const decided = t.wins + t.losses;
+    if (!decided) return '—';
+    return `${((t.wins / decided) * 100).toFixed(1)}%`;
+  }
+
+  trialsKdDisplay(): string {
+    const t = this.trialsBreakdownDetail?.totals;
+    if (!t) return '—';
+    const kd = t.deaths > 0 ? t.kills / t.deaths : t.kills;
+    return kd.toFixed(2);
+  }
+
+  trialsEfficiencyDisplay(): string {
+    const t = this.trialsBreakdownDetail?.totals;
+    if (!t) return '—';
+    const ka = t.kills + t.assists;
+    const eff = t.deaths > 0 ? ka / t.deaths : ka;
+    return eff.toFixed(2);
+  }
+
+  formatTrialsWeekendRange(startIso: string, endIso: string): string {
+    const s = new Date(startIso);
+    const e = new Date(endIso);
+    if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return startIso;
+    const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+    return `${s.toLocaleDateString(undefined, opts)} – ${e.toLocaleDateString(undefined, opts)}`;
+  }
+
+  toggleTrialsWeekend(key: string): void {
+    this.expandedTrialsWeekendKey = this.expandedTrialsWeekendKey === key ? null : key;
+    this.cdr.markForCheck();
   }
 
   onBreakdownTilesClick(event: Event): void {
@@ -10808,25 +10923,54 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.selectedBreakdownCardLabels = new Set();
       this.cdr.markForCheck();
     }
+    // Keep chart category across reloads so tile highlight can be restored after groups rebuild.
+    const chartCategoryBefore = this.breakdownChartCategory;
     try {
-      const membershipIds = this.getBreakdownMembershipIds();
-      if (membershipIds.length === 0) return;
+      const scopes = this.getBreakdownMembershipScopes();
+      if (scopes.length === 0) return;
       this.activityBreakdownService.clearActivityCountsCache();
-      const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
+      const rows = await this.activityBreakdownService.getActivityCountsForScopes(scopes);
       if (gen !== this.breakdownLoadGen) return;
 
-      // When specific account cards are selected, restrict Breakdown to the games (D1/D2)
-      // represented by those accounts so a D1-only selection does not include D2 time.
-      let effectiveRows = rows;
-      const selectedGames = this.getBreakdownSelectedGames();
-      if (selectedGames.length > 0) {
-        const allowed = new Set(selectedGames);
-        effectiveRows = rows.filter(r => !r.game || allowed.has(r.game));
-      }
-
       this.breakdownRetainExpansion = preserve;
-      this.activityBreakdownRows = effectiveRows;
-      this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(effectiveRows);
+      this.activityBreakdownRows = rows;
+      this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(rows);
+      // Trials detail (W/L, weekends) — same scopes as tiles (history values only).
+      try {
+        const trialsDetail = await this.activityBreakdownService.getTrialsDetailForScopes(scopes);
+        if (gen !== this.breakdownLoadGen) return;
+        this.trialsBreakdownDetail = trialsDetail;
+        this.trialsTeammates = await this.activityBreakdownService.getTrialsTeammatesFromPgcr(
+          scopes.map(s => s.membershipId),
+          trialsDetail.instanceIds
+        );
+        if (gen !== this.breakdownLoadGen) return;
+      } catch (trialsErr) {
+        console.warn('[ActivityBreakdown] Trials detail failed', trialsErr);
+        this.trialsBreakdownDetail = null;
+        this.trialsTeammates = [];
+      }
+      // Restore tile selection from chart category (reload clears the Set when !preserve).
+      // Always respect the chart game so D1 dropdown cannot leave a D2 Trials tile lit.
+      if (!preserve && chartCategoryBefore && chartCategoryBefore !== 'all') {
+        const labels = (this.activityBreakdownSummaryCards || []).map(card => card.label);
+        this.selectedBreakdownCardLabels = new Set(
+          tileLabelsForChartCategory(
+            labels,
+            chartCategoryBefore,
+            this.breakdownChartGame as 'all' | 'D1' | 'D2'
+          )
+        );
+        this.breakdownChartCategory = chartCategoryBefore;
+      } else if (!preserve && this.breakdownChartGame !== 'all') {
+        this.selectedBreakdownCardLabels = new Set(
+          [...this.selectedBreakdownCardLabels].filter(
+            label =>
+              label.endsWith(`– ${this.breakdownChartGame}`) ||
+              label.endsWith(`- ${this.breakdownChartGame}`)
+          )
+        );
+      }
       this.recomputeBreakdownChartData();
       this.logBreakdownDebug('loadActivityBreakdown');
     } catch (err) {
@@ -10835,6 +10979,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       if (!preserve) {
         this.activityBreakdownRows = [];
         this.activityBreakdownGroups = [];
+        this.trialsBreakdownDetail = null;
+        this.trialsTeammates = [];
       }
     } finally {
       if (gen === this.breakdownLoadGen) {
