@@ -573,6 +573,18 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
    */
   clearAllPlayers(): void {
     this.playerSelectionClear.clearAllPlayers(this.asPlayerSelectionClearHost());
+    // URL no longer carries ?players= (so refresh does not re-hydrate).
+    // Do NOT clear searchUsername / searchChips here — replace-search calls this
+    // mid-Decrypt and wiping the query made the gate look dead.
+    this.decryptLanding.hideQuietly();
+  }
+
+  /** User chose Clear all — wipe query too and return to the bronze gate. */
+  clearAllPlayersAndSearch(): void {
+    this.clearAllPlayers();
+    this.searchChips = [];
+    this.searchUsername = '';
+    this.errorMessage = '';
   }
 
   removePlayer(index: number) {

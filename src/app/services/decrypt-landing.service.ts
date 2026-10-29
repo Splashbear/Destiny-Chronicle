@@ -2,17 +2,26 @@ import { Injectable, signal } from '@angular/core';
 
 const SESSION_SKIP_KEY = 'dc-decrypt-landing-skip';
 
+export type DecryptLandingPhase = 'idle' | 'searchOpen' | 'loading' | 'unzipping' | 'done';
+
 /**
- * Engram decrypt landing (ENGRAM_THEME_SPEC).
+ * Engram decrypt landing (ENGRAM_THEME_SPEC + bronze transition).
  * Fresh searches only; direct links and Skip-for-session skip it.
  * Progress must come from the real load — this service never invents timers.
  */
 @Injectable({ providedIn: 'root' })
 export class DecryptLandingService {
-  /** Full-screen landing is visible. */
+  /** Full-screen loading/unzip overlay is visible. */
   readonly visible = signal(false);
   /** Brief materialize class on the dossier after landing dismisses. */
   readonly materialize = signal(false);
+  /** Presentation phase for the gate / overlay. */
+  readonly phase = signal<DecryptLandingPhase>('idle');
+  /**
+   * This Decrypt used the bronze theater — keep the legacy loading strip hidden
+   * for the rest of the load even after the overlay unzips away.
+   */
+  readonly ownsLoad = signal(false);
 
   private materializeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -55,9 +64,19 @@ export class DecryptLandingService {
   offerIfEligible(opts: { fromUrlRestore: boolean }): void {
     if (!this.shouldOffer(opts)) {
       this.visible.set(false);
+      this.phase.set('done');
+      this.ownsLoad.set(false);
       return;
     }
+    this.ownsLoad.set(true);
+    this.phase.set('loading');
     this.visible.set(true);
+  }
+
+  openSearchPanel(): void {
+    if (this.phase() === 'idle' || this.phase() === 'done') {
+      this.phase.set('searchOpen');
+    }
   }
 
   skip(): void {
@@ -65,18 +84,37 @@ export class DecryptLandingService {
     this.dismissWithMaterialize();
   }
 
-  /** Load finished (or user dismissed via strip) — close landing. */
+  /**
+   * Load finished — run facet unzip (unless reduced motion / already hidden),
+   * then materialize the hard-light dossier.
+   */
   complete(): void {
     if (!this.visible()) return;
+    if (this.prefersReducedMotion() || this.phase() === 'unzipping') {
+      if (this.phase() !== 'unzipping') {
+        this.dismissWithMaterialize();
+      }
+      return;
+    }
+    this.phase.set('unzipping');
+  }
+
+  /** Called by the landing when the facet fly-out finishes. */
+  finishUnzip(): void {
+    if (!this.visible() && this.phase() !== 'unzipping') return;
     this.dismissWithMaterialize();
   }
 
   hideQuietly(): void {
     this.visible.set(false);
+    this.phase.set('done');
+    this.ownsLoad.set(false);
   }
 
   private dismissWithMaterialize(): void {
     this.visible.set(false);
+    this.phase.set('done');
+    // Keep ownsLoad true so the legacy strip does not flash back mid-load.
     this.materialize.set(true);
     if (this.materializeTimer) clearTimeout(this.materializeTimer);
     this.materializeTimer = setTimeout(() => {

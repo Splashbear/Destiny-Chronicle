@@ -18,6 +18,10 @@ export interface ModalPlayerLoadHost {
   clearModalSelectedPlayers(): void;
   setSearchPanelExpanded(expanded: boolean): void;
   detectChanges(): void;
+  /** Hold engram theater across primary + appends until the day is ready. */
+  beginDecryptBatchHold(): void;
+  endDecryptBatchHold(): void;
+  seedFetchingProfileStatuses(players: PlayerSearchDisplay[]): void;
 }
 
 /**
@@ -44,20 +48,31 @@ export class ModalPlayerLoadService {
     }
 
     const [primary, ...rest] = selectedPlayers;
-    await host.selectPlayer(primary);
-    for (const player of rest) {
-      await host.appendPlayer(player);
-    }
+    // Keep the bronze engram up for the whole multi-account wait — do not unzip
+    // after the primary day-browse while appends are still loading.
+    host.beginDecryptBatchHold();
+    try {
+      await host.selectPlayer(primary);
+      // Seed remaining rows so facets/checklist show every account during the wait.
+      if (rest.length) {
+        host.seedFetchingProfileStatuses(rest);
+      }
+      for (const player of rest) {
+        await host.appendPlayer(player);
+      }
 
-    host.setShowPlatformPicker(false);
-    if (host.getSelectedDate()) {
-      await host.loadAllFilteredActivities();
-    }
-    await host.calculateAccountStats();
+      host.setShowPlatformPicker(false);
+      if (host.getSelectedDate()) {
+        await host.loadAllFilteredActivities();
+      }
+      await host.calculateAccountStats();
 
-    host.setShowPlatformPicker(false);
-    host.clearModalSelectedPlayers();
-    host.setSearchPanelExpanded(false);
-    host.detectChanges();
+      host.setShowPlatformPicker(false);
+      host.clearModalSelectedPlayers();
+      host.setSearchPanelExpanded(false);
+      host.detectChanges();
+    } finally {
+      host.endDecryptBatchHold();
+    }
   }
 }

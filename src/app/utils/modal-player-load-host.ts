@@ -22,5 +22,9 @@ export function buildModalPlayerLoadHost(c: any) {
       c.searchPanelExpanded = expanded;
     },
     detectChanges: () => c.cdr.detectChanges(),
+    beginDecryptBatchHold: () => c.beginDecryptBatchHold(),
+    endDecryptBatchHold: () => c.endDecryptBatchHold(),
+    seedFetchingProfileStatuses: (players: any[]) =>
+      c.seedFetchingProfileStatuses(players),
   };
 }

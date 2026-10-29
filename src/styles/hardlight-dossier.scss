@@ -1,28 +1,105 @@
 /**
- * Engram theme — hard-light dossier frame (ENGRAM_THEME_SPEC).
- * Cool cyan edges + corner brackets. Fire stays warm accents elsewhere.
- * Disabled under Text view (.destiny-bg-still) and prefers-reduced-motion for motion only.
+ * Engram theme — bronze / gold hard-light dossier frame.
+ * Matches opening engram + DOSSIER_HARDLIGHT_MOCKUP (not cyan).
+ * Fire accents stay elsewhere; Text view stays plain.
  */
 
 :root {
-  --dc-hardlight: #9fe3ff;
-  --dc-hardlight-edge: color-mix(in srgb, var(--dc-hardlight) 28%, transparent);
-  --dc-hardlight-edge-strong: color-mix(in srgb, var(--dc-hardlight) 55%, transparent);
-  --dc-hardlight-scan: color-mix(in srgb, var(--dc-hardlight) 4%, transparent);
+  --dc-hardlight: #e4c04a;
+  --dc-hardlight-bright: #ffd56a;
+  --dc-hardlight-wash: #fff3c4;
+  --dc-hardlight-edge: color-mix(in srgb, var(--dc-hardlight) 38%, transparent);
+  --dc-hardlight-edge-strong: color-mix(in srgb, var(--dc-hardlight-bright) 65%, transparent);
+  --dc-hardlight-scan: color-mix(in srgb, var(--dc-hardlight-wash) 7%, transparent);
+  /* Translucent bronze — star chart / radial cartography stays visible behind plates */
+  --dc-hardlight-panel-top: rgba(42, 36, 18, 0.72);
+  --dc-hardlight-panel-mid: rgba(18, 19, 16, 0.62);
+  --dc-hardlight-panel-bot: rgba(11, 12, 14, 0.58);
 }
 
-/* Site shell reads as a decrypted hard-light dossier */
+/* Shared holographic plate fill */
+@mixin dc-hardlight-plate-fill {
+  background:
+    linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--dc-hardlight-wash) 7%, transparent) 45%, transparent 55%),
+    repeating-linear-gradient(
+      0deg,
+      var(--dc-hardlight-scan) 0 1px,
+      transparent 1px 3px
+    ),
+    linear-gradient(
+      160deg,
+      var(--dc-hardlight-panel-top) 0%,
+      var(--dc-hardlight-panel-mid) 45%,
+      var(--dc-hardlight-panel-bot) 100%
+    ) !important;
+}
+
+@mixin dc-hardlight-plate-glow {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 16%, transparent),
+    0 0 0 1px var(--dc-hardlight-edge),
+    0 0 8px color-mix(in srgb, var(--dc-hardlight-bright) 35%, transparent),
+    0 0 22px color-mix(in srgb, var(--dc-hardlight) 22%, transparent) !important;
+}
+
+@mixin dc-hardlight-corner-brackets {
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid var(--dc-hardlight-edge-strong);
+    pointer-events: none;
+    z-index: 2;
+    border-radius: 0;
+    box-shadow: none;
+    background: none;
+    animation: none;
+    opacity: 1;
+  }
+
+  &::before {
+    top: -1px;
+    left: -1px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  &::after {
+    bottom: -1px;
+    right: -1px;
+    border-left: 0;
+    border-top: 0;
+    inset: auto;
+  }
+}
+
+/* Site shell reads as a decrypted bronze hard-light dossier */
 html.dc-hardlight:not(.dc-text-view) {
+  /* Keep starry cartography; slightly stronger so it reads behind glass plates */
+  .destiny-bg-shell {
+    background:
+      radial-gradient(ellipse 100% 55% at 50% 0%, rgba(200, 212, 222, 0.1) 0%, transparent 50%),
+      radial-gradient(ellipse 90% 45% at 50% 100%, rgba(230, 126, 34, 0.16) 0%, transparent 55%),
+      radial-gradient(ellipse 70% 50% at 50% 35%, rgba(228, 192, 74, 0.05) 0%, transparent 60%),
+      linear-gradient(168deg, #1e2430 0%, #283038 32%, #242a26 62%, #322418 100%);
+
+    &::before {
+      opacity: 0.3;
+    }
+
+    &::after {
+      opacity: 0.18;
+    }
+  }
+
   .destiny-bg-shell > header.glass-effect {
     border-color: var(--dc-hardlight-edge) !important;
-    background:
-      repeating-linear-gradient(
-        0deg,
-        var(--dc-hardlight-scan) 0 1px,
-        transparent 1px 4px
-      ),
-      rgba(21, 25, 30, 0.92);
-    box-shadow: 0 0 0 1px var(--dc-hardlight-edge);
+    @include dc-hardlight-plate-fill;
+    @include dc-hardlight-plate-glow;
+    backdrop-filter: blur(10px) saturate(1.1);
+    -webkit-backdrop-filter: blur(10px) saturate(1.1);
   }
 
   .dc-dossier-strip {
@@ -35,48 +112,96 @@ html.dc-hardlight:not(.dc-text-view) {
     font-size: 0.7rem;
     letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--dc-hardlight);
+    color: var(--dc-hardlight-bright);
     border-bottom: 1px solid var(--dc-hardlight-edge);
     padding-bottom: 0.55rem;
     margin-bottom: 0.85rem;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--dc-hardlight) 40%, transparent);
   }
 
   .dc-dossier-strip__status {
     color: var(--dc-cov-full-fg, #8fbf84);
     letter-spacing: 0.12em;
     font-weight: 500;
+    text-shadow: none;
   }
 
+  /* Primary holographic plates */
   .destiny-surface-panel,
-  .destiny-panel,
+  .destiny-panel:not(.destiny-panel--compact),
   .destiny-year-block,
   .destiny-empty-state,
   .destiny-modal-section,
   .destiny-stat-highlight,
-  .loading-profiles-strip {
+  .loading-profiles-strip,
+  .account-summary-panel {
     position: relative;
-    border-color: var(--dc-hardlight-edge) !important;
+    border: 1.5px solid transparent !important;
     border-radius: 4px;
+    border-image: none !important;
+    clip-path: none !important;
+    filter: none !important;
+    overflow: visible;
+    background-image:
+      linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--dc-hardlight-wash) 7%, transparent) 45%, transparent 55%),
+      repeating-linear-gradient(
+        0deg,
+        var(--dc-hardlight-scan) 0 1px,
+        transparent 1px 3px
+      ),
+      linear-gradient(
+        160deg,
+        var(--dc-hardlight-panel-top) 0%,
+        var(--dc-hardlight-panel-mid) 45%,
+        var(--dc-hardlight-panel-bot) 100%
+      ),
+      linear-gradient(135deg, #fff3c4, #e4c04a 32%, #ffe9a855 62%, #fff3c4) !important;
+    background-origin: border-box;
+    background-clip: padding-box, padding-box, padding-box, border-box;
+    backdrop-filter: blur(10px) saturate(1.12) !important;
+    -webkit-backdrop-filter: blur(10px) saturate(1.12) !important;
+    @include dc-hardlight-plate-glow;
+    @include dc-hardlight-corner-brackets;
+
+    > * {
+      position: relative;
+      z-index: 1;
+    }
+  }
+
+  /* Dense activity rows: lighter sheet + brackets only (readable lists) */
+  .destiny-panel--compact,
+  .activity-card-row.destiny-panel,
+  .activity-chrono-row.destiny-panel {
+    border-color: var(--dc-hardlight-edge) !important;
+    border-radius: 3px;
     background:
       repeating-linear-gradient(
         0deg,
         var(--dc-hardlight-scan) 0 1px,
         transparent 1px 4px
       ),
-      rgba(21, 25, 30, 0.94);
+      color-mix(in srgb, var(--dc-hardlight-panel-mid) 70%, transparent) !important;
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 12%, transparent),
-      0 0 0 1px var(--dc-hardlight-edge);
+      inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 10%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--dc-hardlight) 18%, transparent) !important;
+    backdrop-filter: blur(6px) saturate(1.08) !important;
+    -webkit-backdrop-filter: blur(6px) saturate(1.08) !important;
 
     &::before,
     &::after {
       content: '';
       position: absolute;
-      width: 12px;
-      height: 12px;
-      border: 1.5px solid var(--dc-hardlight-edge-strong);
+      width: 8px;
+      height: 8px;
+      border: 1px solid var(--dc-hardlight-edge-strong);
       pointer-events: none;
-      z-index: 1;
+      z-index: 2;
+      background: none;
+      box-shadow: none;
+      animation: none;
+      opacity: 1;
+      inset: auto;
     }
 
     &::before {
@@ -94,8 +219,80 @@ html.dc-hardlight:not(.dc-text-view) {
     }
   }
 
+  /* Beat translucent Activities glass overrides while hard-light is on */
+  .activities-glass-view {
+    .destiny-surface-panel,
+    .destiny-year-block,
+    .account-summary-panel {
+      clip-path: none !important;
+      filter: none !important;
+      border: 1.5px solid transparent !important;
+      background-image:
+        linear-gradient(115deg, transparent 30%, color-mix(in srgb, var(--dc-hardlight-wash) 7%, transparent) 45%, transparent 55%),
+        repeating-linear-gradient(
+          0deg,
+          var(--dc-hardlight-scan) 0 1px,
+          transparent 1px 3px
+        ),
+        linear-gradient(
+          160deg,
+          var(--dc-hardlight-panel-top) 0%,
+          var(--dc-hardlight-panel-mid) 45%,
+          var(--dc-hardlight-panel-bot) 100%
+        ),
+        linear-gradient(135deg, #fff3c4, #e4c04a 32%, #ffe9a855 62%, #fff3c4) !important;
+      background-origin: border-box;
+      background-clip: padding-box, padding-box, padding-box, border-box;
+      backdrop-filter: blur(10px) saturate(1.12) !important;
+      -webkit-backdrop-filter: blur(10px) saturate(1.12) !important;
+      @include dc-hardlight-plate-glow;
+
+      &::before,
+      &::after {
+        display: block !important;
+        opacity: 1 !important;
+      }
+
+      @include dc-hardlight-corner-brackets;
+    }
+  }
+
   .destiny-tab-nav {
-    border-bottom-color: var(--dc-hardlight-edge);
+    border: 1px solid var(--dc-hardlight-edge) !important;
+    border-radius: 4px;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        var(--dc-hardlight-scan) 0 1px,
+        transparent 1px 4px
+      ),
+      color-mix(in srgb, var(--dc-hardlight-panel-bot) 92%, transparent) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 12%, transparent),
+      0 0 0 1px var(--dc-hardlight-edge),
+      0 0 18px color-mix(in srgb, var(--dc-hardlight) 18%, transparent) !important;
+    backdrop-filter: blur(8px) saturate(1.1) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(1.1) !important;
+    gap: 0.35rem;
+  }
+
+  .destiny-tab-nav .main-tab {
+    background: color-mix(in srgb, var(--dc-hardlight) 5%, transparent) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dc-hardlight) 32%, transparent);
+    border: 1px solid #3a3220 !important;
+    color: #a89b78 !important;
+    letter-spacing: 0.06em;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+    border-radius: 0 !important;
+  }
+
+  .destiny-tab-nav .main-tab--active,
+  .destiny-tab-nav .main-tab[aria-selected='true'] {
+    background: linear-gradient(#e4c04a, #a07a1a) !important;
+    color: #14110a !important;
+    font-weight: 600;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--dc-hardlight-bright) 70%, transparent) !important;
+    border-color: transparent !important;
   }
 
   /* Materialize after decrypt landing dismisses */

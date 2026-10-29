@@ -38,6 +38,7 @@ describe('PlayerSelectionClearService', () => {
       clearSelectedAccountsService: () => undefined,
       clearSyncedPlayers: () => undefined,
       resetSyncFlags: () => undefined,
+      updateUrlForPermalink: () => order.push('url'),
       detectChanges: () => order.push('cd'),
     };
 
@@ -45,6 +46,7 @@ describe('PlayerSelectionClearService', () => {
     expect(order[0]).toBe('cancel');
     expect(order).toContain('stats');
     expect(order).toContain('sync');
+    expect(order).toContain('url');
     expect(order[order.length - 1]).toBe('cd');
   });
 });

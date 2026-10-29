@@ -359,6 +359,11 @@ export abstract class PlayerSearchState {
   public showLoadingModal = false;
   loadingPanelExpanded = false;
   public isLoadingComplete = false;
+  /**
+   * >0 while a multi-account Decrypt batch is still running (modal Load Selected).
+   * Keeps the engram theater up until every account + the day browse are ready.
+   */
+  protected decryptBatchHold = 0;
   protected lookupStartedAtMs: number | null = null;
   protected lookupDataSources = new Set<'archive' | 'bungie'>();
   protected lookupAnalyticsSent = false;

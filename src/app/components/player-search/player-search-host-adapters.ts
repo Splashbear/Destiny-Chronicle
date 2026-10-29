@@ -2,6 +2,7 @@
 /** Host adapter factories extracted from PlayerSearchComponent (CODE_CLEANUP_SPEC). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getCharacterId } from "../../utils/character-profile";
+import { baseActivityNameFromVersioned } from "../../utils/date-activity-grouping";
 import type { AccountLoadingStatus } from "../../models/account-loading-status.model";
 
 export function build_asPlayerSearchInitHost(c: any) {
@@ -83,6 +84,7 @@ export function build_asFavoritesLoadHost(c: any) {
     ensureSelectedDate: () => c.ensureSelectedDate(),
     setDateActivityLoading: (loading: boolean) => {
       c.loadingActivities[c.selectedDate] = loading;
+      if (!loading) c.tryRevealDecryptLanding();
     },
     updateLoadingProgress: (
       phase: any,
@@ -139,6 +141,7 @@ export function build_asPlayerSelectLoadHost(c: any) {
     ensureSelectedDate: () => c.ensureSelectedDate(),
     setDateActivityLoading: (loading: boolean) => {
       c.loadingActivities[c.selectedDate] = loading;
+      if (!loading) c.tryRevealDecryptLanding();
     },
     updateLoadingProgress: (
       phase: any,
@@ -250,14 +253,15 @@ export function build_asActivityHistoryLoadHost(c: any) {
   return {
     setCharacterActivityLoading: (k, v) => c.setCharacterActivityLoading(k, v),
     setCharacterActivityError: (k, m) => c.setCharacterActivityError(k, m),
-    beginCharacterActivityFetch: (c) => c.beginCharacterActivityFetch(c),
+    // Param must not be named `c` — that shadows the host and breaks fetch.
+    beginCharacterActivityFetch: (character) => c.beginCharacterActivityFetch(character),
     reportActivityCountDelta: (ctx, game, mt, delta, done) =>
       c.reportActivityCountDeltaFromHost(ctx, game, mt, delta, done),
     noteActivitiesStored: () => c.noteActivitiesStored(),
     invalidateMembershipActivitiesCache: (id) => c.invalidateMembershipActivitiesCache(id),
     addOverallActivitiesProcessed: (n) => c.addOverallActivitiesProcessed(n),
     noteLookupDataSource: (s) => c.noteLookupDataSource(s),
-    noteArchiveCoverage: (c) => c.noteArchiveCoverage(c),
+    noteArchiveCoverage: (cov) => c.noteArchiveCoverage(cov),
     noteDcApiFallback: () => c.noteDcApiFallback(),
     clearDcApiFallbackNotice: () => c.clearDcApiFallbackNotice(),
     hasDcApiFallbackNotice: () => c.hasDcApiFallbackNotice(),
@@ -361,6 +365,7 @@ export function build_asFilteredActivitiesBrowseHost(c: any) {
     updateActivityDisplay: () => c.updateActivityDisplay(),
     setDateActivityLoading: (loading) => {
       c.loadingActivities[c.selectedDate] = loading;
+      if (!loading) c.tryRevealDecryptLanding();
     },
     checkAndShowAnniversaryBanner: () => c.checkAndShowAnniversaryBanner(),
   };
@@ -450,6 +455,7 @@ export function build_asDateSelectFlowHost(c: any) {
     getSelectedPlayersLength: () => c.selectedPlayers.length,
     setDateActivityLoading: (loading: boolean) => {
       c.loadingActivities[c.selectedDate] = loading;
+      if (!loading) c.tryRevealDecryptLanding();
     },
     updateLoadingProgress: (
       phase: any,
@@ -663,6 +669,7 @@ export function build_asPlayerSelectionClearHost(c: any) {
       c.firstFullSyncDone = false;
       c.initialDisplayShown = false;
     },
+    updateUrlForPermalink: () => c.updateUrlForPermalink(),
     detectChanges: () => c.cdr.detectChanges(),
     getClearDebugSnapshot: () => ({
       selectedPlayers: c.selectedPlayers.length,
@@ -917,6 +924,7 @@ export function build_asArchiveExportFlowHost(c: any) {
     },
     setDateActivityLoading: (loading: boolean) => {
       c.loadingActivities[c.selectedDate] = loading;
+      if (!loading) c.tryRevealDecryptLanding();
     },
     showCachedDataInstantly: (player: any, playerKey: string) =>
       c.showCachedDataInstantly(player, playerKey),

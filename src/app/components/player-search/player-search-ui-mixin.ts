@@ -142,6 +142,9 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   protected async clearForReplaceSearch(): Promise<void> {
+    // Preserve in-flight query — clearAllPlayers must not wipe what Decrypt just submitted.
+    const pendingName = this.searchUsername;
+    const pendingChips = [...this.searchChips];
     await this.activityDb.clearAllActivities();
     const remainingCount = await this.activityDb.activities.count();
     if (remainingCount > 0) {
@@ -150,6 +153,8 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
       );
     }
     this.clearAllPlayers();
+    this.searchUsername = pendingName;
+    this.searchChips = pendingChips;
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: this.textView.queryParams(),
@@ -552,6 +557,11 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   public closeLoadingModal(): void {
     this.showLoadingModal = false;
     this.isLoadingComplete = false;
+    // Keep the bronze theater up through lit → unzip; finishUnzip / skip dismiss it.
+    const phase = this.decryptLanding.phase();
+    if (phase === 'loading' || phase === 'unzipping') {
+      return;
+    }
     this.decryptLanding.hideQuietly();
   }
 
@@ -561,20 +571,109 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     if (show) {
       this.decryptLanding.offerIfEligible({ fromUrlRestore: this.urlRestoreInFlight });
     } else if (!show && this.decryptLanding.visible()) {
-      this.decryptLanding.complete();
+      this.tryRevealDecryptLanding();
     }
   }
 
   public setIsLoadingComplete(complete: boolean): void {
     this.isLoadingComplete = complete;
     if (complete) {
-      this.decryptLanding.complete();
+      // After a gate decrypt, default to Add so Splashbear + Puddlecubs works from Edit search.
+      if (this.selectedPlayers.length > 0) {
+        this.addMode = true;
+      }
+      this.tryRevealDecryptLanding();
     }
+  }
+
+  /** Multi-select Decrypt: hold theater until the whole batch + day browse finish. */
+  public beginDecryptBatchHold(): void {
+    this.decryptBatchHold++;
+  }
+
+  public endDecryptBatchHold(): void {
+    this.decryptBatchHold = Math.max(0, this.decryptBatchHold - 1);
+    this.tryRevealDecryptLanding();
+  }
+
+  /**
+   * Engram may unzip only when the dossier is actually ready to read —
+   * every account terminal, day activities loaded, no multi-select batch in flight.
+   */
+  public isDecryptDossierReady(): boolean {
+    if (!this.decryptLanding.visible()) return false;
+    if (this.decryptBatchHold > 0) return false;
+    if (this.profileLoadInProgress) return false;
+    const date = this.selectedDate;
+    if (date && this.loadingActivities[date]) return false;
+    const players = this.selectedPlayers || [];
+    if (!players.length) return false;
+    // Any in-flight status (including seeded not-yet-selected accounts) blocks reveal.
+    if (
+      this.accountLoadingStatuses.some(
+        s => s.status !== 'complete' && s.status !== 'error'
+      )
+    ) {
+      return false;
+    }
+    for (const p of players) {
+      const s = this.accountLoadingStatus.get(this.getPlayerKey(p));
+      if (!s || (s.status !== 'complete' && s.status !== 'error')) return false;
+    }
+    return true;
+  }
+
+  /** Facets light once an account is found (past profile lookup), not only at complete. */
+  public getLitAccountCount(): number {
+    return this.accountLoadingStatuses.filter(s => s.status !== 'fetching-profile')
+      .length;
+  }
+
+  /** Denominator for facet lighting — never shrink when more accounts are still seeding. */
+  public get decryptLandingAccountTotal(): number {
+    return Math.max(
+      this.accountLoadingStatuses.length,
+      this.selectedPlayers?.length || 0,
+      1
+    );
+  }
+
+  private decryptUnzipTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Reveal hard-light dossier only when the wait is truly over. */
+  public tryRevealDecryptLanding(): void {
+    if (!this.isDecryptDossierReady()) return;
+    if (this.decryptLanding.phase() !== 'loading') return;
+    this.scheduleDecryptUnzip();
+  }
+
+  /** Delay unzip so the full lit engram reads before facets fly out. */
+  protected scheduleDecryptUnzip(): void {
+    if (this.decryptUnzipTimer) clearTimeout(this.decryptUnzipTimer);
+    this.decryptUnzipTimer = setTimeout(() => {
+      this.decryptUnzipTimer = null;
+      if (!this.isDecryptDossierReady() || this.decryptLanding.phase() !== 'loading') {
+        return;
+      }
+      this.decryptLanding.complete();
+      this.cdr.markForCheck();
+    }, 650);
   }
 
   public onDecryptLandingSkip(): void {
     this.decryptLanding.skip();
     this.cdr.markForCheck();
+  }
+
+  /** Facet fly-out finished — reveal interactive hard-light dossier. */
+  public onDecryptLandingUnzipComplete(): void {
+    this.decryptLanding.finishUnzip();
+    this.cdr.markForCheck();
+  }
+
+  /** Chip labels for the bronze search panel. */
+  get decryptLandingSelectedNames(): string[] {
+    return this.selectedPlayers.map(p => p.displayName).filter(Boolean);
   }
 
   /** Dossier strip label when hard-light is on. */
@@ -605,8 +704,19 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     return this.accountLoadingStatuses.filter(s => s.status === 'complete').length;
   }
   public getOverallProgress(): number {
-    if (this.accountLoadingStatuses.length === 0) return 0;
-    return Math.round((this.getCompletedCount() / this.accountLoadingStatuses.length) * 100);
+    const fromAccounts =
+      this.accountLoadingStatuses.length === 0
+        ? 0
+        : Math.round(
+            (this.getCompletedCount() / this.accountLoadingStatuses.length) * 100
+          );
+    const lp = this.loadingProgress;
+    // Date/activity fetch uses loadingProgress — keep engram seams moving during that phase.
+    if (lp && lp.total > 0) {
+      const fromSteps = Math.round((lp.current / lp.total) * 100);
+      return Math.max(fromAccounts, Math.min(100, fromSteps));
+    }
+    return fromAccounts;
   }
 
   /** Returns the profile currently being loaded (not complete) for display in the loading modal */
@@ -1040,6 +1150,19 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.focusFirstElementInModal('.modal.show');
   }
 
+  /** Gate ★ Favorites — modal only; never auto-load profiles. */
+  onEngramFavorites(): void {
+    this.dismissFavoritesPrompt();
+    void this.loadFavorites().then(() => this.openFavoritesModal());
+  }
+
+  /** Opening the bronze search panel: clear any favorites prompt so search stays first. */
+  onEngramSearchPanelOpen(): void {
+    this.decryptLanding.openSearchPanel();
+    this.dismissFavoritesPrompt();
+    this.cdr.markForCheck();
+  }
+
   confirmClearData(): void {
     if (confirm(CLEAR_CACHED_DATA_CONFIRM_MESSAGE)) {
       this.clearAllActivitiesFromDb();
@@ -1053,8 +1176,14 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
 
   async loadAndDisplayFavorites() {
     await this.loadFavorites();
-    this.showFavoritesLoadPrompt =
-      this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0;
+    // Engram / hard-light gate is the cold-open entry: never auto-load or banner-prompt
+    // favorites over search. ★ Favorites on the gate remains opt-in.
+    if (this.decryptLanding?.hardlightEnabled?.()) {
+      this.showFavoritesLoadPrompt = false;
+    } else {
+      this.showFavoritesLoadPrompt =
+        this.favoriteAccounts.length > 0 && this.selectedPlayers.length === 0;
+    }
     this.cdr.detectChanges();
   }
 
@@ -1073,6 +1202,10 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
 
   stopProfileLoading(): void {
     applyStopProfileLoadingFlags(this);
+    // Hard-light gate: don't bounce into a favorites prompt after Stop — search stays available.
+    if (this.decryptLanding?.hardlightEnabled?.()) {
+      this.showFavoritesLoadPrompt = false;
+    }
     this.clearAllPlayers();
     this.syncActivityStore();
     this.cdr.detectChanges();

@@ -22,4 +22,9 @@ describe('buildSharePermalinkUrl', () => {
   it('adds text view flag', () => {
     expect(buildSharePermalinkUrl({ textView: true })).toBe('/share?view=text');
   });
+
+  it('returns root when there is nothing to share', () => {
+    expect(buildSharePermalinkUrl({})).toBe('/');
+    expect(buildSharePermalinkUrl({ players: [] })).toBe('/');
+  });
 });

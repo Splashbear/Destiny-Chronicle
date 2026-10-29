@@ -19,6 +19,10 @@ export function handleEscapeKey(c: any): void {
 
 export function handleEnterKey(c: any, event: KeyboardEvent): void {
   const target = event.target as HTMLElement;
+  // Bronze gate owns Enter (chip-on-Enter, Decrypt-to-search). Don't also fire addPlayer.
+  if (target.closest?.('.dc-engram-gate')) {
+    return;
+  }
   if (
     target.tagName === 'INPUT' &&
     target.getAttribute('placeholder')?.includes('username')

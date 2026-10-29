@@ -32,5 +32,7 @@ export function buildSharePermalinkUrl(opts: {
     queryParams.set('view', 'text');
   }
   const qs = queryParams.toString();
-  return qs ? `/share?${qs}` : '/share';
+  // Empty selection → site root so refresh shows the search gate, not a stale /share restore.
+  if (!qs) return '/';
+  return `/share?${qs}`;
 }

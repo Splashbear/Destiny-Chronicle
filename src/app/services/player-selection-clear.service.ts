@@ -50,6 +50,8 @@ export interface PlayerSelectionClearHost {
   clearSyncedPlayers(): void;
   resetSyncFlags(): void;
   detectChanges(): void;
+  /** Drop ?players= from the address bar so refresh does not re-hydrate accounts. */
+  updateUrlForPermalink(): void;
   logClear?(phase: 'start' | 'done', snapshot: Record<string, number>): void;
   getClearDebugSnapshot?(): Record<string, number>;
 }
@@ -125,6 +127,7 @@ export class PlayerSelectionClearService {
 
     host.clearSyncedPlayers();
     host.resetSyncFlags();
+    host.updateUrlForPermalink();
 
     host.logClear?.('done', host.getClearDebugSnapshot?.() ?? {});
     host.detectChanges();

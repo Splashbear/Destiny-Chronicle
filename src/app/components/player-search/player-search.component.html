@@ -1,26 +1,37 @@
 <div class="min-h-0"
      [class.dc-dossier-materialize]="decryptLanding.materialize()">
 
-  <!-- Full-viewport exotic engram gate (empty search) -->
+  <!-- Bronze engram gate: open → search panel (empty search; chips = same multi-name as site) -->
   <dc-decrypt-landing
     *ngIf="selectedPlayers.length === 0 && !textView.enabled()"
     mode="idle"
     [searchUsername]="searchUsername"
     [searching]="!!loading['search']"
+    [selectedNames]="searchChips"
     (searchUsernameChange)="searchUsername = $event; onSearchInput($event)"
+    (queueName)="addSearchChip()"
+    (removeName)="removeSearchChip($event)"
+    [errorMessage]="errorMessage"
     (search)="addPlayer()"
-    (favorites)="openFavoritesModal()">
+    (favorites)="onEngramFavorites()"
+    (searchPanelOpen)="onEngramSearchPanelOpen()">
   </dc-decrypt-landing>
 
-  <!-- Load overlay (fresh search decrypt) -->
+  <!-- Load / unzip overlay (fresh search decrypt → hard-light dossier) -->
   <dc-decrypt-landing
     *ngIf="decryptLanding.visible() && selectedPlayers.length > 0"
     mode="loading"
     [progress]="getOverallProgress()"
     [caption]="decryptingCaption"
     [subline]="decryptingSubline"
-    [guardianLabel]="selectedPlayers[0]?.displayName || ''"
-    (skip)="onDecryptLandingSkip()">
+    [guardianLabel]="selectedPlayers[0].displayName || ''"
+    [selectedNames]="decryptLandingSelectedNames"
+    [litAccounts]="getLitAccountCount()"
+    [totalAccounts]="decryptLandingAccountTotal"
+    [accountStatuses]="accountLoadingStatuses"
+    [unzipping]="decryptLanding.phase() === 'unzipping'"
+    (skip)="onDecryptLandingSkip()"
+    (unzipComplete)="onDecryptLandingUnzipComplete()">
   </dc-decrypt-landing>
 
   <!-- Offline archive banner -->
@@ -100,7 +111,8 @@
         <div class="flex-1 min-w-0 flex flex-row gap-4 items-end">
           <!-- Compact profile chip after load (tap to edit search) -->
           <div *ngIf="selectedPlayers.length > 0 && !searchPanelExpanded"
-               class="destiny-surface-panel p-3 flex-1 min-w-0">
+               class="destiny-surface-panel p-3 flex-1 min-w-0"
+               data-dc-engram-target="accounts">
             <div class="flex flex-wrap items-center gap-2">
               <button type="button"
                       class="flex flex-wrap items-center gap-2 flex-1 min-w-0 text-left rounded-md hover:bg-white/5 px-1 py-0.5 -mx-1"
@@ -210,7 +222,7 @@
             <div *ngIf="selectedPlayers.length > 0" class="mb-4">
               <div class="flex items-center justify-between mb-2">
                 <label class="text-sm font-semibold text-white">Selected Profiles</label>
-                <button (click)="clearAllPlayers()" 
+                <button (click)="clearAllPlayersAndSearch()"
                         class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
                   Clear All
                 </button>
@@ -280,7 +292,7 @@
               </button>
               <div class="flex justify-between items-center mt-2">
                 <span class="text-xs text-slate-400">Profiles: {{ selectedPlayers.length }}/10</span>
-                <button (click)="clearAllPlayers()" 
+                <button (click)="clearAllPlayersAndSearch()"
                         class="chronicle-toolbar-btn text-xs px-2 py-1">
                   Clear All
                 </button>
@@ -298,7 +310,9 @@
         </div>
 
         <!-- Date Picker + Share/Offline -->
-         <div *ngIf="selectedPlayers.length > 0 && dbReady && !loadingActivities[selectedDate]" class="destiny-surface-panel p-4 flex flex-col items-start xl:w-80 min-w-0 shrink-0">
+         <div *ngIf="selectedPlayers.length > 0 && dbReady && !loadingActivities[selectedDate]"
+              class="destiny-surface-panel p-4 flex flex-col items-start xl:w-80 min-w-0 shrink-0"
+              data-dc-engram-target="date">
           <h2 class="destiny-section-title text-xl mb-3">Date</h2>
           <div class="w-full">
             <app-date-picker [selectedMonth]="selectedMonth" [selectedDay]="selectedDay" (dateChange)="onDatePickerChange($event)"></app-date-picker>
@@ -321,8 +335,9 @@
         </div>
       </div>
 
-      <!-- Engram loading strip — full width, below account/date row -->
-      <div *ngIf="showLoadingModal" class="loading-profiles-strip loading-profiles-strip--engram w-full">
+      <!-- Legacy strip — hidden for theater-owned Decrypts (incl. after unzip) -->
+      <div *ngIf="showLoadingModal && !decryptLanding.visible() && !decryptLanding.ownsLoad()"
+           class="loading-profiles-strip loading-profiles-strip--engram w-full">
         <div class="flex items-center gap-3 min-w-0">
           <dc-load-engram
             layout="row"
@@ -374,15 +389,18 @@
             [class.justify-center]="activeTab !== 'heatmap' && activeTab !== 'activities'">
       <!-- Main Content: Yearly Activity Cards (~1200px on wide screens; Heatmap uses full width) -->
          <div class="flex-1 min-w-0"
+              data-dc-engram-target="main"
               [ngClass]="activeTab === 'heatmap' ? 'w-full' : 'w-full max-w-[1200px] mx-auto'">
         <!-- Tab Navigation -->
          <div class="mb-8">
          <div *ngIf="decryptLanding.hardlightEnabled() && !textView.enabled() && selectedPlayers.length > 0"
-              class="dc-dossier-strip" aria-hidden="true">
+              class="dc-dossier-strip" aria-hidden="true"
+              data-dc-engram-target="dossier">
            <span>{{ dossierStripLabel }}</span>
            <span class="dc-dossier-strip__status">{{ dossierStripStatus }}</span>
          </div>
-         <nav class="destiny-tab-nav md:gap-1" role="tablist" aria-label="Activity views">
+         <nav class="destiny-tab-nav md:gap-1" role="tablist" aria-label="Activity views"
+              data-dc-engram-target="tabs">
            <button
              type="button"
              (click)="onTabChange('activities')" 
