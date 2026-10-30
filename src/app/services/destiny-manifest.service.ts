@@ -198,6 +198,36 @@ export class DestinyManifestService {
     return def?.displayProperties?.name || 'Unknown Activity';
   }
 
+  /** True when a live DestinyActivityDefinition exists for this hash. */
+  hasActivityDef(referenceId: string | number, isD1: boolean = false): boolean {
+    if (!referenceId) return false;
+    if (isD1) {
+      const name = this.d1Manifest.getActivityName(referenceId);
+      return !!(name && name !== 'Unknown Activity');
+    }
+    if (!this.manifestLoaded.value) return false;
+    return !!this.activityDefs[String(referenceId)]?.displayProperties?.name;
+  }
+
+  /**
+   * Bungie PGCR-style title: description - name when both exist.
+   * Used when resolving a current referenceId after a retired director hash miss.
+   */
+  getActivityPgcrTitle(referenceId: string | number, isD1: boolean = false): string {
+    if (isD1) return this.getActivityName(referenceId, true);
+    if (!this.manifestLoaded.value) return 'Loading...';
+    const def = this.activityDefs[String(referenceId)];
+    if (!def?.displayProperties?.name) return 'Unknown Activity';
+    const name = String(def.displayProperties.name).trim();
+    const description = def.displayProperties.description
+      ? String(def.displayProperties.description).trim()
+      : '';
+    if (description && description !== name) {
+      return `${description} - ${name}`;
+    }
+    return name;
+  }
+
   getActivityIcon(referenceId: string | number, isD1: boolean = false): string {
     if (!this.manifestLoaded.value) {
       return '';

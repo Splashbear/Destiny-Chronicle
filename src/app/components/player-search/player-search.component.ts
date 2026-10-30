@@ -59,6 +59,7 @@ import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from 
 import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
+import { resolveActivityDisplayName } from '../../utils/resolve-activity-name';
 import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
 import { TitleService } from '../../services/title.service';
 import { compareTitlesByCategory } from '../../config/title-categories';
@@ -5446,21 +5447,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Safely gets the activity name from the manifest
+   * Safely gets the activity name from the manifest.
+   * Retired D2 director hashes fall back via referenceId map (BOT_DECISIONS 2026-10-30).
    */
   getActivityName(activity: ActivityHistory, isD1: boolean): string {
-    const referenceId = activity.activityDetails?.referenceId;
-    const stored = (activity as ActivityHistory & { name?: string }).name?.trim();
-    if (referenceId) {
-      const lookedUp = this.manifest.getActivityName(referenceId, isD1);
-      if (lookedUp && lookedUp !== 'Unknown Activity') {
-        return lookedUp;
-      }
-    }
-    if (stored && stored !== 'Unknown Activity') {
-      return stored;
-    }
-    return 'Unknown Activity';
+    return resolveActivityDisplayName(activity, isD1, {
+      getName: (ref, d1) => this.manifest.getActivityName(ref, d1),
+      hasDef: (ref, d1) => this.manifest.hasActivityDef(ref, d1),
+      getDef: (ref, d1) =>
+        d1 ? null : this.manifest.getActivityDefinitionRaw(ref) ?? null,
+    });
   }
 
   async calculateAccountStats() {
