@@ -89,7 +89,7 @@
 
   <div
     *ngIf="!text.enabled() && sortedPartners.length > 0"
-    class="overflow-x-auto rounded-lg bg-slate-800/95 border border-slate-700">
+    class="played-with-desktop-table overflow-x-auto rounded-lg bg-slate-800/95 border border-slate-700">
     <table class="w-full text-sm text-left">
       <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">
         <tr>
@@ -134,5 +134,41 @@
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- Phone: partner cards so Time / First / Last are never clipped -->
+  <div *ngIf="!text.enabled() && sortedPartners.length > 0" class="played-with-mobile-cards">
+    <article *ngFor="let row of sortedPartners; let i = index" class="played-with-partner-card">
+      <div class="played-with-partner-card__head">
+        <span class="played-with-partner-card__name">{{ row.displayName }}</span>
+        <span class="played-with-partner-card__rank">#{{ i + 1 }}</span>
+      </div>
+      <dl class="played-with-card-stats">
+        <div>
+          <dt>{{ uiI18n.t('playedWith.activities') }}</dt>
+          <dd class="font-mono text-blue-300">{{ row.activitiesTogether }}</dd>
+        </div>
+        <div>
+          <dt>{{ uiI18n.t('playedWith.time') }}</dt>
+          <dd class="font-mono text-slate-300">{{ formatDuration(row.timeTogetherSeconds) }}</dd>
+        </div>
+        <div>
+          <dt>{{ uiI18n.t('playedWith.firstPlayed') }}</dt>
+          <dd>
+            <button type="button" class="text-day-link" (click)="openPartnerGame(row, 'first')">
+              {{ formatDate(row.firstPlayedTogether) }}
+            </button>
+          </dd>
+        </div>
+        <div>
+          <dt>{{ uiI18n.t('playedWith.lastPlayed') }}</dt>
+          <dd>
+            <button type="button" class="text-day-link" (click)="openPartnerGame(row, 'last')">
+              {{ formatDate(row.lastPlayedTogether) }}
+            </button>
+          </dd>
+        </div>
+      </dl>
+    </article>
   </div>
 </div>

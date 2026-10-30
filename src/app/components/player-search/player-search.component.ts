@@ -933,6 +933,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   dbReady: boolean = false;
   activeTab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith' = 'activities';
   readonly enablePlayedWith = environment.enablePlayedWith;
+  /** On This Day panel open/closed (session). Default collapsed per MOBILE_SPEC. */
+  onThisDayExpanded = false;
   
   // Anniversary celebration banner state
   anniversaryFirsts: AnniversaryFirst[] = [];
@@ -1790,6 +1792,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   ) {
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
+    if (typeof sessionStorage !== 'undefined') {
+      this.onThisDayExpanded = sessionStorage.getItem('dc.onThisDayExpanded') === '1';
+    }
     this.loadActivityCollapseState();
     this.loadActivitiesViewPreferences();
     this.updatePlatformTabs();
@@ -11009,6 +11014,34 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         }
       }
     }
+  }
+
+  /** MOBILE_SPEC: On This Day collapsed by default; remember for the session. */
+  toggleOnThisDay(): void {
+    this.onThisDayExpanded = !this.onThisDayExpanded;
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('dc.onThisDayExpanded', this.onThisDayExpanded ? '1' : '0');
+    }
+    this.cdr.markForCheck();
+  }
+
+  get onThisDaySummary(): string {
+    const groups = this.groupedActivitiesByAccount || [];
+    let activities = 0;
+    const years = new Set<number | string>();
+    for (const game of groups) {
+      for (const yg of game.yearGroups || []) {
+        years.add(yg.year);
+        for (const tg of yg.typeGroups || []) {
+          activities += tg.activities?.length || 0;
+        }
+      }
+    }
+    if (activities === 0) {
+      return 'On This Day: no activities';
+    }
+    const y = years.size;
+    return `On This Day: ${activities} ${activities === 1 ? 'activity' : 'activities'} across ${y} ${y === 1 ? 'year' : 'years'}`;
   }
 
   async onTabChange(tab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith') {
