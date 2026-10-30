@@ -405,6 +405,13 @@ export class ArchiveService {
       game = 'D2';
     }
 
+    const statsMissing =
+      game === 'D1' &&
+      row.kills == null &&
+      row.deaths == null &&
+      row.assists == null &&
+      row.duration_seconds == null;
+
     return {
       instance_id: String(row.instance_id ?? ''),
       period: this.normalizeArchivePeriod(row.period),
@@ -415,17 +422,19 @@ export class ArchiveService {
       membership_type: Number(row.membership_type ?? 0),
       display_name: String(row.display_name ?? ''),
       character_id: String(row.character_id ?? ''),
-      completed: Boolean(row.completed),
-      deaths: Number(row.deaths ?? 0),
-      kills: Number(row.kills ?? 0),
-      assists: Number(row.assists ?? 0),
-      duration_seconds: Number(row.duration_seconds ?? 0),
+      // Keep 0 for internal lean type when stats are missing; API layer emits null.
+      completed: statsMissing ? false : Boolean(row.completed),
+      deaths: statsMissing ? 0 : Number(row.deaths ?? 0),
+      kills: statsMissing ? 0 : Number(row.kills ?? 0),
+      assists: statsMissing ? 0 : Number(row.assists ?? 0),
+      duration_seconds: statsMissing ? 0 : Number(row.duration_seconds ?? 0),
       standing: Number(row.standing ?? 0),
       starting_phase_index: Number(row.starting_phase_index ?? 0),
       fireteam_id: String(row.fireteam_id ?? ''),
       is_private: Boolean(row.is_private),
       dump_id: String(row.dump_id ?? ''),
       game,
+      ...(statsMissing ? { stats_missing: true } : {}),
     };
   }
 

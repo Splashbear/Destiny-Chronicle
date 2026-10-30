@@ -18,6 +18,12 @@ describe('activity-history-filters', () => {
     expect(isSocialActivity(undefined, { isSocial: true })).toBeTrue();
   });
 
+  it('D1 Tower hashes are social regardless of mode', () => {
+    expect(isSocialActivity(2, null, '2330516073')).toBeTrue();
+    expect(isSocialActivity(0, null, '1522220810')).toBeTrue();
+    expect(isSocialActivity(0, null, '2370413227')).toBeTrue();
+  });
+
   it('dedupes by instance id across stored and history row shapes', () => {
     const rows = [
       { instanceId: '1', n: 1 },

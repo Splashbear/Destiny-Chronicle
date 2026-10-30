@@ -23,6 +23,8 @@ export interface LeanActivity {
   is_private: boolean;
   dump_id: string;
   game: 'D1' | 'D2';
+  /** Set when parquet/cl_patch had null stats (API should emit null, not 0). */
+  stats_missing?: boolean;
 }
 
 /**
@@ -73,13 +75,16 @@ export interface LightActivityRow {
   membershipId: string;
   membershipType: number;
   characterId: string;
-  completed: boolean;
-  deaths: number;
-  kills?: number;
-  assists?: number;
-  durationSeconds: number;
+  /** null when D1 stats are unavailable (never zero-fill). */
+  completed: boolean | null;
+  deaths: number | null;
+  kills?: number | null;
+  assists?: number | null;
+  durationSeconds: number | null;
   game: 'D1' | 'D2';
   displayName?: string;
+  /** Present when kills/time must not be summed (mode-0 / cl_patch stubs). */
+  statsUnavailable?: boolean;
 }
 
 /**

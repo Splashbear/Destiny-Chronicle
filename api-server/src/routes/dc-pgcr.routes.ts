@@ -149,7 +149,8 @@ export function createDcPgcrRouter(
    */
   router.get('/:instanceId', async (req: Request, res: Response) => {
     const instanceId = String(req.params.instanceId || '');
-    const game = parseGame(getStringParam(req.query.game) || 'D2');
+    const rawGame = getStringParam(req.query.game);
+    let game: ReturnType<typeof parseGame> = null;
     try {
       const format = getStringParam(req.query.format) || 'lite';
 
@@ -158,6 +159,11 @@ export function createDcPgcrRouter(
           error: 'Invalid instance ID',
         });
       }
+      // Require game=D1|D2 — never default to D2 (D1/D2 instance IDs overlap).
+      if (!rawGame) {
+        return res.status(400).json({ error: 'Missing game (expected game=D1 or game=D2)' });
+      }
+      game = parseGame(rawGame);
       if (!game) {
         return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
       }
@@ -180,7 +186,7 @@ export function createDcPgcrRouter(
         return res.status(502).json({
           error: 'Upstream Bungie API error',
           instanceId,
-          game,
+          game: game ?? undefined,
           errorCode: error.errorCode,
           errorStatus: error.errorStatus,
         });
@@ -203,13 +209,15 @@ export function createDcPgcrRouter(
   router.post('/batch', async (req: Request, res: Response) => {
     try {
       const { instanceIds } = req.body;
-      const game = parseGame(req.body?.game ?? 'D2');
-
       if (!Array.isArray(instanceIds) || instanceIds.length === 0) {
         return res.status(400).json({
           error: 'instanceIds array is required',
         });
       }
+      if (req.body?.game == null || req.body?.game === '') {
+        return res.status(400).json({ error: 'Missing game (expected D1 or D2)' });
+      }
+      const game = parseGame(req.body.game);
       if (!game) {
         return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
       }
