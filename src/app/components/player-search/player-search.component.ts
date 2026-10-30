@@ -32,6 +32,13 @@ import { pickFirstEverFromFirsts } from '../../utils/first-ever-from-firsts';
 import { d2PlayedWithAccounts, PlayedWithAccountChoice } from '../../utils/played-with-accounts';
 import { effectiveMembershipType, mapLinkedProfilesToD2SearchRows } from '../../utils/destiny-membership';
 import {
+  coerceGameFilterChoice,
+  displayGameFromFilter,
+  effectiveGame,
+  gameFilterChipEnabled,
+  GameFilterChoice,
+} from '../../utils/effective-game';
+import {
   LocalAccountCandidate,
   localAccountMatchNote,
   matchLocalAccounts,
@@ -1560,6 +1567,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   /** Account card filter for Accomplishments tab (same semantics as Firsts). */
   selectedAccountKeysForAccomplishments: Set<string> = new Set();
   activeAccomplishmentsGame: 'D1' | 'D2' = 'D2';
+  /** GAME_FILTER_SPEC user choice (shared later across tabs). Default Both. */
+  accomplishmentsGameChoice: GameFilterChoice = 'Both';
   activityTypeIcons: { [key: string]: SafeHtml } = {};
   public GILDED_SEAL_IMAGE_MAP = GILDED_SEAL_IMAGE_MAP;
   public normalizeTitleName = normalizeTitleName;
@@ -3486,6 +3495,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     // Ensure UI reflects the newly added chip immediately.
     if (this.activeTab === 'firsts') {
       this.syncActiveFirstsGameWithPlayers();
+    }
+    if (this.activeTab === 'accomplishments') {
+      this.syncActiveAccomplishmentsGameWithPlayers();
     }
     this.updatePlatformTabs();
     this.cdr.detectChanges();
@@ -6954,6 +6966,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     if (this.activeTab === 'firsts') {
       this.syncActiveFirstsGameWithPlayers();
     }
+    if (this.activeTab === 'accomplishments') {
+      this.syncActiveAccomplishmentsGameWithPlayers();
+    }
     this.updatePlatformTabs();
     
     // Update URL for permalink sharing
@@ -10332,19 +10347,48 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   setActiveAccomplishmentsGame(game: 'D1' | 'D2'): void {
-    if (this.activeAccomplishmentsGame !== game) {
-      this.activeAccomplishmentsGame = game;
-      this.cdr.markForCheck();
+    this.setAccomplishmentsGameChoice(game);
+  }
+
+  /** GAME_FILTER_SPEC: chip click for Accomplishments (D1 · D2 · Both). */
+  setAccomplishmentsGameChoice(choice: GameFilterChoice): void {
+    const players = this.selectedPlayers || [];
+    if (!gameFilterChipEnabled(choice, players) && choice !== 'Both') {
+      return;
     }
+    this.accomplishmentsGameChoice = choice;
+    const eff = effectiveGame(players, this.accomplishmentsGameChoice);
+    this.activeAccomplishmentsGame = displayGameFromFilter(
+      eff,
+      players,
+      this.activeAccomplishmentsGame
+    );
+    this.cdr.markForCheck();
+  }
+
+  accomplishmentsGameChipEnabled(chip: GameFilterChoice): boolean {
+    return gameFilterChipEnabled(chip, this.selectedPlayers || []);
+  }
+
+  /** When only one game is possible, hide chips and show this label. */
+  accomplishmentsGameOnlyLabel(): 'D1' | 'D2' | null {
+    const eff = effectiveGame(this.selectedPlayers || [], this.accomplishmentsGameChoice);
+    return eff === 'D1' || eff === 'D2' ? eff : null;
   }
 
   private syncActiveAccomplishmentsGameWithPlayers(): void {
     const players = this.selectedPlayers || [];
     if (!players.length) return;
-    const allD1 = players.every((p) => this.isD1Player(p));
-    const allD2 = players.every((p) => !this.isD1Player(p));
-    if (allD1) this.activeAccomplishmentsGame = 'D1';
-    else if (allD2) this.activeAccomplishmentsGame = 'D2';
+    this.accomplishmentsGameChoice = coerceGameFilterChoice(
+      players,
+      this.accomplishmentsGameChoice
+    );
+    const eff = effectiveGame(players, this.accomplishmentsGameChoice);
+    this.activeAccomplishmentsGame = displayGameFromFilter(
+      eff,
+      players,
+      this.activeAccomplishmentsGame
+    );
   }
 
   /**
