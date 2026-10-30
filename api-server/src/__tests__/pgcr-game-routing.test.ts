@@ -148,6 +148,13 @@ describe('GET /pgcr/:id game routing', () => {
     expect((await request(app).get(`/pgcr/${ID}?game=D3`)).status).toBe(400);
   });
 
+  it('rejects missing game (no silent D2 default)', async () => {
+    const { app } = makeApp({ getBungiePgcr: jest.fn() } as any);
+    const res = await request(app).get(`/pgcr/${ID}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Missing game/i);
+  });
+
   it('batch honours body.game', async () => {
     const getBungiePgcr = jest.fn(async (_id: string, game: string) => (game === 'D1' ? d1Envelope : d2Envelope));
     const { app } = makeApp({ getBungiePgcr } as any);

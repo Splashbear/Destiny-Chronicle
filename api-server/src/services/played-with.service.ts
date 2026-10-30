@@ -1,4 +1,4 @@
-import { SOCIAL_HUB_ACTIVITY_HASHES } from '../utils/social-hubs';
+import { D1_SOCIAL_ACTIVITY_HASHES, SOCIAL_HUB_ACTIVITY_HASHES } from '../utils/social-hubs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Database } from 'duckdb-async';
@@ -218,7 +218,11 @@ const PERIOD_COMPACT = `strftime(CAST(period AS TIMESTAMP), '%Y-%m-%dT%H:%M:%SZ'
  * mode + activity_hash per row, so this also covers accounts found only in 10-16B (no mode in their
  * activity list) - those bands are still read, the hub rows are dropped in the scan.
  */
-export const HUB_CLAUSE = ` AND NOT (COALESCE(mode, -1) = 40 OR (COALESCE(mode, -1) = 0 AND activity_hash IN (${[...SOCIAL_HUB_ACTIVITY_HASHES].join(',')})))`;
+export const HUB_CLAUSE = ` AND NOT (
+  COALESCE(mode, -1) = 40
+  OR activity_hash IN (${[...D1_SOCIAL_ACTIVITY_HASHES].join(',')})
+  OR (COALESCE(mode, -1) = 0 AND activity_hash IN (${[...SOCIAL_HUB_ACTIVITY_HASHES].join(',')}))
+)`;
 
 /**
  * Oversized games (checkpoint-bot lobbies, Bungie mega-PGCRs) are dropped from Played With only.

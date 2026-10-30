@@ -117,13 +117,18 @@ export function createPgcrRouter(
    */
   router.get('/:instanceId', async (req: Request, res: Response) => {
     const instanceId = String(req.params.instanceId || '');
-    const game = parseGame(getStringParam(req.query.game) || 'D2');
+    const rawGame = getStringParam(req.query.game);
+    let game: ReturnType<typeof parseGame> = null;
     try {
       if (!instanceId || !/^\d+$/.test(instanceId)) {
         return res.status(400).json({
           error: 'Invalid instance ID',
         });
       }
+      if (!rawGame) {
+        return res.status(400).json({ error: 'Missing game (expected game=D1 or game=D2)' });
+      }
+      game = parseGame(rawGame);
       if (!game) {
         return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
       }
@@ -177,7 +182,7 @@ export function createPgcrRouter(
         return res.status(502).json({
           error: 'Upstream Bungie API error',
           instance_id: instanceId,
-          game,
+          game: game ?? undefined,
           errorCode: error.errorCode,
           errorStatus: error.errorStatus,
         });

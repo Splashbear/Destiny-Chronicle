@@ -59,6 +59,7 @@ import { StatsService, AccountStats, ActivityGroup as StatsActivityGroup } from 
 import { SafeHtml } from '@angular/platform-browser';
 import { isPvP } from '../../utils/activity-utils';
 import { getActivityName } from '../../utils/activity-utils';
+import { resolveActivityDisplayName } from '../../utils/resolve-activity-name';
 import { DungeonSoloFirst } from '../../models/dungeon-solo-first.model';
 import { TitleService } from '../../services/title.service';
 import { compareTitlesByCategory } from '../../config/title-categories';
@@ -4268,6 +4269,20 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * used by the rest of the application.
    */
   private convertLightActivityToHistory(light: any): ActivityHistory {
+    const statsUnavailable =
+      light.statsUnavailable === true ||
+      light.durationSeconds == null ||
+      light.kills == null;
+    const values: ActivityHistory['values'] = {};
+    if (!statsUnavailable) {
+      if (light.completed != null) values.completed = { basic: { value: light.completed ? 1 : 0 } };
+      if (light.deaths != null) values.deaths = { basic: { value: light.deaths } };
+      if (light.kills != null) values.kills = { basic: { value: light.kills } };
+      if (light.assists != null) values.assists = { basic: { value: light.assists } };
+      if (light.durationSeconds != null) {
+        values.timePlayedSeconds = { basic: { value: light.durationSeconds } };
+      }
+    }
     return {
       period: light.period,
       activityDetails: {
@@ -4275,16 +4290,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         instanceId: String(light.instanceId),
         mode: light.mode
       },
-      values: {
-        completed: { basic: { value: light.completed } },
-        deaths: { basic: { value: light.deaths } },
-        kills: { basic: { value: light.kills } },
-        assists: { basic: { value: light.assists } },
-        timePlayedSeconds: { basic: { value: light.durationSeconds } }
-      },
+      values,
       game: light.game,
-      membershipType: light.membershipType
-    };
+      membershipType: light.membershipType,
+      ...(statsUnavailable ? { statsUnavailable: true } : {}),
+    } as ActivityHistory;
   }
 
   private async loadActivityHistoryForCharacter(character: CharacterWithGame): Promise<void> {
@@ -4624,9 +4634,13 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       const allModeActivities = await Promise.all(modePromises);
       // One row per instance id; drop social spaces (mode/manifest based, not names).
       const allActivities = dedupeByInstanceId(allModeActivities.flat()).filter(
-        a => !isSocialActivity(a.activityDetails?.mode, character.game === 'D2'
-          ? this.manifest.getActivityDefinitionRaw(a.activityDetails?.referenceId)
-          : null)
+        a => !isSocialActivity(
+          a.activityDetails?.mode,
+          character.game === 'D2'
+            ? this.manifest.getActivityDefinitionRaw(a.activityDetails?.referenceId)
+            : null,
+          a.activityDetails?.referenceId
+        )
       );
 
       // Filter for unique new activities; a timed Bungie row also replaces a
@@ -4896,7 +4910,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
 
   }
   getActivityDurationSeconds(activity: ActivityHistory): number {
+    if ((activity as ActivityHistory).statsUnavailable) return 0;
     return activityDurationSeconds(activity);
+  }
+
+  /** Label for duration cell when D1 stats are missing. */
+  activityStatsLabel(activity: ActivityHistory): string {
+    if ((activity as ActivityHistory).statsUnavailable) return 'stats unavailable';
+    return this.formatSecondsToHoursMinutes(this.getActivityDurationSeconds(activity));
   }
 
   /**
@@ -5446,21 +5467,16 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Safely gets the activity name from the manifest
+   * Safely gets the activity name from the manifest.
+   * Retired D2 director hashes fall back via referenceId map (BOT_DECISIONS 2026-10-30).
    */
   getActivityName(activity: ActivityHistory, isD1: boolean): string {
-    const referenceId = activity.activityDetails?.referenceId;
-    const stored = (activity as ActivityHistory & { name?: string }).name?.trim();
-    if (referenceId) {
-      const lookedUp = this.manifest.getActivityName(referenceId, isD1);
-      if (lookedUp && lookedUp !== 'Unknown Activity') {
-        return lookedUp;
-      }
-    }
-    if (stored && stored !== 'Unknown Activity') {
-      return stored;
-    }
-    return 'Unknown Activity';
+    return resolveActivityDisplayName(activity, isD1, {
+      getName: (ref, d1) => this.manifest.getActivityName(ref, d1),
+      hasDef: (ref, d1) => this.manifest.hasActivityDef(ref, d1),
+      getDef: (ref, d1) =>
+        d1 ? null : this.manifest.getActivityDefinitionRaw(ref) ?? null,
+    });
   }
 
   async calculateAccountStats() {
