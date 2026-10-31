@@ -66,7 +66,7 @@ import {
   clearModalFocusToSearch,
 } from '../../utils/modal-focus';
 import { CLEAR_CACHED_DATA_CONFIRM_MESSAGE } from '../../utils/clear-cached-data-confirm';
-import { parsePlayersParamFromUrl } from '../../utils/url-players-param';
+import { parsePlayersParam } from '../../utils/url-players-param';
 import { parsePermalinkDateParam } from '../../utils/permalink-date-param';
 import {
   isFavoriteAccount,
@@ -1440,8 +1440,8 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   protected applyPlayersParamFromUrl(playersParam: string): void {
-    const parsed = parsePlayersParamFromUrl(playersParam);
-    if (parsed) {
+    const parsed = parsePlayersParam(playersParam);
+    if (parsed && parsed.length > 0) {
       this.pendingPlayerData = parsed;
       return;
     }
