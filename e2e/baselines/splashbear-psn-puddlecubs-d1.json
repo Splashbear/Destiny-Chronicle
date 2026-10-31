@@ -1,0 +1,916 @@
+{
+  "version": 1,
+  "label": "splashbear-psn-puddlecubs-d1",
+  "capturedAt": "2026-10-21T05:25:39.951Z",
+  "accounts": [
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "membershipType": 2
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "membershipType": 2
+    }
+  ],
+  "totals": {
+    "activityCount": 20164,
+    "activityTimeSeconds": 21030476,
+    "sealCount": 73
+  },
+  "firsts": [
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "1387993552",
+      "name": "Wrath of the Machine",
+      "completionDate": "2017-03-27",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "1733556769",
+      "name": "King's Fall",
+      "completionDate": "2016-06-20",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "1836893116",
+      "name": "Crota's End",
+      "completionDate": "2016-03-19",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "1836893119",
+      "name": "Crota's End",
+      "completionDate": "2015-09-09",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "260765522",
+      "name": "Wrath of the Machine",
+      "completionDate": "2017-03-23",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "2659248068",
+      "name": "Vault of Glass",
+      "completionDate": "2015-09-10",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "2659248071",
+      "name": "Vault of Glass",
+      "completionDate": "2015-09-06",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "3356249023",
+      "name": "Wrath of the Machine",
+      "completionDate": "2017-04-20",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "3534581229",
+      "name": "King's Fall",
+      "completionDate": "2016-08-02",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "4000873610",
+      "name": "Crota's End",
+      "completionDate": "2017-04-01",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "4038697181",
+      "name": "Vault of Glass",
+      "completionDate": "2017-05-17",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D1",
+      "membershipId": "4611686018452484164",
+      "type": "raid",
+      "referenceId": "856898338",
+      "name": "Vault of Glass",
+      "completionDate": "2017-04-07",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "1077850348",
+      "name": "Prophecy",
+      "completionDate": "2021-02-23",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "1094262727",
+      "name": "Ghosts of the Deep: Explorer",
+      "completionDate": "2025-06-29",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "1225969316",
+      "name": "Spire of the Watcher: Explorer",
+      "completionDate": "2025-06-29",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "124340010",
+      "name": "Ghosts of the Deep: Ultimatum",
+      "completionDate": "2025-06-01",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "1262462921",
+      "name": "Spire of the Watcher: Standard",
+      "completionDate": "2022-12-17",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "1375089621",
+      "name": "Pit of Heresy: Normal",
+      "completionDate": "2019-11-03",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "1668217731",
+      "name": "Duality: Master",
+      "completionDate": "2023-02-09",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2004855007",
+      "name": "Warlord's Ruin: Standard",
+      "completionDate": "2023-12-09",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2032534090",
+      "name": "The Shattered Throne",
+      "completionDate": "2018-11-08",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2296818662",
+      "name": "Spire of the Watcher: Master",
+      "completionDate": "2023-07-12",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2534833093",
+      "name": "Warlord's Ruin: Master",
+      "completionDate": "2024-04-20",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2582501063",
+      "name": "Pit of Heresy: Standard",
+      "completionDate": "2021-02-23",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2716998124",
+      "name": "Ghosts of the Deep: Master",
+      "completionDate": "2024-01-11",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2727361621",
+      "name": "Equilibrium: Standard",
+      "completionDate": "2025-12-30",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2823159265",
+      "name": "Duality: Standard",
+      "completionDate": "2022-05-28",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "2961030534",
+      "name": "Ghosts of the Deep: Eternity",
+      "completionDate": "2025-06-01",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "300092127",
+      "name": "Vesper's Host: Normal",
+      "completionDate": "2024-11-15",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "313828469",
+      "name": "Ghosts of the Deep: Standard",
+      "completionDate": "2023-06-27",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "3193125350",
+      "name": "Prophecy: Ultimatum",
+      "completionDate": "2025-06-15",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "3339002067",
+      "name": "Spire of the Watcher: Ultimatum",
+      "completionDate": "2025-05-18",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "3521648250",
+      "name": "Sundered Doctrine: Master",
+      "completionDate": "2025-09-22",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "3637651331",
+      "name": "Prophecy: Explorer",
+      "completionDate": "2025-07-01",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "3834447244",
+      "name": "Sundered Doctrine: Normal",
+      "completionDate": "2025-03-05",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "4046934917",
+      "name": "Spire of the Watcher: Eternity",
+      "completionDate": "2025-05-07",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "4078656646",
+      "name": "Grasp of Avarice: Standard",
+      "completionDate": "2021-12-08",
+      "isSolo": true,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "4148187374",
+      "name": "Prophecy",
+      "completionDate": "2020-06-14",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "4293676253",
+      "name": "Vesper's Host: Master",
+      "completionDate": "2025-07-26",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "dungeon",
+      "referenceId": "715153594",
+      "name": "Prophecy: Eternity",
+      "completionDate": "2025-06-08",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1042180643",
+      "name": "Garden of Salvation",
+      "completionDate": "2024-10-20",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1044919065",
+      "name": "The Desert Perpetual: Standard",
+      "completionDate": "2025-08-24",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "107319834",
+      "name": "Crota's End: Standard",
+      "completionDate": "2024-10-06",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "119944200",
+      "name": "Leviathan, Spire of Stars: Normal",
+      "completionDate": "2019-09-08",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1374392663",
+      "name": "King's Fall: Standard",
+      "completionDate": "2022-08-31",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1441982566",
+      "name": "Vow of the Disciple: Standard",
+      "completionDate": "2022-03-12",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1507509200",
+      "name": "Crota's End: Master",
+      "completionDate": "2023-11-10",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1516551982",
+      "name": "Pantheon: Calus Resplendent: Customize",
+      "completionDate": "2026-06-13",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1541433876",
+      "name": "Salvation's Edge: Standard",
+      "completionDate": "2024-09-17",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1566552947",
+      "name": "Featured Reprise: Calus: The Pantheon",
+      "completionDate": "2026-07-19",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1681562271",
+      "name": "Vault of Glass: Master",
+      "completionDate": "2021-11-27",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1685065161",
+      "name": "Leviathan: Prestige",
+      "completionDate": "2019-10-05",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "1953549041",
+      "name": "Featured Reprise: Gahlran: The Pantheon",
+      "completionDate": "2026-08-01",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "206811036",
+      "name": "Featured Encore: Insurrection Prime: The Pantheon",
+      "completionDate": "2026-08-01",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2122313384",
+      "name": "Last Wish: Standard",
+      "completionDate": "2018-11-22",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2381413764",
+      "name": "Root of Nightmares: Standard",
+      "completionDate": "2023-03-18",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2530656885",
+      "name": "Pantheon: Morgeth Surpassing: Customize",
+      "completionDate": "2026-06-16",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2659723068",
+      "name": "Garden of Salvation",
+      "completionDate": "2020-01-03",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2693136600",
+      "name": "Leviathan: Normal",
+      "completionDate": "2018-01-04",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2693136601",
+      "name": "Leviathan: Normal",
+      "completionDate": "2017-10-25",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2693136602",
+      "name": "Leviathan: Normal",
+      "completionDate": "2017-09-23",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2693136603",
+      "name": "Leviathan: Normal",
+      "completionDate": "2017-10-08",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2693136604",
+      "name": "Leviathan: Normal",
+      "completionDate": "2018-03-17",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2693136605",
+      "name": "Leviathan: Normal",
+      "completionDate": "2017-10-20",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2918919505",
+      "name": "Root of Nightmares: Master",
+      "completionDate": "2023-05-20",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "2964135793",
+      "name": "King's Fall: Master",
+      "completionDate": "2022-11-26",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3022541210",
+      "name": "Vault of Glass: Master",
+      "completionDate": "2025-03-30",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3089205900",
+      "name": "Leviathan, Eater of Worlds: Normal",
+      "completionDate": "2018-01-29",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3257594522",
+      "name": "King's Fall: Master",
+      "completionDate": "2024-02-27",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3333172150",
+      "name": "Crown of Sorrow: Normal",
+      "completionDate": "2019-07-14",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3458480158",
+      "name": "Garden of Salvation",
+      "completionDate": "2021-02-13",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3879860661",
+      "name": "Leviathan: Prestige",
+      "completionDate": "2019-10-13",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3881495763",
+      "name": "Vault of Glass: Standard",
+      "completionDate": "2021-05-29",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3889634515",
+      "name": "Vow of the Disciple: Master",
+      "completionDate": "2023-11-14",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "3975235718",
+      "name": "Featured Encore: Consecrated Mind: The Pantheon",
+      "completionDate": "2026-10-11",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "4169648176",
+      "name": "The Pantheon: Oryx Exalted",
+      "completionDate": "2024-05-08",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "4169648177",
+      "name": "The Pantheon: Rhulk Indomitable",
+      "completionDate": "2024-05-21",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "4169648179",
+      "name": "The Pantheon: Atraks Sovereign",
+      "completionDate": "2024-05-01",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "4169648182",
+      "name": "The Pantheon: Nezarec Sublime",
+      "completionDate": "2024-06-03",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "4179289725",
+      "name": "Crota's End: Normal",
+      "completionDate": "2023-09-09",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "4217492330",
+      "name": "Vow of the Disciple: Master",
+      "completionDate": "2022-08-06",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "548750096",
+      "name": "Scourge of the Past",
+      "completionDate": "2019-03-11",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "747671496",
+      "name": "Pantheon: Insurrection Prime Revolutionary: Customize",
+      "completionDate": "2026-06-28",
+      "isSolo": false,
+      "isSoloFlawless": false
+    },
+    {
+      "game": "D2",
+      "membershipId": "4611686018465122437",
+      "type": "raid",
+      "referenceId": "910380154",
+      "name": "Deep Stone Crypt",
+      "completionDate": "2020-11-25",
+      "isSolo": false,
+      "isSoloFlawless": false
+    }
+  ],
+  "playedWithTop10": [
+    {
+      "membershipId": "4611686018439378531",
+      "displayName": "BigCush75",
+      "activitiesTogether": 1797
+    },
+    {
+      "membershipId": "4611686018441583665",
+      "displayName": "TheYevinn",
+      "activitiesTogether": 1668
+    },
+    {
+      "membershipId": "4611686018443970323",
+      "displayName": "KaiserHughes",
+      "activitiesTogether": 1537
+    },
+    {
+      "membershipId": "4611686018432221100",
+      "displayName": "Aramis L",
+      "activitiesTogether": 1010
+    },
+    {
+      "membershipId": "4611686018435873388",
+      "displayName": "Tons of Fun Sr",
+      "activitiesTogether": 823
+    },
+    {
+      "membershipId": "4611686018461937667",
+      "displayName": "hollz333",
+      "activitiesTogether": 745
+    },
+    {
+      "membershipId": "4611686018428501296",
+      "displayName": "prancngsissy_",
+      "activitiesTogether": 617
+    },
+    {
+      "membershipId": "4611686018440694170",
+      "displayName": "hugie18",
+      "activitiesTogether": 581
+    },
+    {
+      "membershipId": "4611686018477177018",
+      "displayName": "Rocaveda",
+      "activitiesTogether": 567
+    },
+    {
+      "membershipId": "4611686018440056524",
+      "displayName": "Lunaef8752",
+      "activitiesTogether": 561
+    }
+  ]
+}

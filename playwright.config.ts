@@ -20,5 +20,6 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
+  // Default 2.5m; regression-baseline.spec sets its own ~16m timeout for cold loads.
   timeout: 150000,
 });

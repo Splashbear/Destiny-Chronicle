@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { TextViewService } from './services/text-view.service';
 import { PlayerSearchComponent } from './components/player-search/player-search.component';
 import { PerformanceMonitorComponent } from './components/performance-monitor/performance-monitor.component';
@@ -10,6 +10,7 @@ import { ShareService } from './services/share.service';
 import { SharedStateService } from './services/shared-state.service';
 import { ThemeService } from './services/theme.service';
 import { SiteAnalyticsService } from './services/site-analytics.service';
+import { DecryptLandingService } from './services/decrypt-landing.service';
 
 @Component({
   selector: 'app-root',
@@ -21,6 +22,7 @@ import { SiteAnalyticsService } from './services/site-analytics.service';
 export class AppComponent {
   title = 'Destiny Chronicle';
   readonly textView = inject(TextViewService);
+  readonly decryptLanding = inject(DecryptLandingService);
 
   constructor(
     public theme: ThemeService,
@@ -41,5 +43,15 @@ export class AppComponent {
         this.sharedState.pendingShare = state;
       }
     }
+
+    // Hard-light dossier + text-view mute (ENGRAM_THEME_SPEC)
+    effect(() => {
+      const hard = this.decryptLanding.hardlightEnabled();
+      const text = this.textView.enabled();
+      if (typeof document === 'undefined') return;
+      const root = document.documentElement;
+      root.classList.toggle('dc-hardlight', hard);
+      root.classList.toggle('dc-text-view', text);
+    });
   }
 }

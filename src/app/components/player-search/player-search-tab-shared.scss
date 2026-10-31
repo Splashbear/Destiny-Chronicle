@@ -1,23 +1,24 @@
 /* Shared styles for player-search tab child components (extracted from parent encapsulation). */
 
-/* Selected breakdown tile: same flame outline and fill as the active main tab. */
+/* Selected breakdown tile: light gold sheen vs default plate. */
 .breakdown-tile.breakdown-tile-selected {
-  border: 2px solid var(--destiny-flame) !important;
-  background: linear-gradient(180deg, rgba(230, 126, 34, 0.28) 0%, rgba(201, 162, 39, 0.18) 100%) !important;
+  border: 1.5px solid rgba(255, 213, 106, 0.75) !important;
+  background:
+    linear-gradient(125deg, rgba(255, 243, 196, 0.2) 0%, rgba(228, 192, 74, 0.1) 42%, transparent 68%),
+    linear-gradient(180deg, rgba(228, 192, 74, 0.28) 0%, rgba(20, 17, 13, 0.88) 100%) !important;
   box-shadow:
-    0 0 0 2px rgba(230, 126, 34, 0.55),
-    0 0 16px var(--destiny-flame-glow),
-    inset 0 -1px 0 var(--destiny-ember-glow) !important;
-  color: var(--destiny-parchment);
+    inset 0 1px 0 rgba(255, 243, 196, 0.35),
+    0 0 0 1px rgba(228, 192, 74, 0.55),
+    0 0 18px rgba(255, 213, 106, 0.4) !important;
+  color: var(--destiny-parchment, #ede6da);
 
+  &::before,
   &::after {
-    background: linear-gradient(180deg, rgba(230, 126, 34, 0.34) 0%, rgba(201, 162, 39, 0.2) 100%);
-    opacity: 1;
-    animation: none;
+    opacity: 0 !important;
   }
 
   .destiny-stat-value {
-    color: var(--destiny-gold-bright);
+    color: var(--destiny-gold-bright, #ffd56a);
   }
 }
 
@@ -213,15 +214,24 @@ button.activity-segment-btn {
 }
 
 .activity-pgcr-link--card {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 500;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   line-height: 1.2;
   letter-spacing: 0.01em;
   padding-left: 0.375rem;
+  text-align: right;
+  color: #ede6da;
+  text-decoration: none;
 
-  &:hover {
+  &:hover,
+  &:focus-visible {
     transform: none;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    color: #fff8ee;
   }
 }
 
@@ -291,7 +301,8 @@ img[src*='class-'] {
   box-shadow: 0 -2px 12px rgba(245, 197, 66, 0.08);
 }
 
-.d2-tab.d2-tab-active-blue {
+.d2-tab.d2-tab-active-blue,
+.d2-tab.d2-tab-active-gold {
   color: var(--destiny-gold) !important;
   background: rgba(245, 197, 66, 0.12) !important;
   border-bottom: 2px solid var(--destiny-gold) !important;
@@ -355,16 +366,124 @@ img[src*='class-'] {
   margin-bottom: 0.75rem;
 }
 
+/* Collapsible filter chrome for Titles / Accomplishments / Breakdown / Heatmap */
+.tab-filters {
+  margin-bottom: 1rem;
+  border: 1px solid rgba(201, 162, 39, 0.22);
+  border-radius: 0.5rem;
+  background: rgba(15, 20, 28, 0.55);
+}
+
+.tab-filters > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.6rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e8edf2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  user-select: none;
+}
+
+.tab-filters > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tab-filters > summary::before {
+  content: '▸';
+  color: var(--destiny-gold, #c9a227);
+  font-size: 0.75rem;
+}
+
+.tab-filters[open] > summary::before {
+  content: '▾';
+}
+
+/* Collapsed summary keeps game + account context visible */
+.tab-filters-label {
+  font-weight: 600;
+}
+
+.tab-filters-preview {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.tab-filters[open] > summary .tab-filters-preview {
+  display: none;
+}
+
+.tab-filters-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  background: rgba(201, 162, 39, 0.08);
+  color: #e8edf2;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.tab-filters-chip--game {
+  color: #98a2b0;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-color: rgba(148, 163, 184, 0.35);
+  background: transparent;
+}
+
+.tab-filters-chip--game.tab-filters-chip--active {
+  color: var(--destiny-gold, #c9a227);
+  border-color: rgba(201, 162, 39, 0.55);
+  background: rgba(201, 162, 39, 0.1);
+}
+
+.tab-filters-chip--account {
+  font-weight: 600;
+}
+
+.tab-filters-chip-meta {
+  color: #98a2b0;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.tab-filters-body {
+  padding: 0 0.9rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tab-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
 .text-day {
   max-width: 800px;
   font: 16px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: #d8e4ee;
 }
 
-.text-day-dim { color: #98a2b0; }
+.text-day-dim { color: #b0bac6; }
 .text-day-badge, .text-day-ok { color: #8fbf84; }
 .text-day-no { color: #e85d4c; }
 .text-day-cov { color: #98a2b0; margin: 0 0 12px; }
+
 .text-day-date { margin: 16px 0; padding: 8px 0; border-top: 1px dashed #2a2f36; border-bottom: 1px dashed #2a2f36; }
 .text-day-banner { border: 1px solid #c9a227; color: #e4c04a; padding: 12px 14px; margin: 16px 0; }
 .text-day h2 { margin: 28px 0 8px; font-size: 20px; color: #fff; border-bottom: 1px solid #2a2f36; }
@@ -384,6 +503,15 @@ img[src*='class-'] {
   cursor: pointer;
   font: inherit;
   text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, #e67e22 70%, transparent);
+
+  &:hover,
+  &:focus-visible {
+    color: #f0a04a;
+    text-decoration-color: #f0a04a;
+  }
 }
 .text-day-more {
   margin-top: 16px;

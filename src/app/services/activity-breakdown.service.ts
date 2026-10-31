@@ -9,6 +9,7 @@ import {
   type TrialsBreakdownDetail,
   type TrialsTeammateRow,
 } from '../utils/trials-breakdown';
+import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
 
 /** One membership + game scope for Breakdown (avoids D1/D2 bleed on shared mids). */
 export interface BreakdownMembershipScope {
@@ -451,10 +452,16 @@ export class ActivityBreakdownService {
    * Aggregates activity counts per (referenceId, game) for explicit membership+game scopes.
    * Prefer this over mid-only loads so D1/D2 never bleed when they share a membershipId.
    */
-  async getActivityCountsForScopes(scopes: BreakdownMembershipScope[]): Promise<ActivityCountRow[]> {
+  async getActivityCountsForScopes(
+    scopes: BreakdownMembershipScope[],
+    identityByMembership?: Record<string, string>
+  ): Promise<ActivityCountRow[]> {
     if (scopes.length === 0) return [];
 
-    const cacheKey = this.scopeCacheKey(scopes);
+    const cacheKey = `${this.scopeCacheKey(scopes)}|id:${Object.entries(identityByMembership || {})
+      .map(([id, ident]) => `${id}:${ident}`)
+      .sort()
+      .join(',')}`;
     const cached = this.activityCountsCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -483,33 +490,43 @@ export class ActivityBreakdownService {
       }
     }
 
-    return this.aggregateActivityCounts(allActivities, cacheKey);
+    return this.aggregateActivityCounts(allActivities, cacheKey, identityByMembership);
   }
 
   /**
    * @deprecated Prefer getActivityCountsForScopes. Mid-only loads mix D1+D2 on shared mids.
    */
-  async getActivityCounts(membershipIds: string[]): Promise<ActivityCountRow[]> {
+  async getActivityCounts(
+    membershipIds: string[],
+    identityByMembership?: Record<string, string>
+  ): Promise<ActivityCountRow[]> {
     if (membershipIds.length === 0) return [];
     const scopes: BreakdownMembershipScope[] = membershipIds.flatMap(membershipId => [
       { membershipId, game: 'D1' as const },
       { membershipId, game: 'D2' as const },
     ]);
-    return this.getActivityCountsForScopes(scopes);
+    return this.getActivityCountsForScopes(scopes, identityByMembership);
   }
 
   private async aggregateActivityCounts(
     allActivities: StoredActivity[],
-    cacheKey: string
+    cacheKey: string,
+    identityByMembership?: Record<string, string>
   ): Promise<ActivityCountRow[]> {
 
     // Aggregate per (referenceId, game, effectiveMode). Never merge Trials into Control on the same map.
     const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode: number; lastPlayed?: string; lastPlayedInstanceId?: string }>();
     const instanceIdsByKey = new Map<string, string[]>();
+    const seenInstances = new Set<string>();
 
     for (const a of allActivities) {
       const refId = a.activityDetails?.referenceId;
       if (refId == null || refId === '') continue;
+      const dedupeKey = breakdownActivityDedupeKey(a, identityByMembership);
+      if (dedupeKey) {
+        if (seenInstances.has(dedupeKey)) continue;
+        seenInstances.add(dedupeKey);
+      }
       const game: 'D1' | 'D2' = a.game || 'D2';
       const details = a.activityDetails as {
         mode?: number;

@@ -25,6 +25,15 @@
   cursor: pointer;
   font: inherit;
   text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, #e67e22 70%, transparent);
+
+  &:hover,
+  &:focus-visible {
+    color: #f0a04a;
+    text-decoration-color: #f0a04a;
+  }
 }
 @media (max-width: 640px) {
   .text-prow { grid-template-columns: 1fr 1fr; }

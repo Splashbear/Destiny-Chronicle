@@ -7,7 +7,7 @@ import { TitleItem } from '../../services/title.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 import { SiteAnalyticsService } from '../../services/site-analytics.service';
 
-type ViewMode = 'browse' | 'poster';
+type ViewMode = 'browse' | 'poster' | 'heraldry';
 type SortType = 'release' | 'alpha' | 'category' | 'gilded';
 type LegacyFilter = 'all' | 'current' | 'legacy';
 
@@ -57,6 +57,15 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
 
   get isPosterView(): boolean {
     return this.viewMode === 'poster' || this.isExporting;
+  }
+
+  get isHeraldryView(): boolean {
+    return this.viewMode === 'heraldry';
+  }
+
+  /** Completed seals for Hall of Heraldry banners (Bungie icons only). */
+  get heraldrySeals(): SealDisplayItem[] {
+    return this.displaySeals.filter((s) => s.completed);
   }
 
   ngOnInit() {
@@ -340,8 +349,24 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     return seal.icon || null;
   }
 
+  /** Heraldry always prefers the gilded Bungie/local seal art when earned gilded. */
+  getHeraldryIcon(seal: SealDisplayItem): string | null {
+    if (seal.isGilded && seal.gildedIcon) {
+      return seal.gildedIcon;
+    }
+    return seal.icon || null;
+  }
+
   getGildCount(seal: SealDisplayItem): number | null {
     if (!seal.isGilded || !this.showGildedBadge || !seal.timesGilded) {
+      return null;
+    }
+    return seal.timesGilded;
+  }
+
+  /** Gold superscript count — same cue as Poster, independent of the badge checkbox. */
+  getHeraldryGildCount(seal: SealDisplayItem): number | null {
+    if (!seal.isGilded || !seal.timesGilded || seal.timesGilded < 1) {
       return null;
     }
     return seal.timesGilded;
@@ -353,6 +378,13 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     if (len >= 16) return '0.58rem';
     if (len >= 12) return '0.64rem';
     return '0.72rem';
+  }
+
+  heraldryNameFontSize(name: string): string {
+    const len = this.sealTitleLine(name).trim().length;
+    if (len >= 14) return '0.62rem';
+    if (len >= 11) return '0.68rem';
+    return '0.75rem';
   }
 
   sealTitleLine(name: string): string {

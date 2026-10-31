@@ -1,0 +1,46 @@
+<ng-container *ngIf="text.enabled(); else fullTitles">
+  <div class="text-day">
+    <h2>Titles &amp; Seals</h2>
+    <p class="text-day-banner">Bungie does not record when a title or seal was earned, so no earn dates are shown here — only owned or missing.</p>
+    <p *ngIf="ps.loadingTitlesOverall" class="text-day-dim">Loading titles…</p>
+    <ng-container *ngIf="!ps.loadingTitlesOverall && textTitles() as page">
+      <section *ngFor="let section of page.sections">
+        <h2>{{ section.title }}</h2>
+        <div *ngFor="let row of section.rows" class="text-trow">
+          <span class="text-day-name">{{ row.name }}</span>
+          <span [class.text-day-ok]="row.owned" [class.text-day-no]="!row.owned">{{ row.owned ? 'owned' : 'missing' }}</span>
+        </div>
+      </section>
+      <button *ngIf="page.shown < page.total" type="button" class="text-day-more" (click)="showMoreTextRows()">
+        Show more ({{ page.shown }} of {{ page.total }})
+      </button>
+      <p *ngIf="page.total === 0" class="text-day-dim">No titles found.</p>
+    </ng-container>
+  </div>
+</ng-container>
+<ng-template #fullTitles>
+<div class="space-y-6">
+  <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+    <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
+  </div>
+
+  <div *ngIf="ps.loadingTitlesOverall" class="flex flex-col items-center justify-center py-12 w-full">
+    <app-destiny-loader size="lg" label="Loading titles…"></app-destiny-loader>
+    <div class="text-sm text-slate-400 mt-2">Fetching title data from Bungie</div>
+  </div>
+
+  <div *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length === 0" class="flex flex-col items-center justify-center py-12 w-full">
+    <div class="text-lg text-slate-400 font-medium mb-2">No titles found</div>
+    <div class="text-sm text-slate-500 text-center">
+      No Destiny 2 titles are available for the selected accounts.<br>
+      Make sure you have Destiny 2 accounts selected and try refreshing.
+    </div>
+  </div>
+
+  <app-seal-poster-studio
+    *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length > 0"
+    [titles]="ps.aggregatedTitles"
+    [membershipId]="ps.getMainMembershipId()">
+  </app-seal-poster-studio>
+</div>
+</ng-template>

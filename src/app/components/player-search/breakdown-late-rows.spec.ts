@@ -1,4 +1,4 @@
-import { fakeAsync, flushMicrotasks, tick } from '@angular/core/testing';
+﻿import { fakeAsync, flushMicrotasks, tick } from '@angular/core/testing';
 import { ActivityBreakdownService } from '../../services/activity-breakdown.service';
 import { StoredActivity } from '../../services/activity-db.service';
 import { BreakdownView } from '../../utils/breakdown-view';
@@ -29,11 +29,6 @@ describe('Activity Breakdown late rows', () => {
       getAllActivitiesForMembershipOptimized(membershipId: string) {
         return Promise.resolve(this.rows.filter(row => row.membershipId === membershipId));
       },
-      getActivitiesForMembershipAndGame(membershipId: string, game: 'D1' | 'D2') {
-        return Promise.resolve(
-          this.rows.filter(row => row.membershipId === membershipId && row.game === game)
-        );
-      },
     };
     const manifest = {
       getActivityName: () => 'Vault of Glass',
@@ -42,13 +37,13 @@ describe('Activity Breakdown late rows', () => {
     const breakdown = new ActivityBreakdownService(db as any, manifest as any, { getBatch: async () => new Map() } as any);
     let reads = 0;
     let loadingOnSecondRead = true;
-    const realCounts = breakdown.getActivityCountsForScopes.bind(breakdown);
-    breakdown.getActivityCountsForScopes = async (scopes) => {
+    const realCounts = breakdown.getActivityCounts.bind(breakdown);
+    breakdown.getActivityCounts = async (ids: string[]) => {
       reads += 1;
       if (reads === 2) {
         loadingOnSecondRead = ps.loadingActivityBreakdown;
       }
-      return realCounts(scopes);
+      return realCounts(ids);
     };
 
     const unused = {} as any;
@@ -74,9 +69,7 @@ describe('Activity Breakdown late rows', () => {
       breakdownChartGame: 'all',
       breakdownLastPlayedSort: null,
       perPlatformStats: [],
-      accountStats: { totalTime: 0 },
-      trialsBreakdownDetail: null,
-      trialsTeammates: [],
+      accountStats: { totalTime: 0, totalActivityTime: 0, bungieTotalTime: 0 },
     });
 
     let opened = false;
