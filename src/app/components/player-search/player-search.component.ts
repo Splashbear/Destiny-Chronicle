@@ -39,6 +39,12 @@ import {
   GameFilterChoice,
 } from '../../utils/effective-game';
 import {
+  accountHasGames,
+  formatSearchAccountMeta,
+  linkedProfilePlayByMembership,
+  sortSearchAccountsByPlayActivity,
+} from '../../utils/search-account-activity';
+import {
   LocalAccountCandidate,
   localAccountMatchNote,
   matchLocalAccounts,
@@ -221,6 +227,12 @@ interface PlayerSearchDisplay extends PlayerSearchResult {
   crossSaveOverride?: number;
   /** Set when the row came from favorites / Played With local match (Bot option 1). */
   localMatchNote?: string;
+  /** GAME_FILTER_SPEC 2.1 — LinkedProfiles / D1 Summary play signals. */
+  dateLastPlayed?: string;
+  characterCount?: number;
+  archiveGameCount?: number;
+  /** false = empty platform (dim); true = has play; undefined = unknown. */
+  hasGames?: boolean;
 }
 
 // PvP mode name lookup
@@ -3261,14 +3273,9 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       });
 
       // Identify cross-save primary (if any)
+      this.d2SearchResults = unique;
       this.crossSavePlayer = unique.find(p => p.isCrossSavePrimary) || null;
-
-      // Decide whether to show the picker
-      if (unique.length > 1 || this.crossSavePlayer) {
-        this.showPlatformPicker = true;
-      } else if (unique.length === 1) {
-        await this.selectPlayer(unique[0]);
-      }
+      await this.finalizeSearchAccountPicker();
 
     } catch (error: any) {
       console.error('Error searching D2 player (prefix):', error);
@@ -6327,15 +6334,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
         this.d2SearchResults = dedupe(this.d2SearchResults);
         this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
 
-        const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+        const total = this.d1SearchResults.length + this.d2SearchResults.length;
         if (total === 0) {
           this.errorMessage = 'No Destiny accounts found for the provided names.';
-        } else if (total === 1) {
-          const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
-          await this.selectPlayer(player);
         } else {
-          this.showPlatformPicker = true;
-          this.focusFirstElementInModal('.modal.show');
+          await this.finalizeSearchAccountPicker();
         }
 
         return;
@@ -6403,15 +6406,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
           this.d2SearchResults = dedupe(this.d2SearchResults);
           this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
 
-          const total = this.d1SearchResults.length + this.d2SearchResults.length + (this.crossSavePlayer ? 1 : 0);
+          const total = this.d1SearchResults.length + this.d2SearchResults.length;
           if (total === 0) {
             this.errorMessage = 'No Destiny accounts found for the provided names.';
-          } else if (total === 1) {
-            const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
-            await this.selectPlayer(player);
           } else {
-            this.showPlatformPicker = true;
-            this.focusFirstElementInModal('.modal.show');
+            await this.finalizeSearchAccountPicker();
           }
 
           this.searchUsername = '';
@@ -6513,16 +6512,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             // Identify cross-save primary
             this.crossSavePlayer = this.d2SearchResults.find(p => p.isCrossSavePrimary) || null;
             
-            // Determine next action
             const total = this.d1SearchResults.length + this.d2SearchResults.length;
             if (total === 0) {
               this.errorMessage = 'No Destiny accounts found for that membership ID.';
-            } else if (total === 1) {
-              const player = this.crossSavePlayer || this.d2SearchResults[0] || this.d1SearchResults[0];
-              await this.selectPlayer(player);
             } else {
-              this.showPlatformPicker = true;
-              this.focusFirstElementInModal('.modal.show');
+              await this.finalizeSearchAccountPicker();
             }
             
             this.loading['search'] = false;
@@ -6636,18 +6630,14 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       }
 
       /* --------------------
-         Determine next action
+         Determine next action (grey out empty platforms first)
       -------------------- */
       const total = this.d1SearchResults.length + this.d2SearchResults.length;
       if (total === 0) {
         this.errorMessage = this.localSearchUnverifiedMessage
           || 'No Destiny accounts found with that name.';
-      } else if (total === 1) {
-        const player = this.d2SearchResults[0] || this.d1SearchResults[0];
-        await this.selectPlayer(player);
       } else {
-        this.showPlatformPicker = true;
-        this.focusFirstElementInModal('.modal.show');
+        await this.finalizeSearchAccountPicker();
       }
 
     } catch (error: any) {
@@ -6800,15 +6790,10 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       // Handle results for this individual name
       if (!accumulate) {
         const total = this.d1SearchResults.length + this.d2SearchResults.length;
-        if (total === 1) {
-          const player = this.d2SearchResults[0] || this.d1SearchResults[0];
-          await this.selectPlayer(player);
-        } else if (total === 0) {
+        if (total === 0) {
           console.warn('[BulkAdd] No accounts found for name');
         } else {
-          // Ambiguous – open multi-select modal to let user choose accounts
-          this.showPlatformPicker = true;
-          this.focusFirstElementInModal('.modal.show');
+          await this.finalizeSearchAccountPicker();
         }
       } else {
         // In accumulate mode, just log ambiguous results but don't interrupt the flow
@@ -9565,11 +9550,127 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       p => p.isCrossSavePrimary || (p.crossSaveOverride && p.crossSaveOverride > 0),
     ) || null;
 
-    if (this.d2SearchResults.length > 1 || this.crossSavePlayer) {
-      this.showPlatformPicker = true;
-    } else if (this.d2SearchResults.length === 1) {
-      await this.selectPlayer(this.d2SearchResults[0]);
+    await this.finalizeSearchAccountPicker();
+  }
+
+  /** Accounts currently listed in the search modal (cross-save counted once via D2 rows). */
+  private allModalSearchAccounts(): PlayerSearchDisplay[] {
+    const d2 = this.d2SearchResults || [];
+    const d1 = this.d1SearchResults || [];
+    return [...d2, ...d1];
+  }
+
+  searchAccountMeta(player: PlayerSearchDisplay): string {
+    return formatSearchAccountMeta({
+      game: player.game,
+      platform: player.platform || this.getPlatformName(player.membershipType),
+      hasGames: player.hasGames,
+      archiveGameCount: player.archiveGameCount,
+    });
+  }
+
+  /**
+   * GAME_FILTER_SPEC 2.1 — mark empty platforms from LinkedProfiles / D1 Summary,
+   * sort playable first, auto-select when exactly one account has games.
+   */
+  private async enrichSearchResultsPlayActivity(): Promise<void> {
+    const seed =
+      this.crossSavePlayer ||
+      this.d2SearchResults[0] ||
+      this.d1SearchResults[0];
+    if (!seed) return;
+
+    let profiles: any[] = [];
+    try {
+      const linked = await firstValueFrom(
+        this.bungieService.getLinkedProfiles(seed.membershipType as any, seed.membershipId),
+      );
+      profiles = (linked?.Response?.profiles as any[]) || [];
+    } catch (err) {
+      console.warn('[Search] LinkedProfiles play enrichment failed', err);
     }
+
+    const byMem = linkedProfilePlayByMembership(profiles);
+
+    const applyLinked = (player: PlayerSearchDisplay): PlayerSearchDisplay => {
+      const typed = byMem.get(`${player.membershipType}|${player.membershipId}`);
+      const bare = byMem.get(player.membershipId);
+      const hit = typed || bare;
+      if (hit && hit.dateLastPlayed !== undefined) {
+        player.dateLastPlayed = hit.dateLastPlayed || undefined;
+      }
+      if (hit?.isCrossSavePrimary) {
+        player.isCrossSavePrimary = true;
+      }
+      const has = accountHasGames({
+        dateLastPlayed: player.dateLastPlayed,
+        characterCount: player.characterCount,
+        archiveGameCount: player.archiveGameCount,
+      });
+      if (has !== null) {
+        player.hasGames = has;
+      }
+      return player;
+    };
+
+    this.d2SearchResults = this.d2SearchResults.map((p) => applyLinked({ ...p }));
+    this.d1SearchResults = this.d1SearchResults.map((p) => applyLinked({ ...p }));
+    if (this.crossSavePlayer) {
+      const match = this.d2SearchResults.find(
+        (p) => p.membershipId === this.crossSavePlayer!.membershipId,
+      );
+      this.crossSavePlayer = match ? { ...match } : applyLinked({ ...this.crossSavePlayer });
+    }
+
+    // D1 Summary: no characters ⇒ no games (spec).
+    const d1Need = this.d1SearchResults.filter((p) => p.hasGames == null);
+    await Promise.all(
+      d1Need.map(async (player) => {
+        try {
+          const summary = await firstValueFrom(
+            this.bungieService.getD1Profile(player.membershipType as any, player.membershipId),
+          );
+          const chars = summary?.Response?.data?.characters;
+          const count = Array.isArray(chars)
+            ? chars.length
+            : chars && typeof chars === 'object'
+              ? Object.keys(chars).length
+              : 0;
+          player.characterCount = count;
+          const has = accountHasGames({ characterCount: count });
+          if (has !== null) player.hasGames = has;
+        } catch {
+          /* leave unknown */
+        }
+      }),
+    );
+  }
+
+  private async finalizeSearchAccountPicker(): Promise<void> {
+    await this.enrichSearchResultsPlayActivity();
+    this.d1SearchResults = sortSearchAccountsByPlayActivity(this.d1SearchResults);
+    this.d2SearchResults = sortSearchAccountsByPlayActivity(this.d2SearchResults);
+    this.crossSavePlayer =
+      this.d2SearchResults.find((p) => p.isCrossSavePrimary) || this.crossSavePlayer;
+
+    const all = this.allModalSearchAccounts();
+    if (!all.length) return;
+
+    const playable = all.filter((p) => p.hasGames !== false);
+
+    // Exactly one account with games → load it (empties stay listed only when ambiguous).
+    if (playable.length === 1) {
+      await this.selectPlayer(playable[0]);
+      return;
+    }
+
+    this.showPlatformPicker = true;
+    this.modalSelectedPlayers.clear();
+    for (const player of playable) {
+      this.modalSelectedPlayers.add(this.getPlayerKey(player));
+    }
+    this.focusFirstElementInModal('.modal.show');
+    this.cdr.detectChanges();
   }
 
   /**
@@ -9771,7 +9872,7 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
    * This only selects them in the modal, doesn't load them.
    */
   async selectAllPlayersInModal() {
-    // Clear current selection and select all available players
+    // Select accounts that have games (skip empty Stadia/Epic/etc.).
     this.modalSelectedPlayers.clear();
     
     const all: PlayerSearchDisplay[] = [];
@@ -9781,8 +9882,8 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
     all.push(...this.d2SearchResults.filter(p => !p.isCrossSavePrimary));
     all.push(...this.d1SearchResults);
 
-    // Add all to selection
     all.forEach(player => {
+      if (player.hasGames === false) return;
       this.modalSelectedPlayers.add(this.getPlayerKey(player));
     });
     
