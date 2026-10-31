@@ -42,6 +42,7 @@ import {
   accountHasGames,
   characterCountFromD2ProfileResponse,
   formatSearchAccountMeta,
+  isMeaningfulLastPlayed,
   linkedProfilePlayByMembership,
   sortSearchAccountsByPlayActivity,
 } from '../../utils/search-account-activity';
@@ -9623,9 +9624,23 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.crossSavePlayer = match ? { ...match } : applyLinked({ ...this.crossSavePlayer });
     }
 
-    // Character presence wins — unused Stadia/Epic often share a misleading last-played.
+    // Stadia(5) / Epic(6): require meaningful last-played on that membership card.
+    if (profiles.length > 0) {
+      for (const player of this.d2SearchResults) {
+        const type = Number(player.membershipType);
+        if ((type !== 5 && type !== 6) || player.isCrossSavePrimary) continue;
+        const typed = byMem.get(`${player.membershipType}|${player.membershipId}`);
+        if (!typed || !isMeaningfulLastPlayed(typed.dateLastPlayed)) {
+          player.hasGames = false;
+        }
+      }
+    }
+
+    // Confirm empties via GetProfile. Do not let cross-save profile payloads (which often
+    // return the primary's characters on Stadia/Epic) override a LinkedProfiles empty signal.
     await Promise.all(
       this.d2SearchResults.map(async (player) => {
+        if (player.hasGames === false) return;
         try {
           const profile = await firstValueFrom(
             this.bungieService.getProfile(player.membershipType as any, player.membershipId),
@@ -9636,7 +9651,11 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
             return;
           }
           player.characterCount = count;
-          player.hasGames = count > 0;
+          if (count === 0) {
+            player.hasGames = false;
+          } else if (player.hasGames == null) {
+            player.hasGames = true;
+          }
         } catch {
           /* keep LinkedProfiles signal */
         }
