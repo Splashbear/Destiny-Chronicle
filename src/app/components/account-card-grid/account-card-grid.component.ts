@@ -26,7 +26,8 @@ export interface AccountCardPlatformStats {
     `
       .account-card-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+        /* auto-fit collapses empty tracks so N cards stretch across the row */
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
         width: 100%;
       }
     `,
