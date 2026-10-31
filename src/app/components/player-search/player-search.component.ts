@@ -40,6 +40,7 @@ import {
 } from '../../utils/effective-game';
 import {
   accountHasGames,
+  characterCountFromD2ProfileResponse,
   formatSearchAccountMeta,
   linkedProfilePlayByMembership,
   sortSearchAccountsByPlayActivity,
@@ -9621,6 +9622,26 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       );
       this.crossSavePlayer = match ? { ...match } : applyLinked({ ...this.crossSavePlayer });
     }
+
+    // Character presence wins — unused Stadia/Epic often share a misleading last-played.
+    await Promise.all(
+      this.d2SearchResults.map(async (player) => {
+        try {
+          const profile = await firstValueFrom(
+            this.bungieService.getProfile(player.membershipType as any, player.membershipId),
+          );
+          const count = characterCountFromD2ProfileResponse(profile);
+          if (count === null) {
+            if (player.hasGames !== true) player.hasGames = false;
+            return;
+          }
+          player.characterCount = count;
+          player.hasGames = count > 0;
+        } catch {
+          /* keep LinkedProfiles signal */
+        }
+      }),
+    );
 
     // D1 Summary: no characters ⇒ no games (spec).
     const d1Need = this.d1SearchResults.filter((p) => p.hasGames == null);

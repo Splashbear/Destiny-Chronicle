@@ -59,7 +59,6 @@ export function linkedProfilePlayByMembership(
       dateLastPlayed: p.dateLastPlayed,
       isCrossSavePrimary: p.isCrossSavePrimary,
     });
-    // Also index by membershipId alone so D1/D2 mid collisions still match LinkedProfiles.
     if (!map.has(p.membershipId)) {
       map.set(p.membershipId, {
         dateLastPlayed: p.dateLastPlayed,
@@ -103,4 +102,14 @@ export function formatSearchAccountMeta(opts: {
     return `${game} · ${opts.archiveGameCount.toLocaleString()} games`;
   }
   return `${game} · ${opts.platform}`;
+}
+
+/** Character count from a Destiny2 GetProfile (components 100/200) response. */
+export function characterCountFromD2ProfileResponse(response: any): number | null {
+  if (!response || response.ErrorCode !== 1 || !response.Response) return null;
+  const ids = response.Response.profile?.data?.characterIds;
+  if (Array.isArray(ids)) return ids.length;
+  const data = response.Response.characters?.data;
+  if (data && typeof data === 'object') return Object.keys(data).length;
+  return 0;
 }
