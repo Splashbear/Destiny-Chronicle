@@ -96,7 +96,12 @@ export class PlayerSearchAccomplishmentsTabComponent implements OnInit {
   }
 
   onGameChange(game: 'D1' | 'D2'): void {
-    this.ps.setActiveAccomplishmentsGame(game);
+    this.onGameChoice(game);
+  }
+
+  onGameChoice(choice: 'D1' | 'D2' | 'Both'): void {
+    this.ps.setAccomplishmentsGameChoice(choice);
+    const game = this.ps.activeAccomplishmentsGame;
     this.activeSection = game === 'D1' ? 'd1-books' : 'medals';
     this.visibleCount = this.pageSize;
     this.textPages = 1;

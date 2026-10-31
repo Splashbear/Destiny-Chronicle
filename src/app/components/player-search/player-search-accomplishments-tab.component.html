@@ -4,13 +4,23 @@
     <h2>Accomplishments</h2>
     <p class="text-day-dim">{{ ps.activeAccomplishmentsGame === 'D1' ? 'Destiny 1' : 'Destiny 2' }}.</p>
     <p class="text-xs text-slate-500" *ngIf="asOf">Data from Bungie as of {{ asOf | date:'medium' }}</p>
-    <div class="flex flex-wrap gap-2 mb-2">
-      <button *ngFor="let g of ps.guardianGames"
-              type="button"
-              class="d2-tab" [ngClass]="{'d2-tab-active-blue': ps.activeAccomplishmentsGame===g}"
-              (click)="onGameChange(g)">
-        {{ g === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
-      </button>
+    <p *ngIf="ps.accomplishmentsGameOnlyLabel() as only" class="text-xs text-slate-400 mb-2">{{ only }}</p>
+    <div class="flex flex-wrap gap-2 mb-2" *ngIf="!ps.accomplishmentsGameOnlyLabel()">
+      <button type="button" class="d2-tab"
+              [ngClass]="{'d2-tab-active-blue': ps.accomplishmentsGameChoice==='D1'}"
+              [disabled]="!ps.accomplishmentsGameChipEnabled('D1')"
+              [title]="ps.accomplishmentsGameChipEnabled('D1') ? 'Destiny 1' : 'Select a D1 account to see D1 data'"
+              (click)="onGameChoice('D1')">D1</button>
+      <button type="button" class="d2-tab"
+              [ngClass]="{'d2-tab-active-blue': ps.accomplishmentsGameChoice==='D2'}"
+              [disabled]="!ps.accomplishmentsGameChipEnabled('D2')"
+              [title]="ps.accomplishmentsGameChipEnabled('D2') ? 'Destiny 2' : 'Select a D2 account to see D2 data'"
+              (click)="onGameChoice('D2')">D2</button>
+      <button type="button" class="d2-tab"
+              [ngClass]="{'d2-tab-active-blue': ps.accomplishmentsGameChoice==='Both'}"
+              [disabled]="!ps.accomplishmentsGameChipEnabled('Both')"
+              title="Both"
+              (click)="onGameChoice('Both')">Both</button>
     </div>
     <div class="flex flex-wrap gap-2 text-sm" *ngIf="ps.activeAccomplishmentsGame==='D2'">
       <button type="button" class="underline" [class.text-yellow-300]="activeSection==='medals'" (click)="setSection('medals')">Medals</button>
@@ -117,15 +127,28 @@
       </div>
     </div>
 
-    <!-- Same Destiny 1 / Destiny 2 tabs as Guardian Firsts -->
-    <div class="flex flex-wrap gap-2 mb-4">
-      <button *ngFor="let g of ps.guardianGames"
-              type="button"
-              class="d2-tab" [ngClass]="{'d2-tab-active-blue': ps.activeAccomplishmentsGame===g}"
-              [title]="g === 'D1' ? 'Destiny 1' : 'Destiny 2'"
-              (click)="onGameChange(g)">
-        <span class="hidden sm:inline">{{ g === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</span><span class="sm:hidden">{{ g }}</span>
+    <!-- GAME_FILTER_SPEC: D1 · D2 · Both chips (or single-game label) -->
+    <p *ngIf="ps.accomplishmentsGameOnlyLabel() as only" class="text-sm text-slate-400 mb-4">{{ only }}</p>
+    <div class="flex flex-wrap gap-2 mb-4" *ngIf="!ps.accomplishmentsGameOnlyLabel()">
+      <button type="button" class="d2-tab"
+              [ngClass]="{'d2-tab-active-blue': ps.accomplishmentsGameChoice==='D1' || (ps.accomplishmentsGameChoice==='Both' && ps.activeAccomplishmentsGame==='D1')}"
+              [disabled]="!ps.accomplishmentsGameChipEnabled('D1')"
+              [title]="ps.accomplishmentsGameChipEnabled('D1') ? 'Destiny 1' : 'Select a D1 account to see D1 data'"
+              (click)="onGameChoice('D1')">
+        <span class="hidden sm:inline">Destiny 1</span><span class="sm:hidden">D1</span>
       </button>
+      <button type="button" class="d2-tab"
+              [ngClass]="{'d2-tab-active-blue': ps.accomplishmentsGameChoice==='D2' || (ps.accomplishmentsGameChoice==='Both' && ps.activeAccomplishmentsGame==='D2')}"
+              [disabled]="!ps.accomplishmentsGameChipEnabled('D2')"
+              [title]="ps.accomplishmentsGameChipEnabled('D2') ? 'Destiny 2' : 'Select a D2 account to see D2 data'"
+              (click)="onGameChoice('D2')">
+        <span class="hidden sm:inline">Destiny 2</span><span class="sm:hidden">D2</span>
+      </button>
+      <button type="button" class="d2-tab"
+              [ngClass]="{'d2-tab-active-blue': ps.accomplishmentsGameChoice==='Both'}"
+              [disabled]="!ps.accomplishmentsGameChipEnabled('Both')"
+              title="Both games"
+              (click)="onGameChoice('Both')">Both</button>
     </div>
 
     <p class="text-xs text-slate-500" *ngIf="asOf">Data from Bungie as of {{ asOf | date:'medium' }}</p>
@@ -449,9 +472,19 @@
       </ng-container>
     </section>
 
-    <p *ngIf="!loading && ps.activeAccomplishmentsGame==='D2' && !d2Players().length"
+    <p *ngIf="!loading && ps.activeAccomplishmentsGame==='D2' && !d2Players().length && d1Players().length"
+       class="text-slate-400 text-sm py-4 text-center">
+      Your selected accounts are D1.
+      <button type="button" class="text-yellow-400 underline ml-1" (click)="onGameChoice('D1')">Show D1</button>
+    </p>
+    <p *ngIf="!loading && ps.activeAccomplishmentsGame==='D1' && !d1Players().length && d2Players().length"
+       class="text-slate-400 text-sm py-4 text-center">
+      Your selected accounts are D2.
+      <button type="button" class="text-yellow-400 underline ml-1" (click)="onGameChoice('D2')">Show D2</button>
+    </p>
+    <p *ngIf="!loading && ps.activeAccomplishmentsGame==='D2' && !d2Players().length && !d1Players().length"
        class="text-slate-400 text-sm py-4 text-center">Select a Destiny 2 account.</p>
-    <p *ngIf="!loading && ps.activeAccomplishmentsGame==='D1' && !d1Players().length"
+    <p *ngIf="!loading && ps.activeAccomplishmentsGame==='D1' && !d1Players().length && !d2Players().length"
        class="text-slate-400 text-sm py-4 text-center">Select a Destiny 1 account.</p>
   </div>
 </ng-template>
