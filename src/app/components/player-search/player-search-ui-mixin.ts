@@ -26,6 +26,7 @@ import {
   decryptingYearHint,
 } from '../../utils/decrypting-caption';
 import { mergeArchiveCoverage } from '../../utils/archive-coverage';
+import { getCharacterMinutesPlayed } from '../../utils/character-profile';
 import { applyArchiveWatermark } from '../../utils/archive-watermark';
 import { buildAccountLookupPayload } from '../../utils/lookup-analytics-send';
 import { formatStatusDisplay as formatStatusDisplayUtil } from '../../utils/format-status-display';
@@ -37,6 +38,8 @@ import {
 } from '../../utils/modal-search-players';
 import { buildFavoriteAccountsFromPlayers } from '../../utils/favorites-from-modal';
 import { preselectDefaultModalAccounts } from '../../utils/modal-account-preselect';
+import { formatSearchAccountMeta } from '../../utils/search-account-activity';
+import { PlayerSearchDisplay } from '../../models/player-search-display.model';
 import { toggleInSet } from '../../utils/selection-set';
 import { buildModalPlayerLoadHost } from '../../utils/modal-player-load-host';
 import { buildSharePermalinkUrl } from '../../utils/share-permalink-url';
@@ -412,6 +415,39 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.cdr.detectChanges();
   }
 
+  /** MOBILE_SPEC: On This Day collapsed by default; remember for the session. */
+  toggleOnThisDay(): void {
+    this.onThisDayExpanded = !this.onThisDayExpanded;
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('dc.onThisDayExpanded', this.onThisDayExpanded ? '1' : '0');
+    }
+    this.cdr.markForCheck();
+  }
+
+  get onThisDaySummary(): string {
+    const groups = this.groupedActivitiesByAccount || [];
+    let activities = 0;
+    const years = new Set<number | string>();
+    for (const game of groups) {
+      for (const yg of game.yearGroups || []) {
+        years.add(yg.year);
+        for (const tg of yg.typeGroups || []) {
+          activities += tg.activities?.length || 0;
+        }
+      }
+    }
+    if (activities === 0) {
+      return 'On This Day: no activities';
+    }
+    const y = years.size;
+    return `On This Day: ${activities} ${activities === 1 ? 'activity' : 'activities'} across ${y} ${y === 1 ? 'year' : 'years'}`;
+  }
+
+  toggleDateOverflow(): void {
+    this.showDateOverflow = !this.showDateOverflow;
+    this.cdr.markForCheck();
+  }
+
   /** Open the decrypted-memory share card (Phase 2). */
   onShareAnniversaryMemory(anniversary: AnniversaryFirst): void {
     this.shareMemoryItem = anniversary;
@@ -557,7 +593,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   public closeLoadingModal(): void {
     this.showLoadingModal = false;
     this.isLoadingComplete = false;
-    // Keep the bronze theater up through lit → unzip; finishUnzip / skip dismiss it.
+    // Keep the gold theater up through lit → unzip; finishUnzip / skip dismiss it.
     const phase = this.decryptLanding.phase();
     if (phase === 'loading' || phase === 'unzipping') {
       return;
@@ -671,7 +707,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.cdr.markForCheck();
   }
 
-  /** Chip labels for the bronze search panel. */
+  /** Chip labels for the gold search panel. */
   get decryptLandingSelectedNames(): string[] {
     return this.selectedPlayers.map(p => p.displayName).filter(Boolean);
   }
@@ -688,13 +724,173 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
 
   get dossierStripStatus(): string {
     const cov = this.archiveCoverage;
-    if (!cov) return 'ENGRAM STATUS: · SEALED';
-    if (cov.level === 'full') return 'ENGRAM STATUS: ◆ DECRYPTED';
+    if (!cov) return 'ENGRAM STATUS: · LIVE FROM BUNGIE';
+    if (cov.level === 'full') return 'ENGRAM STATUS: ◆ ARCHIVE + LIVE';
     if (cov.level === 'partial') {
-      const through = cov.through ? ` · ARCHIVE THROUGH ${cov.through}` : '';
-      return `ENGRAM STATUS: ◈ PARTIALLY DECRYPTED${through}`;
+      return 'ENGRAM STATUS: ◆ LIVE FROM BUNGIE';
     }
-    return 'ENGRAM STATUS: ◇ SEALED';
+    return 'ENGRAM STATUS: ◇ LIVE FROM BUNGIE';
+  }
+
+  /** HEADER_REDESIGN_MOCKUP — primary guardian name without bungie code. */
+  get dossierHeaderTitle(): string {
+    const raw = this.selectedPlayers[0]?.displayName || 'Guardian';
+    return String(raw).split('#')[0] || raw;
+  }
+
+  get dossierHeaderSubtitle(): string {
+    const n = this.selectedPlayers.length;
+    return `Dossier · ${n} Guardian${n === 1 ? '' : 's'}`;
+  }
+
+  get dossierHeaderStatus(): string {
+    return '';
+  }
+
+  get dossierHeaderPlayedSeconds(): number {
+    return this.accountStats?.totalTime ?? 0;
+  }
+
+  get dossierHeaderActiveSeconds(): number {
+    return this.breakdownActiveTimeSeconds || this.activityBreakdownUnfilteredTimeSeconds || 0;
+  }
+
+  get dossierHeaderActiveTimeLabel(): string {
+    const sec = this.dossierHeaderActiveSeconds;
+    if (!sec) return '—';
+    return this.formatSecondsToHoursMinutes(sec);
+  }
+
+  get dossierHeaderSocialTimeLabel(): string {
+    const active = this.dossierHeaderActiveSeconds;
+    const played = this.dossierHeaderPlayedSeconds;
+    if (!active || !played) return '—';
+    return this.formatSecondsToHoursMinutes(Math.max(0, played - active));
+  }
+
+  get dossierHeaderTimeLabel(): string {
+    return this.dossierHeaderActiveTimeLabel;
+  }
+
+  get dossierHeaderActivityCount(): string {
+    if (this.accountStatsPending) return '—';
+    return (this.accountStats?.totalActivityCount || 0).toLocaleString();
+  }
+
+  get dossierHeaderSealCount(): string {
+    if (this.accountStatsPending) return '—';
+    return String(this.accountStats?.totalSeals || 0);
+  }
+
+  /** Bungie character playtime by class, summed across every searched account. */
+  get dossierHeaderClassTimes(): Array<{ name: string; label: string }> {
+    const seconds = { Hunter: 0, Titan: 0, Warlock: 0 };
+    for (const pl of this.selectedPlayers || []) {
+      const game = (pl.game === 'D1' ? 'D1' : 'D2') as 'D1' | 'D2';
+      const chars = this.characters[this.getPlayerKey(pl)] || [];
+      for (const ch of chars) {
+        const type = Number(ch?.classType ?? ch?.characterBase?.classType);
+        const name = this.getClassName(type);
+        if (name !== 'Hunter' && name !== 'Titan' && name !== 'Warlock') continue;
+        seconds[name] += getCharacterMinutesPlayed(ch, game) * 60;
+      }
+    }
+    const pending = this.accountStatsPending;
+    return (['Hunter', 'Titan', 'Warlock'] as const).map((name) => ({
+      name,
+      label: pending ? '—' : this.formatSecondsToHoursMinutes(seconds[name]),
+    }));
+  }
+
+  /** Flattened On This Day year cards for the header strip. */
+  get headerOnThisDayYears(): Array<{
+    year: number | string;
+    season: string | null;
+    game: 'D1' | 'D2';
+    line: string;
+  }> {
+    const cards: Array<{
+      year: number | string;
+      season: string | null;
+      game: 'D1' | 'D2';
+      line: string;
+    }> = [];
+    for (const gameGroup of this.groupedActivitiesByAccount || []) {
+      const game = (gameGroup.game === 'D1' ? 'D1' : 'D2') as 'D1' | 'D2';
+      for (const yg of gameGroup.yearGroups || []) {
+        const parts: string[] = [];
+        for (const tg of yg.typeGroups || []) {
+          const n = tg.activities?.length || 0;
+          if (!n) continue;
+          parts.push(n > 1 ? `${tg.name} ×${n}` : tg.name);
+        }
+        cards.push({
+          year: yg.year,
+          season: this.getSeasonForYear(game, yg.year),
+          game,
+          line: parts.slice(0, 2).join(' · ') || '—',
+        });
+      }
+    }
+    return cards.sort((a, b) => Number(b.year) - Number(a.year));
+  }
+
+  headerChipMeta(player: { displayName?: string; platform?: string; membershipId?: string; game?: string }): string {
+    const key = this.getPlayerKey(player as any);
+    const plat = (this.perPlatformStats || []).find((p) => p.accountKey === key);
+    const count = plat?.totalActivities;
+    const short = this.shortPlatformLabel(player.platform || plat?.platform || '');
+    if (count == null) return short || '—';
+    return `${short} · ${Number(count).toLocaleString()}`;
+  }
+
+  shortPlatformLabel(platform: string): string {
+    switch ((platform || '').toLowerCase()) {
+      case 'playstation':
+      case 'psn':
+        return 'PS';
+      case 'xbox':
+      case 'xboxlive':
+        return 'XB';
+      case 'steam':
+        return 'Steam';
+      case 'battle.net':
+      case 'blizzard':
+        return 'Battle.net';
+      case 'stadia':
+        return 'Stadia';
+      case 'epic':
+        return 'Epic';
+      default:
+        return platform || '';
+    }
+  }
+
+  nudgeHeaderDate(deltaDays: number): void {
+    const d = new Date(2000, this.selectedMonth - 1, this.selectedDay);
+    d.setDate(d.getDate() + deltaDays);
+    this.selectedMonth = d.getMonth() + 1;
+    this.selectedDay = d.getDate();
+    this.onDateSearch();
+  }
+
+  goHeaderToday(): void {
+    const n = new Date();
+    this.selectedMonth = n.getMonth() + 1;
+    this.selectedDay = n.getDate();
+    this.onDateSearch();
+  }
+
+  scrollToActivitiesList(): void {
+    if (this.activeTab !== 'activities') {
+      this.onTabChange('activities');
+    }
+    setTimeout(() => {
+      document.querySelector('.destiny-year-block, .activities-glass-view')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 50);
   }
 
   /**
@@ -853,9 +1049,19 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   async selectAllPlayersInModal() {
     this.modalSelectedPlayers.clear();
     for (const player of this.collectAllModalPlayers()) {
+      if (player.hasGames === false) continue;
       this.modalSelectedPlayers.add(this.getPlayerKey(player));
     }
     this.cdr.detectChanges();
+  }
+
+  searchAccountMeta(player: PlayerSearchDisplay): string {
+    return formatSearchAccountMeta({
+      game: player.game,
+      platform: player.platform || this.getPlatformName(player.membershipType),
+      hasGames: player.hasGames,
+      archiveGameCount: player.archiveGameCount,
+    });
   }
 
   protected collectAllModalPlayers(): any[] {
@@ -896,6 +1102,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.modalSelectedPlayers = preselectDefaultModalAccounts({
       crossSavePlayer: this.crossSavePlayer,
       d1SearchResults: this.d1SearchResults,
+      d2SearchResults: this.d2SearchResults,
       getPlayerKey: (p) => this.getPlayerKey(p),
     });
   }
@@ -1156,7 +1363,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     void this.loadFavorites().then(() => this.openFavoritesModal());
   }
 
-  /** Opening the bronze search panel: clear any favorites prompt so search stays first. */
+  /** Opening the gold search panel: clear any favorites prompt so search stays first. */
   onEngramSearchPanelOpen(): void {
     this.decryptLanding.openSearchPanel();
     this.dismissFavoritesPrompt();

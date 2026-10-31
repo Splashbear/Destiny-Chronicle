@@ -1,0 +1,348 @@
+/**
+ * MOBILE_SPEC — phone portrait/landscape layout & readability.
+ * Pairs with hardlight-dossier + READABILITY_SPEC.
+ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+
+/* Profile chip toolbar — wrap on all widths; phone media tightens taps */
+.dc-profile-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Single-row sideways tab strip (no 2-column wrap) */
+.destiny-tab-nav {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  gap: 0.35rem;
+  overscroll-behavior-x: contain;
+}
+
+.destiny-tab-nav .main-tab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 44px;
+}
+
+/* Heatmap: sideways scroll stays inside its pane, never widens the page */
+.activity-heatmap .heatmap-scroll {
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+
+.activity-heatmap .filter-field select,
+.activity-heatmap .filter-field-wide select {
+  max-width: min(100%, 16rem);
+  min-width: 0 !important;
+}
+
+@media (max-width: 767px) {
+  /* Phone dossier flow: search → date → On This Day → tabs/content */
+  .dc-content-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .dc-flow-search {
+    order: 1;
+  }
+  .dc-flow-date {
+    order: 2;
+  }
+  .dc-flow-otd {
+    order: 3;
+  }
+  .dc-flow-main {
+    order: 4;
+  }
+
+  /* Compact date row ≤ ~56px */
+  .dc-date-compact {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    max-height: 56px;
+    padding: 0.35rem 0.75rem !important;
+    width: 100%;
+  }
+
+  .dc-date-compact .destiny-section-title,
+  .dc-date-compact .chronicle-toolbar-btn--secondary:not(.dc-date-more) {
+    display: none !important;
+  }
+
+  .dc-date-compact .dc-date-controls {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+    margin: 0 !important;
+  }
+
+  .dc-date-compact app-date-picker,
+  .dc-date-compact app-date-picker > div {
+    display: flex !important;
+    flex-direction: row !important;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    width: auto;
+  }
+
+  .dc-date-compact select {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 16px; /* prevent iOS zoom */
+    padding: 0.4rem 0.5rem;
+    min-height: 44px;
+  }
+
+  .dc-date-compact .chronicle-action-row {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+    margin: 0 !important;
+    width: auto;
+  }
+
+  .dc-date-compact .chronicle-toolbar-btn--date {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.4rem 0.65rem;
+  }
+
+  .dc-date-compact .dc-date-search-label {
+    display: none;
+  }
+
+  .dc-date-more {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.35rem 0.55rem !important;
+  }
+
+  /* Search panel: stack rows, no overlap 320–430 */
+  .dc-flow-search {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .dc-search-panel-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem;
+  }
+
+  .dc-search-panel-header .dc-search-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .dc-search-panel-header .dc-search-actions > * {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .dc-flow-search .destiny-surface-panel {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dc-profile-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+  }
+
+  .dc-profile-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .dc-profile-chip-row .destiny-chip,
+  .dc-profile-chip {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .dc-profile-chip-row .destiny-chip span:not(.shrink-0),
+  .dc-profile-chip__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  .dc-profile-chip-row .destiny-chip button,
+  .dc-profile-actions button {
+    flex-shrink: 0;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .destiny-input {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  .chronicle-toolbar-btn {
+    min-height: 44px;
+  }
+
+  /* Activity rows: emphasize time; solid panels already from readability */
+  .activity-cards-grid .activity-card-row {
+    min-height: 44px;
+  }
+
+  .activity-pgcr-link--card {
+    min-height: 44px;
+    min-width: 4.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  /* Played With: card list instead of clipped table */
+  .played-with-desktop-table {
+    display: none !important;
+  }
+
+  .played-with-mobile-cards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .played-with-partner-card {
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--dc-hardlight-edge, rgba(201, 162, 39, 0.38));
+    background: var(--dc-hardlight-panel-mid, rgba(18, 19, 16, 0.72));
+  }
+
+  .played-with-partner-card__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .played-with-partner-card__name {
+    color: #fff;
+    font-weight: 600;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .played-with-partner-card__rank {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: #64748b;
+  }
+
+  .played-with-card-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.55rem 0.75rem;
+    margin: 0;
+  }
+
+  .played-with-card-stats > div {
+    min-width: 0;
+  }
+
+  .played-with-card-stats dt {
+    margin: 0;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .played-with-card-stats dd {
+    margin: 0.15rem 0 0;
+    font-size: 0.875rem;
+  }
+
+  .played-with-card-stats .text-day-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Phone: mute glow/scan behind type; keep gold edges */
+  html.dc-hardlight:not(.dc-text-view) {
+    .destiny-surface-panel,
+    .destiny-year-block,
+    .account-summary-panel,
+    .activity-card-column,
+    .played-with-panel,
+    .on-this-day-panel {
+      box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 10%, transparent),
+        0 0 0 1px var(--dc-hardlight-edge) !important;
+    }
+
+    .destiny-section-title,
+    .activity-year-label,
+    .destiny-stat-value {
+      text-shadow: none !important;
+    }
+  }
+}
+
+@media (min-width: 768px) {
+  .played-with-mobile-cards {
+    display: none !important;
+  }
+}
+
+/*
+ * Desktop (HEADER_REDESIGN_MOCKUP): dossier header owns chips / stats / OTD / tabs.
+ * Main content is full-width below ? no side OTD column.
+ */
+@media (min-width: 1280px) {
+  .dc-content-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .dc-dossier-hdr,
+  .dc-flow-main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dc-date-more {
+    display: none !important;
+  }
+}

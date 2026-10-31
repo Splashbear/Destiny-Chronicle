@@ -746,12 +746,17 @@ export function build_asActivityBreakdownLoadHost(c: any) {
     clearBreakdownRowsAndGroups: () => {
       c.activityBreakdownRows = null;
       c.activityBreakdownGroups = [];
+      c.breakdownActiveTimeSeconds = 0;
     },
     clearSelectedBreakdownCardLabels: () => {
       c.selectedBreakdownCardLabels = new Set();
     },
-    markForCheck: () => c.cdr.markForCheck(),
+    markForCheck: () => {
+      c.cdr.markForCheck();
+      c.cdr.detectChanges();
+    },
     getBreakdownMembershipIds: () => c.getBreakdownMembershipIds(),
+    getBreakdownIdentityByMembership: () => c.getBreakdownIdentityByMembership(),
     getBreakdownSelectedGames: () => c.getBreakdownSelectedGames(),
     setBreakdownRetainExpansion: (retain: boolean) => {
       c.breakdownRetainExpansion = retain;
@@ -762,6 +767,9 @@ export function build_asActivityBreakdownLoadHost(c: any) {
     setActivityBreakdownGroups: (
       groups: any) => {
       c.activityBreakdownGroups = groups;
+      c.breakdownActiveTimeSeconds = (groups || []).reduce((sum: number, group: { rows?: Array<{ timeSeconds?: number }> }) => {
+        return sum + (group.rows || []).reduce((rowSum, row) => rowSum + (row.timeSeconds || 0), 0);
+      }, 0);
     },
     recomputeBreakdownChartData: () => c.recomputeBreakdownChartData(),
     logBreakdownDebug: (context: string) => c.logBreakdownDebug(context),

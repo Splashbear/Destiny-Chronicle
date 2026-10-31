@@ -4,13 +4,12 @@ import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-
 import { SealPosterStudioComponent } from '../../components/seal-poster-studio/seal-poster-studio.component';
 import { TextViewService } from '../../services/text-view.service';
 import { pageSections, splitTitles } from '../../utils/text-tab-rows';
-import { CoverageChipComponent } from '../../shared/ui/coverage-chip.component';
 import { TITLES_HOST } from './titles-host.token';
 
 @Component({
   selector: 'app-titles-tab',
   standalone: true,
-  imports: [CommonModule, DestinyLoaderComponent, SealPosterStudioComponent, CoverageChipComponent],
+  imports: [CommonModule, DestinyLoaderComponent, SealPosterStudioComponent],
   templateUrl: './titles-tab.component.html',
   styleUrls: ['../../components/player-search/player-search-tab-shared.scss'],
   changeDetection: ChangeDetectionStrategy.Default,

@@ -1,6 +1,5 @@
 <ng-container *ngIf="text.enabled(); else fullFirsts">
   <div class="text-day">
-    <dc-coverage-chip [coverage]="ps.archiveCoverage"></dc-coverage-chip>
     <h2>Guardian Firsts</h2>
     <p class="text-day-dim">Your first completed clear of each activity. Completions only. {{ ps.activeFirstsGame === 'D1' ? 'Destiny 1' : 'Destiny 2' }}.</p>
     <div class="flex flex-wrap gap-2 mb-4">
@@ -57,7 +56,7 @@
 <!-- Elapsed = release → first clear. Fireteam wraps inside the card. -->
 <ng-template #firstClearMeta let-first="first" let-baseName="baseName">
   <div *ngIf="ps.getFirstClearElapsed(first, baseName) as elapsed"
-       class="text-[11px] text-slate-400 leading-snug break-words whitespace-normal">{{ elapsed }} after release</div>
+       class="text-[11px] text-slate-400 leading-snug break-words whitespace-normal">{{ elapsed === 'Day One' ? 'Day One' : elapsed + ' after release' }}</div>
   <div *ngIf="ps.getFirstClearFireteam(first) as fireteam"
        class="text-[11px] text-slate-400 leading-snug break-words whitespace-normal">Fireteam: {{ fireteam }}</div>
 </ng-template>
@@ -66,7 +65,7 @@
   <ng-container *ngIf="ps.showFirstsSection('story')">
     <h4 class="text-md font-semibold text-amber-200 mb-2 mt-8">Story milestones</h4>
     <p class="text-xs text-slate-500 mb-2">Images come from the manifest PGCR thumbnail for that activity (per hash), then fall back to the story icon.</p>
-    <div *ngIf="milestones.length > 0" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+    <div *ngIf="milestones.length > 0" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
       <div *ngFor="let s of milestones; trackBy: ps.trackByGuardianFirst"
            class="rounded-lg overflow-hidden destiny-modal-section min-h-[7rem] flex flex-col min-w-0">
         <div class="relative flex-1 min-h-[5.5rem] firsts-card-media firsts-card-media--banner bg-cover bg-center"
@@ -196,18 +195,18 @@
             <span *ngIf="!variant.hasClear" class="text-slate-400">No clears found</span>
             <img *ngIf="variant.hasClear" [src]="ps.getPlatformIconUrlForFirst($any(variant.first))" class="w-3 h-3" alt="platform" />
             <img *ngIf="variant.hasClear && variant.first?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
-            <ng-container *ngIf="showSoloFlawless && variant.first as vf">
-              <ng-container *ngIf="ps.getSoloFirstForFirst(vf) as sf">
-                <a *ngIf="sf.firstSolo" dcKind="pgcr-stored" [dcPayload]="sf.firstSolo" class="text-blue-400 hover:text-blue-300 underline text-[11px]">Solo – {{ ps.formatDate(sf.firstSolo.period) }}</a>
-                <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
-                <a *ngIf="sf.firstFlawless" dcKind="pgcr-stored" [dcPayload]="sf.firstFlawless" class="text-green-400 hover:text-green-300 underline text-[11px]">Solo Flawless – {{ ps.formatDate(sf.firstFlawless.period) }}</a>
-                <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3 ml-1" [title]="cls" alt="class" />
-              </ng-container>
-            </ng-container>
           </div>
           <ng-container *ngIf="variant.hasClear">
             <ng-container *ngTemplateOutlet="firstClearMeta; context: { first: variant.first, baseName: item.baseName }"></ng-container>
           </ng-container>
+          <div *ngIf="showSoloFlawless && variant.first as vf" class="flex flex-wrap items-center gap-2 text-[11px]">
+            <ng-container *ngIf="ps.getSoloFirstForFirst(vf) as sf">
+              <a *ngIf="sf.firstSolo" dcKind="pgcr-stored" [dcPayload]="sf.firstSolo" class="text-blue-400 hover:text-blue-300 underline">Solo – {{ ps.formatDate(sf.firstSolo.period) }}</a>
+              <img *ngIf="sf.firstSolo?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+              <a *ngIf="sf.firstFlawless" dcKind="pgcr-stored" [dcPayload]="sf.firstFlawless" class="text-green-400 hover:text-green-300 underline">Solo Flawless – {{ ps.formatDate(sf.firstFlawless.period) }}</a>
+              <img *ngIf="sf.firstFlawless?.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-3 h-3" [title]="cls" alt="class" />
+            </ng-container>
+          </div>
         </div>
       </div>
     </div>
@@ -216,7 +215,7 @@
 
 <ng-template #firstsStackedRaidDungeonCard let-items="items" let-showSoloFlawless="showSoloFlawless" let-layout="layout" let-titleClass="titleClass">
   <div *ngIf="items?.length"
-       [ngClass]="layout === 'stack' ? 'space-y-3' : (layout === 'stack-loose' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3')">
+       [ngClass]="layout === 'stack' ? 'space-y-3' : (layout === 'stack-loose' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3')">
     <ng-container *ngFor="let item of items">
       <ng-container *ngTemplateOutlet="firstsStackedVariantCard; context: { item: item, showSoloFlawless: !!showSoloFlawless, titleClass: titleClass }"></ng-container>
     </ng-container>
@@ -260,33 +259,11 @@
     <option *ngFor="let opt of ps.firstsSectionFilterOptions" [value]="opt.value">{{ opt.label }}</option>
   </select>
 </div>
-<!-- Account cards: click to filter Firsts to selected accounts -->
-<app-account-card-grid
-  *ngIf="ps.perPlatformStats.length > 0"
-  [perPlatformStats]="ps.perPlatformStats"
-  [selectedAccountKeys]="ps.selectedAccountKeysForFirsts"
-  [hint]="'Click a card to show only that account below. Click again to include it again. No selection = all accounts.'"
-  (accountKeyToggle)="ps.onFirstsAccountCardToggle($event)">
-</app-account-card-grid>
+<!-- Account filter is the header cards -->
 <!-- Header when filtering by cards -->
 <div *ngIf="ps.selectedAccountKeysForFirsts.size > 0" class="flex items-center gap-2 mb-6">
   <h3 class="text-xl font-bold text-white">Guardian Firsts ({{ ps.selectedAccountKeysForFirsts.size }} selected)</h3>
 </div>
-<!-- Ledger of Deeds — dated firsts with Bungie activity icons -->
-<div *ngIf="ps.selectedAccountKeysForFirsts.size === 0 && ledgerDeeds().length" class="ledger-deeds destiny-surface-panel p-4 mb-4">
-  <h3 class="ledger-deeds__title">Ledger of Deeds · Firsts</h3>
-  <div class="ledger-deeds__rows">
-    <div class="ledger-deeds__row" *ngFor="let deed of ledgerDeeds()">
-      <span class="ledger-deeds__date">{{ deed.date }}</span>
-      <span class="ledger-deeds__body">
-        <img *ngIf="deed.iconUrl" [src]="deed.iconUrl" alt="" class="ledger-deeds__icon" />
-        <span>{{ deed.label }}</span>
-      </span>
-      <span class="ledger-deeds__fireteam">{{ deed.fireteam }}</span>
-    </div>
-  </div>
-</div>
-
 <!-- Aggregated Firsts across all linked accounts (when no cards selected) -->
 <div *ngIf="ps.selectedAccountKeysForFirsts.size === 0" class="destiny-surface-panel p-4">
   <h3 class="text-lg font-semibold text-white mb-4">{{ ps.selectedPlayers[0].displayName }}'s Guardian Firsts (All Platforms)</h3>
@@ -403,7 +380,7 @@
         </h3>
         <!-- One selected account: full-width row; multiple accounts: multi-column grid -->
         <div class="grid gap-6 lg:gap-8"
-             [ngClass]="group.players.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'">
+             [ngClass]="group.players.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'">
           <ng-container *ngFor="let player of group.players">
             <!-- Reuse the existing secondary player card layout for each comparison column -->
             <div class="destiny-surface-panel p-4 w-full min-w-0">
@@ -557,7 +534,7 @@
     </ng-container>
 
     <!-- Secondary players: compact grid below -->
-    <div *ngIf="layout.secondary.length > 0" class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 grid-flow-row-dense gap-6 lg:gap-8">
+    <div *ngIf="layout.secondary.length > 0" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 grid-flow-row-dense gap-6 lg:gap-8">
       <ng-container *ngFor="let player of layout.secondary">
         <div class="destiny-surface-panel p-4">
           <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">

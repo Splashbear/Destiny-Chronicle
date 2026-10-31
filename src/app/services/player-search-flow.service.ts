@@ -10,6 +10,7 @@ import {
 } from '../utils/player-search-results';
 import { parseUsernames, shouldSearchAsSingleUsername } from '../utils/search-usernames';
 import { PlayerSearchQueryService } from './player-search-query.service';
+import { SearchAccountPlayService } from './search-account-play.service';
 
 /** Host for addPlayer / bulk-name search orchestration. */
 export interface PlayerSearchFlowHost {
@@ -50,7 +51,10 @@ export interface PlayerSearchFlowHost {
  */
 @Injectable({ providedIn: 'root' })
 export class PlayerSearchFlowService {
-  constructor(private playerSearchQuery: PlayerSearchQueryService) {}
+  constructor(
+    private playerSearchQuery: PlayerSearchQueryService,
+    private searchAccountPlay: SearchAccountPlayService
+  ) {}
 
   async addPlayer(host: PlayerSearchFlowHost): Promise<void> {
     if (host.isOfflineArchiveMode()) {
@@ -190,11 +194,11 @@ export class PlayerSearchFlowService {
     host.setD2SearchResults(mapped.players);
     host.setCrossSavePlayer(mapped.crossSave);
 
-    if (mapped.players.length > 1 || mapped.crossSave) {
-      host.openPlatformPicker();
-    } else if (mapped.players.length === 1) {
-      await host.selectPlayer(mapped.players[0]);
-    }
+    await this.finishSearchOutcome(host, {
+      countCrossSaveInTotal: false,
+      emptyMessage: 'No Destiny 2 player found with that Bungie Name.',
+      preferD2ThenD1: true,
+    });
   }
 
   async finishSearchOutcome(
@@ -205,15 +209,31 @@ export class PlayerSearchFlowService {
       preferD2ThenD1?: boolean;
     }
   ): Promise<void> {
-    const crossExtra =
-      opts.countCrossSaveInTotal && host.getCrossSavePlayer() ? 1 : 0;
-    const total =
-      host.getD1SearchResults().length +
-      host.getD2SearchResults().length +
-      crossExtra;
-    if (total === 0) {
+    const enriched = await this.searchAccountPlay.enrichSearchAccounts({
+      d1: host.getD1SearchResults(),
+      d2: host.getD2SearchResults(),
+      crossSave: host.getCrossSavePlayer(),
+    });
+    host.setD1SearchResults(enriched.d1);
+    host.setD2SearchResults(enriched.d2);
+    host.setCrossSavePlayer(enriched.crossSave);
+
+    const all = [
+      ...host.getD2SearchResults(),
+      ...host.getD1SearchResults(),
+    ];
+    if (all.length === 0) {
       host.setErrorMessage(opts.emptyMessage);
-    } else if (total === 1) {
+      return;
+    }
+
+    const playable = all.filter((p) => p.hasGames !== false);
+    if (playable.length === 1) {
+      await host.selectPlayer(playable[0]);
+      return;
+    }
+
+    if (all.length === 1) {
       const player = opts.preferD2ThenD1
         ? host.getD2SearchResults()[0] || host.getD1SearchResults()[0]
         : pickSoleSearchPlayer(
@@ -224,10 +244,11 @@ export class PlayerSearchFlowService {
       if (player) {
         await host.selectPlayer(player);
       }
-    } else {
-      host.openPlatformPicker();
-      host.focusSearchModal();
+      return;
     }
+
+    host.openPlatformPicker();
+    host.focusSearchModal();
   }
 
   async runBulkNameSearch(
@@ -307,15 +328,14 @@ export class PlayerSearchFlowService {
       if (!accumulate) {
         const total =
           host.getD1SearchResults().length + host.getD2SearchResults().length;
-        if (total === 1) {
-          const player =
-            host.getD2SearchResults()[0] || host.getD1SearchResults()[0];
-          await host.selectPlayer(player);
-        } else if (total === 0) {
+        if (total === 0) {
           console.warn(`[BulkAdd] No accounts found for "${name}"`);
         } else {
-          host.openPlatformPicker();
-          host.focusSearchModal();
+          await this.finishSearchOutcome(host, {
+            countCrossSaveInTotal: false,
+            emptyMessage: `No Destiny accounts found for "${name}"`,
+            preferD2ThenD1: true,
+          });
         }
       } else {
         const total =

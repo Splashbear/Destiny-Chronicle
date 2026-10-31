@@ -7,17 +7,40 @@
 }
 
 .controls-panel {
-  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4 p-4 rounded-lg;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
   background-color: #2a2a2a;
 }
 
 .control-group {
   @apply flex flex-col gap-2;
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.control-group--view {
+  flex: 1 1 100%;
+}
+
+.control-sort {
+  width: 100%;
+  max-width: 16rem;
 }
 
 .control-label {
   @apply text-sm font-semibold;
   color: #d4af37;
+}
+
+:host ::ng-deep .d2-tab.d2-tab-active-gold,
+:host ::ng-deep .d2-tab.d2-tab-active-blue {
+  color: #e4c04a !important;
+  background: rgba(228, 192, 74, 0.12) !important;
+  border-bottom: 2px solid #e4c04a !important;
 }
 
 .info-bar {
@@ -30,13 +53,14 @@
 }
 
 .poster-canvas {
-  @apply p-8 mx-auto;
+  @apply p-8 w-full;
   background-color: #1a1a1a;
   min-height: 400px;
 }
 
 .canvas-grid {
-  @apply max-w-6xl;
+  width: 100%;
+  max-width: none;
 }
 
 .poster-canvas.is-poster .seal-card-unearned {
@@ -79,7 +103,8 @@
 .seals-flat {
   display: grid;
   gap: 1.25rem;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  /* Fill the reclaimed right gutter; ~8–9 across on wide desktops */
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
 }
 
 .seal-card {
@@ -321,10 +346,10 @@
 }
 
 .heraldry-banner {
-  width: 92px;
-  min-height: 150px;
+  width: 118px;
+  min-height: 156px;
   box-sizing: border-box;
-  padding: 14px 8px 18px;
+  padding: 14px 10px 20px;
   text-align: center;
   background: linear-gradient(#2b2412, #15191e);
   border: 1px solid #5a4a1c;
@@ -335,11 +360,16 @@
   background: linear-gradient(#3a2a08, #15191e);
 }
 
+.heraldry-banner__icon-wrap {
+  position: relative;
+  display: inline-block;
+  margin: 0 auto;
+}
+
 .heraldry-banner__icon {
   width: 48px;
   height: 48px;
   object-fit: contain;
-  margin: 0 auto;
   display: block;
   filter: drop-shadow(0 0 6px rgba(201, 162, 39, 0.35));
 }
@@ -350,19 +380,14 @@
   color: #e4c04a;
   font-size: 0.75rem;
   font-weight: 700;
-  line-height: 1.2;
-  word-break: break-word;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .heraldry-banner--gilded .heraldry-banner__name {
   color: #ffe9a8;
-}
-
-.heraldry-banner__gild {
-  display: block;
-  margin-top: 0.25rem;
-  color: #8a96a3;
-  font-size: 0.65rem;
 }
 
 .heraldry-hall__note {

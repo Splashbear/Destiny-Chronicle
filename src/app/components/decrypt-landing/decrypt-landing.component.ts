@@ -137,9 +137,9 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       align-items: center;
       justify-content: center;
       background:
-        radial-gradient(ellipse at 50% 45%, rgba(42, 33, 12, 0.4), transparent 45%),
-        linear-gradient(#d08a4c0a 1px, transparent 1px) 0 0 / 40px 40px,
-        linear-gradient(90deg, #d08a4c0a 1px, transparent 1px) 0 0 / 40px 40px,
+        radial-gradient(ellipse at 50% 45%, rgba(42, 36, 18, 0.4), transparent 45%),
+        linear-gradient(#c9a2270a 1px, transparent 1px) 0 0 / 40px 40px,
+        linear-gradient(90deg, #c9a2270a 1px, transparent 1px) 0 0 / 40px 40px,
         #08090a;
       color: #e8e2d0;
       overflow: hidden;
@@ -155,12 +155,12 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       position: absolute;
       inset: 0;
       background:
-        radial-gradient(ellipse at 50% 42%, rgba(40, 28, 16, 0.55) 0%, transparent 55%),
-        radial-gradient(1px 1px at 12% 18%, #ffc89088, transparent),
+        radial-gradient(ellipse at 50% 42%, rgba(40, 34, 14, 0.55) 0%, transparent 55%),
+        radial-gradient(1px 1px at 12% 18%, #ffd56a88, transparent),
         radial-gradient(1px 1px at 28% 72%, #fff8, transparent),
-        radial-gradient(1.5px 1.5px at 61% 24%, #ffc890aa, transparent),
+        radial-gradient(1.5px 1.5px at 61% 24%, #ffd56aaa, transparent),
         radial-gradient(1px 1px at 78% 58%, #fffc, transparent),
-        radial-gradient(1px 1px at 88% 12%, #ffc89066, transparent),
+        radial-gradient(1px 1px at 88% 12%, #ffd56a66, transparent),
         radial-gradient(1px 1px at 45% 88%, #fff6, transparent);
       pointer-events: none;
     }
@@ -204,17 +204,17 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
     .dc-engram-gate__accounts s {
       width: 10px;
       height: 10px;
-      border: 1px solid #d08a4c;
+      border: 1px solid #c9a227;
       text-decoration: none;
       display: block;
       box-sizing: border-box;
     }
     .dc-engram-gate__accounts--on s {
-      background: #d08a4c;
-      box-shadow: 0 0 6px #d08a4c;
+      background: #c9a227;
+      box-shadow: 0 0 6px #c9a227;
     }
     .dc-engram-gate__accounts--on {
-      color: #ffe6cc;
+      color: #fff3c4;
     }
     .dc-engram-gate__accounts--err {
       color: #f0a0a0;
@@ -229,13 +229,13 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
     }
     .dc-engram-gate__cap {
       margin-top: 1.5rem;
-      color: #d08a4c;
+      color: #c9a227;
       font-size: clamp(0.95rem, 2.4vw, 1.15rem);
       letter-spacing: 0.16em;
       text-transform: uppercase;
       font-weight: 600;
       text-align: center;
-      text-shadow: 0 0 8px #d08a4c66;
+      text-shadow: 0 0 8px #c9a22766;
     }
     .dc-engram-gate__sub {
       margin-top: 0.45rem;
@@ -254,7 +254,7 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
     .dc-engram-gate__ring i {
       display: block;
       height: 100%;
-      background: linear-gradient(90deg, #b06a34, #ffc890);
+      background: linear-gradient(90deg, #c9a227, #ffd56a);
       border-radius: 2px;
       transition: width 0.2s ease;
     }
@@ -269,10 +269,10 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       transform: translate(2.5rem, -50%);
       transition: width 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
       background:
-        repeating-linear-gradient(0deg, #ffcf9a0c 0 1px, transparent 1px 3px),
-        linear-gradient(90deg, #2a1c12, #0b0c0e);
+        repeating-linear-gradient(0deg, #ffd56a0c 0 1px, transparent 1px 3px),
+        linear-gradient(90deg, #2a2412, #0b0c0e);
       clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
-      box-shadow: 0 0 0 1.5px #ffcf9a inset;
+      box-shadow: 0 0 0 1.5px #ffd56a inset;
     }
     .dc-engram-gate__panel--open {
       width: min(380px, 86vw);
@@ -287,22 +287,22 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       font-size: 0.75rem;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      color: #d08a4c;
-      text-shadow: 0 0 8px #d08a4c;
+      color: #c9a227;
+      text-shadow: 0 0 8px #c9a227;
     }
     .dc-engram-gate__input {
       width: 100%;
       box-sizing: border-box;
       background: #0008;
-      border: 1px solid #d08a4c88;
-      color: #ffe6cc;
+      border: 1px solid #c9a22788;
+      color: #fff3c4;
       padding: 0.6rem 0.7rem;
       font-size: 0.95rem;
       outline: none;
     }
     .dc-engram-gate__input:focus {
-      border-color: #ffc890;
-      box-shadow: 0 0 0 1px rgba(255, 200, 144, 0.35);
+      border-color: #ffd56a;
+      box-shadow: 0 0 0 1px rgba(255, 213, 106, 0.35);
     }
     .dc-engram-gate__input::placeholder { color: #6b5a48; }
     .dc-engram-gate__chips {
@@ -317,9 +317,9 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       gap: 0.35rem;
       font-size: 0.75rem;
       padding: 0.25rem 0.5rem;
-      border: 1px solid #d08a4c88;
-      color: #ffe6cc;
-      background: #d08a4c1a;
+      border: 1px solid #c9a22788;
+      color: #fff3c4;
+      background: #c9a2271a;
     }
     .dc-engram-gate__chip-x {
       border: 0;
@@ -330,7 +330,7 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       font-size: 0.9rem;
       line-height: 1;
     }
-    .dc-engram-gate__chip-x:hover { color: #ffe6cc; }
+    .dc-engram-gate__chip-x:hover { color: #fff3c4; }
     .dc-engram-gate__panel-help {
       margin: 0.55rem 0 0;
       font-size: 0.7rem;
@@ -348,7 +348,7 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       margin-top: 0.65rem;
       width: 100%;
       border: 0;
-      background: linear-gradient(#d08a4c, #8a4f22);
+      background: linear-gradient(#c9a227, #8a7018);
       color: #14110a;
       font-weight: 700;
       letter-spacing: 0.12em;
@@ -374,7 +374,7 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       padding: 0.25rem;
       text-align: center;
     }
-    .dc-engram-gate__link:hover { color: #ffc890; }
+    .dc-engram-gate__link:hover { color: #ffd56a; }
     .dc-engram-gate__hint {
       display: none;
     }
@@ -385,7 +385,7 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       right: 0;
       z-index: 1;
       text-align: center;
-      color: #b8743c;
+      color: #c9a227;
       letter-spacing: 0.2em;
       font-size: 0.875rem;
       text-transform: uppercase;
@@ -409,8 +409,8 @@ import { Engram3dComponent, EngramUnzipTarget } from '../engram-3d/engram-3d.com
       cursor: pointer;
     }
     .dc-engram-gate__skip:hover {
-      color: #ffe6cc;
-      border-color: #d08a4c88;
+      color: #fff3c4;
+      border-color: #c9a22788;
     }
     @media (max-width: 720px) {
       .dc-engram-gate--open .dc-engram-gate__stage {

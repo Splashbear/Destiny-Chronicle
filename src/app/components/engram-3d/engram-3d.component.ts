@@ -28,7 +28,7 @@ export interface EngramUnzipTarget {
 }
 
 /**
- * Bronze sealed engram (ENGRAM_TRANSITION_3D_MOCKUP).
+ * Gold sealed engram (ENGRAM_TRANSITION_3D_MOCKUP) — site --destiny-gold.
  * Progress lights seams / opens gaps; unzip flies facets into hard-light panel rects.
  * Falls back to 2D SVG under reduced motion or WebGL failure.
  */
@@ -72,13 +72,13 @@ export interface EngramUnzipTarget {
       touch-action: none;
       cursor: grab;
       user-select: none;
-      filter: drop-shadow(0 0 24px rgba(176, 106, 52, 0.55))
-              drop-shadow(0 0 48px rgba(255, 200, 144, 0.22));
+      filter: drop-shadow(0 0 24px rgba(201, 162, 39, 0.55))
+              drop-shadow(0 0 48px rgba(228, 192, 74, 0.28));
     }
     .dc-engram-3d:active { cursor: grabbing; }
     .dc-engram-3d--held {
-      filter: drop-shadow(0 0 32px rgba(255, 200, 144, 0.7))
-              drop-shadow(0 0 64px rgba(176, 106, 52, 0.4));
+      filter: drop-shadow(0 0 32px rgba(255, 213, 106, 0.7))
+              drop-shadow(0 0 64px rgba(201, 162, 39, 0.45));
     }
     .dc-engram-3d--unzip {
       cursor: default;
@@ -105,7 +105,7 @@ export interface EngramUnzipTarget {
       pointer-events: none;
     }
     @media (prefers-reduced-motion: reduce) {
-      .dc-engram-3d { filter: drop-shadow(0 0 12px rgba(176, 106, 52, 0.35)); }
+      .dc-engram-3d { filter: drop-shadow(0 0 12px rgba(201, 162, 39, 0.4)); }
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -197,7 +197,12 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
     private readonly host: ElementRef<HTMLElement>
   ) {
     if (typeof window !== 'undefined' && window.matchMedia) {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // MOBILE_SPEC: no three.js on phones; also honor reduced motion.
+      if (
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+        window.matchMedia('(max-width: 767px)').matches ||
+        window.matchMedia('(pointer: coarse) and (max-width: 1024px)').matches
+      ) {
         this.use3d = false;
       }
     }
@@ -368,7 +373,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(a, 3));
       geo.computeVertexNormals();
       const mat = new THREE.MeshStandardMaterial({
-        color: 0x6a3a1c,
+        color: 0x6a5218,
         metalness: 0.85,
         roughness: 0.42,
         emissive: 0x000000,
@@ -407,7 +412,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
         ]);
         const l = new THREE.Line(
           lg,
-          new THREE.LineBasicMaterial({ color: 0x4a2a14, transparent: true })
+          new THREE.LineBasicMaterial({ color: 0x3a3010, transparent: true })
         );
         m.add(l);
         edges.push(l);
@@ -419,7 +424,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
 
     const core = new THREE.Mesh(
       new THREE.IcosahedronGeometry(0.85, 1),
-      new THREE.MeshBasicMaterial({ color: 0xffd8b0, transparent: true, opacity: 0 })
+      new THREE.MeshBasicMaterial({ color: 0xfff3c4, transparent: true, opacity: 0 })
     );
     this.core = core;
     group.add(core);
@@ -432,7 +437,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         transparent: true,
-        color: 0xffc090,
+        color: 0xffd56a,
       })
     );
     glow.scale.set(6, 6, 1);
@@ -449,7 +454,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
           blending: THREE.AdditiveBlending,
           depthWrite: false,
           transparent: true,
-          color: 0xffe0b0,
+          color: 0xffe9a0,
           opacity: 0,
         })
       );
@@ -478,7 +483,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
     const pts = new THREE.Points(
       pg,
       new THREE.PointsMaterial({
-        color: 0xffd4a0,
+        color: 0xffe08a,
         size: 0.055,
         transparent: true,
         opacity: 0,
@@ -504,9 +509,9 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
     c2.width = c2.height = 256;
     const ctx = c2.getContext('2d')!;
     const gr = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-    gr.addColorStop(0, 'rgba(255,240,210,1)');
-    gr.addColorStop(0.18, 'rgba(255,190,110,0.85)');
-    gr.addColorStop(0.45, 'rgba(220,110,40,0.35)');
+    gr.addColorStop(0, 'rgba(255,243,196,1)');
+    gr.addColorStop(0.18, 'rgba(255,213,106,0.85)');
+    gr.addColorStop(0.45, 'rgba(201,162,39,0.35)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = gr;
     ctx.fillRect(0, 0, 256, 256);
@@ -563,8 +568,8 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   /**
-   * Paint emissive / flares from smoothed progress. Kept bronze-warm — never
-   * blow out to a white “frozen explosion.”
+   * Paint emissive / flares from smoothed progress. Site gold (#c9a227 → #e4c04a)
+   * — never blow out to a white “frozen explosion.”
    */
   private applyLitVisuals(immediate: boolean): void {
     if (!this.faces.length || this.unzipT >= 0) return;
@@ -582,16 +587,16 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
       // Pull plates apart so seams open — dust streams from those gaps.
       m.position.copy(n).multiplyScalar(0.12 * amount);
       const mat = m.material as import('three').MeshStandardMaterial;
-      // Sealed bronze → warm lit amber (not cream-white).
+      // Sealed gold → destiny-gold-bright (not cream-white).
       mat.color.setRGB(
-        0x6a / 255 + amount * ((0xe8 - 0x6a) / 255),
-        0x3a / 255 + amount * ((0x8a - 0x3a) / 255),
-        0x1c / 255 + amount * ((0x3a - 0x1c) / 255)
+        0x6a / 255 + amount * ((0xe4 - 0x6a) / 255),
+        0x52 / 255 + amount * ((0xc0 - 0x52) / 255),
+        0x18 / 255 + amount * ((0x4a - 0x18) / 255)
       );
       mat.emissive.setRGB(
-        amount * (0xe0 / 255),
-        amount * (0x78 / 255),
-        amount * (0x28 / 255)
+        amount * (0xe4 / 255),
+        amount * (0xc0 / 255),
+        amount * (0x4a / 255)
       );
       mat.emissiveIntensity = amount * 0.95;
       mat.metalness = 0.85 - amount * 0.35;
@@ -601,9 +606,9 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
         const lm = (ch as import('three').Line).material as import('three').LineBasicMaterial;
         if (!lm) return;
         lm.color.setRGB(
-          0x3a / 255 + amount * ((0xf0 - 0x3a) / 255),
-          0x1e / 255 + amount * ((0xb0 - 0x1e) / 255),
-          0x0c / 255 + amount * ((0x60 - 0x0c) / 255)
+          0x3a / 255 + amount * ((0xff - 0x3a) / 255),
+          0x30 / 255 + amount * ((0xd5 - 0x30) / 255),
+          0x10 / 255 + amount * ((0x6a - 0x10) / 255)
         );
         lm.opacity = 0.5 + amount * 0.45;
       });
@@ -790,7 +795,7 @@ export class Engram3dComponent implements AfterViewInit, OnChanges, OnDestroy {
       const pl = new THREE.Mesh(
         new THREE.PlaneGeometry(1, 1),
         new THREE.MeshBasicMaterial({
-          color: 0xff9a5a,
+          color: 0xe4c04a,
           transparent: true,
           opacity: 0,
           blending: THREE.AdditiveBlending,

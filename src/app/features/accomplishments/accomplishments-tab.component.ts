@@ -1,10 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DoCheck, OnInit, inject } from '@angular/core';
 import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-loader.component';
-import { AccountCardGridComponent } from '../../components/account-card-grid/account-card-grid.component';
 import { TextViewService } from '../../services/text-view.service';
 import { BungieIconComponent } from '../../shared/ui/bungie-icon.component';
-import { CoverageChipComponent } from '../../shared/ui/coverage-chip.component';
 import { AccomplishmentsMedalsService } from '../../services/accomplishments-medals.service';
 import { AccomplishmentsCollectionsService } from '../../services/accomplishments-collections.service';
 import { AccomplishmentsSealTriumphsService } from '../../services/accomplishments-seal-triumphs.service';
@@ -43,12 +41,12 @@ type AccompSection = 'medals' | 'badges' | 'emblems' | 'seals' | 'd1-books' | 'd
 @Component({
   selector: 'app-accomplishments-tab',
   standalone: true,
-  imports: [CommonModule, DestinyLoaderComponent, AccountCardGridComponent, CoverageChipComponent, BungieIconComponent],
+  imports: [CommonModule, DestinyLoaderComponent, BungieIconComponent],
   templateUrl: './accomplishments-tab.component.html',
   styleUrls: ['../../components/player-search/player-search-tab-shared.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AccomplishmentsTabComponent implements OnInit {
+export class AccomplishmentsTabComponent implements OnInit, DoCheck {
   /** Host is PlayerSearchComponent today (CODE_CLEANUP_SPEC Step 4). */
   readonly ps = inject(ACCOMPLISHMENTS_HOST);
   readonly text = inject(TextViewService);
@@ -83,9 +81,19 @@ export class AccomplishmentsTabComponent implements OnInit {
   sealResults: Record<string, AccountSealTriumphsResult> = {};
   d1BookResults: Record<string, AccountD1RecordBooksResult> = {};
   d1MedalResults: Record<string, AccountMedalsResult> = {};
+  private seenAccountFilterEpoch = 0;
 
   ngOnInit(): void {
+    this.seenAccountFilterEpoch = this.ps.accountFilterEpoch || 0;
     void this.refresh();
+  }
+
+  ngDoCheck(): void {
+    const epoch = this.ps.accountFilterEpoch || 0;
+    if (epoch !== this.seenAccountFilterEpoch) {
+      this.seenAccountFilterEpoch = epoch;
+      void this.refresh();
+    }
   }
 
   setSection(section: AccompSection): void {
@@ -105,6 +113,26 @@ export class AccomplishmentsTabComponent implements OnInit {
     this.textPages = 1;
     this.cdr.markForCheck();
     void this.refresh();
+  }
+
+  /** Collapsed Filters summary: selected accounts, or all when none selected. */
+  get filtersSummaryAccounts(): Array<{
+    accountKey: string;
+    displayName?: string;
+    platform: string;
+    className?: string;
+    lightLevel?: number;
+  }> {
+    const stats = (this.ps.perPlatformStats || []) as Array<{
+      accountKey: string;
+      displayName?: string;
+      platform: string;
+      className?: string;
+      lightLevel?: number;
+    }>;
+    const keys = this.ps.selectedAccountKeysForAccomplishments;
+    if (!keys || keys.size === 0) return stats;
+    return stats.filter((p) => keys.has(p.accountKey));
   }
 
   async refresh(): Promise<void> {

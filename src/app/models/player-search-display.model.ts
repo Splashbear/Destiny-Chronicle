@@ -8,4 +8,10 @@ export interface PlayerSearchDisplay extends PlayerSearchResult {
   isPrimary?: boolean;
   isPublic?: boolean;
   crossSaveOverride?: number;
+  /** GAME_FILTER_SPEC 2.1 — LinkedProfiles / profile character signals. */
+  dateLastPlayed?: string;
+  characterCount?: number;
+  archiveGameCount?: number;
+  /** false = empty platform (dim); true = has play; undefined = unknown. */
+  hasGames?: boolean;
 }

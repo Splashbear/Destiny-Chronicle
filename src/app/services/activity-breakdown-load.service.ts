@@ -25,6 +25,7 @@ export interface ActivityBreakdownLoadHost {
   clearSelectedBreakdownCardLabels(): void;
   markForCheck(): void;
   getBreakdownMembershipIds(): string[];
+  getBreakdownIdentityByMembership(): Record<string, string>;
   getBreakdownSelectedGames(): Array<'D1' | 'D2'>;
   setBreakdownRetainExpansion(retain: boolean): void;
   setActivityBreakdownRows(rows: ActivityCountRow[] | null): void;

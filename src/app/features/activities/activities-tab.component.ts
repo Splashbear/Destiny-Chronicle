@@ -1,12 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { AccountStatsComponent } from '../../components/account-stats/account-stats.component';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { AnniversaryCelebrationBannerComponent } from '../../components/anniversary-celebration-banner/anniversary-celebration-banner.component';
 import { TextViewService } from '../../services/text-view.service';
 import { textDaySections, textViewShouldBuild } from '../../utils/text-tab-rows';
 import { ActivityStore } from '../../core/state/activity.store';
-import { CoverageChipComponent } from '../../shared/ui/coverage-chip.component';
-import { LoadEngramComponent } from '../../shared/ui/load-engram.component';
 import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
 import { ACTIVITIES_HOST } from './activities-host.token';
 
@@ -21,9 +18,6 @@ interface TextDaySection {
   standalone: true,
   imports: [
     CommonModule,
-    AccountStatsComponent,
-    CoverageChipComponent,
-    LoadEngramComponent,
     EmptyStateComponent,
     AnniversaryCelebrationBannerComponent,
   ],

@@ -17,10 +17,10 @@
     <span *ngIf="cov.d1GamesNotCounted">{{ cov.d1GamesNotCounted }} Destiny 1 games are not counted (Played With covers Destiny 2 only).</span>
   </p>
 
-  <div *ngIf="coverage" class="rounded-lg bg-slate-800/95 border border-slate-700 p-4">
+  <div *ngIf="coverage" class="played-with-panel rounded-lg p-4">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
       <span class="text-sm text-slate-300">{{ uiI18n.t('playedWith.coverage') }}</span>
-      <span class="text-sm font-mono text-blue-300">
+      <span class="text-sm font-mono played-with-accent">
         {{ coverage.pgcrCached }} / {{ coverage.totalActivities }} ({{ coverage.percent }}%)
       </span>
     </div>
@@ -41,7 +41,7 @@
     {{ uiI18n.t('playedWith.loading') }}
   </div>
 
-  <div *ngIf="building && !sortedPartners.length" class="rounded-lg bg-slate-800/95 border border-amber-700/50 p-6 text-center text-amber-100 text-sm space-y-2">
+  <div *ngIf="building && !sortedPartners.length" class="played-with-panel rounded-lg border border-amber-700/50 p-6 text-center text-amber-100 text-sm space-y-2">
     <div class="flex items-center justify-center gap-2">
       <app-destiny-loader size="sm"></app-destiny-loader>
       <span>{{ uiI18n.t('playedWith.building') }}</span>
@@ -50,19 +50,19 @@
     <p class="text-xs text-slate-400">{{ uiI18n.t('playedWith.buildingHint') }}</p>
   </div>
 
-  <div *ngIf="buildTimedOut && !sortedPartners.length" class="rounded-lg bg-slate-800/95 border border-red-700/50 p-6 text-center text-red-200 text-sm">
+  <div *ngIf="buildTimedOut && !sortedPartners.length" class="played-with-panel rounded-lg border border-red-700/50 p-6 text-center text-red-200 text-sm">
     {{ uiI18n.t('playedWith.buildTimeout') }}
   </div>
 
   <div
     *ngIf="!loading && !building && !buildTimedOut && coverage && coverage.pgcrCached === 0"
-    class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
+    class="played-with-panel rounded-lg p-6 text-center text-slate-300 text-sm">
     {{ uiI18n.t('playedWith.empty') }}
   </div>
 
   <div
     *ngIf="!building && coverage && coverage.pgcrCached > 0 && sortedPartners.length === 0 && !loading"
-    class="rounded-lg bg-slate-800/95 p-6 text-center text-slate-300 text-sm">
+    class="played-with-panel rounded-lg p-6 text-center text-slate-300 text-sm">
     {{ uiI18n.t('playedWith.noPartners') }}
   </div>
 
@@ -87,27 +87,11 @@
     </ng-container>
   </div>
 
-  <!-- Your Fireteam at the Table — top seats around the fire -->
-  <div *ngIf="!text.enabled() && tableSeats.length > 0" class="fireteam-table-card">
-    <h3 class="fireteam-table-card__title">Your Fireteam at the Table · Played With</h3>
-    <div class="fireteam-table">
-      <div class="fireteam-table__fire" aria-hidden="true"></div>
-      <div *ngFor="let seat of tableSeats; trackBy: trackSeat"
-           class="fireteam-table__seat"
-           [style.left.%]="seat.x"
-           [style.top.%]="seat.y">
-        <div class="fireteam-table__av" [attr.title]="seat.name">{{ seat.initial }}</div>
-        <div class="fireteam-table__name">{{ seat.name }}</div>
-        <span class="fireteam-table__meta">{{ seat.games | number }} games</span>
-      </div>
-    </div>
-  </div>
-
   <div
     *ngIf="!text.enabled() && sortedPartners.length > 0"
-    class="overflow-x-auto rounded-lg bg-slate-800/95 border border-slate-700">
+    class="played-with-panel played-with-desktop-table overflow-x-auto rounded-lg">
     <table class="w-full text-sm text-left">
-      <thead class="text-xs uppercase text-slate-400 border-b border-slate-700">
+      <thead class="text-xs uppercase text-slate-400 border-b border-[rgba(255,220,160,0.12)]">
         <tr>
           <th class="py-3 px-4 font-medium">#</th>
           <th class="py-3 px-4 font-medium">{{ uiI18n.t('playedWith.player') }}</th>
@@ -136,10 +120,10 @@
       <tbody>
         <tr
           *ngFor="let row of sortedPartners; let i = index"
-          class="border-b border-slate-700/60 hover:bg-slate-700/30">
+          class="border-b border-[rgba(255,220,160,0.08)] hover:bg-[rgba(228,192,74,0.06)]">
           <td class="py-2.5 px-4 text-slate-500">{{ i + 1 }}</td>
           <td class="py-2.5 px-4 text-white font-medium">{{ row.displayName }}</td>
-          <td class="py-2.5 px-4 text-right font-mono text-blue-300">{{ row.activitiesTogether }}</td>
+          <td class="py-2.5 px-4 text-right font-mono played-with-accent">{{ row.activitiesTogether }}</td>
           <td class="py-2.5 px-4 text-right font-mono text-slate-300">{{ formatDuration(row.timeTogetherSeconds) }}</td>
           <td class="py-2.5 px-4 text-right hidden sm:table-cell">
             <button type="button" class="text-day-link" (click)="openPartnerGame(row, 'first')">{{ formatDate(row.firstPlayedTogether) }}</button>
@@ -150,5 +134,41 @@
         </tr>
       </tbody>
     </table>
+  </div>
+
+  <!-- Phone: partner cards so Time / First / Last are never clipped -->
+  <div *ngIf="!text.enabled() && sortedPartners.length > 0" class="played-with-mobile-cards">
+    <article *ngFor="let row of sortedPartners; let i = index" class="played-with-partner-card">
+      <div class="played-with-partner-card__head">
+        <span class="played-with-partner-card__name">{{ row.displayName }}</span>
+        <span class="played-with-partner-card__rank">#{{ i + 1 }}</span>
+      </div>
+      <dl class="played-with-card-stats">
+        <div>
+          <dt>{{ uiI18n.t('playedWith.activities') }}</dt>
+          <dd class="played-with-accent font-mono">{{ row.activitiesTogether }}</dd>
+        </div>
+        <div>
+          <dt>{{ uiI18n.t('playedWith.time') }}</dt>
+          <dd class="font-mono text-slate-300">{{ formatDuration(row.timeTogetherSeconds) }}</dd>
+        </div>
+        <div>
+          <dt>{{ uiI18n.t('playedWith.firstPlayed') }}</dt>
+          <dd>
+            <button type="button" class="text-day-link" (click)="openPartnerGame(row, 'first')">
+              {{ formatDate(row.firstPlayedTogether) }}
+            </button>
+          </dd>
+        </div>
+        <div>
+          <dt>{{ uiI18n.t('playedWith.lastPlayed') }}</dt>
+          <dd>
+            <button type="button" class="text-day-link" (click)="openPartnerGame(row, 'last')">
+              {{ formatDate(row.lastPlayedTogether) }}
+            </button>
+          </dd>
+        </div>
+      </dl>
+    </article>
   </div>
 </div>

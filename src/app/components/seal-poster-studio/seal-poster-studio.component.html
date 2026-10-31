@@ -1,19 +1,19 @@
 <div class="seal-poster-studio">
   <div class="studio-header">
     <div class="controls-panel">
-      <div class="control-group">
+      <div class="control-group control-group--view">
         <label class="control-label">View</label>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <button (click)="setViewMode('browse')"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'browse', 'd2-tab': viewMode !== 'browse'}">
+                  [ngClass]="{'d2-tab d2-tab-active-gold': viewMode === 'browse', 'd2-tab': viewMode !== 'browse'}">
             Browse
           </button>
           <button (click)="setViewMode('heraldry')"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'heraldry', 'd2-tab': viewMode !== 'heraldry'}">
+                  [ngClass]="{'d2-tab d2-tab-active-gold': viewMode === 'heraldry', 'd2-tab': viewMode !== 'heraldry'}">
             Heraldry
           </button>
           <button (click)="setViewMode('poster')"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': viewMode === 'poster', 'd2-tab': viewMode !== 'poster'}">
+                  [ngClass]="{'d2-tab d2-tab-active-gold': viewMode === 'poster', 'd2-tab': viewMode !== 'poster'}">
             Poster
           </button>
         </div>
@@ -21,7 +21,7 @@
 
       <div class="control-group">
         <label class="control-label">Sort By</label>
-        <select [(ngModel)]="sortType" (ngModelChange)="onSortChange()" class="destiny-input text-sm">
+        <select [(ngModel)]="sortType" (ngModelChange)="onSortChange()" class="destiny-input text-sm control-sort">
           <option value="release">Release (Newest First)</option>
           <option value="alpha">A–Z</option>
           <option value="category">By Season / Expansion</option>
@@ -33,11 +33,11 @@
         <label class="control-label">Filter</label>
         <div class="flex gap-1 text-xs flex-wrap">
           <button (click)="legacyFilter='all'; onToggleChange()"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': legacyFilter==='all', 'd2-tab': legacyFilter!=='all'}">All</button>
+                  [ngClass]="{'d2-tab d2-tab-active-gold': legacyFilter==='all', 'd2-tab': legacyFilter!=='all'}">All</button>
           <button (click)="legacyFilter='current'; onToggleChange()"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': legacyFilter==='current', 'd2-tab': legacyFilter!=='current'}">Current</button>
+                  [ngClass]="{'d2-tab d2-tab-active-gold': legacyFilter==='current', 'd2-tab': legacyFilter!=='current'}">Current</button>
           <button (click)="legacyFilter='legacy'; onToggleChange()"
-                  [ngClass]="{'d2-tab d2-tab-active-blue': legacyFilter==='legacy', 'd2-tab': legacyFilter!=='legacy'}">Legacy</button>
+                  [ngClass]="{'d2-tab d2-tab-active-gold': legacyFilter==='legacy', 'd2-tab': legacyFilter!=='legacy'}">Legacy</button>
         </div>
       </div>
 
@@ -103,14 +103,14 @@
       <div *ngFor="let seal of heraldrySeals; trackBy: trackByHash"
            class="heraldry-banner"
            [class.heraldry-banner--gilded]="seal.isGilded">
-        <img *ngIf="getSealIcon(seal)"
-             [src]="getSealIcon(seal)"
-             class="heraldry-banner__icon"
-             [alt]="seal.name" />
-        <b class="heraldry-banner__name">{{ sealTitleLine(seal.name) }}</b>
-        <span *ngIf="seal.isGilded" class="heraldry-banner__gild">
-          gilded<span *ngIf="getGildCount(seal) as n"> ×{{ n }}</span>
-        </span>
+        <div class="heraldry-banner__icon-wrap">
+          <img *ngIf="getHeraldryIcon(seal)"
+               [src]="getHeraldryIcon(seal)"
+               class="heraldry-banner__icon"
+               [alt]="seal.name" />
+          <sup *ngIf="getHeraldryGildCount(seal) as n" class="gild-super">{{ n }}</sup>
+        </div>
+        <b class="heraldry-banner__name" [style.font-size]="heraldryNameFontSize(seal.name)">{{ sealTitleLine(seal.name) }}</b>
       </div>
     </div>
     <p class="heraldry-hall__note">

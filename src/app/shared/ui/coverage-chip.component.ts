@@ -29,13 +29,10 @@ export class CoverageChipComponent {
   @Input() coverage: CoverageChipInput | null = null;
 
   line(cov: CoverageChipInput): string {
-    if (cov.level === 'full') return '◆ Decrypted';
-    if (cov.level === 'partial') {
-      const date = cov.through || 'the archive watermark';
-      return `◈ Partially decrypted · archive through ${date}`;
-    }
-    if (cov.level === 'absent') return '◇ Sealed';
-    return 'Archive coverage';
+    if (cov.level === 'full') return '◆ Live from Bungie';
+    if (cov.level === 'partial') return '◆ Live from Bungie';
+    if (cov.level === 'absent') return '◇ Live from Bungie';
+    return 'Live from Bungie';
   }
 
   chipClass(cov: CoverageChipInput): string {
@@ -46,17 +43,8 @@ export class CoverageChipComponent {
   }
 
   tooltip(cov: CoverageChipInput): string {
-    if (cov.level === 'partial') {
-      const date = cov.through || 'the archive watermark';
-      return `Archive through ${date}; newer games load live from Bungie.`;
-    }
-    if (cov.level === 'full') {
-      return cov.through
-        ? `Archive through ${cov.through}; coverage is complete for loaded accounts.`
-        : 'Archive coverage is complete for loaded accounts.';
-    }
-    if (cov.level === 'absent') {
-      return 'No archive coverage yet; games load live from Bungie.';
+    if (cov.level === 'partial' || cov.level === 'full' || cov.level === 'absent') {
+      return 'Games load live from Bungie.';
     }
     return '';
   }

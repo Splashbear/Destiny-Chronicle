@@ -349,8 +349,24 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     return seal.icon || null;
   }
 
+  /** Heraldry always prefers the gilded Bungie/local seal art when earned gilded. */
+  getHeraldryIcon(seal: SealDisplayItem): string | null {
+    if (seal.isGilded && seal.gildedIcon) {
+      return seal.gildedIcon;
+    }
+    return seal.icon || null;
+  }
+
   getGildCount(seal: SealDisplayItem): number | null {
     if (!seal.isGilded || !this.showGildedBadge || !seal.timesGilded) {
+      return null;
+    }
+    return seal.timesGilded;
+  }
+
+  /** Gold superscript count — same cue as Poster, independent of the badge checkbox. */
+  getHeraldryGildCount(seal: SealDisplayItem): number | null {
+    if (!seal.isGilded || !seal.timesGilded || seal.timesGilded < 1) {
       return null;
     }
     return seal.timesGilded;
@@ -362,6 +378,13 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     if (len >= 16) return '0.58rem';
     if (len >= 12) return '0.64rem';
     return '0.72rem';
+  }
+
+  heraldryNameFontSize(name: string): string {
+    const len = this.sealTitleLine(name).trim().length;
+    if (len >= 14) return '0.62rem';
+    if (len >= 11) return '0.68rem';
+    return '0.75rem';
   }
 
   sealTitleLine(name: string): string {

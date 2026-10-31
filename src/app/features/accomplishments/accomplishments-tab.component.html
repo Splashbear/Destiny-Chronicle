@@ -1,6 +1,5 @@
 <ng-container *ngIf="text.enabled(); else fullAccomplishments">
   <div class="text-day space-y-3">
-    <dc-coverage-chip [coverage]="ps.archiveCoverage"></dc-coverage-chip>
     <h2>Accomplishments</h2>
     <p class="text-day-dim">{{ ps.activeAccomplishmentsGame === 'D1' ? 'Destiny 1' : 'Destiny 2' }}.</p>
     <p class="text-xs text-slate-500" *ngIf="asOf">Data from Bungie as of {{ asOf | date:'medium' }}</p>
@@ -102,7 +101,22 @@
     <p class="text-sm text-yellow-300/90" *ngIf="snapshotMessage">{{ snapshotMessage }}</p>
 
     <details class="tab-filters">
-      <summary>Filters</summary>
+      <summary>
+        <span class="tab-filters-label">Filters</span>
+        <span class="tab-filters-preview" aria-hidden="true">
+          <span class="tab-filters-chip tab-filters-chip--game"
+                [class.tab-filters-chip--active]="ps.activeAccomplishmentsGame==='D1'">Destiny 1</span>
+          <span class="tab-filters-chip tab-filters-chip--game"
+                [class.tab-filters-chip--active]="ps.activeAccomplishmentsGame==='D2'">Destiny 2</span>
+          <span *ngFor="let plat of filtersSummaryAccounts"
+                class="tab-filters-chip tab-filters-chip--account">
+            {{ plat.displayName || plat.platform }}
+            <span class="tab-filters-chip-meta" *ngIf="plat.platform || plat.className || plat.lightLevel">
+              · {{ plat.platform }}<ng-container *ngIf="plat.className"> · {{ plat.className }}</ng-container><ng-container *ngIf="plat.lightLevel"> · {{ plat.lightLevel }}</ng-container>
+            </span>
+          </span>
+        </span>
+      </summary>
       <div class="tab-filters-body">
         <div class="tab-filters-row">
           <button *ngFor="let g of ps.guardianGames"
@@ -128,14 +142,6 @@
             {{ savingSnapshot ? 'Saving…' : 'Save snapshot' }}
           </button>
         </div>
-
-        <app-account-card-grid
-          *ngIf="ps.perPlatformStats.length > 0"
-          [perPlatformStats]="ps.perPlatformStats"
-          [selectedAccountKeys]="ps.selectedAccountKeysForAccomplishments"
-          [hint]="'Click a card to show only that account. Click again to include it again. No selection = all accounts.'"
-          (accountKeyToggle)="ps.onAccomplishmentsAccountCardToggle($event); refresh()">
-        </app-account-card-grid>
 
         <div class="tab-filters-row" *ngIf="ps.activeAccomplishmentsGame==='D2'">
           <button type="button" class="px-3 py-1.5 text-sm rounded border border-slate-600"

@@ -579,7 +579,7 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
     this.decryptLanding.hideQuietly();
   }
 
-  /** User chose Clear all — wipe query too and return to the bronze gate. */
+  /** User chose Clear all — wipe query too and return to the gold gate. */
   clearAllPlayersAndSearch(): void {
     this.clearAllPlayers();
     this.searchChips = [];

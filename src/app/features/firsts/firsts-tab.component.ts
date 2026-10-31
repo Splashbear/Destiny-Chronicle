@@ -1,12 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AccountCardGridComponent } from '../../components/account-card-grid/account-card-grid.component';
 import { ChangeDetectionStrategy, Component, Directive, ElementRef, HostListener, inject, Input, OnChanges, OnDestroy } from '@angular/core';
 import { FIRSTS_HOST } from './firsts-host.token';
 import { TextViewService } from '../../services/text-view.service';
 import { ActivityFirstCompletion } from '../../models/guardian-firsts.model';
 import { completedClearRows, firstTags, pageSections, yearsAgoLabel } from '../../utils/text-tab-rows';
-import { CoverageChipComponent } from '../../shared/ui/coverage-chip.component';
 
 const firstsClicks = new WeakMap<HTMLElement, { kind: string; payload: unknown; flag?: boolean }>();
 
@@ -47,7 +45,7 @@ interface TextFirstRow {
 @Component({
   selector: 'app-firsts-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule, AccountCardGridComponent, FirstsClickDirective, CoverageChipComponent],
+  imports: [CommonModule, FormsModule, FirstsClickDirective],
   templateUrl: './firsts-tab.component.html',
   styleUrls: ['../../components/player-search/player-search-tab-shared.scss'],
   changeDetection: ChangeDetectionStrategy.Default,
@@ -58,50 +56,6 @@ export class FirstsTabComponent {
   readonly text = inject(TextViewService);
   readonly pageSize = 40;
   textPages = 1;
-
-  /**
-   * Ledger of Deeds rows for the active Firsts game — Bungie activity icons, dates, fireteam facts.
-   */
-  ledgerDeeds(): { date: string; label: string; fireteam: string; iconUrl: string | null }[] {
-    const game = this.ps.activeFirstsGame;
-    const list = ((this.ps.guardianFirsts || []) as ActivityFirstCompletion[])
-      .filter((f: ActivityFirstCompletion) => (f.game || 'D2') === game)
-      .slice()
-      .sort((a: ActivityFirstCompletion, b: ActivityFirstCompletion) =>
-        new Date(a.completionDate).getTime() - new Date(b.completionDate).getTime())
-      .slice(0, 12);
-
-    return list.map((f: ActivityFirstCompletion) => {
-      const isD1 = f.game === 'D1';
-      const iconUrl = f.referenceId != null
-        ? this.ps.getActivityIconUrl(f.referenceId, isD1)
-        : null;
-      let fireteam = '—';
-      if (f.isSolo || f.isSoloFlawless) {
-        fireteam = 'alone';
-      } else if (typeof f.fireteamSize === 'number' && f.fireteamSize > 0) {
-        fireteam = `${f.fireteamSize} Guardians`;
-      } else {
-        const names = this.ps.getFirstClearFireteam(f);
-        if (names) {
-          const n = names.split(',').map((s: string) => s.trim()).filter(Boolean).length;
-          if (n > 0) fireteam = `${n} Guardians`;
-        }
-      }
-      const kind =
-        f.isSoloFlawless ? 'solo flawless' :
-        f.isSolo ? 'solo' :
-        f.type === 'dungeon' ? 'first clear' :
-        f.type === 'raid' ? 'first clear' :
-        'first';
-      return {
-        date: (f.completionDate || '').slice(0, 10),
-        label: `${f.name || 'Activity'} · ${kind}`,
-        fireteam,
-        iconUrl,
-      };
-    });
-  }
 
   @HostListener('click', ['$event'])
   onDelegatedClick(event: MouseEvent): void {

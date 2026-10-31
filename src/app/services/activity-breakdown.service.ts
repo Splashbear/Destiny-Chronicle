@@ -3,6 +3,7 @@ import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { isSrlActivity, srlGroupingMode } from '../config/srl.config';
+import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
 
 export interface ActivityCountRow {
   referenceId: string;
@@ -382,8 +383,19 @@ export class ActivityBreakdownService {
     this.activityCountsCache.clear();
   }
 
-  private membershipCacheKey(membershipIds: string[]): string {
-    return `${this.activityCountsCacheVersion}|${[...membershipIds].sort().join('|')}`;
+  private membershipCacheKey(
+    membershipIds: string[],
+    identityByMembership?: Record<string, string>
+  ): string {
+    const ids = [...membershipIds].sort().join('|');
+    if (!identityByMembership) {
+      return `${this.activityCountsCacheVersion}|${ids}`;
+    }
+    const ident = membershipIds
+      .map(id => `${id}:${identityByMembership[id] || id}`)
+      .sort()
+      .join(',');
+    return `${this.activityCountsCacheVersion}|${ids}|${ident}`;
   }
 
   /**
@@ -409,10 +421,13 @@ export class ActivityBreakdownService {
    * Aggregates activity counts per (referenceId, game) across all given memberships.
    * Uses all characters under each membership. Resolves names and types from the manifest.
    */
-  async getActivityCounts(membershipIds: string[]): Promise<ActivityCountRow[]> {
+  async getActivityCounts(
+    membershipIds: string[],
+    identityByMembership?: Record<string, string>
+  ): Promise<ActivityCountRow[]> {
     if (membershipIds.length === 0) return [];
 
-    const cacheKey = this.membershipCacheKey(membershipIds);
+    const cacheKey = this.membershipCacheKey(membershipIds, identityByMembership);
     const cached = this.activityCountsCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -427,10 +442,16 @@ export class ActivityBreakdownService {
     // Aggregate per (referenceId, game). For D1 we also track instanceIds so we can backfill time from PGCR when activity history has no duration.
     const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode?: number; lastPlayed?: string; lastPlayedInstanceId?: string }>();
     const instanceIdsByKey = new Map<string, string[]>();
+    const seenInstances = new Set<string>();
 
     for (const a of allActivities) {
       const refId = a.activityDetails?.referenceId;
       if (refId == null || refId === '') continue;
+      const dedupeKey = breakdownActivityDedupeKey(a, identityByMembership);
+      if (dedupeKey) {
+        if (seenInstances.has(dedupeKey)) continue;
+        seenInstances.add(dedupeKey);
+      }
       const game: 'D1' | 'D2' = a.game || 'D2';
       const key = `${refId}|${game}`;
       const existing = aggByKey.get(key) || { runs: 0, clears: 0, timeSeconds: 0, mode: undefined };
@@ -439,9 +460,7 @@ export class ActivityBreakdownService {
       if (completed) {
         existing.clears += 1;
       }
-      const seconds = this.getActivityDurationSeconds(a);
-      existing.timeSeconds += seconds;
-      // SRL races are often reported as mode 32 (private match) or 5; group them as SRL.
+      existing.timeSeconds += this.getActivityDurationSeconds(a);
       const rowMode = srlGroupingMode(a, game);
       if (rowMode !== undefined && (existing.mode === undefined || (rowMode !== existing.mode && (rowMode === 94 || rowMode === 29)))) {
         existing.mode = rowMode;

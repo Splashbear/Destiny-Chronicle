@@ -496,7 +496,7 @@ export class ArchiveHtmlReportService {
       const release = lookupActivityReleaseDate(name, game);
       if (!release) continue;
       const elapsed = formatReleaseElapsed(release, when);
-      if (elapsed) return `${elapsed} after release`;
+      if (elapsed) return elapsed === 'Day One' ? 'Day One' : `${elapsed} after release`;
     }
     return '';
   }

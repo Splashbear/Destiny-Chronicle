@@ -201,11 +201,19 @@ export abstract class PlayerSearchState {
    * When profiles are loaded, the search card collapses to a compact chip strip.
    * Tap "Edit search" to expand again.
    */
-  searchPanelExpanded = true;
+  searchPanelExpanded = false;
+  /** Bumps when header account cards change so Accomplishments can refresh. */
+  accountFilterEpoch = 0;
+  /** On This Day panel open/closed (session). Default collapsed per MOBILE_SPEC. */
+  onThisDayExpanded = false;
+  /** Mobile date-row overflow for Share & Archive */
+  showDateOverflow = false;
   /** Activity breakdown: counts per specific activity (e.g. per raid, per playlist). */
   activityBreakdownRows: ActivityCountRow[] | null = null;
   loadingActivityBreakdown = false;
   activityBreakdownGroups: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
+  /** Unique-instance activity time from the last Breakdown load. */
+  breakdownActiveTimeSeconds = 0;
   /** Selected activity card labels for filtering; empty = show all */
   selectedBreakdownCardLabels = new Set<string>();
   /** Whether the tile selection area is collapsed */

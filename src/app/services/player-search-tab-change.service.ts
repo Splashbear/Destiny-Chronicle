@@ -36,6 +36,8 @@ export class PlayerSearchTabChangeService {
   ): Promise<void> {
     host.setActiveTab(tab);
     host.detectChanges();
+    // MOBILE_SPEC bug 3: keep tab bar in view; don't jump to bottom of heatmap.
+    this.stabilizeTabScroll();
     if (
       tab === 'heatmap' ||
       tab === 'breakdown' ||
@@ -66,5 +68,38 @@ export class PlayerSearchTabChangeService {
     if (tab === 'titles' && host.getSelectedPlayersLength() > 0) {
       await host.ensureTitlesLoadedForTab();
     }
+    // Heatmap mounts async content — re-stabilize after paint.
+    if (tab === 'heatmap' && typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => this.stabilizeTabScroll());
+    }
+  }
+
+  private stabilizeTabScroll(): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const nav = document.querySelector(
+      '.destiny-tab-nav[data-dc-engram-target="tabs"]'
+    ) as HTMLElement | null;
+    if (!nav) {
+      return;
+    }
+    nav.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' as ScrollBehavior });
+    const active = nav.querySelector(
+      '.main-tab[aria-selected="true"]'
+    ) as HTMLElement | null;
+    if (active && typeof active.scrollIntoView === 'function') {
+      active.scrollIntoView({
+        block: 'nearest',
+        inline: 'center',
+        behavior: 'instant' as ScrollBehavior,
+      });
+    }
+    const panel = document.getElementById('dc-tab-panel-top');
+    panel?.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+      behavior: 'instant' as ScrollBehavior,
+    });
   }
 }

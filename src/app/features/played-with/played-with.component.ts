@@ -212,38 +212,6 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
     return playedWithDisplayName(name);
   }
 
-  /**
-   * Top seats around the fire (Phase 2). Initials until emblem URLs exist on the API.
-   * Positions match ENGRAM_THEME_PHASE2_MOCKUP layout.
-   */
-  get tableSeats(): { name: string; initial: string; games: number; x: number; y: number }[] {
-    const slots = [
-      { x: 50, y: 2 },
-      { x: 70, y: 16 },
-      { x: 78, y: 52 },
-      { x: 66, y: 78 },
-      { x: 50, y: 86 },
-      { x: 34, y: 78 },
-      { x: 22, y: 52 },
-      { x: 30, y: 16 },
-    ];
-    return this.sortedPartners.slice(0, slots.length).map((row, i) => {
-      const name = this.partnerName(row.displayName);
-      const initial = (name.replace(/^\[.*?\]\s*/, '').trim().charAt(0) || '?').toUpperCase();
-      return {
-        name,
-        initial,
-        games: row.activitiesTogether || 0,
-        x: slots[i].x,
-        y: slots[i].y,
-      };
-    });
-  }
-
-  trackSeat(_i: number, seat: { name: string }): string {
-    return seat.name;
-  }
-
   async openPartnerGame(row: FireteamPartnerRow, which: 'first' | 'last'): Promise<void> {
     const period = which === 'first' ? row.firstPlayedTogether : row.lastPlayedTogether;
     if (!period) {

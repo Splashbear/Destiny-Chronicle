@@ -1,6 +1,5 @@
 <ng-container *ngIf="text.enabled(); else fullTitles">
   <div class="text-day">
-    <dc-coverage-chip [coverage]="ps.archiveCoverage"></dc-coverage-chip>
     <h2>Titles &amp; Seals</h2>
     <p class="text-day-banner">Bungie does not record when a title or seal was earned, so no earn dates are shown here — only owned or missing.</p>
     <p *ngIf="ps.loadingTitlesOverall" class="text-day-dim">Loading titles…</p>
@@ -24,23 +23,6 @@
   <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
     <h3 class="text-lg font-semibold text-white">Titles (Cross-Save Account)</h3>
   </div>
-  <details class="tab-filters">
-    <summary>Filters</summary>
-    <div class="tab-filters-body">
-      <div class="tab-filters-row">
-        <button (click)="ps.refreshTitles()"
-                [disabled]="ps.loadingTitlesOverall"
-                class="px-3 py-1.5 destiny-btn-primary disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2">
-          <app-destiny-loader *ngIf="ps.loadingTitlesOverall" size="sm"></app-destiny-loader>
-          {{ ps.loadingTitlesOverall ? 'Refreshing...' : 'Refresh Titles' }}
-        </button>
-        <button (click)="ps.debugTitles()"
-                class="px-3 py-1.5 destiny-btn-secondary text-sm">
-          Debug Titles
-        </button>
-      </div>
-    </div>
-  </details>
 
   <div *ngIf="ps.loadingTitlesOverall" class="flex flex-col items-center justify-center py-12 w-full">
     <app-destiny-loader size="lg" label="Loading titles…"></app-destiny-loader>

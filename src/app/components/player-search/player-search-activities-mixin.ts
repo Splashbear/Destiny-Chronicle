@@ -227,11 +227,26 @@ export abstract class PlayerSearchActivitiesMixin extends PlayerSearchBreakdownM
   }
 
   onAccountSummaryCardToggle(accountKey: string): void {
-    this.selectedAccountKeysForActivities = toggleInSet(
-      this.selectedAccountKeysForActivities,
-      accountKey
-    );
+    this.onSiteAccountCardToggle(accountKey);
+  }
+
+  /** Header cards are the one account filter for every tab. */
+  onSiteAccountCardToggle(accountKey: string): void {
+    const next = toggleInSet(this.selectedAccountKeysForActivities, accountKey);
+    this.selectedAccountKeysForActivities = next;
+    this.selectedAccountKeysForFirsts = new Set(next);
+    this.selectedAccountKeysForAccomplishments = new Set(next);
+    this.selectedAccountKeysForBreakdown = new Set(next);
+
+    const selectedGames = this.getBreakdownSelectedGames();
+    this.breakdownChartGame =
+      selectedGames.length === 1 ? selectedGames[0] : 'all';
+
+    this.accountFilterEpoch += 1;
     this.cdr.markForCheck();
+    if (this.selectedPlayers.length > 0 && this.activeTab === 'breakdown') {
+      void this.loadActivityBreakdown();
+    }
   }
 
   getActivityAccountKey(row: {

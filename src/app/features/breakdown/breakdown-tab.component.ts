@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AccountCardGridComponent } from '../../components/account-card-grid/account-card-grid.component';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChangeDetectionStrategy, Component, Directive, inject, Input, OnInit } from '@angular/core';
 import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-loader.component';
@@ -35,7 +34,7 @@ export class BreakdownCreateProbe implements OnInit {
 @Component({
   selector: 'app-breakdown-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule, AccountCardGridComponent, BaseChartDirective, DestinyLoaderComponent, BreakdownCreateProbe, EmptyStateComponent],
+  imports: [CommonModule, FormsModule, BaseChartDirective, DestinyLoaderComponent, BreakdownCreateProbe, EmptyStateComponent],
   templateUrl: './breakdown-tab.component.html',
   styleUrls: ['../../components/player-search/player-search-tab-shared.scss'],
   changeDetection: ChangeDetectionStrategy.Default,
@@ -47,5 +46,35 @@ export class BreakdownTabComponent {
 
   textBars() {
     return breakdownTextBars(this.ps.activityBreakdownSummaryCards || []);
+  }
+
+  /** Collapsed Filters summary: selected accounts, or all when none selected. */
+  get filtersSummaryAccounts(): Array<{
+    accountKey: string;
+    displayName?: string;
+    platform: string;
+    game: 'D1' | 'D2';
+    className?: string;
+    lightLevel?: number;
+  }> {
+    const stats = (this.ps.perPlatformStats || []) as Array<{
+      accountKey: string;
+      displayName?: string;
+      platform: string;
+      game: 'D1' | 'D2';
+      className?: string;
+      lightLevel?: number;
+    }>;
+    const keys = this.ps.selectedAccountKeysForBreakdown;
+    if (!keys || keys.size === 0) return stats;
+    return stats.filter((p) => keys.has(p.accountKey));
+  }
+
+  get filtersSummaryHasD1(): boolean {
+    return this.filtersSummaryAccounts.some((p) => p.game === 'D1');
+  }
+
+  get filtersSummaryHasD2(): boolean {
+    return this.filtersSummaryAccounts.some((p) => p.game === 'D2');
   }
 }

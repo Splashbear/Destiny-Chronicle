@@ -36,62 +36,22 @@
   <app-destiny-loader size="sm"></app-destiny-loader>
   <span>Loading activity breakdown…</span>
 </div>
-<div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown" class="space-y-6">
-  <details class="tab-filters">
-    <summary>Filters</summary>
-    <div class="tab-filters-body">
-      <app-account-card-grid
-        [perPlatformStats]="ps.perPlatformStats"
-        [selectedAccountKeys]="ps.selectedAccountKeysForBreakdown"
-        [statsPending]="ps.accountStatsPending"
-        [hint]="'Click a card to show only that account in the breakdown below. Click again to include it again. No selection = all accounts.'"
-        (accountKeyToggle)="ps.onBreakdownAccountCardToggle($event)">
-      </app-account-card-grid>
-    </div>
-  </details>
-  <div *ngIf="!ps.hasBreakdownAccountFilter" class="destiny-surface-panel p-4 mb-4">
-    <h3 class="text-lg font-semibold text-white mb-1">{{ ps.selectedPlayers[0].displayName }}'s Activity Breakdown (All Accounts)</h3>
-    <p class="text-slate-300 text-sm">All-time totals across {{ ps.selectedPlayers.length }} {{ ps.selectedPlayers.length === 1 ? 'profile' : 'profiles' }}. Open Filters to narrow by account.</p>
-  </div>
-  <div *ngIf="ps.hasBreakdownAccountFilter" class="flex items-center gap-2 mb-4">
-    <h3 class="text-xl font-bold text-white">Activity Breakdown ({{ ps.selectedAccountKeysForBreakdown.size }} selected)</h3>
-  </div>
+<div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.hasBreakdownAccountFilter" class="flex items-center gap-2 mb-4">
+  <h3 class="text-xl font-bold text-white">Activity Breakdown ({{ ps.selectedAccountKeysForBreakdown.size }} selected)</h3>
 </div>
 <div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.activityBreakdownGroups.length > 0" class="space-y-8">
-  <!-- Total time card: wording depends on All vs per-account -->
-  <div class="destiny-stat-highlight">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-      <h3 class="text-lg font-semibold text-white">
-        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size > 0">Total Time (Filtered)</ng-container>
-        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">Total Time Across All Accounts</ng-container>
-        <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">Total Time (Selected Accounts)</ng-container>
-      </h3>
-      <button (click)="ps.exportBreakdownToExcel()"
-              [disabled]="!ps.activityBreakdownGroups.length"
-              class="px-3 py-1.5 text-sm destiny-btn-primary disabled:opacity-50 transition-colors flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-        Export to Excel
-      </button>
-    </div>
-    <p class="text-slate-300 text-sm mb-3">
-      <span *ngIf="ps.selectedBreakdownCardLabels.size > 0">Showing selected activity types only.</span>
-      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && !ps.hasBreakdownAccountFilter">All-time aggregate across {{ ps.selectedPlayers.length }} {{ ps.selectedPlayers.length === 1 ? 'profile' : 'profiles' }} – how you've spent your time in Destiny, total.</span>
-      <span *ngIf="ps.selectedBreakdownCardLabels.size === 0 && ps.hasBreakdownAccountFilter">All-time activity for selected account(s) – not limited to the selected date.</span>
-    </p>
-    <div class="destiny-stat-value"
-         title="Sum of time in activities only — excludes orbit, Tower, and social spaces.">{{ ps.accountStatsPending ? '—' : ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}</div>
-  </div>
-  <p class="text-slate-300 text-sm">
-    <ng-container *ngIf="!ps.hasBreakdownAccountFilter">Counts and time are aggregated across all selected profiles and all characters (all time, not just the selected date).</ng-container>
-    <ng-container *ngIf="ps.hasBreakdownAccountFilter">Counts and time for selected account(s) across all characters (all time, not just the selected date).</ng-container>
-    Time is activity time only (same scope as Account Summary) — not Bungie minutesPlayed. Each row is a specific activity (e.g. a raid, a Crucible playlist, a strike).
-  </p>
-  
-  <!-- Charts Section (collapsible) -->
   <div *ngIf="ps.activityBreakdownSummaryCards.length > 0" class="destiny-surface-panel p-4 mb-6">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
         <h3 class="text-lg font-semibold text-white">Activity Distribution</h3>
+        <div class="destiny-stat-value text-xl"
+             title="Unique activity instances only — excludes orbit, Tower, and social spaces.">
+          {{ ps.accountStatsPending ? '—' : ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}
+        </div>
+        <span class="text-slate-400 text-sm">
+          <ng-container *ngIf="ps.selectedBreakdownCardLabels.size > 0">active time (filtered)</ng-container>
+          <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0">active time</ng-container>
+        </span>
         <button (click)="ps.breakdownChartCollapsed = !ps.breakdownChartCollapsed"
                 class="flex items-center gap-1 px-2 py-1 text-sm text-slate-300 hover:text-white destiny-btn-secondary text-sm"
                 [attr.aria-expanded]="!ps.breakdownChartCollapsed">
@@ -102,6 +62,12 @@
           </svg>
         </button>
       </div>
+      <button (click)="ps.exportBreakdownToExcel()"
+              [disabled]="!ps.activityBreakdownGroups.length"
+              class="px-3 py-1.5 text-sm destiny-btn-primary disabled:opacity-50 transition-colors flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+        Export to Excel
+      </button>
     </div>
     <div *ngIf="!ps.breakdownChartCollapsed" class="space-y-4">
       <div class="flex flex-wrap items-center gap-3">
@@ -172,7 +138,7 @@
            'breakdown-tile-default': !ps.isBreakdownCardSelected(card.label),
            'breakdown-tile-selected': ps.isBreakdownCardSelected(card.label)
          }">
-      <div class="font-medium text-slate-200 text-sm truncate" [title]="card.label">{{ card.label }}</div>
+      <div class="font-medium text-slate-200 text-sm leading-snug break-words line-clamp-2 min-h-[2.5rem]" [title]="card.label">{{ card.label }}</div>
       <div class="destiny-stat-value text-lg">{{ ps.formatSecondsToHoursMinutes(card.timeSeconds) }}</div>
       <div class="text-xs text-slate-400">{{ card.runs | number }} runs, {{ card.clears | number }} clears ({{ card.clearRate | number:'1.0-0' }}%)</div>
     </div>

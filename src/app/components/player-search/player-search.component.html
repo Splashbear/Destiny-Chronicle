@@ -1,7 +1,7 @@
 <div class="min-h-0"
      [class.dc-dossier-materialize]="decryptLanding.materialize()">
 
-  <!-- Bronze engram gate: open → search panel (empty search; chips = same multi-name as site) -->
+  <!-- Gold engram gate: open → search panel (empty search; chips = same multi-name as site) -->
   <dc-decrypt-landing
     *ngIf="selectedPlayers.length === 0 && !textView.enabled()"
     mode="idle"
@@ -104,238 +104,278 @@
   <!-- Dossier UI only after a Guardian is selected (gate covers empty state) -->
   <div class="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6"
        *ngIf="selectedPlayers.length > 0 || textView.enabled()">
-    <div class="flex flex-col gap-8">
-      <!-- Top Row: Account and Date Pickers (Horizontal) -->
-      <div class="w-full flex flex-col xl:flex-row gap-6">
-        <!-- Account Picker -->
-        <div class="flex-1 min-w-0 flex flex-row gap-4 items-end">
-          <!-- Compact profile chip after load (tap to edit search) -->
-          <div *ngIf="selectedPlayers.length > 0 && !searchPanelExpanded"
-               class="destiny-surface-panel p-3 flex-1 min-w-0"
-               data-dc-engram-target="accounts">
-            <div class="flex flex-wrap items-center gap-2">
-              <button type="button"
-                      class="flex flex-wrap items-center gap-2 flex-1 min-w-0 text-left rounded-md hover:bg-white/5 px-1 py-0.5 -mx-1"
-                      (click)="expandSearchPanel()"
-                      aria-label="Edit search">
-                <span *ngFor="let player of selectedPlayers"
-                      class="destiny-chip"
-                      [title]="player.platform + ' · ' + player.membershipId">
-                  <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-3.5 h-3.5" alt="" />
-                  <img [src]="getGameIconUrl(player.game)" class="w-3.5 h-3.5" alt="" />
-                  <span class="truncate max-w-[10rem]">{{ player.displayName }}</span>
-                </span>
-              </button>
-              <button type="button"
-                      (click)="toggleAddMode()"
-                      class="chronicle-toolbar-btn text-xs px-3 py-1.5 shrink-0"
-                      [class.chronicle-toolbar-btn--primary]="addMode"
-                      [attr.title]="addMode ? 'Add mode — new searches add profiles' : 'Replace mode — new searches replace profiles'"
-                      [attr.aria-pressed]="addMode">
-                {{ addMode ? '✓ Add' : '⚠ Replace' }}
-              </button>
-              <button type="button" (click)="expandSearchPanel()" class="chronicle-toolbar-btn text-xs px-3 py-1.5 shrink-0">
-                Edit search
-              </button>
-              <button type="button" (click)="openFavoritesModal()" class="chronicle-toolbar-btn chronicle-toolbar-btn--primary text-xs px-3 py-1.5 shrink-0">
-                ★ Favorites
-              </button>
-            </div>
-            <p class="text-xs text-slate-300 mt-2 mb-0">
-              {{ addMode ? 'Add mode — new searches add profiles' : 'Replace mode — new searches replace profiles' }}
-              · {{ selectedPlayers.length }}/10 profiles
-            </p>
+    <div class="dc-content-shell">
+      <header *ngIf="selectedPlayers.length > 0"
+              class="dc-dossier-hdr"
+              data-dc-engram-target="accounts">
+        <div class="dc-dossier-hdr__row1">
+          <div class="dc-dossier-hdr__badge" aria-hidden="true"></div>
+          <div class="dc-dossier-hdr__title">
+            <h1>{{ dossierHeaderTitle }}</h1>
+            <div class="dc-dossier-hdr__label">{{ dossierHeaderSubtitle }}</div>
           </div>
-
-          <div *ngIf="selectedPlayers.length > 0 && searchPanelExpanded" class="destiny-surface-panel p-4 flex-1 min-w-0">
-            <div class="flex items-center justify-between mb-6">
-              <h2 class="text-xl font-bold font-d2-headline text-gradient">Search for your Destiny Account</h2>
-              <div class="flex items-center gap-2">
-                <button *ngIf="selectedPlayers.length > 0"
-                        type="button"
-                        (click)="collapseSearchPanel()"
-                        class="chronicle-toolbar-btn text-xs px-3 py-1.5">
-                  Collapse
-                </button>
-                <button (click)="openFavoritesModal()" 
-                        class="chronicle-toolbar-btn chronicle-toolbar-btn--primary">
-                  <span>★</span>
-                  <span>Favorites</span>
-                  <span *ngIf="favoriteAccounts.length > 0" class="text-xs opacity-80">({{ favoriteAccounts.length }})</span>
-                </button>
-              </div>
-            </div>
-            <!-- API Unavailable Message -->
-            <div *ngIf="!apiAvailable && !d1ApiIssue && !d2ApiIssue" class="bg-red-900 text-red-200 p-2 rounded mb-4 text-sm">
-              Bungie API is currently unavailable. Showing cached data where possible.
-            </div>
-            <div *ngIf="d1ApiIssue" class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm">
-              <p class="font-medium text-amber-200 mb-0.5">Destiny 1 API issue</p>
-              <p>{{ d1ApiIssue }}</p>
-            </div>
-            <div *ngIf="d2ApiIssue" class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm">
-              <p class="font-medium text-amber-200 mb-0.5">Destiny 2 API issue</p>
-              <p>{{ d2ApiIssue }}</p>
-            </div>
-            <div *ngIf="dcApiFallbackNotice"
-                 class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm relative pr-9">
-              <button type="button"
-                      (click)="dismissDcApiFallbackNotice()"
-                      class="absolute top-2 right-2 p-1 rounded text-amber-300/80 hover:text-white hover:bg-white/10"
-                      aria-label="Dismiss">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-              <p class="font-medium text-amber-200 mb-0.5">Using Bungie API (slower)</p>
-              <p>{{ dcApiFallbackNotice }}</p>
-            </div>
-            <!-- Favorites: opt-in so a fresh search is not blocked -->
-            <div *ngIf="showFavoritesLoadPrompt && selectedPlayers.length === 0"
-                 class="destiny-banner-info mb-4 text-sm flex flex-col sm:flex-row sm:items-center gap-3">
-              <div class="flex-1 min-w-0">
-                <p class="font-medium mb-0.5" style="color: var(--destiny-gold)">Load your favorites?</p>
-                <p class="text-slate-300">
-                  You have {{ favoriteAccounts.length }} saved favorite{{ favoriteAccounts.length === 1 ? '' : 's' }}.
-                  Load them now, or search for someone else first.
-                </p>
-              </div>
-              <div class="flex gap-2 shrink-0">
-                <button type="button" (click)="confirmLoadFavorites()"
-                        class="chronicle-toolbar-btn chronicle-toolbar-btn--primary text-xs px-3 py-1.5">
-                  Load favorites
-                </button>
-                <button type="button" (click)="dismissFavoritesPrompt()"
-                        class="chronicle-toolbar-btn text-xs px-3 py-1.5">
-                  Not now
-                </button>
-              </div>
-            </div>
-            <!-- User guidance: how to use the app (dismissible) -->
-            <div *ngIf="selectedPlayers.length === 0 && !hideGetStartedBanner" class="destiny-banner-info mb-4 text-sm relative pr-9">
-              <button (click)="dismissGetStartedBanner()" class="absolute top-2 right-2 p-1 rounded text-slate-400 hover:text-white hover:bg-white/10" aria-label="Dismiss">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-              <p class="text-slate-200">
-                Search by Bungie name (e.g. Splashbear#1078), pick your accounts, then browse Activities by date — Guardian Firsts, Titles, and Breakdown cover the rest.
-              </p>
-            </div>
-            <!-- Selected profiles ribbon -->
-            <div *ngIf="selectedPlayers.length > 0" class="mb-4">
-              <div class="flex items-center justify-between mb-2">
-                <label class="text-sm font-semibold text-white">Selected Profiles</label>
-                <button (click)="clearAllPlayersAndSearch()"
-                        class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
-                  Clear All
-                </button>
-              </div>
-              <div class="space-y-2 max-h-32 overflow-y-auto">
-                <div *ngFor="let player of selectedPlayers; let i = index" 
-                     class="flex flex-wrap items-center justify-between gap-1 p-2 rounded transition-colors"
-                     [ngClass]="isFavorite(player) ? 'destiny-chip-favorite' : 'destiny-modal-section hover:border-[rgba(245,197,66,0.3)]'">
-                  <div class="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
-                    <img [src]="getPlatformIconUrl(getPlatformId(player.platform))" class="w-4 h-4 flex-shrink-0" alt="platform" />
-                    <img [src]="getGameIconUrl(player.game)" class="w-4 h-4 flex-shrink-0" alt="game" />
-                    <span class="text-sm text-white break-words min-w-0" [title]="player.displayName + ' (' + player.platform + ', ' + player.game + ')'">
-                      {{ player.displayName }}
-                    </span>
-                    <span class="text-xs text-slate-400 flex-shrink-0">({{ player.platform }})</span>
-                    <span *ngIf="isFavorite(player)" class="text-xs flex-shrink-0" style="color: var(--destiny-gold)">★</span>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <button (click)="toggleFavorite(player)" 
-                            class="text-xs px-2 py-1 rounded transition-colors"
-                            [ngClass]="isFavorite(player) ? 'destiny-btn-primary text-xs px-2 py-1' : 'destiny-btn-secondary text-xs px-2 py-1'">
-                      {{ isFavorite(player) ? '★' : '☆' }}
-                    </button>
-                    <button (click)="removePlayer(i)" 
-                            class="text-xs px-2 py-1 bg-red-600 hover:bg-red-500 text-white rounded">
-                      ✕
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <!-- Compact Search Form -->
-            <div *ngIf="!isOfflineArchiveMode" class="flex flex-col gap-2">
-              <div *ngIf="searchChips.length > 0" class="flex flex-wrap gap-2">
-                <span *ngFor="let chip of searchChips; let i = index"
-                      class="destiny-chip">
-                  {{ chip }}
-                  <button (click)="removeSearchChip(i)" class="text-slate-400 hover:text-white" aria-label="Remove name">✕</button>
-                </span>
-              </div>
-              <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
-                <input type="text"
-                       [(ngModel)]="searchUsername"
-                       (ngModelChange)="onSearchInput($event)"
-                       (keydown.enter)="handleSearchEnter($any($event))"
-                       [class.border-red-500]="errorMessage"
-                       class="destiny-input flex-1 px-4 py-2.5 text-sm"
-                       placeholder="Type a name, then Enter to save"
-                       aria-label="Destiny username"
-                       aria-describedby="search-help">
-                <button (click)="addPlayer()"
-                        [disabled]="!searchUsername && searchChips.length === 0"
-                        class="chronicle-toolbar-btn chronicle-toolbar-btn--primary sm:shrink-0"
-                        [attr.aria-label]="loading['search'] ? 'Searching for accounts' : 'Search for Destiny accounts'"
-                        [attr.aria-busy]="loading['search']">
-                  {{ loading['search'] ? 'Searching...' : 'Search' }}
-                </button>
-                <div id="search-help" class="sr-only">Press Enter after each name to save it, then click Search to look up accounts.</div>
-              </div>
-            </div>
-            <!-- Add Mode Controls -->
-            <div *ngIf="selectedPlayers.length > 0" class="mt-3">
-              <button (click)="toggleAddMode()" 
-                      class="chronicle-toolbar-btn w-full text-left text-xs"
-                      [class.chronicle-toolbar-btn--primary]="addMode">
-                <span>{{ addMode ? '✓ Add mode — new searches add profiles' : '⚠ Replace mode — new searches replace profiles' }}</span>
-              </button>
-              <div class="flex justify-between items-center mt-2">
-                <span class="text-xs text-slate-400">Profiles: {{ selectedPlayers.length }}/10</span>
-                <button (click)="clearAllPlayersAndSearch()"
-                        class="chronicle-toolbar-btn text-xs px-2 py-1">
-                  Clear All
-                </button>
-              </div>
-            </div>
-      <div *ngIf="errorMessage" class="mt-2 text-sm text-red-400">
-        {{ errorMessage }}
-      </div>
-      <div *ngIf="bungieUnavailable && !d1ApiIssue && !d2ApiIssue" class="mt-2 text-xs text-amber-300 bg-amber-900/40 border border-amber-600/60 rounded px-3 py-2">
-        Bungie returned an error for this search. If you are using a non-localhost URL (such as a LAN IP),
-        make sure that origin is added to your Bungie API application, then try again. Otherwise this is
-        usually a temporary Bungie outage — try again later.
-      </div>
-          </div>
+          <button type="button"
+                  class="dc-dossier-hdr__chip dc-dossier-hdr__chip-add"
+                  (click)="searchPanelExpanded ? collapseSearchPanel() : expandSearchPanel()">
+            {{ searchPanelExpanded ? 'Close search' : '+ Decrypt another' }}
+          </button>
+          <button type="button"
+                  (click)="openFavoritesModal()"
+                  class="chronicle-toolbar-btn chronicle-toolbar-btn--primary text-xs px-3 py-1.5 shrink-0">
+            ★ Favorites
+          </button>
         </div>
 
-        <!-- Date Picker + Share/Offline -->
-         <div *ngIf="selectedPlayers.length > 0 && dbReady && !loadingActivities[selectedDate]"
-              class="destiny-surface-panel p-4 flex flex-col items-start xl:w-80 min-w-0 shrink-0"
-              data-dc-engram-target="date">
-          <h2 class="destiny-section-title text-xl mb-3">Date</h2>
-          <div class="w-full">
-            <app-date-picker [selectedMonth]="selectedMonth" [selectedDay]="selectedDay" (dateChange)="onDatePickerChange($event)"></app-date-picker>
-            <div class="chronicle-action-row mt-3">
-              <button (click)="onDateSearch()" class="chronicle-toolbar-btn chronicle-toolbar-btn--primary flex-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                </svg>
-                Search Date
-              </button>
-              <button (click)="showShareDropdown = true"
-                      class="chronicle-toolbar-btn flex-1 min-w-[8rem]">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"></path>
-                </svg>
+        <div class="dc-dossier-hdr__row2">
+          <div class="dc-dossier-hdr__stats-col">
+            <div class="dc-dossier-hdr__stats dc-dossier-hdr__stats--primary">
+              <div class="dc-dossier-hdr__stat"
+                   title="Time in matches, strikes, raids, and other activities. Excludes orbit, Tower, and social spaces.">
+                <span class="dc-dossier-hdr__label">Active time</span>
+                <div class="dc-dossier-hdr__stat-v">{{ dossierHeaderActiveTimeLabel }}</div>
+              </div>
+              <div class="dc-dossier-hdr__stat"
+                   title="Bungie character playtime that is not in an activity — orbit, Tower, and social spaces.">
+                <span class="dc-dossier-hdr__label">Orbit &amp; social</span>
+                <div class="dc-dossier-hdr__stat-v">{{ dossierHeaderSocialTimeLabel }}</div>
+              </div>
+              <div class="dc-dossier-hdr__stat">
+                <span class="dc-dossier-hdr__label">Activities</span>
+                <div class="dc-dossier-hdr__stat-v">{{ dossierHeaderActivityCount }}</div>
+              </div>
+              <div class="dc-dossier-hdr__stat">
+                <span class="dc-dossier-hdr__label">Seals</span>
+                <div class="dc-dossier-hdr__stat-v">{{ dossierHeaderSealCount }}</div>
+              </div>
+            </div>
+            <div class="dc-dossier-hdr__stats dc-dossier-hdr__stats--classes"
+                 title="Bungie character playtime by class, summed across every searched account (includes orbit).">
+              <div class="dc-dossier-hdr__stat" *ngFor="let cls of dossierHeaderClassTimes">
+                <span class="dc-dossier-hdr__label dc-dossier-hdr__label--class">
+                  <img *ngIf="getClassIconUrl(cls.name) as icon"
+                       [src]="icon"
+                       class="dc-dossier-hdr__class-icon"
+                       [alt]="cls.name"
+                       [title]="cls.name" />
+                  {{ cls.name }}
+                </span>
+                <div class="dc-dossier-hdr__stat-v dc-dossier-hdr__stat-v--sm">{{ cls.label }}</div>
+              </div>
+            </div>
+          </div>
+          <div class="dc-dossier-hdr__otd"
+               [class.is-open]="onThisDayExpanded"
+               data-dc-engram-target="date">
+            <div class="dc-dossier-hdr__otd-top">
+              <div *ngIf="dbReady" class="dc-dossier-hdr__date">
+                <button type="button" (click)="nudgeHeaderDate(-1)" aria-label="Previous day">‹</button>
+                <app-date-picker [selectedMonth]="selectedMonth"
+                                 [selectedDay]="selectedDay"
+                                 (dateChange)="onDatePickerChange($event); onDateSearch()"></app-date-picker>
+                <button type="button" (click)="nudgeHeaderDate(1)" aria-label="Next day">›</button>
+                <button type="button" (click)="goHeaderToday()">Today</button>
+              </div>
+              <span class="dc-dossier-hdr__otd-title">On This Day</span>
+              <button type="button"
+                      class="dc-dossier-hdr__otd-sum"
+                      (click)="toggleOnThisDay()"
+                      [attr.aria-expanded]="onThisDayExpanded">{{ onThisDaySummary }}</button>
+              <button type="button"
+                      class="chronicle-toolbar-btn chronicle-toolbar-btn--secondary text-xs shrink-0 hidden sm:inline-flex"
+                      (click)="showShareDropdown = true">
                 Share &amp; Archive
               </button>
+              <button type="button"
+                      class="chronicle-toolbar-btn chronicle-toolbar-btn--secondary dc-date-more sm:hidden"
+                      (click)="toggleDateOverflow(); showShareDropdown = true"
+                      aria-label="Share and archive">
+                ⋯
+              </button>
+            </div>
+            <div class="dc-dossier-hdr__yrs">
+              <div *ngFor="let card of headerOnThisDayYears" class="dc-dossier-hdr__yr">
+                <div class="dc-dossier-hdr__yr-y">{{ card.year }}</div>
+                <div class="dc-dossier-hdr__yr-d">
+                  <ng-container *ngIf="card.game === 'D1'">D1 · </ng-container>{{ card.season || '—' }}
+                </div>
+                <div class="dc-dossier-hdr__yr-a">{{ card.line }}</div>
+              </div>
+              <button type="button" class="dc-dossier-hdr__more" (click)="scrollToActivitiesList()">See all ›</button>
             </div>
           </div>
         </div>
+
+        <div class="dc-dossier-hdr__accounts">
+          <p class="dc-dossier-hdr__accounts-hint">Click a card to filter the whole dossier. Click again to include it again. No selection = all accounts.</p>
+          <app-account-card-grid
+            [perPlatformStats]="perPlatformStats"
+            [selectedAccountKeys]="selectedAccountKeysForActivities"
+            [statsPending]="accountStatsPending"
+            (accountKeyToggle)="onSiteAccountCardToggle($event)">
+          </app-account-card-grid>
+        </div>
+
+        <div *ngIf="searchPanelExpanded" class="dc-dossier-hdr__search">
+          <div *ngIf="!apiAvailable && !d1ApiIssue && !d2ApiIssue" class="bg-red-900 text-red-200 p-2 rounded mb-3 text-sm">
+            Bungie API is currently unavailable. Showing cached data where possible.
+          </div>
+          <div *ngIf="d1ApiIssue" class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm">
+            <p class="font-medium text-amber-200 mb-0.5">Destiny 1 API issue</p>
+            <p>{{ d1ApiIssue }}</p>
+          </div>
+          <div *ngIf="d2ApiIssue" class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm">
+            <p class="font-medium text-amber-200 mb-0.5">Destiny 2 API issue</p>
+            <p>{{ d2ApiIssue }}</p>
+          </div>
+          <div *ngIf="dcApiFallbackNotice"
+               class="bg-amber-950/80 text-amber-100 border border-amber-600/50 p-3 rounded mb-3 text-sm relative pr-9">
+            <button type="button"
+                    (click)="dismissDcApiFallbackNotice()"
+                    class="absolute top-2 right-2 p-1 rounded text-amber-300/80 hover:text-white hover:bg-white/10"
+                    aria-label="Dismiss">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            <p class="font-medium text-amber-200 mb-0.5">Using Bungie API (slower)</p>
+            <p>{{ dcApiFallbackNotice }}</p>
+          </div>
+          <div *ngIf="!isOfflineArchiveMode" class="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center">
+            <input type="text"
+                   [(ngModel)]="searchUsername"
+                   (ngModelChange)="onSearchInput($event)"
+                   (keydown.enter)="handleSearchEnter($any($event))"
+                   [class.border-red-500]="errorMessage"
+                   class="destiny-input flex-1 px-4 py-2.5 text-sm"
+                   placeholder="Type a name, then Enter to search"
+                   aria-label="Destiny username">
+            <button (click)="addPlayer()"
+                    [disabled]="!searchUsername && searchChips.length === 0"
+                    class="chronicle-toolbar-btn chronicle-toolbar-btn--primary sm:shrink-0"
+                    [attr.aria-busy]="loading['search']">
+              {{ loading['search'] ? 'Searching...' : 'Search' }}
+            </button>
+            <button type="button"
+                    (click)="toggleAddMode()"
+                    class="chronicle-toolbar-btn text-xs sm:shrink-0"
+                    [class.chronicle-toolbar-btn--primary]="addMode">
+              {{ addMode ? 'Add mode' : 'Replace mode' }}
+            </button>
+          </div>
+          <div *ngIf="searchChips.length > 0" class="flex flex-wrap gap-2 mt-2">
+            <span *ngFor="let chip of searchChips; let i = index" class="destiny-chip">
+              {{ chip }}
+              <button (click)="removeSearchChip(i)" class="text-slate-400 hover:text-white" aria-label="Remove name">✕</button>
+            </span>
+          </div>
+          <div *ngIf="errorMessage" class="mt-2 text-sm text-red-400">{{ errorMessage }}</div>
+        </div>
+
+        <div class="dc-dossier-hdr__tabs" id="dc-tab-panel-top">
+          <nav class="destiny-tab-nav md:gap-1 w-full" role="tablist" aria-label="Activity views"
+               data-dc-engram-target="tabs">
+            <button
+              type="button"
+              (click)="onTabChange('activities')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'activities' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'activities'"
+              [title]="uiI18n.t('tab.activities')">
+              📊 {{ uiI18n.t('tab.activities') }}
+            </button>
+            <button
+              type="button"
+              (click)="onTabChange('firsts')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'firsts' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'firsts'"
+              [title]="uiI18n.t('tab.firsts')">
+              🏆 {{ uiI18n.t('tab.firsts') }}
+            </button>
+            <button
+              type="button"
+              (click)="onTabChange('titles')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'titles' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'titles'"
+              title="Titles">
+              🎖️ {{ uiI18n.t('tab.titles') }}
+            </button>
+            <button
+              type="button"
+              (click)="onTabChange('accomplishments')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'accomplishments' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'accomplishments'"
+              [title]="uiI18n.t('tab.accomplishments')">
+              🏅 {{ uiI18n.t('tab.accomplishments') }}
+            </button>
+            <button
+              type="button"
+              (click)="onTabChange('breakdown')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'breakdown' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'breakdown'"
+              [title]="uiI18n.t('tab.breakdown')">
+              📋 {{ uiI18n.t('tab.breakdown') }}
+            </button>
+            <button
+              type="button"
+              (click)="onTabChange('heatmap')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'heatmap' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'heatmap'"
+              [title]="uiI18n.t('tab.heatmap')">
+              🔥 {{ uiI18n.t('tab.heatmap') }}
+            </button>
+            <button
+              *ngIf="enablePlayedWith"
+              type="button"
+              (click)="onTabChange('playedWith')"
+              class="main-tab"
+              [ngClass]="{ 'main-tab--active': activeTab === 'playedWith' }"
+              role="tab"
+              [attr.aria-selected]="activeTab === 'playedWith'"
+              [title]="uiI18n.t('tab.playedWith')">
+              🤝 {{ uiI18n.t('tab.playedWith') }}
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      <div *ngIf="textView.enabled() && selectedPlayers.length === 0"
+           class="dc-dossier-hdr__tabs mb-4"
+           id="dc-tab-panel-top-text">
+        <nav class="destiny-tab-nav md:gap-1 w-full" role="tablist" aria-label="Activity views"
+             data-dc-engram-target="tabs">
+          <button type="button" (click)="onTabChange('activities')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'activities' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'activities'">📊 {{ uiI18n.t('tab.activities') }}</button>
+          <button type="button" (click)="onTabChange('firsts')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'firsts' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'firsts'">🏆 {{ uiI18n.t('tab.firsts') }}</button>
+          <button type="button" (click)="onTabChange('titles')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'titles' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'titles'">🎖️ {{ uiI18n.t('tab.titles') }}</button>
+          <button type="button" (click)="onTabChange('accomplishments')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'accomplishments' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'accomplishments'">🏅 {{ uiI18n.t('tab.accomplishments') }}</button>
+          <button type="button" (click)="onTabChange('breakdown')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'breakdown' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'breakdown'">📋 {{ uiI18n.t('tab.breakdown') }}</button>
+          <button type="button" (click)="onTabChange('heatmap')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'heatmap' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'heatmap'">🔥 {{ uiI18n.t('tab.heatmap') }}</button>
+          <button *ngIf="enablePlayedWith" type="button" (click)="onTabChange('playedWith')" class="main-tab"
+                  [ngClass]="{ 'main-tab--active': activeTab === 'playedWith' }" role="tab"
+                  [attr.aria-selected]="activeTab === 'playedWith'">🤝 {{ uiI18n.t('tab.playedWith') }}</button>
+        </nav>
       </div>
 
-      <!-- Legacy strip — hidden for theater-owned Decrypts (incl. after unzip) -->
       <div *ngIf="showLoadingModal && !decryptLanding.visible() && !decryptLanding.ownsLoad()"
            class="loading-profiles-strip loading-profiles-strip--engram w-full">
         <div class="flex items-center gap-3 min-w-0">
@@ -364,7 +404,7 @@
             Stop
           </button>
           <button type="button" (click)="closeLoadingModal()" class="text-slate-500 hover:text-white p-1 shrink-0" aria-label="Dismiss">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
         <div *ngIf="loadingPanelExpanded" class="mt-2 pt-2 border-t border-[rgba(201,162,39,0.12)] space-y-1 max-h-28 overflow-y-auto">
@@ -383,100 +423,9 @@
           </p>
         </div>
       </div>
-       
-       <!-- Main Content Area with Right Sidebar -->
-       <div class="flex-1 min-w-0 flex flex-col xl:flex-row gap-8"
-            [class.justify-center]="activeTab !== 'heatmap' && activeTab !== 'activities'">
-      <!-- Main Content: Yearly Activity Cards (~1200px on wide screens; Heatmap uses full width) -->
-         <div class="flex-1 min-w-0"
-              data-dc-engram-target="main"
-              [ngClass]="activeTab === 'heatmap' ? 'w-full' : 'w-full max-w-[1200px] mx-auto'">
-        <!-- Tab Navigation -->
-         <div class="mb-8">
-         <div *ngIf="decryptLanding.hardlightEnabled() && !textView.enabled() && selectedPlayers.length > 0"
-              class="dc-dossier-strip" aria-hidden="true"
-              data-dc-engram-target="dossier">
-           <span>{{ dossierStripLabel }}</span>
-           <span class="dc-dossier-strip__status">{{ dossierStripStatus }}</span>
-         </div>
-         <nav class="destiny-tab-nav md:gap-1" role="tablist" aria-label="Activity views"
-              data-dc-engram-target="tabs">
-           <button
-             type="button"
-             (click)="onTabChange('activities')" 
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'activities' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'activities'"
-             [title]="uiI18n.t('tab.activities')">
-             📊 {{ uiI18n.t('tab.activities') }}
-           </button>
-           <button
-             type="button"
-             (click)="onTabChange('firsts')"
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'firsts' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'firsts'"
-             [title]="uiI18n.t('tab.firsts')">
-             🏆 {{ uiI18n.t('tab.firsts') }}
-           </button>
-           <!-- Analytics tab temporarily hidden -->
-           <button
-             type="button"
-             (click)="onTabChange('titles')"
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'titles' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'titles'"
-             title="Titles">
-             🎖️ {{ uiI18n.t('tab.titles') }}
-           </button>
-           <button
-             type="button"
-             (click)="onTabChange('accomplishments')"
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'accomplishments' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'accomplishments'"
-             [title]="uiI18n.t('tab.accomplishments')">
-             🏅 {{ uiI18n.t('tab.accomplishments') }}
-           </button>
-           <button
-             type="button"
-             (click)="onTabChange('breakdown')"
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'breakdown' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'breakdown'"
-             [title]="uiI18n.t('tab.breakdown')">
-             📋 {{ uiI18n.t('tab.breakdown') }}
-           </button>
-           <button
-             type="button"
-             (click)="onTabChange('heatmap')"
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'heatmap' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'heatmap'"
-             [title]="uiI18n.t('tab.heatmap')">
-             🔥 {{ uiI18n.t('tab.heatmap') }}
-           </button>
-          <button
-             *ngIf="enablePlayedWith"
-             type="button"
-             (click)="onTabChange('playedWith')"
-             class="main-tab"
-             [ngClass]="{ 'main-tab--active': activeTab === 'playedWith' }"
-             role="tab"
-             [attr.aria-selected]="activeTab === 'playedWith'"
-             [title]="uiI18n.t('tab.playedWith')">
-             🤝 {{ uiI18n.t('tab.playedWith') }}
-           </button>
-           </nav>
-        </div>
 
-        <!-- Background PGCR prefetch: show on all tabs when D1 report data is still loading -->
+      <div class="dc-flow-main flex-1 min-w-0 w-full"
+           data-dc-engram-target="main">
         <div *ngIf="(pgcrPrefetchProgress$ | async) as prefetch" class="mb-3">
           <div *ngIf="prefetch.inProgress"
                class="destiny-surface-panel text-center text-slate-400 py-3 px-4 flex flex-col sm:flex-row items-center justify-center gap-2">
@@ -490,87 +439,38 @@
           </div>
         </div>
 
-        <!-- Activities Tab -->
-        <div *ngIf="activeTab === 'activities'">
+        <div *ngIf="activeTab === 'activities'" class="dc-flow-activities-host">
           <app-activities-tab></app-activities-tab>
         </div>
 
-        <!-- Activity breakdown tab -->
         <div *ngIf="activeTab === 'breakdown'">
           <app-breakdown-tab></app-breakdown-tab>
         </div>
 
-        <!-- Guardian Firsts Tab -->
         <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0">
           <app-firsts-tab></app-firsts-tab>
         </div>
 
-        <!-- Titles Tab -->
         <div *ngIf="activeTab === 'titles'">
           <app-titles-tab></app-titles-tab>
         </div>
 
-        <!-- Accomplishments Tab (Medals first; more sections follow) -->
         <div *ngIf="activeTab === 'accomplishments' && selectedPlayers.length > 0">
           <app-accomplishments-tab></app-accomplishments-tab>
         </div>
 
-        <!-- Heatmap Tab -->
         <div *ngIf="activeTab === 'heatmap'">
-          <dc-coverage-chip *ngIf="textView.enabled()" [coverage]="archiveCoverage"></dc-coverage-chip>
           <app-activity-heatmap
             [membershipIds]="heatmapMembershipIds"
             [characterMeta]="heatmapCharacterMeta"
             (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
         </div>
 
-        <!-- Played With Tab -->
         <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0">
-          <dc-coverage-chip *ngIf="textView.enabled()" [coverage]="archiveCoverage"></dc-coverage-chip>
           <app-played-with *ngIf="playedWithAccounts.length; else playedWithD2Only" [accounts]="playedWithAccounts"></app-played-with>
           <ng-template #playedWithD2Only>
             <p class="text-sm text-slate-400">{{ uiI18n.t('playedWith.d2Only') }}</p>
           </ng-template>
-        </div>
-
-
-          <!-- Analytics Tab -->
-        <!-- Analytics view temporarily removed -->
-      </div>
-         
-         <!-- Right Sidebar: On This Day (Activities tab only) -->
-       <div *ngIf="activeTab === 'activities'"
-            class="xl:w-80 xl:sticky xl:top-4 flex flex-col gap-6 min-w-0">
-        <div class="destiny-surface-panel p-4">
-          <div class="mb-4">
-            <h3 class="destiny-section-title text-lg mb-1">📅 On This Day</h3>
-            <p class="text-sm text-slate-300">
-              Activities from {{ selectedMonth }}/{{ selectedDay }} across all years in your Destiny history
-            </p>
-          </div>
-          <div *ngIf="!loadingActivities[selectedDate] && groupedActivitiesByAccount && groupedActivitiesByAccount.length > 0">
-            <div class="space-y-4">
-              <div *ngFor="let gameGroup of groupedActivitiesByAccount" class="destiny-year-block rounded-lg p-4 mt-2">
-                <h4 class="text-white font-medium mb-2">{{ gameGroup.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}</h4>
-                <div class="text-base text-slate-300">
-                  <div *ngFor="let yearGroup of gameGroup.yearGroups" class="mb-2">
-                    <div class="font-medium text-slate-200">{{ yearGroup.year }}<span *ngIf="getSeasonForYear(gameGroup.game, yearGroup.year) as season" class="text-slate-300"> ({{ season }})</span></div>
-                    <div *ngFor="let typeGroup of yearGroup.typeGroups" class="ml-2">
-                      {{ typeGroup.name }}: {{ typeGroup.activities.length }} activities
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div *ngIf="!loadingActivities[selectedDate] && (!groupedActivitiesByAccount || groupedActivitiesByAccount.length === 0)" 
-               class="text-slate-300 text-center py-4 text-sm">
-            No activities found for this date.
-          </div>
-          <div *ngIf="loadingActivities[selectedDate]" class="text-slate-300 text-center py-4 text-sm">
-            Loading activities...
-          </div>
-          </div>
         </div>
       </div>
     </div>
@@ -688,12 +588,13 @@
         <button type="button"
                 class="modal-account-pick"
                 [class.modal-account-pick--selected]="isPlayerSelected(crossSavePlayer)"
+                [class.modal-account-pick--empty]="crossSavePlayer.hasGames === false"
                 [attr.aria-pressed]="isPlayerSelected(crossSavePlayer)"
                 (click)="togglePlayerSelection(crossSavePlayer, $event)">
           <img [src]="getPlatformIconUrl(crossSavePlayer.membershipType)" class="w-5 h-5 shrink-0" alt="" />
           <div class="modal-account-pick-body">
             <div class="modal-account-pick-name">{{ crossSavePlayer.displayName }}</div>
-            <div class="modal-account-pick-meta">Cross Save ({{ crossSavePlayer.platform }})</div>
+            <div class="modal-account-pick-meta">Cross Save · {{ searchAccountMeta(crossSavePlayer) }}</div>
           </div>
           <span class="modal-account-pick-badge">{{ isPlayerSelected(crossSavePlayer) ? 'Selected' : 'Select' }}</span>
         </button>
@@ -707,12 +608,13 @@
                   *ngFor="let player of d2ModalAccounts"
                   class="modal-account-pick"
                   [class.modal-account-pick--selected]="isPlayerSelected(player)"
+                  [class.modal-account-pick--empty]="player.hasGames === false"
                   [attr.aria-pressed]="isPlayerSelected(player)"
                   (click)="togglePlayerSelection(player, $event)">
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
-              <div class="modal-account-pick-meta">{{ getPlatformName(player.membershipType) }}</div>
+              <div class="modal-account-pick-meta">{{ searchAccountMeta(player) }}</div>
             </div>
             <span class="modal-account-pick-badge">{{ isPlayerSelected(player) ? 'Selected' : 'Select' }}</span>
           </button>
@@ -727,12 +629,13 @@
                   *ngFor="let player of d1SearchResults"
                   class="modal-account-pick"
                   [class.modal-account-pick--selected]="isPlayerSelected(player)"
+                  [class.modal-account-pick--empty]="player.hasGames === false"
                   [attr.aria-pressed]="isPlayerSelected(player)"
                   (click)="togglePlayerSelection(player, $event)">
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
-              <div class="modal-account-pick-meta">{{ getPlatformName(player.membershipType) }}</div>
+              <div class="modal-account-pick-meta">{{ searchAccountMeta(player) }}</div>
             </div>
             <span class="modal-account-pick-badge">{{ isPlayerSelected(player) ? 'Selected' : 'Select' }}</span>
           </button>

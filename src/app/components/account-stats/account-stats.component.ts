@@ -15,9 +15,10 @@ interface PerTypeStat {
   imports: [CommonModule, AccountCardGridComponent],
   template: `
     <div class="destiny-surface-panel account-summary-panel p-4 flex flex-col gap-4" *ngIf="effectiveStats as s">
-      <h3 class="text-lg font-semibold text-[var(--destiny-gold)] font-d2-headline m-0">Account Summary</h3>
+      <ng-container *ngIf="!hideHeadlineStats">
+        <h3 class="text-lg font-semibold text-[var(--destiny-gold)] font-d2-headline m-0">Account Summary</h3>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div class="account-summary-stat"
              [attr.title]="activityTimeTooltip">
           <span class="account-summary-stat-label">Time in Activities</span>
@@ -36,9 +37,10 @@ interface PerTypeStat {
           <span class="account-summary-stat-label">Total Activities</span>
           <span class="destiny-stat-value text-xl">{{ effectiveLoading ? '—' : s.totalActivityCount }}</span>
         </div>
-      </div>
+        </div>
+      </ng-container>
 
-      <table class="account-summary-table w-full text-sm text-left" *ngIf="s.perType">
+      <table class="account-summary-table w-full text-sm text-left" *ngIf="perTypeEntries.length > 0">
         <thead>
           <tr>
             <th class="py-2 pr-2">Activity Type</th>
@@ -50,7 +52,7 @@ interface PerTypeStat {
           <tr *ngFor="let entry of perTypeEntries">
             <td class="py-1.5 pr-2">{{ entry[0] }}</td>
             <td class="py-1.5 pr-2 text-right font-mono">{{ effectiveLoading ? '—' : entry[1].count }}</td>
-            <td class="py-1.5 text-right font-mono text-[var(--destiny-gold)]">{{ effectiveLoading ? '—' : formatDuration(entry[1].time) }}</td>
+            <td class="py-1.5 text-right font-mono account-summary-time">{{ effectiveLoading ? '—' : formatDuration(entry[1].time) }}</td>
           </tr>
         </tbody>
       </table>
@@ -83,6 +85,8 @@ export class AccountStatsComponent {
   @Input() selectedAccountKeys: Set<string> | null = null;
   /** True while account stats are still loading — show placeholders, never a stale 0. */
   @Input() loading = false;
+  /** Hide the three headline totals when the dossier header already shows them. */
+  @Input() hideHeadlineStats = false;
   @Output() accountKeyToggle = new EventEmitter<string>();
   @Input() onExportActivities?: () => void;
   @Input() onOpenExportOptionsDialog?: () => void;

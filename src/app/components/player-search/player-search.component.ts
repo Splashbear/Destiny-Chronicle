@@ -59,6 +59,7 @@ import { distinctUntilChanged, exhaustMap } from 'rxjs/operators';
 import { TimezoneService } from '../../services/timezone.service';
 import { ActivityIconService } from '../../services/activity-icon.service';
 import { DatePickerComponent } from '../date-picker/date-picker.component';
+import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivitiesTabComponent,
   ACTIVITIES_HOST } from '../../features/activities';
 import { BreakdownTabComponent,
@@ -125,6 +126,7 @@ export type {
     FormsModule,
     ExportOptionsDialogComponent,
     DatePickerComponent,
+    AccountCardGridComponent,
     ActivitiesTabComponent,
     BreakdownTabComponent,
     FirstsTabComponent,
@@ -206,6 +208,9 @@ export class PlayerSearchComponent extends PlayerSearchUiMixin implements OnInit
     super();
     (window as any).activityDbService = this.activityDb;
     this.hideGetStartedBanner = typeof localStorage !== 'undefined' && localStorage.getItem(HIDE_GET_STARTED_KEY) === 'true';
+    if (typeof sessionStorage !== 'undefined') {
+      this.onThisDayExpanded = sessionStorage.getItem('dc.onThisDayExpanded') === '1';
+    }
     this.loadActivityCollapseState();
     this.loadActivitiesViewPreferences();
     this.updatePlatformTabs();

@@ -323,20 +323,21 @@
       <div class="grid grid-cols-1 gap-2">
         <div *ngFor="let versionGroup of ps.getVersionGroups(typeGroup.activities); trackBy: ps.trackByVersionGroup" class="mb-3 pl-2 min-w-0 border-l border-[rgba(201,162,39,0.15)]">
           <div class="flex flex-wrap items-center gap-1 mb-1.5">
-            <span class="text-xs font-medium text-[var(--destiny-gold)] bg-black/30 border border-[var(--destiny-gold)]/30 px-2 py-0.5 rounded">{{ versionGroup.version }}</span>
-            <span class="text-xs text-slate-400">
+            <span class="activity-version-label">{{ versionGroup.version }}</span>
+            <span class="activity-version-count">
               ({{ versionGroup.activities.length }} {{ versionGroup.activities.length === 1 ? 'completion' : 'completions' }})
             </span>
           </div>
           <div *ngFor="let activity of versionGroup.activities; trackBy: ps.trackByActivity"
-               class="activity-card-row activity-row destiny-panel destiny-panel--compact min-w-0 transition-colors mb-1"
+               class="activity-card-row activity-row min-w-0"
                [ngStyle]="{ '--activity-accent': ps.getActivityTypeAccent(typeGroup.type) }">
-            <div class="activity-row-meta">
+            <div class="activity-row-meta" *ngIf="ps.selectedPlayers.length > 1">
               <img [src]="ps.getGameIconUrl((activity.game || gameGroup.game) === 'D1' ? 'D1' : 'D2')" class="w-4 h-4 shrink-0 object-contain" alt="game" />
               <img [src]="ps.getPlatformIconUrl(activity.membershipType || 0)" class="w-4 h-4 platform-icon" alt="platform" />
               <img *ngIf="activity.characterClass as cls" [src]="ps.getClassIconUrl(cls)" class="w-4 h-4 shrink-0" [title]="cls" alt="class" />
             </div>
-            <span class="activity-row-name text-xs text-slate-300 font-medium">{{ ps.getActivityDisplayName(activity) }}</span>
+            <span *ngIf="ps.selectedPlayers.length > 1" class="activity-row-name text-xs font-medium">{{ ps.getActivityDisplayName(activity) }}</span>
+            <span *ngIf="ps.selectedPlayers.length <= 1" class="activity-row-name activity-row-name--spacer" aria-hidden="true"></span>
             <button type="button"
                     [attr.data-instance-id]="activity.activityDetails?.instanceId"
                     [attr.data-d1]="(activity.game || gameGroup.game) === 'D1' ? '1' : '0'"

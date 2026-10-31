@@ -1,6 +1,6 @@
 /**
- * Engram theme — bronze / gold hard-light dossier frame.
- * Matches opening engram + DOSSIER_HARDLIGHT_MOCKUP (not cyan).
+ * Engram theme — site gold hard-light dossier frame.
+ * Matches opening engram + DOSSIER_HARDLIGHT_MOCKUP (not cyan / not bronze).
  * Fire accents stay elsewhere; Text view stays plain.
  */
 
@@ -15,6 +15,10 @@
   --dc-hardlight-panel-top: rgba(42, 36, 18, 0.72);
   --dc-hardlight-panel-mid: rgba(18, 19, 16, 0.62);
   --dc-hardlight-panel-bot: rgba(11, 12, 14, 0.58);
+  /* READABILITY_SPEC — text/data over solid panels */
+  --dc-read-body: #ede6da;
+  --dc-read-label: #b8a890;
+  --dc-read-panel: rgba(20, 17, 13, 0.9); /* #14110D @ ~90% */
 }
 
 /* Shared holographic plate fill */
@@ -42,13 +46,14 @@
     0 0 22px color-mix(in srgb, var(--dc-hardlight) 22%, transparent) !important;
 }
 
+/* Corner ticks sit outside the plate so they never cross title text. */
 @mixin dc-hardlight-corner-brackets {
   &::before,
   &::after {
     content: '';
     position: absolute;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     border: 1.5px solid var(--dc-hardlight-edge-strong);
     pointer-events: none;
     z-index: 2;
@@ -60,15 +65,15 @@
   }
 
   &::before {
-    top: -1px;
-    left: -1px;
+    top: -6px;
+    left: -6px;
     border-right: 0;
     border-bottom: 0;
   }
 
   &::after {
-    bottom: -1px;
-    right: -1px;
+    bottom: -6px;
+    right: -6px;
     border-left: 0;
     border-top: 0;
     inset: auto;
@@ -298,6 +303,303 @@ html.dc-hardlight:not(.dc-text-view) {
   /* Materialize after decrypt landing dismisses */
   .dc-dossier-materialize {
     animation: dc-dossier-in 0.28s ease-out both;
+  }
+
+  /*
+   * READABILITY_SPEC — solid panels behind text; frame effects only on edges.
+   * Glow on H1/H2 and big stats; body/labels/cells stay clean.
+   */
+  .activity-cards-grid {
+    .activity-card-column {
+      background: var(--dc-read-panel) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      border-color: var(--dc-hardlight-edge-strong) !important;
+      box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 14%, transparent),
+        0 0 0 1px var(--dc-hardlight-edge),
+        0 0 10px color-mix(in srgb, var(--dc-hardlight-bright) 28%, transparent),
+        0 0 20px color-mix(in srgb, var(--dc-hardlight) 14%, transparent) !important;
+
+      &::before {
+        opacity: 0 !important;
+        animation: none !important;
+      }
+    }
+
+    .activity-card-row {
+      background: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      clip-path: none !important;
+      filter: none !important;
+      margin-bottom: 0 !important;
+      padding: 0.4rem 0.15rem !important;
+      border-bottom: 1px solid rgba(255, 220, 160, 0.08) !important;
+
+      &::before,
+      &::after {
+        display: none !important;
+      }
+    }
+
+    .activity-version-label {
+      color: var(--dc-hardlight-bright);
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: none;
+      border: 0;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    .activity-version-count {
+      color: var(--dc-read-label);
+      font-size: 0.75rem;
+    }
+
+    .activity-row-name {
+      color: var(--dc-read-body);
+    }
+
+    .activity-row-name--spacer {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .activity-pgcr-link,
+    .activity-pgcr-link--card {
+      color: var(--dc-read-body) !important;
+      font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: 'tnum' 1;
+      text-align: right;
+      text-decoration: none !important;
+      text-shadow: none !important;
+
+      &:hover,
+      &:focus-visible {
+        color: #fff8ee !important;
+        text-decoration: underline !important;
+        text-underline-offset: 2px;
+      }
+    }
+  }
+
+  .activities-glass-view {
+    .destiny-year-block {
+      background: var(--dc-read-panel) !important;
+      background-image: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      border: 1.5px solid var(--dc-hardlight-edge) !important;
+      box-shadow:
+        inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 12%, transparent),
+        0 0 0 1px var(--dc-hardlight-edge),
+        0 0 14px color-mix(in srgb, var(--dc-hardlight) 14%, transparent) !important;
+
+      &::before,
+      &::after {
+        /* Keep corner brackets on year frames only */
+        opacity: 1;
+      }
+    }
+
+    .activity-year-label {
+      text-shadow: 0 0 10px color-mix(in srgb, var(--dc-hardlight) 40%, transparent);
+    }
+
+    .account-summary-panel {
+      background: var(--dc-read-panel) !important;
+      background-image: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+
+      .account-summary-stat {
+        background: rgba(20, 17, 13, 0.72) !important;
+        border-color: color-mix(in srgb, var(--dc-hardlight) 22%, transparent) !important;
+        box-shadow: none !important;
+      }
+
+      .account-summary-stat-label {
+        color: var(--dc-read-label) !important;
+        text-shadow: none !important;
+      }
+
+      .destiny-stat-value {
+        color: var(--dc-hardlight-bright);
+        text-shadow: 0 0 12px color-mix(in srgb, var(--dc-hardlight) 45%, transparent);
+      }
+
+      .account-summary-time {
+        color: var(--dc-read-body) !important;
+        font-variant-numeric: tabular-nums;
+        text-shadow: none !important;
+      }
+    }
+  }
+
+  .on-this-day-panel {
+    background: var(--dc-read-panel) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .on-this-day-sub,
+  .on-this-day-empty,
+  .on-this-day-season {
+    color: var(--dc-read-label);
+  }
+
+  .on-this-day-game-title {
+    color: var(--dc-hardlight-bright);
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--dc-hardlight) 35%, transparent);
+  }
+
+  .on-this-day-year {
+    margin-bottom: 12px;
+  }
+
+  .on-this-day-year-label {
+    color: var(--dc-read-body);
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+  }
+
+  .on-this-day-row {
+    margin-left: 0.5rem;
+    color: var(--dc-read-body);
+    font-size: 0.9375rem;
+  }
+
+  .on-this-day-name {
+    font-weight: 700;
+    color: var(--dc-read-body);
+  }
+
+  .on-this-day-count {
+    font-weight: 400;
+    color: var(--dc-read-label);
+  }
+
+  /* Date panel: one solid primary, one outlined secondary */
+  .chronicle-toolbar-btn--date.chronicle-toolbar-btn--primary {
+    background: linear-gradient(180deg, #e4c04a 0%, #a07a1a 100%) !important;
+    color: #14110a !important;
+    border-color: transparent !important;
+    font-weight: 600;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--dc-hardlight-bright) 45%, transparent) !important;
+    text-shadow: none !important;
+
+    &:hover {
+      background: linear-gradient(180deg, #ffd56a 0%, #c9a227 100%) !important;
+      color: #14110a !important;
+    }
+  }
+
+  .chronicle-toolbar-btn--secondary {
+    background: transparent !important;
+    color: var(--dc-read-body) !important;
+    border: 1px solid var(--dc-hardlight-edge-strong) !important;
+    box-shadow: none !important;
+
+    &:hover {
+      background: color-mix(in srgb, var(--dc-hardlight) 10%, transparent) !important;
+      color: #fff8ee !important;
+    }
+  }
+
+  /* Body copy: no bloom on dense data */
+  .activity-cards-grid,
+  .account-summary-table,
+  .on-this-day-panel {
+    text-shadow: none;
+  }
+
+  /* Accomplishments + Breakdown: solid readable plates (same cue as Activities) */
+  app-accomplishments-tab .destiny-surface-panel,
+  app-breakdown-tab .destiny-surface-panel:not(.breakdown-tile-selected),
+  app-breakdown-tab .destiny-stat-highlight,
+  app-accomplishments-tab .destiny-modal-section,
+  app-breakdown-tab .destiny-modal-section {
+    background: var(--dc-read-panel) !important;
+    background-image: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Dense breakdown tiles: no corner ticks — they collide with title text. */
+  app-breakdown-tab .breakdown-tile {
+    &::before,
+    &::after {
+      display: none !important;
+      content: none !important;
+    }
+  }
+
+  /* Selected filter tile: light gold sheen so selection is obvious on hard-light plates */
+  app-breakdown-tab .breakdown-tile.breakdown-tile-selected {
+    border: 1.5px solid var(--dc-hardlight-edge-strong) !important;
+    background-image:
+      linear-gradient(
+        125deg,
+        color-mix(in srgb, var(--dc-hardlight-wash) 22%, transparent) 0%,
+        color-mix(in srgb, var(--dc-hardlight) 10%, transparent) 42%,
+        transparent 68%
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--dc-hardlight) 28%, #14110d) 0%,
+        color-mix(in srgb, var(--dc-hardlight) 12%, #14110d) 100%
+      ) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight-wash) 35%, transparent),
+      0 0 0 1px var(--dc-hardlight-edge-strong),
+      0 0 18px color-mix(in srgb, var(--dc-hardlight-bright) 45%, transparent) !important;
+
+    &::before,
+    &::after {
+      display: none !important;
+      content: none !important;
+    }
+
+    .destiny-stat-value {
+      color: var(--dc-hardlight-bright) !important;
+      text-shadow: 0 0 10px color-mix(in srgb, var(--dc-hardlight) 40%, transparent);
+    }
+  }
+
+  app-breakdown-tab .destiny-stat-highlight .text-white,
+  app-accomplishments-tab .text-white {
+    color: var(--dc-read-body) !important;
+    text-shadow: none !important;
+  }
+
+  /* Played With: gold dossier panels (no cool blue slate) */
+  .played-with-panel {
+    background: var(--dc-read-panel) !important;
+    border: 1.5px solid var(--dc-hardlight-edge) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 12%, transparent),
+      0 0 0 1px var(--dc-hardlight-edge),
+      0 0 14px color-mix(in srgb, var(--dc-hardlight) 12%, transparent) !important;
+  }
+
+  .played-with-accent {
+    color: var(--dc-hardlight-bright) !important;
+  }
+
+  .seal-poster-studio .controls-panel,
+  .seal-poster-studio .info-bar,
+  .seal-poster-studio .heraldry-hall {
+    background: var(--dc-read-panel) !important;
+    border: 1px solid var(--dc-hardlight-edge);
   }
 }
 

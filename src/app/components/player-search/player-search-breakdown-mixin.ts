@@ -14,6 +14,7 @@ import {
 import { buildBreakdownChartDataFromItems, sumBreakdownCardTimeSeconds } from '../../utils/breakdown-chart-data';
 import { getBreakdownProfileTotalTimeSeconds as getBreakdownProfileTotalTimeSecondsUtil } from '../../utils/breakdown-profile-time';
 import { getBreakdownMembershipIds as getBreakdownMembershipIdsUtil } from '../../utils/breakdown-membership-ids';
+import { breakdownIdentityByMembership } from '../../utils/breakdown-account-identity';
 import { getBreakdownSelectedGames as getBreakdownSelectedGamesUtil } from '../../utils/breakdown-selected-games';
 import { sumBreakdownGroupTotals } from '../../utils/breakdown-group-totals';
 import {
