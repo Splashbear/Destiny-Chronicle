@@ -612,12 +612,15 @@
         <button type="button"
                 class="modal-account-pick"
                 [class.modal-account-pick--selected]="isPlayerSelected(crossSavePlayer)"
+                [class.modal-account-pick--empty]="crossSavePlayer.hasGames === false"
                 [attr.aria-pressed]="isPlayerSelected(crossSavePlayer)"
                 (click)="togglePlayerSelection(crossSavePlayer)">
           <img [src]="getPlatformIconUrl(crossSavePlayer.membershipType)" class="w-5 h-5 shrink-0" alt="" />
           <div class="modal-account-pick-body">
             <div class="modal-account-pick-name">{{ crossSavePlayer.displayName }}</div>
-            <div class="modal-account-pick-meta">Cross Save ({{ crossSavePlayer.platform }})</div>
+            <div class="modal-account-pick-meta">
+              Cross Save · {{ searchAccountMeta(crossSavePlayer) }}
+            </div>
           </div>
           <span class="modal-account-pick-badge">{{ isPlayerSelected(crossSavePlayer) ? 'Selected' : 'Select' }}</span>
         </button>
@@ -631,13 +634,14 @@
                   *ngFor="let player of d2SearchResults"
                   class="modal-account-pick"
                   [class.modal-account-pick--selected]="isPlayerSelected(player)"
+                  [class.modal-account-pick--empty]="player.hasGames === false"
                   [attr.aria-pressed]="isPlayerSelected(player)"
                   (click)="togglePlayerSelection(player)">
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
               <div class="modal-account-pick-meta">
-                {{ getPlatformName(player.membershipType) }}
+                {{ searchAccountMeta(player) }}
                 <span *ngIf="player.localMatchNote" class="text-slate-500"> · {{ player.localMatchNote }}</span>
               </div>
             </div>
@@ -654,13 +658,14 @@
                   *ngFor="let player of d1SearchResults"
                   class="modal-account-pick"
                   [class.modal-account-pick--selected]="isPlayerSelected(player)"
+                  [class.modal-account-pick--empty]="player.hasGames === false"
                   [attr.aria-pressed]="isPlayerSelected(player)"
                   (click)="togglePlayerSelection(player)">
             <img [src]="getPlatformIconUrl(player.membershipType)" class="w-5 h-5 shrink-0" alt="" />
             <div class="modal-account-pick-body">
               <div class="modal-account-pick-name">{{ player.displayName }}</div>
               <div class="modal-account-pick-meta">
-                {{ getPlatformName(player.membershipType) }}
+                {{ searchAccountMeta(player) }}
                 <span *ngIf="player.localMatchNote" class="text-slate-500"> · {{ player.localMatchNote }}</span>
               </div>
             </div>
