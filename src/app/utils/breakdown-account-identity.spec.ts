@@ -38,6 +38,16 @@ describe('breakdownIdentityByMembership', () => {
     ]);
     expect(map['ps']).toBe(map['steam']);
   });
+
+  it('does not let D1 overwrite a shared mid that already has D2 identity', () => {
+    const map = breakdownIdentityByMembership([
+      { game: 'D2', membershipId: 'ps', displayName: 'Splashbear#1078' },
+      { game: 'D1', membershipId: 'ps', displayName: 'splashbear' },
+      { game: 'D2', membershipId: 'steam', displayName: 'Splashbear#1078' },
+    ]);
+    expect(map['ps']).toBe('D2:splashbear#1078');
+    expect(map['ps']).toBe(map['steam']);
+  });
 });
 
 describe('breakdownActivityDedupeKey', () => {

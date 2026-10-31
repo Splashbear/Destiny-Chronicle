@@ -37,7 +37,11 @@ export function breakdownIdentityByMembership(
   const map: Record<string, string> = {};
   for (const player of players || []) {
     if (!player.membershipId) continue;
-    map[player.membershipId] = breakdownAccountIdentity(player);
+    const next = breakdownAccountIdentity(player);
+    const prev = map[player.membershipId];
+    // Same Bungie mid can host D1 + D2; keep D2 so cross-save PGCRs still dedupe.
+    if (prev?.startsWith('D2:') && next.startsWith('D1:')) continue;
+    map[player.membershipId] = next;
   }
   return map;
 }
