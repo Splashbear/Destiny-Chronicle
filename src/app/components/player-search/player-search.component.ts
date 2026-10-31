@@ -9624,8 +9624,19 @@ export class PlayerSearchComponent implements OnInit, OnDestroy {
       this.crossSavePlayer = match ? { ...match } : applyLinked({ ...this.crossSavePlayer });
     }
 
-    // Stadia(5) / Epic(6): require meaningful last-played on that membership card.
-    if (profiles.length > 0) {
+    // Stadia(5) / Epic(6): unused cross-save leftovers. When PS/Xbox/Steam/… also
+    // appear, force empty — LinkedProfiles often echoes the primary last-played.
+    const hasCorePlatform = this.d2SearchResults.some((p) => {
+      const type = Number(p.membershipType);
+      return type !== 5 && type !== 6;
+    });
+    if (hasCorePlatform) {
+      for (const player of this.d2SearchResults) {
+        const type = Number(player.membershipType);
+        if ((type !== 5 && type !== 6) || player.isCrossSavePrimary) continue;
+        player.hasGames = false;
+      }
+    } else if (profiles.length > 0) {
       for (const player of this.d2SearchResults) {
         const type = Number(player.membershipType);
         if ((type !== 5 && type !== 6) || player.isCrossSavePrimary) continue;
