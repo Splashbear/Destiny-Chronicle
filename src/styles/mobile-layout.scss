@@ -317,39 +317,18 @@ body {
   }
 }
 
-/* Desktop: On This Day can sit as sidebar; phone uses flow order above */
+/* Desktop: OTD lives in the dossier header ? keep shell full-width (no empty sidebar column). */
 @media (min-width: 1280px) {
   .dc-content-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 20rem;
-    grid-template-areas:
-      'search date'
-      'main otd';
-    gap: 1.5rem 2rem;
-    align-items: start;
+    display: block;
+    width: 100%;
   }
 
-  .dc-flow-search {
-    grid-area: search;
-    order: unset;
-  }
-  .dc-flow-date {
-    grid-area: date;
-    order: unset;
-  }
-  .dc-flow-otd {
-    grid-area: otd;
-    order: unset;
-    position: sticky;
-    top: 1rem;
-  }
+  .dc-flow-search,
+  .dc-flow-date,
+  .dc-flow-otd,
   .dc-flow-main {
-    grid-area: main;
     order: unset;
-  }
-
-  .dc-date-compact {
-    /* restore normal date panel on desktop */
   }
 
   .dc-date-more {

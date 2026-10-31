@@ -224,6 +224,11 @@ export abstract class PlayerSearchBreakdownMixin extends PlayerSearchFirstsMixin
     );
   }
 
+  /** Cross-save identity map so linked D2 platforms count one PGCR once. */
+  getBreakdownIdentityByMembership(): Record<string, string> {
+    return breakdownIdentityByMembership(this.selectedPlayers);
+  }
+
   /** Toggle account card selection for Breakdown tab; reloads breakdown data. */
   async onBreakdownAccountCardToggle(accountKey: string): Promise<void> {
     this.selectedAccountKeysForBreakdown = toggleInSet(

@@ -22,10 +22,19 @@ export interface AccountCardPlatformStats {
   selector: 'app-account-card-grid',
   standalone: true,
   imports: [CommonModule],
+  styles: [
+    `
+      .account-card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+        width: 100%;
+      }
+    `,
+  ],
   template: `
     <div *ngIf="displayStats.length > 0" class="platform-breakdown">
       <p *ngIf="hint" class="text-sm text-slate-300 mb-2">{{ hint }}</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      <div class="account-card-grid gap-4"
            (click)="onGridClick($event)"
            (keydown)="onGridKey($event)">
         <div *ngFor="let plat of displayStats; trackBy: trackAccount"
