@@ -46,8 +46,8 @@ describe('D1 Support', () => {
     if (db) {
       await db.close();
     }
-    // Clean up fixtures
-    await fs.rm(FIXTURES_DIR, { recursive: true, force: true });
+    // Clean up fixtures (Windows may still hold parquet briefly after DuckDB close)
+    await fs.rm(FIXTURES_DIR, { recursive: true, force: true }).catch(() => undefined);
   });
 
   describe('Bucket hash calculation', () => {
@@ -712,6 +712,7 @@ describe('D1 Support', () => {
       expect(result.coverage.d1Bands).toBe(1);
       expect(result.partners.length).toBeGreaterThan(0);
       expect(result.partners[0].membershipId).toBe('9999999999999');
+      await pwService.close();
     });
 
     test('should set coverage.complete=false when D1 bands are used (Bug 2)', async () => {
@@ -720,32 +721,9 @@ describe('D1 Support', () => {
         return;
       }
 
+      // Reuse band-0 fixture from beforeAll / prior PW test (avoid Windows overwrite while DuckDB holds the file).
       const testMid = '4611686018443970323';
       const instanceId = '500000';
-      const band = 0;
-
-      // Create D1 Played With parquet
-      const d1PwPath = path.join(d1PlayedWithRoot!, 'pw', `iid_band=${band}`, 'pw.parquet');
-      await fs.mkdir(path.dirname(d1PwPath), { recursive: true });
-
-      await db.all(`
-        CREATE TEMP TABLE d1_pw_coverage_test (
-          instance_id BIGINT,
-          membership_id BIGINT,
-          display_name VARCHAR,
-          period TIMESTAMP,
-          activity_hash UINTEGER,
-          mode TINYINT
-        )
-      `);
-
-      await db.all(`
-        INSERT INTO d1_pw_coverage_test VALUES
-          (${instanceId}, ${testMid}, 'D1Guardian', '2014-09-01 10:00:00', 1234567890, 6)
-      `);
-
-      await db.all(`COPY d1_pw_coverage_test TO '${d1PwPath.replace(/\\/g, '/')}' (FORMAT PARQUET)`);
-      await db.all('DROP TABLE d1_pw_coverage_test');
 
       const pwService = new PlayedWithService({
         legacyRoot: '',
@@ -768,6 +746,7 @@ describe('D1 Support', () => {
       expect(result.coverage.complete).toBe(false); // Bug 2 fix: D1 index only covers billion 1
       expect(result.coverage.d1CoverageCaveat).toBeDefined();
       expect(result.coverage.d1CoverageCaveat).toContain('billion 1 only');
+      await pwService.close();
     });
   });
 

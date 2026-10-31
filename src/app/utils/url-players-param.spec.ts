@@ -1,18 +1,33 @@
-import { parsePlayersParamFromUrl } from './url-players-param';
+import { parsePlayersParam } from './url-players-param';
 
-describe('parsePlayersParamFromUrl', () => {
-  it('parses plain JSON array', () => {
-    const raw = JSON.stringify([{ membershipId: '1', game: 'D2' }]);
-    expect(parsePlayersParamFromUrl(raw)?.[0].membershipId).toBe('1');
+describe('parsePlayersParam', () => {
+  const players = [
+    {
+      displayName: 'Splashbear',
+      membershipId: '1',
+      membershipType: 3,
+      game: 'd2',
+      platform: 'pc',
+    },
+  ];
+  const json = JSON.stringify(players);
+
+  it('parses raw JSON (Angular already decoded once)', () => {
+    expect(parsePlayersParam(json)).toEqual(players);
   });
 
   it('parses once-encoded JSON', () => {
-    const raw = encodeURIComponent(JSON.stringify([{ membershipId: '2' }]));
-    expect(parsePlayersParamFromUrl(raw)?.[0].membershipId).toBe('2');
+    expect(parsePlayersParam(encodeURIComponent(json))).toEqual(players);
   });
 
-  it('returns null for garbage', () => {
-    expect(parsePlayersParamFromUrl('not-json')).toBeNull();
-    expect(parsePlayersParamFromUrl('')).toBeNull();
+  it('parses double-encoded JSON (legacy write path)', () => {
+    expect(parsePlayersParam(encodeURIComponent(encodeURIComponent(json)))).toEqual(players);
+  });
+
+  it('returns null for empty or invalid input', () => {
+    expect(parsePlayersParam(null)).toBeNull();
+    expect(parsePlayersParam('')).toBeNull();
+    expect(parsePlayersParam('not-json')).toBeNull();
+    expect(parsePlayersParam('{"a":1}')).toBeNull();
   });
 });

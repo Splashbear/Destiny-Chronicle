@@ -3,7 +3,19 @@ import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { isSrlActivity, srlGroupingMode } from '../config/srl.config';
+import { classifyPvp, trialsSectionKey } from '../utils/classify-pvp';
+import {
+  aggregateTrialsBreakdown,
+  type TrialsBreakdownDetail,
+  type TrialsTeammateRow,
+} from '../utils/trials-breakdown';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
+
+/** One membership + game scope for Breakdown (avoids D1/D2 bleed on shared mids). */
+export interface BreakdownMembershipScope {
+  membershipId: string;
+  game: 'D1' | 'D2';
+}
 
 export interface ActivityCountRow {
   referenceId: string;
@@ -39,6 +51,7 @@ const MODE_33 = 33;
 /** D1-specific display overrides for Reserved modes. Used when game is D1. */
 const D1_MODE_DISPLAY_OVERRIDES: Record<number, string> = {
   9: 'Vehicle PVP',
+  14: 'Trials of Osiris',
   21: 'Prison of Elders',
   22: 'Prison of Elders',
   27: 'D1 Crucible',
@@ -60,6 +73,7 @@ const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
   11: 'Reserved11',
   12: 'Clash',
   13: 'Reserved13',
+  14: 'Reserved14', // D1 classic TrialsOfOsiris — see D1_MODE_DISPLAY_OVERRIDES; D2 uses 84
   15: 'CrimsonDoubles',
   16: 'Nightfall',
   17: 'HeroicNightfall',
@@ -149,7 +163,7 @@ const MODE_ORDER: Record<number, number> = {
   92: 6, 85: 6, 83: 6, 77: 6, 78: 6, 86: 6,  // Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive
   63: 7, 75: 7, 76: 7, 67: 7, 33: 7, 0: 7,  // Gambit (incl. mode 0 None/Emerald Coast, mode 33)
   93: 71,   // Renegade Activities (own category, between Gambit and PvP)
-  5: 8, 10: 8, 12: 8, 19: 8, 84: 8, 37: 8, 38: 8, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP modes
+  5: 8, 10: 8, 12: 8, 14: 7.5, 15: 8, 19: 8, 84: 7.5, 37: 8, 38: 8, 39: 7.5, 41: 7.5, 42: 7.5, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP; Trials modes ordered with Trials tile
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
   69: 8, 70: 8, 71: 8, 72: 8, 73: 8, 74: 8,  // Competitive/Quickplay
   9: 12, 21: 13, 22: 13, 27: 14, 29: 15, 94: 15, 30: 13,  // D1 SRL=29; D2 MoT SRL=94
@@ -274,7 +288,18 @@ const EXCLUDE_FROM_BREAKDOWN = new Set<string>([
  * Battlegrounds → Story Strikes → Exotic Story Missions → Seasonal Arena.
  * See docs/activity-breakdown-curated-lists.md for full lists.
  */
-type SectionOverrideKey = 'battlegrounds' | 'story-strikes' | 'exotic-story-missions' | 'seasonal-arena' | 'prison-of-elders' | 'gambit' | 'nightfall' | 'pvp' | 'sparrow-racing-league';
+type SectionOverrideKey =
+  | 'battlegrounds'
+  | 'story-strikes'
+  | 'exotic-story-missions'
+  | 'seasonal-arena'
+  | 'prison-of-elders'
+  | 'gambit'
+  | 'nightfall'
+  | 'trials-osiris'
+  | 'trials-nine'
+  | 'pvp'
+  | 'sparrow-racing-league';
 
 const BATTLEGROUNDS_MODES = new Set([2, 3, 18, 46, 47, 86]);
 const STORY_STRIKES_MODES = new Set([2]);
@@ -311,7 +336,9 @@ const SECTION_OVERRIDE_ORDER: Record<SectionOverrideKey, number> = {
   gambit: 7,                 // Gambit, Gambit Prime, Reckoning, None/Emerald Coast, mode 33
   nightfall: 2,              // All Nightfall variants (16, 17, 46, 47)
   'sparrow-racing-league': 15, // SRL (mode 29 or name/hash when mislabeled as PvP)
-  pvp: 8                     // All PvP modes
+  'trials-osiris': 7.4,        // Trials of Osiris (D1 + D2 + Freelance) above Nine / Crucible
+  'trials-nine': 7.5,          // Trials of the Nine (separate mode family)
+  pvp: 8                       // Non-Trials Crucible
 };
 
 const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
@@ -323,14 +350,17 @@ const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
   gambit: 'Gambit',
   nightfall: 'Nightfall',
   'sparrow-racing-league': 'Sparrow Racing League',
-  pvp: 'PvP'
+  'trials-osiris': 'Trials of Osiris',
+  'trials-nine': 'Trials of the Nine',
+  pvp: 'Crucible'
 };
 
 const PRISON_OF_ELDERS_MODES = new Set([21, 22, 30]);
 const GAMBIT_MODES = new Set([0, 33, 63, 75, 76]);  // None/Emerald Coast, mode 33, Gambit, Gambit Prime, Reckoning
 const NIGHTFALL_MODES = new Set([16, 17, 46, 47]);
+/** Non-Trials PvP modes for the Crucible tile. Trials peeled via classifyPvp. Includes D1 mode 14 so D1 Trials still enter the PvP path before split. */
 const PVP_MODES = new Set([
-  5, 10, 12, 19, 25, 31, 32, 37, 38, 39, 41, 42, 43, 44, 45, 48, 49, 50,
+  5, 10, 12, 14, 15, 19, 25, 27, 31, 32, 37, 38, 39, 41, 42, 43, 44, 45, 48, 49, 50,
   51, 52, 53, 54, 55, 56, 57, 59, 60, 61, 62, 65, 68, 69, 70, 71, 72, 73, 74,
   80, 81, 84, 88, 89, 90, 91
 ]);
@@ -368,10 +398,13 @@ export const SOCIAL_SPACE_AND_PATROL_REF = {
 export class ActivityBreakdownService {
 
   /** Bumped when row shape changes so stale cached rows are not reused. */
-  private readonly activityCountsCacheVersion = 'v2-instance';
+  private readonly activityCountsCacheVersion = 'v4-trials-split';
 
-  /** Cached full breakdown per sorted membership-id key (avoids re-scanning IndexedDB + PGCR backfill). */
+  /** Cached full breakdown per sorted membership+game scope key. */
   private activityCountsCache = new Map<string, ActivityCountRow[]>();
+
+  /** Cached Trials detail (W/L, weekends) per scope key. */
+  private trialsDetailCache = new Map<string, TrialsBreakdownDetail>();
 
   constructor(
     private activityDb: ActivityDbService,
@@ -381,21 +414,19 @@ export class ActivityBreakdownService {
 
   clearActivityCountsCache(): void {
     this.activityCountsCache.clear();
+    this.trialsDetailCache.clear();
   }
 
-  private membershipCacheKey(
-    membershipIds: string[],
-    identityByMembership?: Record<string, string>
-  ): string {
-    const ids = [...membershipIds].sort().join('|');
-    if (!identityByMembership) {
-      return `${this.activityCountsCacheVersion}|${ids}`;
-    }
-    const ident = membershipIds
-      .map(id => `${id}:${identityByMembership[id] || id}`)
-      .sort()
-      .join(',');
-    return `${this.activityCountsCacheVersion}|${ids}|${ident}`;
+  private scopeCacheKey(scopes: BreakdownMembershipScope[]): string {
+    const parts = scopes
+      .map(s => `${s.game}:${s.membershipId}`)
+      .sort();
+    return `${this.activityCountsCacheVersion}|${parts.join('|')}`;
+  }
+
+  /** @deprecated Prefer scopeCacheKey — kept for any mid-only callers. */
+  private membershipCacheKey(membershipIds: string[]): string {
+    return `${this.activityCountsCacheVersion}|mids|${[...membershipIds].sort().join('|')}`;
   }
 
   /**
@@ -418,29 +449,73 @@ export class ActivityBreakdownService {
   }
 
   /**
-   * Aggregates activity counts per (referenceId, game) across all given memberships.
-   * Uses all characters under each membership. Resolves names and types from the manifest.
+   * Aggregates activity counts per (referenceId, game) for explicit membership+game scopes.
+   * Prefer this over mid-only loads so D1/D2 never bleed when they share a membershipId.
    */
-  async getActivityCounts(
-    membershipIds: string[],
+  async getActivityCountsForScopes(
+    scopes: BreakdownMembershipScope[],
     identityByMembership?: Record<string, string>
   ): Promise<ActivityCountRow[]> {
-    if (membershipIds.length === 0) return [];
+    if (scopes.length === 0) return [];
 
-    const cacheKey = this.membershipCacheKey(membershipIds, identityByMembership);
+    const cacheKey = `${this.scopeCacheKey(scopes)}|id:${Object.entries(identityByMembership || {})
+      .map(([id, ident]) => `${id}:${ident}`)
+      .sort()
+      .join(',')}`;
     const cached = this.activityCountsCache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     const allActivities: StoredActivity[] = [];
-    for (const membershipId of membershipIds) {
-      const list = await this.activityDb.getAllActivitiesForMembershipOptimized(membershipId);
-      allActivities.push(...list);
+    for (const scope of scopes) {
+      let list = await this.activityDb.getActivitiesForMembershipAndGame(scope.membershipId, scope.game);
+      // Legacy D1 rows sometimes omit `game`; treat untagged rows on a D1 scope as D1.
+      // Do not pull untagged into D2 (would mix games on shared membership ids).
+      if (scope.game === 'D1') {
+        const all = await this.activityDb.getAllActivitiesForMembershipOptimized(scope.membershipId);
+        const tagged = new Set(
+          list.map(a => a.activityDetails?.instanceId).filter(Boolean).map(String)
+        );
+        for (const a of all) {
+          if (a.game === 'D2' || a.game === 'D1') continue; // D1 already in list; never pull D2
+          const iid = a.activityDetails?.instanceId != null ? String(a.activityDetails.instanceId) : '';
+          if (iid && tagged.has(iid)) continue;
+          list = list.concat([{ ...a, game: 'D1' }]);
+        }
+      }
+      for (const a of list) {
+        // Force scope game so mistagged rows cannot flip D1 into D2 tiles.
+        allActivities.push({ ...a, game: scope.game });
+      }
     }
 
-    // Aggregate per (referenceId, game). For D1 we also track instanceIds so we can backfill time from PGCR when activity history has no duration.
-    const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode?: number; lastPlayed?: string; lastPlayedInstanceId?: string }>();
+    return this.aggregateActivityCounts(allActivities, cacheKey, identityByMembership);
+  }
+
+  /**
+   * @deprecated Prefer getActivityCountsForScopes. Mid-only loads mix D1+D2 on shared mids.
+   */
+  async getActivityCounts(
+    membershipIds: string[],
+    identityByMembership?: Record<string, string>
+  ): Promise<ActivityCountRow[]> {
+    if (membershipIds.length === 0) return [];
+    const scopes: BreakdownMembershipScope[] = membershipIds.flatMap(membershipId => [
+      { membershipId, game: 'D1' as const },
+      { membershipId, game: 'D2' as const },
+    ]);
+    return this.getActivityCountsForScopes(scopes, identityByMembership);
+  }
+
+  private async aggregateActivityCounts(
+    allActivities: StoredActivity[],
+    cacheKey: string,
+    identityByMembership?: Record<string, string>
+  ): Promise<ActivityCountRow[]> {
+
+    // Aggregate per (referenceId, game, effectiveMode). Never merge Trials into Control on the same map.
+    const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode: number; lastPlayed?: string; lastPlayedInstanceId?: string }>();
     const instanceIdsByKey = new Map<string, string[]>();
     const seenInstances = new Set<string>();
 
@@ -453,18 +528,39 @@ export class ActivityBreakdownService {
         seenInstances.add(dedupeKey);
       }
       const game: 'D1' | 'D2' = a.game || 'D2';
-      const key = `${refId}|${game}`;
-      const existing = aggByKey.get(key) || { runs: 0, clears: 0, timeSeconds: 0, mode: undefined };
+      const details = a.activityDetails as {
+        mode?: number;
+        modes?: number[];
+        directorActivityHash?: string | number;
+        referenceId?: string | number;
+        activityTypeHash?: string | number;
+      };
+      const rawMode = srlGroupingMode(a, game) ?? details?.mode ?? 0;
+      const classified = classifyPvp({
+        game,
+        modes: details?.modes ?? (a as { modes?: number[] }).modes,
+        mode: rawMode,
+        directorActivityHash: details?.directorActivityHash,
+        referenceId: refId,
+        activityTypeHash: details?.activityTypeHash,
+      });
+      // Canonical mode so Trials rows stay in Trials tiles even when history reported AllPvP (5).
+      let effectiveMode = rawMode;
+      if (classified.bucket === 'trials-nine') effectiveMode = 39;
+      else if (classified.bucket === 'trials-d1') effectiveMode = 14;
+      else if (classified.bucket === 'trials-too' || classified.bucket === 'trials-freelance') effectiveMode = 84;
+      else if (rawMode === 94 || rawMode === 29) effectiveMode = rawMode;
+
+      const key = `${refId}|${game}|${effectiveMode}`;
+      const existing = aggByKey.get(key) || { runs: 0, clears: 0, timeSeconds: 0, mode: effectiveMode };
       existing.runs += 1;
       const completed = a.values?.completed?.basic?.value === 1;
       if (completed) {
         existing.clears += 1;
       }
-      existing.timeSeconds += this.getActivityDurationSeconds(a);
-      const rowMode = srlGroupingMode(a, game);
-      if (rowMode !== undefined && (existing.mode === undefined || (rowMode !== existing.mode && (rowMode === 94 || rowMode === 29)))) {
-        existing.mode = rowMode;
-      }
+      const seconds = this.getActivityDurationSeconds(a);
+      existing.timeSeconds += seconds;
+      existing.mode = effectiveMode;
       const instanceId = a.activityDetails?.instanceId != null ? String(a.activityDetails.instanceId) : undefined;
       const period = a.period;
       if (period) {
@@ -530,7 +626,8 @@ export class ActivityBreakdownService {
     const d1ZeroTimeInstanceIds: string[] = [];
     const keyToInstanceIdsForBackfill = new Map<string, string[]>();
     for (const [key, agg] of aggByKey) {
-      const [, game] = key.split('|');
+      const parts = key.split('|');
+      const game = parts[1];
       if (game !== 'D1' || agg.timeSeconds !== 0) continue;
       const ids = instanceIdsByKey.get(key);
       if (!ids?.length) continue;
@@ -542,7 +639,7 @@ export class ActivityBreakdownService {
       const pgcrBatch = await this.pgcrCache.getBatch(d1ZeroTimeInstanceIds);
       for (const row of rows) {
         if (row.game !== 'D1' || row.timeSeconds !== 0) continue;
-        const key = `${row.referenceId}|${row.game}`;
+        const key = `${row.referenceId}|${row.game}|${row.mode}`;
         const ids = keyToInstanceIdsForBackfill.get(key);
         if (!ids?.length) continue;
         let sum = 0;
@@ -643,7 +740,17 @@ export class ActivityBreakdownService {
     if (GAMBIT_MODES.has(mode)) return 'gambit';
     if (NIGHTFALL_MODES.has(mode)) return 'nightfall';
     if (isSrlActivity(row.referenceId, row.baseName, mode)) return 'sparrow-racing-league';
-    if (PVP_MODES.has(mode)) return 'pvp';
+    // Trials peeled above Crucible; Osiris vs Nine are separate tiles (separate modes).
+    {
+      const classified = classifyPvp({
+        game: game === 'D1' ? 'D1' : 'D2',
+        mode,
+        referenceId: row.referenceId,
+      });
+      const trialsKey = trialsSectionKey(classified.bucket);
+      if (trialsKey) return trialsKey;
+      if (PVP_MODES.has(mode)) return 'pvp';
+    }
     if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
 
     if (STORY_STRIKES_MODES.has(mode)) {
@@ -717,7 +824,15 @@ export class ActivityBreakdownService {
 
   /** Sort rows within a section. Delegates to sortRowsForMode for mode sections; uses section-specific sort for overrides. */
   private sortRowsForSection(sectionKey: string, mode: number | undefined, list: ActivityCountRow[], game?: 'D1' | 'D2'): ActivityCountRow[] {
-    if (sectionKey === 'prison-of-elders' || sectionKey === 'gambit' || sectionKey === 'nightfall' || sectionKey === 'pvp' || sectionKey === 'sparrow-racing-league') {
+    if (
+      sectionKey === 'prison-of-elders' ||
+      sectionKey === 'gambit' ||
+      sectionKey === 'nightfall' ||
+      sectionKey === 'trials-osiris' ||
+      sectionKey === 'trials-nine' ||
+      sectionKey === 'pvp' ||
+      sectionKey === 'sparrow-racing-league'
+    ) {
       return list.sort((a, b) => {
         const baseCmp = (a.baseName || '').localeCompare(b.baseName || '');
         if (baseCmp !== 0) return baseCmp;
@@ -810,5 +925,118 @@ export class ActivityBreakdownService {
     const name = DESTINY_ACTIVITY_MODE_NAMES[mode];
     if (name) return name;
     return `Mode ${mode}`;
+  }
+
+  /**
+   * Per-match Trials stats from stored history (standing / KDA / time).
+   * Source: IndexedDB activity history values — not inferred flawless/Lighthouse.
+   */
+  async getTrialsDetailForScopes(scopes: BreakdownMembershipScope[]): Promise<TrialsBreakdownDetail> {
+    if (scopes.length === 0) {
+      return aggregateTrialsBreakdown([]);
+    }
+    const cacheKey = `trials|${this.scopeCacheKey(scopes)}`;
+    const cached = this.trialsDetailCache.get(cacheKey);
+    if (cached) return cached;
+
+    const allActivities: StoredActivity[] = [];
+    for (const scope of scopes) {
+      const list = await this.activityDb.getActivitiesForMembershipAndGame(scope.membershipId, scope.game);
+      for (const a of list) {
+        allActivities.push({ ...a, game: scope.game });
+      }
+    }
+
+    const detail = aggregateTrialsBreakdown(allActivities, (ref, game) => {
+      const name = this.manifest.getActivityName(ref, game === 'D1');
+      if (name) return name;
+      const family = game === 'D2' ? this.manifest.getActivityFamilyName(ref) : '';
+      return family || 'Unknown activity';
+    });
+    this.trialsDetailCache.set(cacheKey, detail);
+    return detail;
+  }
+
+  /** @deprecated Prefer getTrialsDetailForScopes. */
+  async getTrialsDetail(membershipIds: string[]): Promise<TrialsBreakdownDetail> {
+    const scopes: BreakdownMembershipScope[] = membershipIds.flatMap(membershipId => [
+      { membershipId, game: 'D1' as const },
+      { membershipId, game: 'D2' as const },
+    ]);
+    return this.getTrialsDetailForScopes(scopes);
+  }
+
+  /**
+   * Top Trials teammates from Played With partners filtered to Trials instance overlap.
+   * When partner rows lack per-instance data, returns [] (do not invent).
+   */
+  trialsTeammatesFromPartners(
+    partners: Array<{ membershipId: string; displayName: string; instanceIds?: string[] }>,
+    trialsInstanceIds: string[],
+    limit = 10
+  ): TrialsTeammateRow[] {
+    if (!partners?.length || !trialsInstanceIds?.length) return [];
+    const trialsSet = new Set(trialsInstanceIds.map(String));
+    const rows: TrialsTeammateRow[] = [];
+    for (const p of partners) {
+      const ids = p.instanceIds || [];
+      let matchesTogether = 0;
+      for (const id of ids) {
+        if (trialsSet.has(String(id))) matchesTogether++;
+      }
+      if (matchesTogether > 0) {
+        rows.push({
+          membershipId: p.membershipId,
+          displayName: p.displayName || p.membershipId,
+          matchesTogether,
+        });
+      }
+    }
+    return rows.sort((a, b) => b.matchesTogether - a.matchesTogether).slice(0, limit);
+  }
+
+  /**
+   * Top Trials fireteam partners from cached PGCRs for Trials instance IDs.
+   * Opponents are out of scope — only players on the same team as a selected membership.
+   */
+  async getTrialsTeammatesFromPgcr(
+    membershipIds: string[],
+    trialsInstanceIds: string[],
+    limit = 10
+  ): Promise<TrialsTeammateRow[]> {
+    if (!membershipIds.length || !trialsInstanceIds.length) return [];
+    const ourIds = new Set(membershipIds.map(String));
+    const counts = new Map<string, { displayName: string; matchesTogether: number }>();
+    // Cap PGCR lookups so a huge Trials history does not stall Breakdown.
+    const ids = trialsInstanceIds.slice(0, 800);
+    const batch = await this.pgcrCache.getBatch(ids);
+    for (const pgcr of batch.values()) {
+      const players = pgcr?.players;
+      if (!players?.length) continue;
+      const ours = players.filter(p => p.id && ourIds.has(String(p.id)));
+      if (!ours.length) continue;
+      const ourTeams = new Set(ours.map(p => p.team).filter(t => t != null));
+      for (const p of players) {
+        if (!p.id || ourIds.has(String(p.id))) continue;
+        if (ourTeams.size && p.team != null && !ourTeams.has(p.team)) continue;
+        const id = String(p.id);
+        const name = p.name || id;
+        const prev = counts.get(id);
+        if (prev) {
+          prev.matchesTogether += 1;
+          if (name && name !== id) prev.displayName = name;
+        } else {
+          counts.set(id, { displayName: name, matchesTogether: 1 });
+        }
+      }
+    }
+    return [...counts.entries()]
+      .map(([membershipId, v]) => ({
+        membershipId,
+        displayName: v.displayName,
+        matchesTogether: v.matchesTogether,
+      }))
+      .sort((a, b) => b.matchesTogether - a.matchesTogether)
+      .slice(0, limit);
   }
 }

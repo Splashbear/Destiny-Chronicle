@@ -1,33 +1,37 @@
 /**
- * Parse ?players= / path players param (tolerates 1–2× URI encoding).
- * Returns the first valid non-empty JSON array, or null.
+ * Parse the `players` query/path param from a permalink.
+ *
+ * Writers historically double-encoded (`encodeURIComponent` + `URLSearchParams`);
+ * Angular/`URLSearchParams` already decode once on read. Try raw JSON first,
+ * then one decode, then two — so both old and new links load.
  */
-export function parsePlayersParamFromUrl(playersParam: string): any[] | null {
-  if (!playersParam) return null;
-  const attempts = [
-    playersParam,
-    (() => {
-      try {
-        return decodeURIComponent(playersParam);
-      } catch {
-        return playersParam;
-      }
-    })(),
-  ];
+export function parsePlayersParam(raw: string | null | undefined): unknown[] | null {
+  if (raw == null || raw === '') {
+    return null;
+  }
+
+  const attempts = [raw];
   try {
-    attempts.push(decodeURIComponent(attempts[1]));
+    attempts.push(decodeURIComponent(raw));
   } catch {
     /* ignore */
   }
+  try {
+    attempts.push(decodeURIComponent(decodeURIComponent(raw)));
+  } catch {
+    /* ignore */
+  }
+
   for (const candidate of attempts) {
     try {
-      const playerData = JSON.parse(candidate);
-      if (Array.isArray(playerData) && playerData.length > 0) {
-        return playerData;
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
     } catch {
-      // try next encoding level
+      /* try next */
     }
   }
+
   return null;
 }

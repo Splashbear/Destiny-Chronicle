@@ -3,7 +3,8 @@
         <div *ngIf="text.enabled()" class="text-day">
           <h2>Account Summary</h2>
           <p *ngIf="ps.accountStats as stats">
-            Time <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalTime) }}</strong>
+            Time in activities <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalActivityTime || 0) }}</strong>
+            · Total time in game <strong>{{ ps.formatSecondsToHoursMinutes(stats.totalTime) }}</strong>
             · Seals <strong>{{ stats.totalSeals || 0 }}</strong>
             · Activities <strong>{{ stats.totalActivityCount }}</strong>
           </p>
@@ -39,7 +40,7 @@
                   <span [class.text-day-ok]="ps.isActivityCompleted(row.activity)" [class.text-day-no]="!ps.isActivityCompleted(row.activity)">
                     {{ ps.isActivityCompleted(row.activity) ? 'Completed' : 'Not completed' }}
                   </span>
-                  <span>{{ ps.formatSecondsToHoursMinutes(ps.getActivityDurationSeconds(row.activity)) }}</span>
+                  <span>{{ ps.activityStatsLabel(row.activity) }}</span>
                   <button type="button" class="text-day-link" (click)="ps.openExternalPGCR(row.activity, row.isD1, $event)">PGCR</button>
                 </div>
               </section>

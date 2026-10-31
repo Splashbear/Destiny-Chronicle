@@ -68,7 +68,10 @@ export class ActivityBreakdownLoadService {
       const membershipIds = host.getBreakdownMembershipIds();
       if (membershipIds.length === 0) return;
       this.activityBreakdownService.clearActivityCountsCache();
-      const rows = await this.activityBreakdownService.getActivityCounts(membershipIds);
+      const rows = await this.activityBreakdownService.getActivityCounts(
+        membershipIds,
+        host.getBreakdownIdentityByMembership()
+      );
       if (gen !== host.getBreakdownLoadGen()) return;
 
       let effectiveRows = rows;

@@ -1,4 +1,4 @@
-import { fakeAsync, flushMicrotasks, tick } from '@angular/core/testing';
+﻿import { fakeAsync, flushMicrotasks, tick } from '@angular/core/testing';
 import { ActivityBreakdownService } from '../../services/activity-breakdown.service';
 import { StoredActivity } from '../../services/activity-db.service';
 import { BreakdownView } from '../../utils/breakdown-view';

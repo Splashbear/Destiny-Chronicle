@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
+﻿import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AssetUrlService } from '../../services/asset-url.service';
 import { ActivityIconService } from '../../services/activity-icon.service';

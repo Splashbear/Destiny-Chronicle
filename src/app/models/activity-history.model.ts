@@ -29,6 +29,8 @@ export interface ActivityHistory {
    * distinguish Destiny 1 vs Destiny 2 rows without casting.
    */
   game?: 'D1' | 'D2';
+  /** D1 mode-0 / cl_patch rows with no usable PGCR stats — do not zero-fill. */
+  statsUnavailable?: boolean;
 }
 
 export interface Character {

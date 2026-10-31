@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import { Database } from 'duckdb-async';
 import { LeanActivity } from '../types/lean-activity.types';
 import { logger } from '../utils/logger';
+import { activityDedupeKey, d1CoverageCaveat, filterExistingRoots, parseRootList } from '../utils/d1-roots';
 
 /**
  * Tier information for multi-tier archive lookups.
@@ -45,7 +46,9 @@ export class ArchiveService {
   private gapIndexSortedRoot: string;
   private enableGapLean: boolean;
   private gapRelaxComplete: boolean;
-  private d1IndexRoot: string;
+  /** Configured D1 act roots (may include missing paths; skipped at read time). */
+  private d1IndexRoots: string[];
+  private d1CoverageNote: string;
   private archiveAvailable = false;
   private db: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
@@ -64,7 +67,7 @@ export class ArchiveService {
     enableGapLean: boolean = false,
     gapIndexSortedRoot: string = '',
     gapRelaxComplete: boolean = false,
-    d1IndexRoot: string = ''
+    d1IndexRootOrRoots: string | string[] = ''
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
@@ -75,7 +78,15 @@ export class ArchiveService {
     this.gapIndexSortedRoot = gapIndexSortedRoot;
     this.gapRelaxComplete = gapRelaxComplete;
     this.enableGapLean = enableGapLean && !!gapIndexRoot;
-    this.d1IndexRoot = d1IndexRoot;
+    this.d1IndexRoots = Array.isArray(d1IndexRootOrRoots)
+      ? [...new Set(d1IndexRootOrRoots.map(String).map(s => s.trim()).filter(Boolean))]
+      : parseRootList(undefined, d1IndexRootOrRoots);
+    this.d1CoverageNote = d1CoverageCaveat(this.d1IndexRoots.length);
+  }
+
+  /** True when at least one D1 act root is configured. */
+  private hasD1Index(): boolean {
+    return this.d1IndexRoots.length > 0;
   }
 
   /** Brief 5 Option A: whether gap ready/ merge is active. */
@@ -100,7 +111,7 @@ export class ArchiveService {
       await fs.access(this.leanActivitiesPath);
       
       this.db = await Database.create(':memory:');
-      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2× (profiled).
+      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2� (profiled).
       const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
       const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
       await this.db.all(`SET threads=${threads}`);
@@ -120,7 +131,7 @@ export class ArchiveService {
         gapIndexSortedRoot: this.gapIndexSortedRoot || '(none)',
         enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
-        d1IndexRoot: this.d1IndexRoot || '(none)',
+        d1IndexRoots: this.d1IndexRoots.length ? this.d1IndexRoots : ['(none)'],
       });
     } catch (error) {
       logger.warn('Archive files not accessible or DuckDB init failed', {
@@ -394,6 +405,13 @@ export class ArchiveService {
       game = 'D2';
     }
 
+    const statsMissing =
+      game === 'D1' &&
+      row.kills == null &&
+      row.deaths == null &&
+      row.assists == null &&
+      row.duration_seconds == null;
+
     return {
       instance_id: String(row.instance_id ?? ''),
       period: this.normalizeArchivePeriod(row.period),
@@ -404,23 +422,25 @@ export class ArchiveService {
       membership_type: Number(row.membership_type ?? 0),
       display_name: String(row.display_name ?? ''),
       character_id: String(row.character_id ?? ''),
-      completed: Boolean(row.completed),
-      deaths: Number(row.deaths ?? 0),
-      kills: Number(row.kills ?? 0),
-      assists: Number(row.assists ?? 0),
-      duration_seconds: Number(row.duration_seconds ?? 0),
+      // Keep 0 for internal lean type when stats are missing; API layer emits null.
+      completed: statsMissing ? false : Boolean(row.completed),
+      deaths: statsMissing ? 0 : Number(row.deaths ?? 0),
+      kills: statsMissing ? 0 : Number(row.kills ?? 0),
+      assists: statsMissing ? 0 : Number(row.assists ?? 0),
+      duration_seconds: statsMissing ? 0 : Number(row.duration_seconds ?? 0),
       standing: Number(row.standing ?? 0),
       starting_phase_index: Number(row.starting_phase_index ?? 0),
       fireteam_id: String(row.fireteam_id ?? ''),
       is_private: Boolean(row.is_private),
       dump_id: String(row.dump_id ?? ''),
       game,
+      ...(statsMissing ? { stats_missing: true } : {}),
     };
   }
 
   /**
    * Multi-tier lookup for player activities.
-   * Tries: lite → per-mid extract → compact ids → absent.
+   * Tries: lite ? per-mid extract ? compact ids ? absent.
    * Never falls through if a tier knows the player (even if filters leave 0 rows).
    * Tracks all tier errors in coverage.notes.
    */
@@ -453,7 +473,7 @@ export class ArchiveService {
 
     // D1 requests: try D1 index first (only when D1_INDEX_ROOT is set), then fall back to lite/extract
     let d1TierTriedAndEmpty = false;
-    if (options?.game === 'D1' && this.d1IndexRoot && this.bucketHashType) {
+    if (options?.game === 'D1' && this.hasD1Index() && this.bucketHashType) {
       try {
         const d1Result = await this.tryD1ActLookup(membershipId, options);
         if (tierErrors.length > 0) {
@@ -489,7 +509,7 @@ export class ArchiveService {
           liteResult.tier.notes = [...(liteResult.tier.notes || []), ...tierErrors];
         }
         // For D1 requests with D1_INDEX_ROOT set, never return D2-labeled rows
-        if (this.d1IndexRoot && options?.game === 'D1' && liteResult.activities.some(a => a.game === 'D2')) {
+        if (this.hasD1Index() && options?.game === 'D1' && liteResult.activities.some(a => a.game === 'D2')) {
           liteResult.activities = liteResult.activities.filter(a => a.game !== 'D2');
           if (liteResult.activities.length === 0) {
             // Had rows but all were D2; keep searching
@@ -501,7 +521,7 @@ export class ArchiveService {
           if (d1TierTriedAndEmpty) {
             liteResult.tier.level = 'partial';
             liteResult.tier.indexComplete = false;
-            const d1Caveat = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.';
+            const d1Caveat = this.d1CoverageNote;
             liteResult.tier.notes = liteResult.tier.notes ? [d1Caveat, ...liteResult.tier.notes] : [d1Caveat];
           }
           return this.mergeGapLeanIfEnabled(liteResult, membershipId, options, tierErrors);
@@ -530,7 +550,7 @@ export class ArchiveService {
             extractResult.tier.notes = Array.from(new Set(allNotes));
           }
           // For D1 requests with D1_INDEX_ROOT set, never return D2-labeled rows
-          if (this.d1IndexRoot && options?.game === 'D1' && extractResult.activities.some(a => a.game === 'D2')) {
+          if (this.hasD1Index() && options?.game === 'D1' && extractResult.activities.some(a => a.game === 'D2')) {
             extractResult.activities = extractResult.activities.filter(a => a.game !== 'D2');
             if (extractResult.activities.length === 0) {
               // Had rows but all were D2; keep searching
@@ -542,7 +562,7 @@ export class ArchiveService {
             if (d1TierTriedAndEmpty) {
               extractResult.tier.level = 'partial';
               extractResult.tier.indexComplete = false;
-              const d1Caveat = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.';
+              const d1Caveat = this.d1CoverageNote;
               extractResult.tier.notes = extractResult.tier.notes ? [d1Caveat, ...extractResult.tier.notes] : [d1Caveat];
             }
             return this.mergeGapLeanIfEnabled(extractResult, membershipId, options, tierErrors);
@@ -556,7 +576,7 @@ export class ArchiveService {
     }
 
     // Tier 3: Try compact index (skip for D1 requests when D1_INDEX_ROOT is set - compact is D2 only)
-    if (!(this.d1IndexRoot && options?.game === 'D1') && this.compactIndexRoot && this.bucketHashType) {
+    if (!(this.hasD1Index() && options?.game === 'D1') && this.compactIndexRoot && this.bucketHashType) {
       try {
         const compactResult = await this.tryCompactIndexLookup(membershipId, options);
         if (tierErrors.length > 0) {
@@ -601,7 +621,7 @@ export class ArchiveService {
 
     logger.debug('No archive data found for membership', { membershipId });
     // For D1 requests with D1_INDEX_ROOT set, always return partial (not absent) with coverage caveat
-    if (this.d1IndexRoot && options?.game === 'D1') {
+    if (this.hasD1Index() && options?.game === 'D1') {
       return {
         activities: [],
         tier: {
@@ -609,7 +629,7 @@ export class ArchiveService {
           source: 'none',
           indexComplete: false,
           notes: [
-            'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.',
+            this.d1CoverageNote,
             ...(tierErrors.length > 0 ? tierErrors : []),
           ],
         },
@@ -847,8 +867,8 @@ export class ArchiveService {
    * Option A: read 20-col lean rows from gap ready/ mid_bucket=N.
    * Skips incomplete buckets (_COMPLETE.json missing) without failing the request.
    *
-   * W7 (2026-10-02): gap `game` is untrusted — extract used iconPath heuristic
-   * (`"destiny2" in iconPath` → D2 else D1), mislabeling ~20% of D2 PGCRs as D1.
+   * W7 (2026-10-02): gap `game` is untrusted � extract used iconPath heuristic
+   * (`"destiny2" in iconPath` ? D2 else D1), mislabeling ~20% of D2 PGCRs as D1.
    * Raw gap source is D2-only. Never SQL-filter on gap.game; force game='D2' on
    * returned rows. Skip entirely when caller asks for game=D1.
    */
@@ -936,7 +956,7 @@ export class ArchiveService {
     }
 
     try {
-      // Ignore stored game column when querying (W7) — filtering on it drops ~20% of real D2 rows.
+      // Ignore stored game column when querying (W7) � filtering on it drops ~20% of real D2 rows.
       // W8: ~245k rows have membership_id='0' (unreachable); never query as mid '0'.
       if (membershipId === '0' || membershipId === '') {
         return {
@@ -1134,18 +1154,11 @@ export class ArchiveService {
   }
 
   /**
-   * Try D1 activity index lookup.
-   * D1 layout: D1_INDEX_ROOT/act/mid_bucket=N/instances.parquet
-   * Bucket = hash(membership_id::VARCHAR) % 256 (test vector: 4611686018443970323 -> 115)
-   * Sorted by (membership_id, instance_id).
-   * Columns: instance_id BIGINT, period TIMESTAMP, activity_hash UINTEGER, mode SMALLINT,
-   *          membership_id BIGINT, membership_type TINYINT, character_id BIGINT, completed BOOLEAN,
-   *          deaths/kills/assists/duration_seconds INTEGER, game VARCHAR ('D1'),
-   *          display_name VARCHAR, mid_bucket BIGINT.
-   *
-   * Coverage caveat: D1 billion 1 only (instance IDs 1 to 1,000,000,000), Aug 30 to Dec 9 2014.
-   * Other billions are missing; later D1 history is incomplete and falls back to Bungie live.
-   * Returns level:'partial', indexComplete:false ALWAYS (D1 is still active, recent games must go live).
+   * Try D1 activity index lookup across configured roots (union + dedupe).
+   * Layout per root: <root>/act/mid_bucket=N/instances.parquet
+   * Bucket = hash(membership_id::VARCHAR) % 256 (test vector: 4611686018443970323 -> 115).
+   * Dedupes by game + instanceId + membership + character (billions can overlap at the boundary).
+   * Returns level:'partial', indexComplete:false ALWAYS (D1 is still active; archive is incomplete).
    */
   private async tryD1ActLookup(
     membershipId: string,
@@ -1156,106 +1169,88 @@ export class ArchiveService {
       limit?: number;
     }
   ): Promise<PlayerActivitiesResult> {
-    if (!this.d1IndexRoot || !this.db || !this.bucketHashType) {
-      return {
-        activities: [],
-        tier: {
-          level: 'partial',
-          source: 'none',
-          indexComplete: false,
-          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
-        },
-        knownPlayer: false,
-      };
+    const coverageNote = this.d1CoverageNote;
+    const empty = (extra?: string): PlayerActivitiesResult => ({
+      activities: [],
+      tier: {
+        level: 'partial',
+        source: 'none',
+        indexComplete: false,
+        notes: extra ? [extra, coverageNote] : [coverageNote],
+      },
+      knownPlayer: false,
+    });
+
+    if (!this.hasD1Index() || !this.db || !this.bucketHashType) {
+      return empty();
     }
 
-    // Only serve D1 requests from D1 index
     if (options?.game !== 'D1') {
-      return {
-        activities: [],
-        tier: {
-          level: 'partial',
-          source: 'none',
-          indexComplete: false,
-          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
-        },
-        knownPlayer: false,
-      };
+      return empty();
     }
 
     const bucket = await this.calculateBucket(membershipId);
     if (bucket === null) {
-      return {
-        activities: [],
-        tier: {
-          level: 'partial',
-          source: 'none',
-          indexComplete: false,
-          notes: ['D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Not in archive; use Bungie live.'],
-        },
-        knownPlayer: false,
-      };
+      return empty();
+    }
+
+    const roots = filterExistingRoots(this.d1IndexRoots, 'D1 index root');
+    if (!roots.length) {
+      return empty('No D1 index roots available on disk');
     }
 
     const pathMod = await import('path');
-    const bucketDir = pathMod.join(this.d1IndexRoot, 'act', `mid_bucket=${bucket}`);
-    const instancesPath = pathMod.join(bucketDir, 'instances.parquet');
+    const byKey = new Map<string, LeanActivity>();
+    let knownPlayer = false;
+    let filtersApplied = false;
+    const resultNotes: string[] = [];
 
-    const coverageNote = 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete; use Bungie live for recent games.';
+    for (const root of roots) {
+      const instancesPath = pathMod.join(root, 'act', `mid_bucket=${bucket}`, 'instances.parquet');
+      try {
+        await fs.access(instancesPath);
+      } catch {
+        logger.debug('D1 index bucket not found in root', { bucket, membershipId, root });
+        continue;
+      }
 
-    try {
-      await fs.access(instancesPath);
-    } catch {
-      logger.debug('D1 index bucket not found', { bucket, membershipId });
-      return {
-        activities: [],
-        tier: {
-          level: 'partial',
-          source: 'none',
-          indexComplete: false,
-          notes: [coverageNote],
-        },
-        knownPlayer: false,
-      };
+      try {
+        const result = await this.queryPlayerActivitiesSchema(
+          instancesPath,
+          membershipId,
+          { ...options, game: 'D1' },
+          'd1_act'
+        );
+        if (result.knownPlayer) knownPlayer = true;
+        if (result.filtersApplied) filtersApplied = true;
+        if (result.notes?.length) resultNotes.push(...result.notes);
+        for (const a of result.activities) {
+          const key = activityDedupeKey(a);
+          if (!byKey.has(key)) byKey.set(key, a);
+        }
+      } catch (error) {
+        logger.error('Failed to read D1 index root', { error, bucket, membershipId, root });
+        resultNotes.push(`Error reading D1 index at ${root}`);
+      }
     }
 
-    try {
-      const result = await this.queryPlayerActivitiesSchema(
-        instancesPath,
-        membershipId,
-        { ...options, game: 'D1' },
-        'd1_act'
-      );
+    const activities = [...byKey.values()];
+    // Prefer newest first when a limit was applied per-root (union may exceed limit).
+    activities.sort((a, b) => String(b.period).localeCompare(String(a.period)));
+    const limit = options?.limit ?? 10000;
+    const trimmed = activities.slice(0, limit);
 
-      const notes = [
-        ...(result.notes || []),
-        coverageNote,
-      ];
-
-      return {
-        activities: result.activities,
-        knownPlayer: result.knownPlayer,
-        tier: {
-          level: 'partial',  // Always partial: D1 is still active, index incomplete
-          source: result.activities.length > 0 ? 'd1_act' : 'none',
-          indexComplete: false,  // Billion 1 only, not complete
-          filtersApplied: result.filtersApplied,
-          notes,
-        },
-      };
-    } catch (error) {
-      logger.error('Failed to read D1 index', { error, bucket, membershipId });
-      return {
-        activities: [],
-        tier: {
-          level: 'partial',
-          source: 'none',
-          indexComplete: false,
-          notes: ['Error reading D1 index', coverageNote],
-        },
-        knownPlayer: false,
-      };
-    }
+    return {
+      activities: trimmed,
+      knownPlayer,
+      tier: {
+        level: 'partial',
+        source: trimmed.length > 0 ? 'd1_act' : 'none',
+        indexComplete: false,
+        filtersApplied,
+        notes: [...new Set([...resultNotes, coverageNote])],
+      },
+    };
   }
 
   /**
@@ -1283,7 +1278,7 @@ export class ArchiveService {
     }
 
     try {
-      // W11: cache schema — DESCRIBE was a full parquet open per request.
+      // W11: cache schema � DESCRIBE was a full parquet open per request.
       let availableColumns = this.parquetSchemaCache.get(parquetPath);
       if (!availableColumns) {
         const schemaResult = await this.db.all(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);

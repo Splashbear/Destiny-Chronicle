@@ -10,6 +10,16 @@
 export const SOCIAL_ACTIVITY_MODE = 40;
 
 /**
+ * D1 Tower / Tower-like hashes (BOT_DECISIONS 2026-10-30 addendum).
+ * Keep rows in DB; exclude from totals, heatmap, On This Day, Played With.
+ */
+export const D1_SOCIAL_ACTIVITY_HASHES: ReadonlySet<string> = new Set([
+  '2330516073',
+  '1522220810',
+  '2370413227',
+]);
+
+/**
  * D1 activity history modes to page. Mode 0 (None) returns every activity in
  * one request; the old [2, 6, 4] list only fetched Story, Patrol and Raid.
  */
@@ -26,8 +36,16 @@ export interface ActivityDefLike {
  * True when an activity is a social space visit.
  * mode: the PGCR / history mode. def: manifest activity definition (optional).
  * Mode 0 alone is NOT social: many real games are stored as mode 0.
+ * D1 Tower hashes are always social (even when mode is wrong/missing).
  */
-export function isSocialActivity(mode: number | null | undefined, def?: ActivityDefLike | null): boolean {
+export function isSocialActivity(
+  mode: number | null | undefined,
+  def?: ActivityDefLike | null,
+  referenceId?: string | number | null
+): boolean {
+  if (referenceId != null && D1_SOCIAL_ACTIVITY_HASHES.has(String(referenceId))) {
+    return true;
+  }
   if (Number(mode) === SOCIAL_ACTIVITY_MODE) return true;
   if (!def) return false;
   if (def.isSocial === true) return true;

@@ -7,6 +7,7 @@ import { SummaryStore, summaryKey } from '../services/played-with-summary.store'
 import { PartnerNameRefresher } from '../services/partner-name-refresh.service';
 import { AccountSummary, mergeAccounts, readAccountSummary } from '../services/played-with-account';
 import { PRIVATE_GUARDIAN } from '../services/played-with.service';
+import { d1CoverageCaveat } from '../utils/d1-roots';
 
 const STALE_MS = Number(process.env.PLAYED_WITH_STALE_MINUTES || 60) * 60_000;
 const PLATFORM: Record<number, string> = { 1: 'Xbox', 2: 'PSN', 3: 'Steam', 4: 'Blizzard', 5: 'Stadia', 6: 'Epic' };
@@ -72,10 +73,12 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
 
     // D1 Played With not supported on per-account route yet
     if (game === 'D1') {
+      const caveat =
+        pw && typeof pw.d1CoverageNote === 'function' ? pw.d1CoverageNote() : d1CoverageCaveat(1);
       return res.status(501).json({
         error: 'D1 Played With not supported on per-account route',
         message: 'Per-account Played With for D1 is not available yet. D1 Played With only works via the legacy getPartners path when summaries is unset.',
-        d1CoverageCaveat: 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014).',
+        d1CoverageCaveat: caveat,
       });
     }
     const include = Array.isArray(body.include) ? ids.filter((x) => (body.include as unknown[]).map(String).includes(x)) : ids;

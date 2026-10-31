@@ -1,6 +1,6 @@
 /**
  * MOBILE_SPEC — phone portrait/landscape layout & readability.
- * Pairs with hardlight-dossier + READABILITY_SPEC.
+ * Gold/hardlight aesthetic stays on feat/engram-hardlight-landing (#73).
  */
 
 html {
@@ -12,6 +12,15 @@ html,
 body {
   overflow-x: clip;
   max-width: 100vw;
+}
+
+/* Hide phone Played With cards on wider viewports by default */
+.played-with-mobile-cards {
+  display: none;
+}
+
+.dc-date-more {
+  display: none;
 }
 
 /* Profile chip toolbar — wrap on all widths; phone media tightens taps */
@@ -138,6 +147,7 @@ body {
   }
 
   .dc-date-more {
+    display: inline-flex !important;
     flex: 0 0 auto;
     min-width: 44px;
     min-height: 44px;
@@ -241,8 +251,9 @@ body {
 
   .played-with-partner-card {
     padding: 0.85rem 1rem;
-    border: 1px solid var(--dc-hardlight-edge, rgba(201, 162, 39, 0.38));
-    background: var(--dc-hardlight-panel-mid, rgba(18, 19, 16, 0.72));
+    border: 1px solid rgba(100, 116, 139, 0.55);
+    background: rgba(30, 41, 59, 0.95);
+    border-radius: 0.5rem;
   }
 
   .played-with-partner-card__head {
@@ -298,25 +309,6 @@ body {
     align-items: center;
   }
 
-  /* Phone: mute glow/scan behind type; keep gold edges */
-  html.dc-hardlight:not(.dc-text-view) {
-    .destiny-surface-panel,
-    .destiny-year-block,
-    .account-summary-panel,
-    .activity-card-column,
-    .played-with-panel,
-    .on-this-day-panel {
-      box-shadow:
-        inset 0 1px 0 color-mix(in srgb, var(--dc-hardlight) 10%, transparent),
-        0 0 0 1px var(--dc-hardlight-edge) !important;
-    }
-
-    .destiny-section-title,
-    .activity-year-label,
-    .destiny-stat-value {
-      text-shadow: none !important;
-    }
-  }
 }
 
 @media (min-width: 768px) {
@@ -325,21 +317,39 @@ body {
   }
 }
 
-/*
- * Desktop (HEADER_REDESIGN_MOCKUP): dossier header owns chips / stats / OTD / tabs.
- * Main content is full-width below ? no side OTD column.
- */
+/* Desktop: On This Day can sit as sidebar; phone uses flow order above */
 @media (min-width: 1280px) {
   .dc-content-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    grid-template-areas:
+      'search date'
+      'main otd';
+    gap: 1.5rem 2rem;
+    align-items: start;
   }
 
-  .dc-dossier-hdr,
+  .dc-flow-search {
+    grid-area: search;
+    order: unset;
+  }
+  .dc-flow-date {
+    grid-area: date;
+    order: unset;
+  }
+  .dc-flow-otd {
+    grid-area: otd;
+    order: unset;
+    position: sticky;
+    top: 1rem;
+  }
   .dc-flow-main {
-    width: 100%;
-    min-width: 0;
+    grid-area: main;
+    order: unset;
+  }
+
+  .dc-date-compact {
+    /* restore normal date panel on desktop */
   }
 
   .dc-date-more {

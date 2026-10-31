@@ -32,8 +32,8 @@ These are environment variable names. Empty means that tier is unused.
 
 | Name | Default idea | Before turning it on |
 | --- | --- | --- |
-| `D1_INDEX_ROOT` | empty | Destiny 1 activity reads. Confirm billion 1 only, and that coverage stays partial. |
-| `D1_PLAYED_WITH_ROOT` | empty | Destiny 1 Played With. The site tab does not send Destiny 1-only accounts today. |
+| `D1_INDEX_ROOT` / `D1_INDEX_ROOTS` | empty | Destiny 1 activity reads. One root = billion 1; two `;`-separated roots = billions 1–2. Coverage stays partial. |
+| `D1_PLAYED_WITH_ROOT` / `D1_PLAYED_WITH_ROOTS` | empty | Destiny 1 Played With (same root count / cap as index). The site tab does not send Destiny 1-only accounts today. |
 | `ENABLE_GAP_LEAN` | off | Gap-fill lean reads. Leave off on the public API until a staging check matches expected row counts. |
 | `GAP_RELAX_COMPLETE` | off | Looser "complete" coverage. Leave off unless a check shows it does not mark a hole as full. |
 | `FIX_ON_VIEW_ENABLED` | off | Correct a flagged Destiny 2 report when it is opened. Needs `FLAG_LOOKUP_ROOT`. |

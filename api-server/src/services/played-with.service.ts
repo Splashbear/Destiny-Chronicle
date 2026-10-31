@@ -1,8 +1,14 @@
-import { SOCIAL_HUB_ACTIVITY_HASHES } from '../utils/social-hubs';
+import { D1_SOCIAL_ACTIVITY_HASHES, SOCIAL_HUB_ACTIVITY_HASHES } from '../utils/social-hubs';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Database } from 'duckdb-async';
 import { logger } from '../utils/logger';
+import {
+  d1CoverageCaveat,
+  d1MaxInstanceId,
+  filterExistingRoots,
+  parseRootList,
+} from '../utils/d1-roots';
 
 /**
  * Played With reader over two band layouts (both `<root>/iid_band=N/*.parquet`, N = instance_id / 1e6):
@@ -35,8 +41,10 @@ export interface PlayedWithConfig {
   minRoot?: string;
   /** Name-range table (mid BIGINT, name, first_seen, last_seen) parquet file(s) or glob; fills names for every partner. */
   nameTable?: string;
-  /** D1 played-with root: pw/iid_band=N/pw.parquet, N = instance_id // 1,000,000 */
+  /** D1 played-with root: pw/iid_band=N/pw.parquet (first of d1Roots; back-compat). */
   d1Root?: string;
+  /** D1 played-with roots (billion 1 + billion 2). Band 1000 is read from every root that has it. */
+  d1Roots?: string[];
 }
 
 /**
@@ -68,8 +76,9 @@ export const PRIVATE_GUARDIAN = 'Private Guardian';
 export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): PlayedWithConfig | null {
   const legacyRoot = (env.PLAYED_WITH_LEGACY_ROOT || env.PLAYED_WITH_ROOT || '').trim();
   const compactRoot = (env.PLAYED_WITH_COMPACT_ROOT || '').trim();
-  const d1Root = (env.D1_PLAYED_WITH_ROOT || '').trim();
-  if (!legacyRoot && !compactRoot && !(env.PLAYED_WITH_MIN_ROOT || '').trim() && !d1Root) return null;
+  const d1Roots = parseRootList(env.D1_PLAYED_WITH_ROOTS, env.D1_PLAYED_WITH_ROOT);
+  const d1Root = d1Roots[0] || '';
+  if (!legacyRoot && !compactRoot && !(env.PLAYED_WITH_MIN_ROOT || '').trim() && !d1Roots.length) return null;
   const compactDoneDir = (env.PLAYED_WITH_COMPACT_DONE_DIR || '').trim()
     || (compactRoot ? path.join(path.dirname(compactRoot), '_w38_state', 'done') : '');
   return {
@@ -85,6 +94,7 @@ export function loadPlayedWithConfig(env: NodeJS.ProcessEnv = process.env): Play
     minRoot: (env.PLAYED_WITH_MIN_ROOT || '').trim() || undefined,
     nameTable: (env.PLAYED_WITH_NAME_TABLE || '').trim() || undefined,
     d1Root: d1Root || undefined,
+    d1Roots: d1Roots.length ? d1Roots : undefined,
   };
 }
 
@@ -113,7 +123,7 @@ export interface BandPlan {
 
 export function planBands(
   instanceIds: Iterable<string>,
-  cfg: Pick<PlayedWithConfig, 'legacyRoot' | 'compactRoot' | 'splitIid' | 'compactMaxIid' | 'd1Root'>,
+  cfg: Pick<PlayedWithConfig, 'legacyRoot' | 'compactRoot' | 'splitIid' | 'compactMaxIid' | 'd1Root' | 'd1Roots'>,
   compactDoneStems: ReadonlySet<string>,
   minimalBands: ReadonlySet<number> = new Set(),
   game?: 'D1' | 'D2'
@@ -127,12 +137,14 @@ export function planBands(
     const l = m.get(band);
     if (l) l.push(id); else m.set(band, [id]);
   };
+  const d1RootCount = (cfg.d1Roots && cfg.d1Roots.length) ? cfg.d1Roots.length : (cfg.d1Root ? 1 : 0);
+  const d1Max = d1MaxInstanceId(d1RootCount);
   for (const id of new Set(instanceIds)) {
     const n = Number(id);
     if (!Number.isFinite(n) || n <= 0) { miss(id, 'invalid'); continue; }
     const band = Math.floor(n / BAND_SIZE);
-    // D1 range: instance IDs 1 to 1,000,000,000 (billion 1 only), only when game=D1 explicitly requested
-    if (game === 'D1' && n > 0 && n <= 1_000_000_000 && cfg.d1Root) {
+    // D1 range: up to 1B (one root) or 2B (two+ roots); only when game=D1 explicitly requested
+    if (game === 'D1' && n > 0 && n <= d1Max && d1RootCount > 0) {
       push(plan.d1, band, id);
     } else if (n < cfg.compactMaxIid && minimalBands.has(band)) {
       push(plan.minimal, band, id);
@@ -206,7 +218,11 @@ const PERIOD_COMPACT = `strftime(CAST(period AS TIMESTAMP), '%Y-%m-%dT%H:%M:%SZ'
  * mode + activity_hash per row, so this also covers accounts found only in 10-16B (no mode in their
  * activity list) - those bands are still read, the hub rows are dropped in the scan.
  */
-export const HUB_CLAUSE = ` AND NOT (COALESCE(mode, -1) = 40 OR (COALESCE(mode, -1) = 0 AND activity_hash IN (${[...SOCIAL_HUB_ACTIVITY_HASHES].join(',')})))`;
+export const HUB_CLAUSE = ` AND NOT (
+  COALESCE(mode, -1) = 40
+  OR activity_hash IN (${[...D1_SOCIAL_ACTIVITY_HASHES].join(',')})
+  OR (COALESCE(mode, -1) = 0 AND activity_hash IN (${[...SOCIAL_HUB_ACTIVITY_HASHES].join(',')}))
+)`;
 
 /**
  * Oversized games (checkpoint-bot lobbies, Bungie mega-PGCRs) are dropped from Played With only.
@@ -272,10 +288,27 @@ export class PlayedWithService {
     return bandFiles(path.join(root, kind, 'by_iid_1m'), band);
   }
 
-  /** D1 band files: D1_ROOT/pw/iid_band=N/pw.parquet */
+  /** D1 band files from every configured root that exists (union). Band 1000 spans both billions. */
   private d1BandFiles(band: number): string[] {
-    if (!this.cfg.d1Root) return [];
-    return bandFiles(path.join(this.cfg.d1Root, 'pw'), band);
+    const configured = (this.cfg.d1Roots && this.cfg.d1Roots.length)
+      ? this.cfg.d1Roots
+      : (this.cfg.d1Root ? [this.cfg.d1Root] : []);
+    const roots = filterExistingRoots(configured, 'D1 played-with root');
+    const files: string[] = [];
+    for (const root of roots) {
+      files.push(...bandFiles(path.join(root, 'pw'), band));
+    }
+    return files;
+  }
+
+  private d1ConfiguredRootCount(): number {
+    if (this.cfg.d1Roots && this.cfg.d1Roots.length) return this.cfg.d1Roots.length;
+    return this.cfg.d1Root ? 1 : 0;
+  }
+
+  /** Coverage note from configured D1 played-with root count (for API 501 / client copy). */
+  d1CoverageNote(): string {
+    return d1CoverageCaveat(this.d1ConfiguredRootCount());
   }
 
   /** Done-marker stems currently present (re-read per request so new W38 files appear without restart). */
@@ -357,10 +390,8 @@ export class PlayedWithService {
     collect('minimal', '', plan.minimal);
     collect('d1', '', plan.d1);
     
-    // D1 index only covers billion 1 (instance IDs 1-1B); indexComplete must be false when D1 bands are used.
-    // Off-by-default behavior (no D1_ROOT): complete=true when all instances covered.
+    // D1 archive is incomplete (billions 1–2 at most); indexComplete must be false when D1 bands are used.
     const indexComplete = plan.d1.size > 0 ? false : plan.uncovered.length === 0;
-    
     const coverage: PlayedWithCoverage = {
       complete: indexComplete,
       totalInstances: durations.size,
@@ -371,7 +402,7 @@ export class PlayedWithService {
       compactBands: plan.compact.size,
       minimalBands: plan.minimal.size,
       d1Bands: plan.d1.size,
-      d1CoverageCaveat: plan.d1.size > 0 ? 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history incomplete.' : undefined,
+      d1CoverageCaveat: plan.d1.size > 0 ? d1CoverageCaveat(this.d1ConfiguredRootCount()) : undefined,
     };
     if (!covered.length) return { partners: [], coverage };
 

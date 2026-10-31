@@ -24,6 +24,10 @@ import { matchesCalendarDay, scanYears, utcDayWindow } from '../utils/calendar-d
 import { noteIdbRead } from '../utils/idb-read-log';
 import { MembershipRowCache } from '../utils/membership-row-cache';
 import { fireteamNamesFromPgcr } from '../utils/firsts-fireteam';
+import {
+  activityDurationSeconds,
+  sumActivityDurationSeconds,
+} from '../utils/activity-duration-seconds';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -2081,8 +2085,9 @@ export class ActivityDbService extends Dexie {
       let activities: any[] = [];
       if (isD1) {
         // ---------------- Parallel D1 pagination ----------------
+        // D1 DestinyActivityModeType: TrialsOfOsiris = 14, IronBanner = 19 (not D2's 84).
         const D1_MODES = [
-          0,1,2,3,4,5,6,10,12,15,16,17,18,19,22,24,25,31,32,37,38,39,40,41,42,43,44,45,46,48,49,50,51,52,53
+          0, 2, 3, 4, 5, 6, 7, 10, 12, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 29, 31, 32
         ];
         const pageSize = 250;
         
@@ -2320,13 +2325,7 @@ export class ActivityDbService extends Dexie {
    * so D1 time displays correctly in stats and breakdown.
    */
   private getActivityDurationSeconds(a: any): number {
-    const v = a?.values;
-    if (v?.timePlayedSeconds?.basic?.value != null) return Number(v.timePlayedSeconds.basic.value);
-    if (v?.secondsPlayed?.basic?.value != null) return Number(v.secondsPlayed.basic.value);
-    if (typeof v?.secondsPlayed === 'number') return v.secondsPlayed;
-    if (typeof a?.secondsPlayed === 'number') return a.secondsPlayed;
-    if (typeof a?.timePlayedSeconds === 'number') return a.timePlayedSeconds;
-    return 0;
+    return activityDurationSeconds(a);
   }
 
   // Helper to generate a composite key for a favorite account
@@ -3221,25 +3220,37 @@ export class ActivityDbService extends Dexie {
   }
 
   /**
-   * Count + sum of activity durations for one membership/game from IndexedDB.
-   * Time is PGCR/activity time only (no orbit, Tower, or social spaces).
+   * Sum of stored activity durations for one membership + game (PGCR / history timePlayed).
+   * Used by Account Summary "Time in activities" — must read IndexedDB, not the UI cache.
    */
-  async summarizeActivitiesForMembershipAndGame(
+  async sumActivityDurationForMembershipAndGame(
     membershipId: string,
     game: 'D1' | 'D2'
-  ): Promise<{ count: number; totalTimeSeconds: number }> {
+  ): Promise<number> {
     await this.initPromise;
-    if (!membershipId) return { count: 0, totalTimeSeconds: 0 };
+    if (!membershipId) return 0;
     const acts = await this.activities
       .where('membershipId')
       .equals(membershipId)
       .and(a => a.game === game)
       .toArray();
-    let totalTimeSeconds = 0;
-    for (const a of acts) {
-      totalTimeSeconds += this.getActivityDurationSeconds(a);
-    }
-    return { count: acts.length, totalTimeSeconds };
+    return sumActivityDurationSeconds(acts);
+  }
+
+  /**
+   * All stored rows for one membership + game (for Account Summary per-type rollups).
+   */
+  async getActivitiesForMembershipAndGame(
+    membershipId: string,
+    game: 'D1' | 'D2'
+  ): Promise<StoredActivity[]> {
+    await this.initPromise;
+    if (!membershipId) return [];
+    return this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => a.game === game)
+      .toArray();
   }
 
   /**

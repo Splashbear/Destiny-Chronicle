@@ -293,17 +293,23 @@ export class AccomplishmentsD1Service {
 
     try {
       const profile = await firstValueFrom(this.bungie.getD1Profile(membershipType as any, membershipId));
-      const characters = this.extractD1Characters(profile);
-      for (const charId of characters.slice(0, 3)) {
-        try {
-          const charAdv = await firstValueFrom(
-            this.bungie.getD1CharacterAdvisorsV2(membershipType, membershipId, charId)
-          );
-          this.absorbAdvisorDefinitions(charAdv);
-          this.mergeBooks(merged, this.unwrapAdvisorsData(charAdv)?.recordBooks);
-        } catch {
-          /* character may be private / gone */
-        }
+      const characters = this.extractD1Characters(profile).slice(0, 3);
+      // Character Advisors are independent — overlap instead of stacking ~1–3s each.
+      const charResults = await Promise.all(
+        characters.map(async (charId) => {
+          try {
+            return await firstValueFrom(
+              this.bungie.getD1CharacterAdvisorsV2(membershipType, membershipId, charId)
+            );
+          } catch {
+            return null; /* character may be private / gone */
+          }
+        })
+      );
+      for (const charAdv of charResults) {
+        if (!charAdv) continue;
+        this.absorbAdvisorDefinitions(charAdv);
+        this.mergeBooks(merged, this.unwrapAdvisorsData(charAdv)?.recordBooks);
       }
     } catch {
       /* profile optional if account advisors already populated */

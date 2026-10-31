@@ -631,6 +631,14 @@
       margin-bottom: 0.25rem;
     }
 
+    .account-summary-stat-hint {
+      display: block;
+      margin-top: 0.35rem;
+      font-size: 0.6875rem;
+      line-height: 1.35;
+      color: rgba(148, 163, 184, 0.75);
+    }
+
     .account-summary-table {
       color: rgba(203, 213, 225, 0.95);
       border-top: 1px solid rgba(201, 162, 39, 0.22);

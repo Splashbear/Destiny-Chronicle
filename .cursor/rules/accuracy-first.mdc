@@ -1,0 +1,27 @@
+---
+description: Accuracy and ship discipline for Destiny Chronicle — do not break live stats
+alwaysApply: true
+---
+
+# Accuracy first (Destiny Chronicle)
+
+Players only trust this app if the numbers are right. Speed matters; **wrong totals are worse than slow ones**.
+
+## Before shipping any change that touches
+
+- Account Summary / playtime / activity counts
+- Activity history load, IndexedDB reads, archive merge
+- Host adapters / peels / `@ts-nocheck` extractions
+- Labels that claim “activities”, “in game”, “completions”, or “firsts”
+
+### Required
+
+1. **Name the data source in the UI or code comment** (Bungie profile `minutesPlayedTotal` vs summed activity-report durations vs unique clears). Never label profile time as “time in activities”.
+2. **Do not invent summary surfaces** (per-type tables, experimental theme blocks) on live without an explicit ask.
+3. **Build is not enough.** After the change, mentally (or actually) run Splashbear: load accounts, confirm Account Summary shows non-zero **Time in activities** when **Total Activities** &gt; 0, and that activities/firsts/breakdown still populate.
+4. **No `@ts-nocheck` host peels** that rebind `c` or call free functions without imports — those already blanked live tabs twice.
+5. Prefer **IndexedDB / stored history** for cumulative activity stats; never trust an empty in-memory `this.activities` UI cache for Account Summary totals.
+
+### If accuracy is unclear
+
+Stop and ask, or ship a smaller change. Do not “fix forward” with speculative labels or rollups that over-count attempts as completions.

@@ -4,7 +4,7 @@ This document describes Destiny 1 (D1) support in the api-server.
 
 ## Overview
 
-The api-server now supports reading archived Destiny 1 activity and played-with data from separate D1-specific index roots. D1 support is **off by default** and only activates when `D1_INDEX_ROOT` is configured.
+The api-server supports reading archived Destiny 1 activity and played-with data from D1-specific index roots. D1 support is **off by default** and only activates when `D1_INDEX_ROOTS` (or legacy `D1_INDEX_ROOT`) is configured.
 
 When D1 index roots are not configured, the server behaves identically to before — all requests are handled by existing D2 indexes and live Bungie API fallback.
 
@@ -85,15 +85,24 @@ iid_band              BIGINT
 
 ## Coverage Caveat
 
-**IMPORTANT**: This D1 index contains **billion 1 only** (instance IDs `1` to `1,000,000,000`), covering **August 30 to December 9, 2014**.
+Configure one or more D1 roots:
 
-Other billions are missing, so later D1 activity history is **incomplete** from this source and **must fall back to Bungie live API** for any games after Dec 9, 2014.
+- **One root** (legacy): **billion 1 only** (instance IDs `1`–`1,000,000,000`), **Aug 30–Dec 9 2014**.
+- **Two roots** (`D1_INDEX_ROOTS` / `D1_PLAYED_WITH_ROOTS`): **billions 1–2** (IDs `1`–`2,000,000,000`), **Aug 30 2014–~Mar 2015**.
+
+Later D1 history is **incomplete** from this source and **must fall back to Bungie live**.
 
 **D1 is still an active game**. Recent D1 activities exist and are real — they just aren't in this archive.
 
+Billion-2 played-with bands are `1000`–`2000`. Band `1000` exists in **both** roots (billion 1 holds only iid `1_000_000_000`; billion 2 holds `1_000_000_001`–`1_000_999_999`) — the API unions and dedupes that band.
+
 ### API Response Notes
 
-All D1 tier responses include a note in `tier.notes`:
+All D1 tier responses include a note in `tier.notes` based on how many roots are configured, for example:
+```
+"D1 coverage: billions 1-2 (IDs 1-2B, Aug 30 2014 to ~Mar 2015). Later D1 history falls back to Bungie live."
+```
+or (single root):
 ```
 "D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live."
 ```
@@ -127,21 +136,21 @@ The per-account Played With route (`/played-with/stats` when summaries store is 
 Add these to your `.env`:
 
 ```bash
-# Destiny 1 index root (optional, off by default)
-# Points to parent folder containing act/ and pw/ subdirectories
-D1_INDEX_ROOT=/path/to/d1/final
+# Destiny 1 — single root (backward compatible)
+D1_INDEX_ROOT=D:\DestinyChronicleDB\d1_final
+D1_PLAYED_WITH_ROOT=D:\DestinyChronicleDB\d1_final
 
-# D1 played-with root (optional, used by played-with routes)
-# Typically the same as D1_INDEX_ROOT (contains pw/ subdirectory)
-D1_PLAYED_WITH_ROOT=/path/to/d1/final
+# Or multi-root (billions 1-2). ;-separated. Falls back to the single-root vars when unset.
+# Missing paths are skipped with a warning (API keeps running).
+D1_INDEX_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2
+D1_PLAYED_WITH_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2
 ```
 
-Both variables typically point to the same parent folder (e.g., `D:\d1\final`) which contains:
-- `act/mid_bucket=N/instances.parquet` (activity index, ~30.2 GB)
-- `pw/iid_band=N/pw.parquet` (played-with index, ~13.0 GB)
-- **Total: ~43 GB**
+Each root is a parent folder containing:
+- `act/mid_bucket=N/instances.parquet`
+- `pw/iid_band=N/pw.parquet`
 
-If `D1_INDEX_ROOT` is not set or empty, D1 support is disabled and behavior is unchanged.
+If neither `D1_INDEX_ROOTS` nor `D1_INDEX_ROOT` is set, D1 support is disabled and behavior is unchanged.
 
 ### Server Startup
 
@@ -186,7 +195,7 @@ Archive initialized: {
 }
 ```
 
-**Note**: D1 responses always have `level: "partial"` and `indexComplete: false` because the D1 index only covers billion 1 (instance IDs 1 to 1,000,000,000, Aug 30 to Dec 9 2014). All period fields (`period`, `minPeriod`, `maxPeriod`) are returned as timezone-independent ISO 8601 UTC strings (e.g., `"2014-10-26T18:57:22Z"`).
+**Note**: D1 responses always have `level: "partial"` and `indexComplete: false` because the D1 archive only covers billions 1–2 at most. All period fields (`period`, `minPeriod`, `maxPeriod`) are returned as timezone-independent ISO 8601 UTC strings (e.g., `"2014-10-26T18:57:22Z"`).
 
 ### PGCR Endpoints
 
@@ -204,10 +213,10 @@ Archive initialized: {
 
 `POST /played-with`
 
-**With D1_PLAYED_WITH_ROOT configured**:
-- Plans D1 bands for instance IDs in range 1 to 1,000,000,000
-- Reads from `D1_INDEX_ROOT/pw/iid_band=N/pw.parquet`
-- Coverage response includes `d1Bands` count
+**With D1_PLAYED_WITH_ROOT / D1_PLAYED_WITH_ROOTS configured**:
+- Plans D1 bands for instance IDs in range 1–1B (one root) or 1–2B (two+ roots)
+- Reads `pw/iid_band=N/pw.parquet` from every existing root (union; band 1000 from both)
+- Coverage response includes `d1Bands` count and a billions 1–2 (or billion 1) caveat
 
 **Response**:
 ```json

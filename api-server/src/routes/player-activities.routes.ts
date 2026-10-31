@@ -12,6 +12,8 @@ import { logger } from '../utils/logger';
 import { resolveCoverageLevel, shouldStripPartialActivities } from '../utils/coverage-level';
 import { filterSocialHubs } from '../utils/social-hubs';
 import { dedupeActivitiesByInstance } from '../utils/dedupe-activities';
+import { isD1StatsUnavailable } from '../utils/d1-stats-unavailable';
+import { d1CoverageCaveat } from '../utils/d1-roots';
 
 /** W6: exclude social hubs unless explicitly requested or EXCLUDE_SOCIAL_HUBS=false. */
 function shouldIncludeSocialHubs(req: Request): boolean {
@@ -80,9 +82,30 @@ function getStringParam(value: unknown): string {
 }
 
 /**
- * Convert LeanActivity to LightActivityRow for API response
+ * Convert LeanActivity to LightActivityRow for API response.
+ * D1 rows with no usable stats return null (not 0) for kills/time/completed.
  */
 function toLightActivityRow(activity: LeanActivity): LightActivityRow {
+  const unavailable = isD1StatsUnavailable(activity) || !!activity.stats_missing;
+  if (unavailable) {
+    return {
+      instanceId: activity.instance_id,
+      period: activity.period,
+      activityHash: activity.activity_hash,
+      mode: activity.mode,
+      membershipId: activity.membership_id,
+      membershipType: activity.membership_type,
+      characterId: activity.character_id,
+      completed: null,
+      deaths: null,
+      kills: null,
+      assists: null,
+      durationSeconds: null,
+      game: activity.game,
+      displayName: activity.display_name || undefined,
+      statsUnavailable: true,
+    };
+  }
   return {
     instanceId: activity.instance_id,
     period: activity.period,
@@ -132,10 +155,14 @@ function buildCoverage(
   const minPeriod = periodsWithValues.length > 0 ? periodsWithValues[0] : null;
   const maxPeriod = periodsWithValues.length > 0 ? periodsWithValues[periodsWithValues.length - 1] : null;
 
+  const isD1 = options.game === 'D1';
   const watermark = watermarkService.getWatermark();
-  const watermarkNote = watermark
-    ? `Archive contains activities up to instance ID ${watermark.max_instance_id}`
-    : undefined;
+  // D1 must not carry D2 watermark / archiveCompleteBelowIid (BOT_DECISIONS 2026-10-30).
+  const watermarkNote = isD1
+    ? undefined
+    : watermark
+      ? `Archive contains activities up to instance ID ${watermark.max_instance_id}`
+      : undefined;
 
   const resolved = resolveCoverageLevel({
     tierLevel: tierInfo.level,
@@ -149,6 +176,26 @@ function buildCoverage(
   const notes = Array.from(
     new Set([...(tierInfo.notes || []), ...resolved.notes].filter(Boolean))
   );
+  // Prefer the configured D1 billions caveat; drop stale "billion 1 only" / D2 range notes.
+  if (isD1) {
+    const filtered = notes.filter(
+      (n) =>
+        !/billion 1 only/i.test(n) &&
+        !/15999999999|10000000000|archiveCompleteBelowIid/i.test(n) &&
+        !/up to 15\.?999/i.test(n)
+    );
+    const multiRoots = String(process.env.D1_INDEX_ROOTS || '')
+      .split(';')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const rootCount = multiRoots.length > 0 ? multiRoots.length : process.env.D1_INDEX_ROOT ? 1 : 2;
+    const caveat = d1CoverageCaveat(rootCount);
+    if (!filtered.some((n) => n.startsWith('D1 coverage:'))) {
+      filtered.push(caveat);
+    }
+    notes.length = 0;
+    notes.push(...filtered);
+  }
 
   return {
     level: resolved.level,
@@ -163,7 +210,7 @@ function buildCoverage(
     indexComplete: tierInfo.indexComplete,
     filtersApplied: tierInfo.filtersApplied,
     notes: notes.length ? notes : undefined,
-    archiveCompleteBelowIid: watermarkService.completeBelowIid(),
+    archiveCompleteBelowIid: isD1 ? undefined : watermarkService.completeBelowIid(),
   };
 }
 

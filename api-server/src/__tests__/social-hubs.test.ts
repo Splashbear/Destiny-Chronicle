@@ -27,6 +27,12 @@ describe('W6 social hub filter', () => {
     expect(isSocialHubActivity({ mode: 6, activity_hash: 123 })).toBe(false);
   });
 
+  test('D1 Tower hashes are social regardless of mode', () => {
+    expect(isSocialHubActivity({ mode: 2, activity_hash: 2330516073 })).toBe(true);
+    expect(isSocialHubActivity({ mode: 0, activity_hash: 1522220810 })).toBe(true);
+    expect(isSocialHubActivity({ mode: 6, activity_hash: 2370413227 })).toBe(true);
+  });
+
   test('filterSocialHubs counts exclusions', () => {
     const rows = [
       { mode: 4, activity_hash: 1 },
