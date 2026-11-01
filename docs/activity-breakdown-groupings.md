@@ -66,15 +66,13 @@ Sections are ordered for UX. Lower order = shown earlier:
 
 | Order | Modes | Description |
 |-------|-------|-------------|
-| 0 | 4 | Raid |
-| 1 | 82 | Dungeon |
+| 0 | 4 | Raid (game-split D1/D2; shared remake names OK) |
+| 1 | 82 | Dungeon (**D2 only**) |
 | 2 | 16, 17, 46, 47 | Nightfall variants |
-| 3 | 3, 18 | Strike, AllStrikes |
+| 3 | 3, 18 | Strike (unified Strike + AllStrikes) |
 | 4 | 2 | Story |
 | 5 | 87 | LostSector |
 | 6 | 92, 85, 83, 77, 78, 86 | Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive |
-| 1 | 82 | Dungeon (**D2 only**) |
-| 3 | 3, 18 | Strike (unified Strike + AllStrikes) |
 | 7 | 63, 75, 76, 67, 33 (+ Emerald Coast **by name** when mode 0) | Gambit (**D2 only** — never bare mode 0) |
 | 7.5 | Trials | Trials of Osiris (D2 84 / D1 14), Trials of the Nine (39/41/42), Freelance — see `docs/specs/TRIALS_BREAKDOWN_SPEC.md` |
 | 8 | Crucible (non-Trials PvP) | Control, Clash, IronBanner, Survival, etc. (PvP minus Trials) |
