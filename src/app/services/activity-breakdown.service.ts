@@ -400,7 +400,7 @@ export const SOCIAL_SPACE_AND_PATROL_REF = {
 export class ActivityBreakdownService {
 
   /** Bumped when row shape changes so stale cached rows are not reused. */
-  private readonly activityCountsCacheVersion = 'v5-d1-no-gambit';
+  private readonly activityCountsCacheVersion = 'v6-game-gated-overrides';
 
   /** Cached full breakdown per sorted membership+game scope key. */
   private activityCountsCache = new Map<string, ActivityCountRow[]>();
@@ -743,7 +743,7 @@ export class ActivityBreakdownService {
     // applying GAMBIT_MODES (which includes 0) mis-labeled D1 Crucible as "Gambit – D1".
     if (game === 'D2' && GAMBIT_MODES.has(mode)) return 'gambit';
     if (NIGHTFALL_MODES.has(mode)) return 'nightfall';
-    if (isSrlActivity(row.referenceId, row.baseName, mode)) return 'sparrow-racing-league';
+    if (isSrlActivity(row.referenceId, row.baseName, mode, game)) return 'sparrow-racing-league';
     // Trials peeled above Crucible; Osiris vs Nine are separate tiles (separate modes).
     {
       const classified = classifyPvp({
@@ -762,20 +762,28 @@ export class ActivityBreakdownService {
       if (d1Type === 'sparrow-racing-league') return 'sparrow-racing-league';
       if (d1Type === 'nightfall') return 'nightfall';
     }
-    if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
+    // D2-only curated peels — never apply to Destiny 1 rows (same class of bug as D1 Gambit).
+    if (game === 'D2') {
+      if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
 
-    if (STORY_STRIKES_MODES.has(mode)) {
-      if (base.includes('pirate hideout')) return 'story-strikes';
-      if (base.startsWith('sever - ') || base === 'sever') return 'story-strikes';
-      if (STORY_STRIKES_BASE_NAMES.has(base)) return 'story-strikes';
+      if (STORY_STRIKES_MODES.has(mode)) {
+        if (base.includes('pirate hideout')) return 'story-strikes';
+        if (base.startsWith('sever - ') || base === 'sever') return 'story-strikes';
+        if (STORY_STRIKES_BASE_NAMES.has(base)) return 'story-strikes';
+      }
+
+      if (EXOTIC_STORY_MODES.has(mode)) {
+        if (EXOTIC_STORY_BASE_NAMES.has(base)) return 'exotic-story-missions';
+        if (base.includes('avalon') || base.includes('node.ovrd')) return 'exotic-story-missions';
+      }
+
+      if (
+        SEASONAL_ARENA_MODES.has(mode) &&
+        (SEASONAL_ARENA_BASE_NAMES.has(base) || [77, 78, 83, 85, 86].includes(mode))
+      ) {
+        return 'seasonal-arena';
+      }
     }
-
-    if (EXOTIC_STORY_MODES.has(mode)) {
-      if (EXOTIC_STORY_BASE_NAMES.has(base)) return 'exotic-story-missions';
-      if (base.includes('avalon') || base.includes('node.ovrd')) return 'exotic-story-missions';
-    }
-
-    if (SEASONAL_ARENA_MODES.has(mode) && (SEASONAL_ARENA_BASE_NAMES.has(base) || [77, 78, 83, 85, 86].includes(mode))) return 'seasonal-arena';
 
     return null;
   }

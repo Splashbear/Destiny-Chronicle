@@ -74,13 +74,19 @@ const SRL_EXCLUDE_NAME_PATTERNS = ['Sparrow Control'];
 export function isSrlActivity(
   referenceId: string | number,
   name?: string,
-  mode?: number
+  mode?: number,
+  game?: 'D1' | 'D2'
 ): boolean {
   const ref = String(referenceId);
-  if (D1_SRL_HASHES.includes(ref) || D2_SRL_HASHES.includes(ref)) {
+  const d1Hash = D1_SRL_HASHES.includes(ref);
+  const d2Hash = D2_SRL_HASHES.includes(ref);
+  if (game === 'D1') {
+    if (d1Hash || mode === SRL_ACTIVITY_MODE_D1) return true;
+  } else if (game === 'D2') {
+    if (d2Hash || mode === SRL_ACTIVITY_MODE_D2) return true;
+  } else if (d1Hash || d2Hash) {
     return true;
-  }
-  if (mode != null && (SRL_ACTIVITY_MODES as readonly number[]).includes(mode)) {
+  } else if (mode != null && (SRL_ACTIVITY_MODES as readonly number[]).includes(mode)) {
     return true;
   }
   if (!name) {
@@ -128,16 +134,28 @@ export interface SrlHistoryRowLike {
 }
 
 /** True when a Bungie / stored history row is an SRL race (track, playlist node, or mode list). */
-export function isSrlHistoryRow(row: SrlHistoryRowLike | null | undefined, name?: string): boolean {
+export function isSrlHistoryRow(
+  row: SrlHistoryRowLike | null | undefined,
+  name?: string,
+  game?: 'D1' | 'D2'
+): boolean {
   const d = row?.activityDetails;
   if (!d) return false;
-  if (Array.isArray(d.modes) && d.modes.some(m => (SRL_ACTIVITY_MODES as readonly number[]).includes(Number(m)))) {
-    return true;
+  const modes = Array.isArray(d.modes) ? d.modes.map(Number) : [];
+  if (game === 'D1') {
+    if (modes.includes(SRL_ACTIVITY_MODE_D1)) return true;
+  } else if (game === 'D2') {
+    if (modes.includes(SRL_ACTIVITY_MODE_D2)) return true;
+    if (d.directorActivityHash != null && D2_SRL_HASHES.includes(String(d.directorActivityHash))) {
+      return true;
+    }
+  } else {
+    if (modes.some(m => (SRL_ACTIVITY_MODES as readonly number[]).includes(m))) return true;
+    if (d.directorActivityHash != null && D2_SRL_HASHES.includes(String(d.directorActivityHash))) {
+      return true;
+    }
   }
-  if (d.directorActivityHash != null && D2_SRL_HASHES.includes(String(d.directorActivityHash))) {
-    return true;
-  }
-  return isSrlActivity(d.referenceId ?? '', name, d.mode ?? undefined);
+  return isSrlActivity(d.referenceId ?? '', name, d.mode ?? undefined, game);
 }
 
 /**
@@ -150,6 +168,6 @@ export function srlGroupingMode(
   name?: string
 ): number | undefined {
   const mode = row?.activityDetails?.mode ?? undefined;
-  if (!isSrlHistoryRow(row, name)) return mode;
+  if (!isSrlHistoryRow(row, name, game)) return mode;
   return game === 'D1' ? SRL_ACTIVITY_MODE_D1 : SRL_ACTIVITY_MODE_D2;
 }

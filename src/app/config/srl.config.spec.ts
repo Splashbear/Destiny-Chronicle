@@ -34,4 +34,11 @@ describe('srl.config', () => {
     const d1 = { activityDetails: { referenceId: '1478347980', mode: 29 } };
     expect(srlGroupingMode(d1, 'D1')).toBe(29);
   });
+
+  it('does not treat D1 SRL mode/hash as SRL on a D2 row', () => {
+    // Mode 29 + D1 hash alone must not mark a D2 row; track names may still match (shared D1/D2 tracks).
+    expect(isSrlActivity('1478347980', 'Twilight Gap', 29, 'D2')).toBe(false);
+    expect(isSrlActivity('not-srl', 'Whatever', 29, 'D2')).toBe(false);
+    expect(isSrlActivity('1478347980', 'Campus Martius', 29, 'D1')).toBe(true);
+  });
 });
