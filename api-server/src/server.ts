@@ -73,7 +73,8 @@ async function startServer(): Promise<void> {
     config.enableGapLean,
     config.gapIndexSortedRoot,
     config.gapRelaxComplete,
-    config.d1IndexRoots.length ? config.d1IndexRoots : config.d1IndexRoot
+    config.d1IndexRoots.length ? config.d1IndexRoots : config.d1IndexRoot,
+    config.gapIndexExtraRoots
   );
   await archiveService.initialize();
 

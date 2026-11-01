@@ -17,6 +17,12 @@ export interface ApiConfig {
   gapIndexRoot: string;
   /** W11: membership_id-sorted gap root; preferred per-bucket when complete. */
   gapIndexSortedRoot: string;
+  /**
+   * Extra gap roots (`;`-separated GAP_INDEX_EXTRA_ROOTS), same layout as gapIndexRoot
+   * (mid_bucket=N/instances.parquet + _COMPLETE.json). Rows are unioned with gapIndexRoot rows
+   * (e.g. the 10-16B detail rebuild while gapIndexRoot holds ids below 10B).
+   */
+  gapIndexExtraRoots: string[];
   /** When true, merge GAP_INDEX_ROOT lean rows with compact/lite results. */
   enableGapLean: boolean;
   /**
@@ -69,6 +75,7 @@ export const ENV_KEYS = {
   COMPACT_INDEX_ROOT: 'COMPACT_INDEX_ROOT',
   GAP_INDEX_ROOT: 'GAP_INDEX_ROOT',
   GAP_INDEX_SORTED_ROOT: 'GAP_INDEX_SORTED_ROOT',
+  GAP_INDEX_EXTRA_ROOTS: 'GAP_INDEX_EXTRA_ROOTS',
   ENABLE_GAP_LEAN: 'ENABLE_GAP_LEAN',
   GAP_RELAX_COMPLETE: 'GAP_RELAX_COMPLETE',
   D1_INDEX_ROOT: 'D1_INDEX_ROOT',
