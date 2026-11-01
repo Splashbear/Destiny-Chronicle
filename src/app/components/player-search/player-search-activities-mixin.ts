@@ -244,8 +244,11 @@ export abstract class PlayerSearchActivitiesMixin extends PlayerSearchBreakdownM
 
     this.accountFilterEpoch += 1;
     this.cdr.markForCheck();
-    if (this.selectedPlayers.length > 0 && this.activeTab === 'breakdown') {
-      void this.loadActivityBreakdown();
+    // Header Active/Orbit use Breakdown totals — refresh even when not on that tab.
+    if (this.selectedPlayers.length > 0) {
+      void this.loadActivityBreakdown({
+        preserveView: (this.activityBreakdownGroups?.length || 0) > 0,
+      });
     }
   }
 

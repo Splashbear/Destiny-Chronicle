@@ -223,11 +223,23 @@ export class PlayerSearchComponent extends PlayerSearchUiMixin implements OnInit
         this.searchUsername = term;
       });
 
-    // Debounce heavy account-stats calculation; ignore new triggers while one is running
+    // Debounce heavy account-stats + Active/Orbit header totals (Breakdown load).
+    // Header Active time is summed from Breakdown rows — do not wait for the Breakdown tab click.
     this.statsDebounce$
       .pipe(
         debounceTime(1000),
-        exhaustMap(() => from(this.calculateAccountStats()))
+        exhaustMap(() =>
+          from(
+            (async () => {
+              await this.calculateAccountStats();
+              if (this.selectedPlayers.length > 0) {
+                await this.loadActivityBreakdown({
+                  preserveView: (this.activityBreakdownGroups?.length || 0) > 0,
+                });
+              }
+            })()
+          )
+        )
       )
       .subscribe();
   }
