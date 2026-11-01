@@ -463,6 +463,12 @@ export class ActivityDbService extends Dexie {
     return undefined;
   }
 
+  /** D1 raid (and related) referenceId → family display name for Firsts / Breakdown. */
+  static getD1FamilyName(referenceId: string | number | null | undefined): string | undefined {
+    if (referenceId == null || referenceId === '') return undefined;
+    return ActivityDbService.D1_FAMILY_MAP[String(referenceId)];
+  }
+
   // Add D1 family map
   private static readonly D1_FAMILY_MAP: Record<string, string> = {
     // Vault of Glass (all variants map to base name)

@@ -297,6 +297,8 @@ type SectionOverrideKey =
   | 'prison-of-elders'
   | 'gambit'
   | 'nightfall'
+  | 'strikes'
+  | 'dungeon'
   | 'trials-osiris'
   | 'trials-nine'
   | 'pvp'
@@ -334,8 +336,10 @@ const SECTION_OVERRIDE_ORDER: Record<SectionOverrideKey, number> = {
   'exotic-story-missions': 42,
   'seasonal-arena': 6,       // With rotators (Dares, Menagerie, Offensive, etc.)
   'prison-of-elders': 36,    // D1 Prison of Elders (modes 21, 22, 30)
-  gambit: 7,                 // Gambit, Gambit Prime, Reckoning, None/Emerald Coast, mode 33
+  gambit: 7,                 // Gambit, Gambit Prime, Reckoning (D2); Emerald Coast by name when mode 0
   nightfall: 2,              // All Nightfall variants (16, 17, 46, 47)
+  strikes: 3,                // Strike + AllStrikes (3, 18)
+  dungeon: 1,                // D2 dungeons (82)
   'sparrow-racing-league': 15, // SRL (mode 29 or name/hash when mislabeled as PvP)
   'trials-osiris': 7.4,        // Trials of Osiris (D1 + D2 + Freelance) above Nine / Crucible
   'trials-nine': 7.5,          // Trials of the Nine (separate mode family)
@@ -350,6 +354,8 @@ const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
   'prison-of-elders': 'Prison of Elders',
   gambit: 'Gambit',
   nightfall: 'Nightfall',
+  strikes: 'Strike',
+  dungeon: 'Dungeon',
   'sparrow-racing-league': 'Sparrow Racing League',
   'trials-osiris': 'Trials of Osiris',
   'trials-nine': 'Trials of the Nine',
@@ -357,9 +363,15 @@ const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
 };
 
 const PRISON_OF_ELDERS_MODES = new Set([21, 22, 30]);
-/** D2-only. Mode 0 covers mis-tagged Emerald Coast; never apply to D1 (Gambit did not exist). */
-const GAMBIT_MODES = new Set([0, 33, 63, 75, 76]);
+/** D2-only real Gambit modes. Do NOT include 0 — D2 history often stores unrelated activities as mode 0. */
+const GAMBIT_MODES = new Set([33, 63, 75, 76]);
+/** Mis-tagged D2 Emerald Coast / Gambit rows sometimes report mode 0; match by name only. */
+const GAMBIT_MODE_ZERO_NAMES = new Set(['emerald coast', 'gambit', 'the emerald coast']);
 const NIGHTFALL_MODES = new Set([16, 17, 46, 47]);
+/** Playlist strike modes — unified under Strike tile (not separate AllStrikes). */
+const STRIKE_MODES = new Set([3, 18]);
+/** Dungeons are Destiny 2 only (mode 82). */
+const DUNGEON_MODES = new Set([82]);
 /** Non-Trials PvP modes for the Crucible tile. Trials peeled via classifyPvp. Includes D1 mode 14 so D1 Trials still enter the PvP path before split. */
 const PVP_MODES = new Set([
   5, 10, 12, 14, 15, 19, 25, 27, 31, 32, 37, 38, 39, 41, 42, 43, 44, 45, 48, 49, 50,
@@ -400,7 +412,7 @@ export const SOCIAL_SPACE_AND_PATROL_REF = {
 export class ActivityBreakdownService {
 
   /** Bumped when row shape changes so stale cached rows are not reused. */
-  private readonly activityCountsCacheVersion = 'v6-game-gated-overrides';
+  private readonly activityCountsCacheVersion = 'v7-raid-dungeon-strike';
 
   /** Cached full breakdown per sorted membership+game scope key. */
   private activityCountsCache = new Map<string, ActivityCountRow[]>();
@@ -588,8 +600,16 @@ export class ActivityBreakdownService {
       let baseName: string;
       let variantName: string;
       if (isD1) {
-        baseName = name || `Unknown (${referenceId})`;
-        variantName = '';
+        // Prefer D1 raid family map so VoG/Crota/KF/WotM variants roll up like Firsts.
+        const d1Family = ActivityDbService.getD1FamilyName(referenceId);
+        if (d1Family) {
+          baseName = d1Family;
+          const full = name || d1Family;
+          variantName = full === d1Family ? '' : full.replace(d1Family, '').replace(/^[:\s-]+/, '').trim();
+        } else {
+          baseName = name || `Unknown (${referenceId})`;
+          variantName = '';
+        }
       } else {
         baseName = this.manifest.getActivityFamilyName(referenceId) || name || `Unknown (${referenceId})`;
         const fullName = name || baseName;
@@ -739,10 +759,21 @@ export class ActivityBreakdownService {
     const game = row.game || 'D2';
 
     if (game === 'D1' && PRISON_OF_ELDERS_MODES.has(mode)) return 'prison-of-elders';
-    // Gambit / Gambit Prime / Reckoning are Destiny 2 only. D1 history often stores mode 0;
-    // applying GAMBIT_MODES (which includes 0) mis-labeled D1 Crucible as "Gambit – D1".
-    if (game === 'D2' && GAMBIT_MODES.has(mode)) return 'gambit';
+    // Dungeons are Destiny 2 only.
+    if (game === 'D2' && DUNGEON_MODES.has(mode)) return 'dungeon';
+    // Gambit is Destiny 2 only. Never treat bare mode 0 as Gambit (dumps Crucible/seasonal into Gambit).
+    if (game === 'D2') {
+      if (GAMBIT_MODES.has(mode)) return 'gambit';
+      if (mode === 0 && (GAMBIT_MODE_ZERO_NAMES.has(base) || base.includes('emerald coast'))) {
+        return 'gambit';
+      }
+    }
     if (NIGHTFALL_MODES.has(mode)) return 'nightfall';
+    // Battlegrounds before Strike — they share playlist strike modes (3/18/46/47).
+    if (game === 'D2' && BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) {
+      return 'battlegrounds';
+    }
+    if (STRIKE_MODES.has(mode)) return 'strikes';
     if (isSrlActivity(row.referenceId, row.baseName, mode, game)) return 'sparrow-racing-league';
     // Trials peeled above Crucible; Osiris vs Nine are separate tiles (separate modes).
     {
@@ -755,17 +786,26 @@ export class ActivityBreakdownService {
       if (trialsKey) return trialsKey;
       if (PVP_MODES.has(mode)) return 'pvp';
     }
+    // Mode 0 / untyped: use manifest activity type so Crucible/Gambit/etc. land correctly.
+    if (mode === 0) {
+      const typed = this.manifest.getActivityType(row.referenceId, mode, game === 'D1');
+      if (typed === 'crucible') return 'pvp';
+      if (typed === 'gambit' && game === 'D2') return 'gambit';
+      if (typed === 'sparrow-racing-league') return 'sparrow-racing-league';
+      if (typed === 'nightfall') return 'nightfall';
+      if (typed === 'strike') return 'strikes';
+      if (typed === 'dungeon' && game === 'D2') return 'dungeon';
+    }
     // D1 archive/history often leaves mode 0; use D1 activity type so PvP maps land in Crucible.
     if (game === 'D1') {
       const d1Type = this.manifest.getActivityType(row.referenceId, mode, true);
       if (d1Type === 'crucible') return 'pvp';
       if (d1Type === 'sparrow-racing-league') return 'sparrow-racing-league';
       if (d1Type === 'nightfall') return 'nightfall';
+      if (d1Type === 'strike') return 'strikes';
     }
     // D2-only curated peels — never apply to Destiny 1 rows (same class of bug as D1 Gambit).
     if (game === 'D2') {
-      if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
-
       if (STORY_STRIKES_MODES.has(mode)) {
         if (base.includes('pirate hideout')) return 'story-strikes';
         if (base.startsWith('sever - ') || base === 'sever') return 'story-strikes';
@@ -843,10 +883,21 @@ export class ActivityBreakdownService {
 
   /** Sort rows within a section. Delegates to sortRowsForMode for mode sections; uses section-specific sort for overrides. */
   private sortRowsForSection(sectionKey: string, mode: number | undefined, list: ActivityCountRow[], game?: 'D1' | 'D2'): ActivityCountRow[] {
+    if (sectionKey === 'dungeon') {
+      return list.sort((a, b) => {
+        const oa = this.getDungeonSortKey(a.baseName);
+        const ob = this.getDungeonSortKey(b.baseName);
+        if (oa !== ob) return oa - ob;
+        const baseCmp = (a.baseName || '').localeCompare(b.baseName || '');
+        if (baseCmp !== 0) return baseCmp;
+        return (a.variantName || '').localeCompare(b.variantName || '');
+      });
+    }
     if (
       sectionKey === 'prison-of-elders' ||
       sectionKey === 'gambit' ||
       sectionKey === 'nightfall' ||
+      sectionKey === 'strikes' ||
       sectionKey === 'trials-osiris' ||
       sectionKey === 'trials-nine' ||
       sectionKey === 'pvp' ||
@@ -910,7 +961,7 @@ export class ActivityBreakdownService {
         return (a.variantName || '').localeCompare(b.variantName || '');
       });
     }
-    if (mode === 82) { // Dungeon
+    if (mode === 82 && game === 'D2') { // Dungeon (D2 only)
       return list.sort((a, b) => {
         const oa = this.getDungeonSortKey(a.baseName);
         const ob = this.getDungeonSortKey(b.baseName);
@@ -940,6 +991,7 @@ export class ActivityBreakdownService {
   }
 
   private modeToLabel(mode: number, game?: 'D1' | 'D2'): string {
+    if (game === 'D1' && mode === 82) return 'Unknown'; // Dungeons do not exist in D1
     if (game === 'D1' && D1_MODE_DISPLAY_OVERRIDES[mode]) return D1_MODE_DISPLAY_OVERRIDES[mode];
     const name = DESTINY_ACTIVITY_MODE_NAMES[mode];
     if (name) return name;

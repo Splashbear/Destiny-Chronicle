@@ -319,9 +319,9 @@ export class DestinyManifestService {
       }
     }
 
-    // Special case: Shattered Throne has wrong mode but is definitely a dungeon
+    // Special case: Shattered Throne has wrong mode but is definitely a D2 dungeon
     const refIdStr = String(referenceId);
-    if (refIdStr === '2032534090' || refIdStr === '1347078175') {
+    if (!isD1 && (refIdStr === '2032534090' || refIdStr === '1347078175')) {
       return 'dungeon';
     }
     
@@ -330,7 +330,8 @@ export class DestinyManifestService {
     if (isSrlActivity(refIdStr, resolvedName, mode, isD1 ? 'D1' : 'D2')) {
       return 'sparrow-racing-league';
     }
-    if (isAnyPantheonActivity(refIdStr, activityName)) {
+    // Pantheon is Destiny 2 only
+    if (!isD1 && isAnyPantheonActivity(refIdStr, activityName)) {
       return 'raid';
     }
 
