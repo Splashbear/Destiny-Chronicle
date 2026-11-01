@@ -746,7 +746,8 @@ export function build_asActivityBreakdownLoadHost(c: any) {
     clearBreakdownRowsAndGroups: () => {
       c.activityBreakdownRows = null;
       c.activityBreakdownGroups = [];
-      c.breakdownActiveTimeSeconds = 0;
+      // Keep breakdownActiveTimeSeconds until setActivityBreakdownGroups so
+      // dossier Active/Orbit do not flash empty during background reloads.
     },
     clearSelectedBreakdownCardLabels: () => {
       c.selectedBreakdownCardLabels = new Set();
