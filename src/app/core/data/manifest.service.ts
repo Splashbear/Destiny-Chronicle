@@ -378,7 +378,8 @@ export class DestinyManifestService {
       // D2 modes
       if (mode === 82) return 'dungeon';
       if (mode === 46 || mode === 18 || mode === 48 || mode === 49) return 'strike';
-      if (mode === 63 || mode === 75 || mode === 45 || mode === 47 || mode === 67) return 'gambit';
+      // Gambit did not exist in D1 — never classify D1 rows as gambit from D2 mode numbers.
+      if (!isD1 && (mode === 63 || mode === 75 || mode === 45 || mode === 47 || mode === 67)) return 'gambit';
       if (mode === 79) return 'lost-sector';
       if (mode === 80 || mode === 81) return 'seasonal';
       if (mode === 90 || mode === 91) return 'exotic-mission';

@@ -81,4 +81,29 @@ describe('ActivityBreakdownService Trials / Crucible split', () => {
     ]);
     expect(groups.some(g => g.type === 'trials-nine' && g.game === 'D2')).toBe(true);
   });
+
+  it('does not put D1 mode-0 Crucible maps under Gambit (Gambit is D2-only)', () => {
+    const manifest = {
+      getActivityType: (_ref: string, _mode?: number, isD1?: boolean) =>
+        isD1 ? 'crucible' : 'other',
+      getActivityName: () => 'Twilight Gap',
+      getActivityFamilyName: () => 'Twilight Gap',
+    };
+    const svc = new ActivityBreakdownService({} as any, manifest as any, { getBatch: async () => new Map() } as any);
+    const groups = svc.groupRowsByType([
+      row({ referenceId: 'd1-pvp-1', mode: 0, game: 'D1', baseName: 'Twilight Gap', runs: 8 }),
+      row({ referenceId: 'd1-control', mode: 10, game: 'D1', baseName: 'Control', runs: 3 }),
+      row({ referenceId: 'd2-gambit', mode: 63, game: 'D2', baseName: 'Emerald Coast', runs: 4 }),
+      row({ referenceId: 'd2-emerald-0', mode: 0, game: 'D2', baseName: 'Emerald Coast', runs: 2 }),
+    ]);
+
+    expect(groups.some(g => g.type === 'gambit' && g.game === 'D1')).toBe(false);
+    expect(groups.some(g => g.type === 'pvp' && g.game === 'D1')).toBe(true);
+    expect(groups.some(g => g.type === 'gambit' && g.game === 'D2')).toBe(true);
+
+    const d1CrucibleRuns = groups
+      .filter(g => g.type === 'pvp' && g.game === 'D1')
+      .reduce((s, g) => s + g.rows.reduce((a, r) => a + r.runs, 0), 0);
+    expect(d1CrucibleRuns).toBe(11);
+  });
 });
