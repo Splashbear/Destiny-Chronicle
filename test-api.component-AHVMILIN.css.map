@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/test-api/test-api.component.ts"],
+  "sourcesContent": ["\n    .test-container {\n      padding: 20px;\n    }\n    .test-section {\n      margin-bottom: 20px;\n      padding: 15px;\n      border: 1px solid #ccc;\n      border-radius: 4px;\n    }\n    button {\n      margin: 5px;\n      padding: 5px 10px;\n    }\n    pre {\n      background: #f5f5f5;\n      padding: 10px;\n      border-radius: 4px;\n      overflow: auto;\n    }\n  "],
+  "mappings": "AACI,CAAA,eAAA,QACE,KAEF,CAAA,aACE,cAAA,KAJF,QAKE,KACA,OAAA,IAAA,MAAA,KANF,cAOE,IAEF,OATA,OAUE,IAVF,QAWE,IAAA,KAEF,IACE,WAAA,QAdF,QAeE,KAfF,cAgBE,IACA,SAAA",
+  "names": []
+}

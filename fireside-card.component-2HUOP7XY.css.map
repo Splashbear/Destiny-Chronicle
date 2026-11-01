@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/fireside-card.component.ts"],
+  "sourcesContent": ["\n    .dc-fireside-card {\n      border: 1px solid color-mix(in srgb, var(--dc-ember, #c0392b) 35%, transparent);\n      border-radius: 0.5rem;\n      background:\n        linear-gradient(180deg, color-mix(in srgb, var(--dc-ember, #c0392b) 8%, transparent), transparent 40%),\n        var(--dc-surface, #2a2f36);\n      box-shadow: 0 0 0 1px color-mix(in srgb, var(--dc-gold, #c9a227) 12%, transparent);\n    }\n  "],
+  "mappings": "AACI,CAAA,iBACE,OAAA,IAAA,MAAA,UAAA,GAAA,IAAA,CAAA,IAAA,UAAA,EAAA,SAAA,GAAA,CAAA,aADF,cAEE,MACA,WACE,gBAAA,MAAA,CAAA,UAAA,GAAA,IAAA,CAAA,IAAA,UAAA,EAAA,SAAA,EAAA,CAAA,YAAA,CAAA,YAAA,IAAA,CAAA,IAAA,YAAA,EAAA,SAEF,WAAA,EAAA,EAAA,EAAA,IAAA,UAAA,GAAA,IAAA,CAAA,IAAA,SAAA,EAAA,SAAA,GAAA,CAAA",
+  "names": []
+}

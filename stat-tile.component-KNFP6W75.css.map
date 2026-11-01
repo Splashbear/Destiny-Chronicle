@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/stat-tile.component.ts"],
+  "sourcesContent": ["\n    .dc-stat-tile {\n      min-width: 0;\n    }\n    .dc-stat-tile__label {\n      font-size: 0.75rem;\n      color: var(--dc-muted, #98a2b0);\n      margin-bottom: 0.15rem;\n    }\n    .dc-stat-tile__value {\n      font-size: 1.125rem;\n      font-weight: 600;\n      color: var(--dc-gold-bright, #e4c04a);\n      font-variant-numeric: tabular-nums;\n    }\n    .dc-stat-tile__hint {\n      font-size: 0.6875rem;\n      color: var(--dc-muted, #98a2b0);\n      margin-top: 0.15rem;\n    }\n  "],
+  "mappings": "AACI,CAAA,aACE,UAAA,EAEF,CAAA,oBACE,UAAA,OACA,MAAA,IAAA,UAAA,EAAA,SACA,cAAA,OAEF,CAAA,oBACE,UAAA,SACA,YAAA,IACA,MAAA,IAAA,gBAAA,EAAA,SACA,qBAAA,aAEF,CAAA,mBACE,UAAA,SACA,MAAA,IAAA,UAAA,EAAA,SACA,WAAA",
+  "names": []
+}

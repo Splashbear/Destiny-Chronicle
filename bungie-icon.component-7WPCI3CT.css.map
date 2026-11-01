@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/bungie-icon.component.ts"],
+  "sourcesContent": ["\n    :host { display: inline-flex; flex-shrink: 0; line-height: 0; }\n    .dc-bungie-icon { object-fit: contain; display: block; border-radius: 0.25rem; }\n    .dc-bungie-icon--empty { display: block; border-radius: 0.25rem; background: #334155; }\n  "],
+  "mappings": "AACI,MAAQ,QAAA,YAAsB,YAAA,EAAgB,YAAA,EAC9C,CAAA,eAAkB,WAAA,QAAqB,QAAA,MADvC,cACuD,OACvD,CAAA,sBAAyB,QAAA,MAFzB,cAEyC,OAAwB,WAAA",
+  "names": []
+}

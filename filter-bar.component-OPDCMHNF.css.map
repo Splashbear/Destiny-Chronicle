@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/filter-bar.component.ts"],
+  "sourcesContent": ["\n    .dc-filter-bar {\n      display: flex;\n      flex-wrap: nowrap;\n      align-items: center;\n      gap: 0.5rem;\n      min-width: 0;\n    }\n    .dc-filter-bar--wrap {\n      flex-wrap: wrap;\n    }\n  "],
+  "mappings": "AACI,CAAA,cACE,QAAA,KACA,UAAA,OACA,YAAA,OACA,IAAA,MACA,UAAA,EAEF,CAAA,oBACE,UAAA",
+  "names": []
+}
