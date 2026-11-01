@@ -119,21 +119,25 @@ describe('ActivityBreakdownService Trials / Crucible split', () => {
     );
     const groups = svc.groupRowsByType([
       row({ referenceId: 'cerberus', mode: 3, game: 'D1', baseName: 'Cerberus Vae III', runs: 12 }),
+      row({ referenceId: 'all-strikes', mode: 18, game: 'D1', baseName: 'Dust Palace', runs: 2 }),
       row({ referenceId: 'winters-nf', mode: 16, game: 'D1', baseName: "Winter's Run", runs: 4 }),
       // Would match Story Strikes curated name if D2 peels were applied to D1.
       row({ referenceId: 'd1-override', mode: 2, game: 'D1', baseName: 'Override', runs: 2 }),
       row({ referenceId: 'd2-bg', mode: 3, game: 'D2', baseName: 'Battleground: Hailstone', runs: 5 }),
       row({ referenceId: 'd2-lake', mode: 3, game: 'D2', baseName: 'Lake of Shadows', runs: 9 }),
       row({ referenceId: 'd2-lake-nf', mode: 46, game: 'D2', baseName: 'Lake of Shadows', runs: 3 }),
+      row({ referenceId: 'd2-allstrikes', mode: 18, game: 'D2', baseName: 'The Arms Dealer', runs: 4 }),
     ]);
 
-    expect(groups.some(g => g.type === 'mode-3' && g.game === 'D1' && g.label === 'Strike – D1')).toBe(true);
+    expect(groups.some(g => g.type === 'strikes' && g.game === 'D1' && g.label === 'Strike – D1')).toBe(true);
     expect(groups.some(g => g.type === 'nightfall' && g.game === 'D1')).toBe(true);
     expect(groups.some(g => g.type === 'story-strikes' && g.game === 'D1')).toBe(false);
     expect(groups.some(g => g.type === 'battlegrounds' && g.game === 'D2')).toBe(true);
-    expect(groups.some(g => g.type === 'mode-3' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'strikes' && g.game === 'D2')).toBe(true);
     expect(groups.some(g => g.type === 'nightfall' && g.game === 'D2')).toBe(true);
     expect(groups.some(g => g.type === 'battlegrounds' && g.game === 'D1')).toBe(false);
+    // Mode 3 + 18 share one Strike tile per game (no separate AllStrikes).
+    expect(groups.filter(g => g.type === 'strikes' && g.game === 'D2').length).toBe(1);
   });
 
   it('does not classify D2 mode 29 as SRL (D1-only mode)', () => {
@@ -144,5 +148,47 @@ describe('ActivityBreakdownService Trials / Crucible split', () => {
     ]);
     expect(groups.some(g => g.type === 'sparrow-racing-league' && g.game === 'D2')).toBe(false);
     expect(groups.some(g => g.type === 'sparrow-racing-league' && g.game === 'D1')).toBe(true);
+  });
+
+  it('keeps raids/dungeons game-split and does not dump D2 mode-0 Crucible into Gambit', () => {
+    const manifest = {
+      getActivityType: (ref: string) => {
+        if (String(ref).includes('altar')) return 'crucible';
+        if (String(ref).includes('emerald')) return 'gambit';
+        if (String(ref).includes('throne')) return 'dungeon';
+        return 'other';
+      },
+      getActivityName: () => 'x',
+      getActivityFamilyName: () => 'x',
+    };
+    const svc = new ActivityBreakdownService({} as any, manifest as any, { getBatch: async () => new Map() } as any);
+    const groups = svc.groupRowsByType([
+      row({ referenceId: 'vog-d1', mode: 4, game: 'D1', baseName: 'Vault of Glass', runs: 10 }),
+      row({ referenceId: 'vog-d2', mode: 4, game: 'D2', baseName: 'Vault of Glass', runs: 8 }),
+      row({ referenceId: 'throne', mode: 82, game: 'D2', baseName: 'The Shattered Throne', runs: 5 }),
+      row({ referenceId: 'fake-d1-dungeon', mode: 82, game: 'D1', baseName: 'Should Not Be Dungeon', runs: 1 }),
+      row({ referenceId: 'altar', mode: 0, game: 'D2', baseName: 'Altar of Flame', runs: 3 }),
+      row({ referenceId: 'emerald', mode: 0, game: 'D2', baseName: 'Emerald Coast', runs: 2 }),
+      row({ referenceId: 'gambit63', mode: 63, game: 'D2', baseName: 'Gambit', runs: 4 }),
+      row({ referenceId: 'lake', mode: 3, game: 'D2', baseName: 'Lake of Shadows', runs: 6 }),
+      row({ referenceId: 'lake-nf', mode: 46, game: 'D2', baseName: 'Lake of Shadows', runs: 2 }),
+    ]);
+
+    expect(groups.some(g => g.type === 'mode-4' && g.game === 'D1')).toBe(true);
+    expect(groups.some(g => g.type === 'mode-4' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'dungeon' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'dungeon' && g.game === 'D1')).toBe(false);
+    expect(groups.some(g => g.label === 'Dungeon – D1')).toBe(false);
+
+    const gambitNames = groups
+      .filter(g => g.type === 'gambit' && g.game === 'D2')
+      .flatMap(g => g.rows.map(r => r.baseName));
+    expect(gambitNames).toContain('Emerald Coast');
+    expect(gambitNames).toContain('Gambit');
+    expect(gambitNames).not.toContain('Altar of Flame');
+
+    expect(groups.some(g => g.type === 'pvp' && g.rows.some(r => r.baseName === 'Altar of Flame'))).toBe(true);
+    expect(groups.some(g => g.type === 'strikes' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'nightfall' && g.game === 'D2')).toBe(true);
   });
 });
