@@ -161,7 +161,8 @@ const MODE_ORDER: Record<number, number> = {
   2: 4,   // Story
   87: 5,  // LostSector
   92: 6, 85: 6, 83: 6, 77: 6, 78: 6, 86: 6,  // Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive
-  63: 7, 75: 7, 76: 7, 67: 7, 33: 7, 0: 7,  // Gambit (incl. mode 0 None/Emerald Coast, mode 33)
+  63: 7, 75: 7, 76: 7, 67: 7, 33: 7,  // D2 Gambit family (override also catches D2 mode 0 Emerald Coast)
+  0: 11,  // None — D1 mode-0 rows must not share Gambit order; D2 mode 0 uses gambit override
   93: 71,   // Renegade Activities (own category, between Gambit and PvP)
   5: 8, 10: 8, 12: 8, 14: 7.5, 15: 8, 19: 8, 84: 7.5, 37: 8, 38: 8, 39: 7.5, 41: 7.5, 42: 7.5, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP; Trials modes ordered with Trials tile
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
@@ -356,7 +357,8 @@ const SECTION_OVERRIDE_LABELS: Record<SectionOverrideKey, string> = {
 };
 
 const PRISON_OF_ELDERS_MODES = new Set([21, 22, 30]);
-const GAMBIT_MODES = new Set([0, 33, 63, 75, 76]);  // None/Emerald Coast, mode 33, Gambit, Gambit Prime, Reckoning
+/** D2-only. Mode 0 covers mis-tagged Emerald Coast; never apply to D1 (Gambit did not exist). */
+const GAMBIT_MODES = new Set([0, 33, 63, 75, 76]);
 const NIGHTFALL_MODES = new Set([16, 17, 46, 47]);
 /** Non-Trials PvP modes for the Crucible tile. Trials peeled via classifyPvp. Includes D1 mode 14 so D1 Trials still enter the PvP path before split. */
 const PVP_MODES = new Set([
@@ -398,7 +400,7 @@ export const SOCIAL_SPACE_AND_PATROL_REF = {
 export class ActivityBreakdownService {
 
   /** Bumped when row shape changes so stale cached rows are not reused. */
-  private readonly activityCountsCacheVersion = 'v4-trials-split';
+  private readonly activityCountsCacheVersion = 'v5-d1-no-gambit';
 
   /** Cached full breakdown per sorted membership+game scope key. */
   private activityCountsCache = new Map<string, ActivityCountRow[]>();
@@ -737,7 +739,9 @@ export class ActivityBreakdownService {
     const game = row.game || 'D2';
 
     if (game === 'D1' && PRISON_OF_ELDERS_MODES.has(mode)) return 'prison-of-elders';
-    if (GAMBIT_MODES.has(mode)) return 'gambit';
+    // Gambit / Gambit Prime / Reckoning are Destiny 2 only. D1 history often stores mode 0;
+    // applying GAMBIT_MODES (which includes 0) mis-labeled D1 Crucible as "Gambit – D1".
+    if (game === 'D2' && GAMBIT_MODES.has(mode)) return 'gambit';
     if (NIGHTFALL_MODES.has(mode)) return 'nightfall';
     if (isSrlActivity(row.referenceId, row.baseName, mode)) return 'sparrow-racing-league';
     // Trials peeled above Crucible; Osiris vs Nine are separate tiles (separate modes).
@@ -750,6 +754,13 @@ export class ActivityBreakdownService {
       const trialsKey = trialsSectionKey(classified.bucket);
       if (trialsKey) return trialsKey;
       if (PVP_MODES.has(mode)) return 'pvp';
+    }
+    // D1 archive/history often leaves mode 0; use D1 activity type so PvP maps land in Crucible.
+    if (game === 'D1') {
+      const d1Type = this.manifest.getActivityType(row.referenceId, mode, true);
+      if (d1Type === 'crucible') return 'pvp';
+      if (d1Type === 'sparrow-racing-league') return 'sparrow-racing-league';
+      if (d1Type === 'nightfall') return 'nightfall';
     }
     if (BATTLEGROUNDS_MODES.has(mode) && base.includes('battleground')) return 'battlegrounds';
 
