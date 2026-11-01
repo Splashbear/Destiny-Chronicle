@@ -44,6 +44,8 @@ export class ArchiveService {
   private gapIndexRoot: string;
   /** W11: optional membership_id-sorted gap root (parquet RG pruning). Prefer when complete. */
   private gapIndexSortedRoot: string;
+  /** Extra gap roots unioned with the primary gap root (see ApiConfig.gapIndexExtraRoots). */
+  private gapExtraRoots: string[];
   private enableGapLean: boolean;
   private gapRelaxComplete: boolean;
   /** Configured D1 act roots (may include missing paths; skipped at read time). */
@@ -67,7 +69,8 @@ export class ArchiveService {
     enableGapLean: boolean = false,
     gapIndexSortedRoot: string = '',
     gapRelaxComplete: boolean = false,
-    d1IndexRootOrRoots: string | string[] = ''
+    d1IndexRootOrRoots: string | string[] = '',
+    gapExtraRoots: string[] = []
   ) {
     this.leanActivitiesPath = leanActivitiesPath;
     this.membershipPath = membershipPath;
@@ -77,6 +80,7 @@ export class ArchiveService {
     this.gapIndexRoot = gapIndexRoot;
     this.gapIndexSortedRoot = gapIndexSortedRoot;
     this.gapRelaxComplete = gapRelaxComplete;
+    this.gapExtraRoots = [...new Set((gapExtraRoots || []).map(String).map(s => s.trim()).filter(Boolean))];
     this.enableGapLean = enableGapLean && !!gapIndexRoot;
     this.d1IndexRoots = Array.isArray(d1IndexRootOrRoots)
       ? [...new Set(d1IndexRootOrRoots.map(String).map(s => s.trim()).filter(Boolean))]
@@ -111,7 +115,7 @@ export class ArchiveService {
       await fs.access(this.leanActivitiesPath);
       
       this.db = await Database.create(':memory:');
-      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2× (profiled).
+      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2ï¿½ (profiled).
       const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
       const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
       await this.db.all(`SET threads=${threads}`);
@@ -129,6 +133,7 @@ export class ArchiveService {
         compactIndexRoot: this.compactIndexRoot,
         gapIndexRoot: this.gapIndexRoot || '(none)',
         gapIndexSortedRoot: this.gapIndexSortedRoot || '(none)',
+        gapExtraRoots: this.gapExtraRoots.length ? this.gapExtraRoots : ['(none)'],
         enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
         d1IndexRoots: this.d1IndexRoots.length ? this.d1IndexRoots : ['(none)'],
@@ -858,12 +863,96 @@ export class ArchiveService {
    * Option A: read 20-col lean rows from gap ready/ mid_bucket=N.
    * Skips incomplete buckets (_COMPLETE.json missing) without failing the request.
    *
-   * W7 (2026-10-02): gap `game` is untrusted — extract used iconPath heuristic
+   * W7 (2026-10-02): gap `game` is untrusted ï¿½ extract used iconPath heuristic
    * (`"destiny2" in iconPath` ? D2 else D1), mislabeling ~20% of D2 PGCRs as D1.
    * Raw gap source is D2-only. Never SQL-filter on gap.game; force game='D2' on
    * returned rows. Skip entirely when caller asks for game=D1.
    */
   private async tryGapLeanLookup(
+    membershipId: string,
+    options?: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    }
+  ): Promise<PlayerActivitiesResult> {
+    const primary = await this.tryGapLeanLookupPrimary(membershipId, options);
+    if (this.gapExtraRoots.length === 0 || !this.enableGapLean || options?.game === 'D1') {
+      return primary;
+    }
+    if (membershipId === '0' || membershipId === '') {
+      return primary;
+    }
+    const bucket = await this.calculateBucket(membershipId);
+    if (bucket === null) return primary;
+
+    const pathMod = await import('path');
+    const map = new Map<string, LeanActivity>();
+    for (const a of primary.activities) map.set(this.activityDedupeKey(a), a);
+    let known = primary.knownPlayer;
+    let extraRows = 0;
+    const notes: string[] = [...(primary.tier.notes || [])];
+    for (const root of this.gapExtraRoots) {
+      const bucketDir = pathMod.join(root, `mid_bucket=${bucket}`);
+      const parquetPath = pathMod.join(bucketDir, 'instances.parquet');
+      try {
+        await fs.access(parquetPath);
+        if (!this.gapRelaxComplete) await fs.access(pathMod.join(bucketDir, '_COMPLETE.json'));
+      } catch {
+        notes.push(`Gap extra root bucket ${bucket} not available (${pathMod.basename(root)})`);
+        continue;
+      }
+      try {
+        const r = await this.queryPlayerActivitiesSchema(
+          parquetPath,
+          membershipId,
+          { ...options, game: undefined },
+          'gap_lean_extra'
+        );
+        if (r.knownPlayer) known = true;
+        for (const g of r.activities.map(forceGapLeanGame)) {
+          const key = this.activityDedupeKey(g);
+          const existing = map.get(key);
+          if (!existing || this.leanRichness(g) > this.leanRichness(existing)) {
+            map.set(key, g);
+            extraRows++;
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to read gap extra root', { error, bucket, membershipId, root });
+        notes.push(`Error reading gap extra root bucket ${bucket}`);
+      }
+    }
+    if (extraRows === 0) {
+      return notes.length === (primary.tier.notes || []).length
+        ? primary
+        : { ...primary, tier: { ...primary.tier, notes } };
+    }
+    const limit = options?.limit || 10000;
+    const activities = Array.from(map.values())
+      .sort((a, b) => {
+        if (a.period && b.period) return b.period.localeCompare(a.period);
+        if (a.period) return -1;
+        if (b.period) return 1;
+        return String(b.instance_id).localeCompare(String(a.instance_id), undefined, { numeric: true });
+      })
+      .slice(0, limit);
+    return {
+      activities,
+      knownPlayer: known || activities.length > 0,
+      tier: {
+        ...primary.tier,
+        level: 'full',
+        source: 'gap_lean',
+        indexComplete: primary.tier.indexComplete ?? true,
+        notes: Array.from(new Set([...notes, `Gap lean: +${extraRows} rows from extra roots (GAP_INDEX_EXTRA_ROOTS)`])),
+      },
+    };
+  }
+
+  /** Primary gap root lookup (GAP_INDEX_ROOT / sorted root); tryGapLeanLookup adds extra roots. */
+  private async tryGapLeanLookupPrimary(
     membershipId: string,
     options?: {
       game?: 'D1' | 'D2';
@@ -947,7 +1036,7 @@ export class ArchiveService {
     }
 
     try {
-      // Ignore stored game column when querying (W7) — filtering on it drops ~20% of real D2 rows.
+      // Ignore stored game column when querying (W7) ï¿½ filtering on it drops ~20% of real D2 rows.
       // W8: ~245k rows have membership_id='0' (unreachable); never query as mid '0'.
       if (membershipId === '0' || membershipId === '') {
         return {
@@ -1269,7 +1358,7 @@ export class ArchiveService {
     }
 
     try {
-      // W11: cache schema — DESCRIBE was a full parquet open per request.
+      // W11: cache schema ï¿½ DESCRIBE was a full parquet open per request.
       let availableColumns = this.parquetSchemaCache.get(parquetPath);
       if (!availableColumns) {
         const schemaResult = await this.db.all(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);

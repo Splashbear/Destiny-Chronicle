@@ -30,6 +30,7 @@ export function loadConfig(): ApiConfig {
     compactIndexRoot: process.env[ENV_KEYS.COMPACT_INDEX_ROOT] || '',
     gapIndexRoot: process.env[ENV_KEYS.GAP_INDEX_ROOT] || '',
     gapIndexSortedRoot: process.env[ENV_KEYS.GAP_INDEX_SORTED_ROOT] || '',
+    gapIndexExtraRoots: parseRootList(process.env[ENV_KEYS.GAP_INDEX_EXTRA_ROOTS], ''),
     // Default OFF — staging on :3002 sets ENABLE_GAP_LEAN=true; live :3001 must not.
     enableGapLean: process.env[ENV_KEYS.ENABLE_GAP_LEAN] === 'true',
     gapRelaxComplete: process.env[ENV_KEYS.GAP_RELAX_COMPLETE] === 'true',
