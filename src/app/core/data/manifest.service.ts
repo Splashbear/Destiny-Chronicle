@@ -9,7 +9,12 @@ import { ManifestCacheService } from '../../services/manifest-cache.service';
 import { AssetUrlService } from '../../services/asset-url.service';
 import { ArchiveRuntimeService } from '../../services/archive-runtime.service';
 import { isAnyPantheonActivity } from '../../config/pantheon.config';
-import { isSrlActivity, SRL_ACTIVITY_MODES, D2_SRL_TYPE_HASH } from '../../config/srl.config';
+import {
+  isSrlActivity,
+  SRL_ACTIVITY_MODES,
+  SRL_ACTIVITY_MODE_D1,
+  D2_SRL_TYPE_HASH,
+} from '../../config/srl.config';
 import { bungieRequestUrl } from '../../utils/bungie-request-url';
 
 @Injectable({
@@ -322,7 +327,7 @@ export class DestinyManifestService {
     
     const activityName = this.activityDefs[refIdStr]?.displayProperties?.name as string | undefined;
     const resolvedName = activityName || this.getActivityName(referenceId, isD1);
-    if (isSrlActivity(refIdStr, resolvedName, mode)) {
+    if (isSrlActivity(refIdStr, resolvedName, mode, isD1 ? 'D1' : 'D2')) {
       return 'sparrow-racing-league';
     }
     if (isAnyPantheonActivity(refIdStr, activityName)) {
@@ -353,37 +358,47 @@ export class DestinyManifestService {
     //     isStrikeHash: D1_STRIKE_HASHES.includes(Number(referenceId))
     //   });
     // }
-    if (D1_RAID_HASHES.includes(Number(referenceId))) {
-      return 'raid';
-    }
-    if (D1_STORY_HASHES.includes(Number(referenceId))) {
-      return 'story';
-    }
-    if (D1_STRIKE_HASHES.includes(Number(referenceId))) {
-      return 'strike';
+    if (isD1) {
+      if (D1_RAID_HASHES.includes(Number(referenceId))) {
+        return 'raid';
+      }
+      if (D1_STORY_HASHES.includes(Number(referenceId))) {
+        return 'story';
+      }
+      if (D1_STRIKE_HASHES.includes(Number(referenceId))) {
+        return 'strike';
+      }
     }
     // First check the mode if provided (from activity data)
     if (mode !== undefined) {
-      if ((SRL_ACTIVITY_MODES as readonly number[]).includes(mode)) return 'sparrow-racing-league';
-      // Crucible modes (D1 & D2)
-      const CRUCIBLE_MODES = [5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66];
-      if (CRUCIBLE_MODES.includes(mode)) return 'crucible';
-      // D1 modes
-      if (mode === 4) return 'raid';
-      if (mode === 16) return 'strike';
-      if (mode === 2) return 'story';
-      if (mode === 3 || mode === 6) return 'patrol';
-      if (mode === 1) return 'public-event';
-      if (mode === 7) return 'nightfall';
-      // D2 modes
-      if (mode === 82) return 'dungeon';
-      if (mode === 46 || mode === 18 || mode === 48 || mode === 49) return 'strike';
-      // Gambit did not exist in D1 — never classify D1 rows as gambit from D2 mode numbers.
-      if (!isD1 && (mode === 63 || mode === 75 || mode === 45 || mode === 47 || mode === 67)) return 'gambit';
-      if (mode === 79) return 'lost-sector';
-      if (mode === 80 || mode === 81) return 'seasonal';
-      if (mode === 90 || mode === 91) return 'exotic-mission';
-      if (mode === 92 || mode === 93) return 'seasonal-event';
+      if (isD1) {
+        if (mode === SRL_ACTIVITY_MODE_D1) return 'sparrow-racing-league';
+        const D1_CRUCIBLE_MODES = [5, 9, 10, 12, 14, 15, 19, 24, 25, 27, 28, 31];
+        if (D1_CRUCIBLE_MODES.includes(mode)) return 'crucible';
+        // Align with Bungie DestinyActivityModeType used in D1 history / Breakdown.
+        if (mode === 4) return 'raid';
+        if (mode === 3 || mode === 18) return 'strike';
+        if (mode === 16 || mode === 17) return 'nightfall';
+        if (mode === 2) return 'story';
+        if (mode === 6) return 'patrol';
+        if (mode === 1) return 'public-event';
+        if (mode === 21 || mode === 22 || mode === 30) return 'prison-of-elders';
+      } else {
+        if ((SRL_ACTIVITY_MODES as readonly number[]).includes(mode)) return 'sparrow-racing-league';
+        const CRUCIBLE_MODES = [5, 10, 12, 15, 19, 24, 25, 28, 37, 38, 39, 40, 41, 42, 43, 44, 48, 49, 50, 51, 52, 53, 65, 66];
+        if (CRUCIBLE_MODES.includes(mode)) return 'crucible';
+        if (mode === 4) return 'raid';
+        if (mode === 82) return 'dungeon';
+        if (mode === 3 || mode === 46 || mode === 18) return 'strike';
+        if (mode === 16 || mode === 17) return 'nightfall';
+        if (mode === 2) return 'story';
+        if (mode === 6) return 'patrol';
+        if (mode === 63 || mode === 75 || mode === 45 || mode === 47 || mode === 67) return 'gambit';
+        if (mode === 79) return 'lost-sector';
+        if (mode === 80 || mode === 81) return 'seasonal';
+        if (mode === 90 || mode === 91) return 'exotic-mission';
+        if (mode === 92 || mode === 93) return 'seasonal-event';
+      }
     }
     // First check ACTIVITY_FAMILY_MAP for known activities (provides proper variant naming)
     // Then fall back to manifest-based automatic detection for new activities
@@ -430,7 +445,11 @@ export class DestinyManifestService {
     const modeTypes: number[] = def.activityModeTypes || [];
     const displayName = def.displayProperties?.name as string | undefined;
 
-    if (typeHash === D2_SRL_TYPE_HASH || modeTypes.includes(94) || isSrlActivity(refIdStr, displayName, mode)) {
+    if (
+      typeHash === D2_SRL_TYPE_HASH ||
+      modeTypes.includes(94) ||
+      isSrlActivity(refIdStr, displayName, mode, 'D2')
+    ) {
       return 'sparrow-racing-league';
     }
     

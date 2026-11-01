@@ -106,4 +106,43 @@ describe('ActivityBreakdownService Trials / Crucible split', () => {
       .reduce((s, g) => s + g.rows.reduce((a, r) => a + r.runs, 0), 0);
     expect(d1CrucibleRuns).toBe(11);
   });
+
+  it('keeps D1 strikes in Strike – D1 and does not apply D2-only story peels', () => {
+    const svc = new ActivityBreakdownService(
+      {} as any,
+      {
+        getActivityType: () => 'strike',
+        getActivityName: (id: string) => (String(id).includes('cerberus') ? 'Cerberus Vae III' : 'Unknown'),
+        getActivityFamilyName: () => '',
+      } as any,
+      { getBatch: async () => new Map() } as any
+    );
+    const groups = svc.groupRowsByType([
+      row({ referenceId: 'cerberus', mode: 3, game: 'D1', baseName: 'Cerberus Vae III', runs: 12 }),
+      row({ referenceId: 'winters-nf', mode: 16, game: 'D1', baseName: "Winter's Run", runs: 4 }),
+      // Would match Story Strikes curated name if D2 peels were applied to D1.
+      row({ referenceId: 'd1-override', mode: 2, game: 'D1', baseName: 'Override', runs: 2 }),
+      row({ referenceId: 'd2-bg', mode: 3, game: 'D2', baseName: 'Battleground: Hailstone', runs: 5 }),
+      row({ referenceId: 'd2-lake', mode: 3, game: 'D2', baseName: 'Lake of Shadows', runs: 9 }),
+      row({ referenceId: 'd2-lake-nf', mode: 46, game: 'D2', baseName: 'Lake of Shadows', runs: 3 }),
+    ]);
+
+    expect(groups.some(g => g.type === 'mode-3' && g.game === 'D1' && g.label === 'Strike – D1')).toBe(true);
+    expect(groups.some(g => g.type === 'nightfall' && g.game === 'D1')).toBe(true);
+    expect(groups.some(g => g.type === 'story-strikes' && g.game === 'D1')).toBe(false);
+    expect(groups.some(g => g.type === 'battlegrounds' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'mode-3' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'nightfall' && g.game === 'D2')).toBe(true);
+    expect(groups.some(g => g.type === 'battlegrounds' && g.game === 'D1')).toBe(false);
+  });
+
+  it('does not classify D2 mode 29 as SRL (D1-only mode)', () => {
+    const svc = new ActivityBreakdownService({} as any, {} as any, { getBatch: async () => new Map() } as any);
+    const groups = svc.groupRowsByType([
+      row({ referenceId: 'not-srl', mode: 29, game: 'D2', baseName: 'Some PvP', runs: 1 }),
+      row({ referenceId: '1478347980', mode: 29, game: 'D1', baseName: 'Campus Martius', runs: 2 }),
+    ]);
+    expect(groups.some(g => g.type === 'sparrow-racing-league' && g.game === 'D2')).toBe(false);
+    expect(groups.some(g => g.type === 'sparrow-racing-league' && g.game === 'D1')).toBe(true);
+  });
 });
