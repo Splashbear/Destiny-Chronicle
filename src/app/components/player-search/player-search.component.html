@@ -171,7 +171,7 @@
                 <button type="button" (click)="nudgeHeaderDate(-1)" aria-label="Previous day">‹</button>
                 <app-date-picker [selectedMonth]="selectedMonth"
                                  [selectedDay]="selectedDay"
-                                 (dateChange)="onDatePickerChange($event); onDateSearch()"></app-date-picker>
+                                 (dateChange)="onDatePickerChange($event)"></app-date-picker>
                 <button type="button" (click)="nudgeHeaderDate(1)" aria-label="Next day">›</button>
                 <button type="button" (click)="goHeaderToday()">Today</button>
               </div>

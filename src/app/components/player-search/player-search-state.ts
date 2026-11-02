@@ -358,6 +358,8 @@ export abstract class PlayerSearchState {
   showShareDropdown = false;
   modalSelectedPlayers: Set<string> = new Set();
   protected breakdownRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Debounce header month/day selects so both can change before On This Day reloads. */
+  protected dateSearchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   protected breakdownLoadGen = 0;
   protected breakdownLoadInFlight = false;
   protected breakdownDirty = false;
