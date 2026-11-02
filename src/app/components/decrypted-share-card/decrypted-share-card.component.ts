@@ -3,9 +3,12 @@ import {
   ElementRef,
   EventEmitter,
   Input,
+  OnChanges,
   Output,
+  SimpleChanges,
   ViewChild,
   ChangeDetectionStrategy,
+  ChangeDetectorRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import html2canvas from 'html2canvas';
@@ -35,11 +38,13 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
         <p class="dsc-hint">1200×630 for Discord and X. Facts from your history; the flavor line is Chronicle’s wording.</p>
         <div class="dsc-stage">
           <div #cardEl class="dsc-card" [style.width.px]="1200" [style.height.px]="630">
-            <img *ngIf="memory.pgcrImageUrl" [src]="memory.pgcrImageUrl" alt="" class="dsc-card__bg" />
+            <img *ngIf="memory.pgcrImageUrl" [src]="memory.pgcrImageUrl" alt="" class="dsc-card__bg"
+                 (error)="onBgError()" />
             <div class="dsc-card__shade"></div>
             <div class="dsc-card__engram">
-              <img *ngIf="memory.iconUrl" [src]="memory.iconUrl" alt="" class="dsc-card__activity-icon" />
-              <svg *ngIf="!memory.iconUrl" width="140" height="160" viewBox="0 0 140 160" aria-hidden="true">
+              <img *ngIf="memory.iconUrl && !iconBroken" [src]="memory.iconUrl" alt=""
+                   class="dsc-card__activity-icon" (error)="onIconError()" />
+              <svg *ngIf="!memory.iconUrl || iconBroken" width="140" height="160" viewBox="0 0 140 160" aria-hidden="true">
                 <polygon points="70,8 128,44 128,116 70,152 12,116 12,44" fill="none" stroke="#c9a227" stroke-width="3"/>
                 <polygon points="70,30 108,54 108,106 70,130 32,106 32,54" fill="#c9a227" opacity=".55"/>
               </svg>
@@ -119,7 +124,7 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
     }
   `],
 })
-export class DecryptedShareCardComponent {
+export class DecryptedShareCardComponent implements OnChanges {
   @Input() open = false;
   @Input() memory: AnniversaryFirst | null = null;
   @Input() flavorLine = '';
@@ -127,6 +132,16 @@ export class DecryptedShareCardComponent {
 
   @ViewChild('cardEl') cardEl?: ElementRef<HTMLDivElement>;
   exporting = false;
+  /** Hide broken CDN icons; show Chronicle engram instead of browser slash. */
+  iconBroken = false;
+
+  constructor(private readonly cdr: ChangeDetectorRef) {}
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['memory']) {
+      this.iconBroken = false;
+    }
+  }
 
   get typeSuffix(): string {
     if (!this.memory) return '';
@@ -135,6 +150,18 @@ export class DecryptedShareCardComponent {
       case 'solo': return ', solo';
       case 'first-ever': return ', first ever';
       default: return ', first clear';
+    }
+  }
+
+  onIconError(): void {
+    this.iconBroken = true;
+    this.cdr.markForCheck();
+  }
+
+  onBgError(): void {
+    const el = this.cardEl?.nativeElement?.querySelector('.dsc-card__bg') as HTMLImageElement | null;
+    if (el) {
+      el.remove();
     }
   }
 

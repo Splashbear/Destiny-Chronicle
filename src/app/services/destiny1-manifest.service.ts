@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
 import { BungieApiService } from './bungie-api.service';
 import { AssetUrlService } from './asset-url.service';
+import { usableBungieIconPath } from '../utils/bungie-icon-path';
 
 @Injectable({
   providedIn: 'root'
@@ -200,10 +201,9 @@ export class Destiny1ManifestService {
       }
       return '';
     }
-    if (def.icon) {
-      return this.assetUrl.resolve(def.icon);
-    }
-    return def.displayProperties?.icon ? this.assetUrl.resolve(def.displayProperties.icon) : '';
+    const rawIcon = def.icon || def.displayProperties?.icon;
+    const icon = usableBungieIconPath(rawIcon);
+    return icon ? this.assetUrl.resolve(icon) : '';
   }
 
   getActivityRaidImage(referenceId: string | number): string {

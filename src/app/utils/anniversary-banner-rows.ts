@@ -6,6 +6,7 @@ import {
   raidDungeonFirstsShownOnCards,
 } from './anniversary-helper';
 import { AnniversaryFirst } from '../components/anniversary-celebration-banner/anniversary-celebration-banner.component';
+import { isPlaceholderBungieIcon } from './bungie-icon-path';
 
 export interface AnniversaryFirstEverInput {
   activity: ActivityHistory;
@@ -104,10 +105,17 @@ export function buildAnniversaryBannerRows(input: {
     let pgcrImageUrl: string | null = null;
     if (referenceId != null) {
       iconUrl = resolvers.resolveIconUrl(referenceId, isD1);
+      if (iconUrl && isPlaceholderBungieIcon(iconUrl)) {
+        iconUrl = null;
+      }
       if (match.type !== 'first-ever') {
         pgcrImageUrl = resolvers.resolveFirstCompletionImage(first as ActivityFirstCompletion);
       } else {
         pgcrImageUrl = resolvers.resolvePgcrImageUrl(referenceId, isD1);
+      }
+      // Many dungeon/raid variants ship missing_icon_d2; use PGCR art for thumbs/share.
+      if (!iconUrl && pgcrImageUrl) {
+        iconUrl = pgcrImageUrl;
       }
     }
 
