@@ -20,7 +20,7 @@ import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 import { environment } from '../../environments/environment';
 import { AccountWriteIndex, placeholderIdsToDrop } from '../utils/account-write-index';
-import { matchesCalendarDay, scanYears, utcDayWindow } from '../utils/calendar-day-query';
+import { localDayWindow, matchesCalendarDay, scanYears } from '../utils/calendar-day-query';
 import { noteIdbRead } from '../utils/idb-read-log';
 import { MembershipRowCache } from '../utils/membership-row-cache';
 import { fireteamNamesFromPgcr } from '../utils/firsts-fireteam';
@@ -126,8 +126,8 @@ export class ActivityDbService extends Dexie {
   
   // Enhanced LRU caches with TTL support
   private activitiesCache: LRUCache<StoredActivity[]> = { maxSize: 200, data: new Map() };
-  /** One UTC calendar day, all accounts. Shared by every character lookup for that day. */
-  private utcDayCache = new Map<string, StoredActivity[]>();
+  /** One local calendar day (On This Day), all accounts. Shared by every character lookup for that day. */
+  private localDayCache = new Map<string, StoredActivity[]>();
   private readonly accountWriteIndex = new AccountWriteIndex();
   private readonly activityIdentityCache = new MembershipRowCache<Array<{ instanceId: string; period: string; game?: 'D1' | 'D2' }>>();
   /** Full rows for an account, filled by the first read and updated after writes. */
@@ -572,7 +572,7 @@ export class ActivityDbService extends Dexie {
       });
       this.accountWriteIndex.commit(uniqueActivities);
       this.rememberAccountRows(uniqueActivities);
-      this.utcDayCache.clear();
+      this.localDayCache.clear();
       for (const membershipId of membershipIds) {
         this.activityIdentityCache.invalidate(membershipId);
       }
@@ -636,7 +636,7 @@ export class ActivityDbService extends Dexie {
   }
 
   private invalidateActivityReads(membershipIds?: string[]): void {
-    this.utcDayCache.clear();
+    this.localDayCache.clear();
     if (!membershipIds) {
       this.accountWriteIndex.drop();
       this.activityIdentityCache.invalidate();
@@ -652,20 +652,20 @@ export class ActivityDbService extends Dexie {
     }
   }
 
-  private async rowsOnUtcDay(year: number, month: number, day: number): Promise<StoredActivity[]> {
+  private async rowsOnLocalDay(year: number, month: number, day: number): Promise<StoredActivity[]> {
     const key = `${year}-${month}-${day}`;
-    const cached = this.utcDayCache.get(key);
+    const cached = this.localDayCache.get(key);
     if (cached) {
       return cached;
     }
-    const window = utcDayWindow(year, month, day);
+    const window = localDayWindow(year, month, day);
     const rows = await this.activities
       .where('[period+membershipId+characterId]')
       .between([window.start, '', ''], [window.end, '\uffff', '\uffff'], true, false)
       .toArray();
     noteIdbRead('getActivitiesByDate', rows.length);
     const kept = rows.filter(row => matchesCalendarDay(row.period, month, day, year));
-    this.utcDayCache.set(key, kept);
+    this.localDayCache.set(key, kept);
     return kept;
   }
 
@@ -677,7 +677,7 @@ export class ActivityDbService extends Dexie {
         return [];
       }
       const years = scanYears(year);
-      const chunks = await Promise.all(years.map(y => this.rowsOnUtcDay(y, month, day)));
+      const chunks = await Promise.all(years.map(y => this.rowsOnLocalDay(y, month, day)));
       return chunks.flat().filter(activity =>
         activity.membershipId === membershipId && activity.characterId === characterId
       );
@@ -704,7 +704,7 @@ export class ActivityDbService extends Dexie {
         return [];
       }
       const years = scanYears(year);
-      const chunks = await Promise.all(years.map(y => this.rowsOnUtcDay(y, month, day)));
+      const chunks = await Promise.all(years.map(y => this.rowsOnLocalDay(y, month, day)));
       return chunks.flat().filter(activity => activity.membershipId === membershipId);
     } catch (error) {
       console.error('[Dexie] Error in getActivitiesByDateForMembership:', error);

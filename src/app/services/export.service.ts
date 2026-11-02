@@ -261,9 +261,9 @@ export class ExportService {
           for (const activity of playerActivities) {
             const period = activity.period;
             const d = period ? new Date(period) : null;
-            const year = d ? d.getUTCFullYear() : '';
-            const month = d ? d.getUTCMonth() + 1 : '';
-            const day = d ? d.getUTCDate() : '';
+            const year = d ? d.getFullYear() : '';
+            const month = d ? d.getMonth() + 1 : '';
+            const day = d ? d.getDate() : '';
             const duration = (activity as any)?.values?.timePlayedSeconds?.basic?.value ?? '';
             const kills = (activity as any)?.values?.kills?.basic?.value ?? '';
             const deaths = (activity as any)?.values?.deaths?.basic?.value ?? '';
@@ -309,8 +309,8 @@ export class ExportService {
           console.error('[ExportService] Invalid date in options.from:', options.from);
           return;
         }
-        const month = date.getUTCMonth() + 1;
-        const day = date.getUTCDate();
+        const month = date.getMonth() + 1;
+        const day = date.getDate();
         console.log('[ExportService] Exporting for date:', { from: options.from, month, day });
         for (const player of selectedPlayers) {
           // Gather per-membership activities for the date across all characters
@@ -318,7 +318,7 @@ export class ExportService {
           for (const activity of acts) {
             const period = activity.period;
             const d = period ? new Date(period) : null;
-            const year = d ? d.getUTCFullYear() : '';
+            const year = d ? d.getFullYear() : '';
             const duration = (activity as any)?.values?.timePlayedSeconds?.basic?.value ?? '';
             const kills = (activity as any)?.values?.kills?.basic?.value ?? '';
             const deaths = (activity as any)?.values?.deaths?.basic?.value ?? '';
