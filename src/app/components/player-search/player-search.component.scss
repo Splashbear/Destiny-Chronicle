@@ -1242,6 +1242,19 @@ img[src*="class-"] {
   height: 32px;
 }
 
+.dc-dossier-hdr__date-search {
+  margin-left: 0.25rem;
+  background: rgba(201, 138, 75, 0.22) !important;
+  border-color: rgba(201, 138, 75, 0.55) !important;
+  color: var(--dc-hdr-bz2) !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dc-dossier-hdr__date-search:hover {
+  background: rgba(201, 138, 75, 0.35) !important;
+}
+
 .dc-dossier-hdr__otd-title {
   font-weight: 700;
   color: var(--dc-hdr-bz2);
