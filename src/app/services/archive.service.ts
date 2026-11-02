@@ -26,6 +26,7 @@ import {
   ArchiveBuildResult,
 } from '../models/archive.types';
 import { AccomplishmentsSnapshotService } from './accomplishments-snapshot.service';
+import { ArchiveSpreadsheetService } from './archive-spreadsheet.service';
 import {
   bungieAbsoluteUrl,
   extensionFromBungiePath,
@@ -61,6 +62,7 @@ export class ArchiveService {
     private d1Manifest: Destiny1ManifestService,
     private titleService: TitleService,
     private accomplishmentsSnapshot: AccomplishmentsSnapshotService,
+    private archiveSpreadsheet: ArchiveSpreadsheetService,
     private archiveMedia: ArchiveMediaService,
     private archiveRuntime: ArchiveRuntimeService,
     private locale: LocaleService,
@@ -134,7 +136,7 @@ export class ArchiveService {
     const onProgress = options.onProgress ?? (() => undefined);
     const gathered = await this.gatherArchiveData(accounts, options);
 
-    onProgress(this.progress('archive.progress.buildingZip'), 85);
+    onProgress(this.progress('archive.progress.buildingZip'), 82);
     const zip = new JSZip();
     const {
       manifest,
@@ -157,6 +159,21 @@ export class ArchiveService {
     zip.file('data/accomplishments-snapshot.json', JSON.stringify(accomplishmentsSnapshot, null, 2));
     zip.file('manifest/d2-activity-defs.json', JSON.stringify(d2ActivityDefs));
     zip.file('manifest/d2-presentation-nodes.json', JSON.stringify(d2PresentationNodes));
+
+    try {
+      onProgress('Building Chronicle.xlsx…', 86);
+      const xlsx = await this.archiveSpreadsheet.buildChronicleXlsx(
+        accounts,
+        activities,
+        (msg) => onProgress(msg, 87)
+      );
+      zip.file('Chronicle.xlsx', xlsx.buffer);
+      console.info(
+        `[Archive] Chronicle.xlsx: ${xlsx.activityRows} activity rows, ${xlsx.elapsedMs} ms, ~${Math.round(xlsx.buffer.byteLength / 1024)} KB`
+      );
+    } catch (err) {
+      console.warn('[Archive] Chronicle.xlsx skipped:', err);
+    }
 
     if (manifest.includePgcr) {
       const pgcrFolder = zip.folder('data/pgcr');
