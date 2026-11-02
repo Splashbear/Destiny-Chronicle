@@ -1,4 +1,9 @@
-/** UTC calendar match used by getActivitiesByDate. */
+/**
+ * Local calendar-day matching for On This Day.
+ * Activities and Anniversaries must use the same rule: the user's timezone, where they are.
+ */
+
+/** Local calendar match used by getActivitiesByDate (same rule as anniversary firsts). */
 export function matchesCalendarDay(
   period: string | undefined,
   month: number,
@@ -12,8 +17,8 @@ export function matchesCalendarDay(
   if (Number.isNaN(date.getTime())) {
     return false;
   }
-  const sameDay = date.getUTCMonth() + 1 === month && date.getUTCDate() === day;
-  return year ? sameDay && date.getUTCFullYear() === year : sameDay;
+  const sameDay = date.getMonth() + 1 === month && date.getDate() === day;
+  return year ? sameDay && date.getFullYear() === year : sameDay;
 }
 
 /** Full-list filter. This is the result the UI already shows. */
@@ -26,7 +31,7 @@ export function selectByCalendarDay<T extends { period?: string }>(
   return rows.filter(row => matchesCalendarDay(row.period, month, day, year));
 }
 
-export function scanYears(year: number | undefined, latestYear = new Date().getUTCFullYear()): number[] {
+export function scanYears(year: number | undefined, latestYear = new Date().getFullYear()): number[] {
   if (year) {
     return [year];
   }
@@ -38,14 +43,17 @@ export function scanYears(year: number | undefined, latestYear = new Date().getU
   return years;
 }
 
-/** Inclusive start, exclusive end, both UTC. Covers the whole UTC day the filter keeps. */
-export function utcDayWindow(year: number, month: number, day: number): { start: string; end: string } {
-  const start = new Date(Date.UTC(year, month - 1, day));
-  const end = new Date(Date.UTC(year, month - 1, day + 1));
+/**
+ * Inclusive start, exclusive end as ISO strings covering the user's local calendar day.
+ * Spans adjacent UTC days when the local offset crosses midnight UTC.
+ */
+export function localDayWindow(year: number, month: number, day: number): { start: string; end: string } {
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-export function periodInUtcWindow(period: string, start: string, end: string): boolean {
+export function periodInDayWindow(period: string, start: string, end: string): boolean {
   return period >= start && period < end;
 }
 
@@ -57,12 +65,12 @@ export function rowsInDayWindows<T extends { period?: string }>(
   year?: number,
   latestYear?: number
 ): T[] {
-  const windows = scanYears(year, latestYear).map(y => utcDayWindow(y, month, day));
+  const windows = scanYears(year, latestYear).map(y => localDayWindow(y, month, day));
   return rows.filter(row => {
     if (!row.period) {
       return false;
     }
-    return windows.some(window => periodInUtcWindow(row.period as string, window.start, window.end));
+    return windows.some(window => periodInDayWindow(row.period as string, window.start, window.end));
   });
 }
 
