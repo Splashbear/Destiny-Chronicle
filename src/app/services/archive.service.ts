@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import JSZip from 'jszip';
@@ -26,7 +26,6 @@ import {
   ArchiveBuildResult,
 } from '../models/archive.types';
 import { AccomplishmentsSnapshotService } from './accomplishments-snapshot.service';
-import { ArchiveSpreadsheetService } from './archive-spreadsheet.service';
 import {
   bungieAbsoluteUrl,
   extensionFromBungiePath,
@@ -62,11 +61,12 @@ export class ArchiveService {
     private d1Manifest: Destiny1ManifestService,
     private titleService: TitleService,
     private accomplishmentsSnapshot: AccomplishmentsSnapshotService,
-    private archiveSpreadsheet: ArchiveSpreadsheetService,
     private archiveMedia: ArchiveMediaService,
     private archiveRuntime: ArchiveRuntimeService,
     private locale: LocaleService,
-    private i18n: UiI18nService
+    private i18n: UiI18nService,
+    /** Lazy Chronicle.xlsx builder — keep spreadsheet code out of the initial bundle. */
+    private injector: Injector
   ) {}
 
   private progress(key: string, vars?: Record<string, string | number>): string {
@@ -162,7 +162,10 @@ export class ArchiveService {
 
     try {
       onProgress('Building Chronicle.xlsx…', 86);
-      const xlsx = await this.archiveSpreadsheet.buildChronicleXlsx({
+      // Dynamic import so production initial budget stays under 2.5mb (xlsx + sheet builder).
+      const { ArchiveSpreadsheetService } = await import('./archive-spreadsheet.service');
+      const spreadsheet = this.injector.get(ArchiveSpreadsheetService);
+      const xlsx = await spreadsheet.buildChronicleXlsx({
         accounts,
         activities,
         titlesSnapshot,
