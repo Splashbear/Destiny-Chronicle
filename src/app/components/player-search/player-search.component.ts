@@ -263,10 +263,6 @@ export class PlayerSearchComponent extends PlayerSearchUiMixin implements OnInit
       clearTimeout(this.breakdownRefreshTimer);
       this.breakdownRefreshTimer = null;
     }
-    if (this.dateSearchDebounceTimer) {
-      clearTimeout(this.dateSearchDebounceTimer);
-      this.dateSearchDebounceTimer = null;
-    }
   }
 
   /**
