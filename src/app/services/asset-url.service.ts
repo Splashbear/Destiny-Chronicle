@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BUNGIE_ORIGIN, isOfficialBungieHost, normalizeBungiePath, parseHttpUrl } from '../utils/archive-hash';
+import { isPlaceholderBungieIcon } from '../utils/bungie-icon-path';
 import { ArchiveRuntimeService } from './archive-runtime.service';
 
 @Injectable({ providedIn: 'root' })
@@ -35,8 +36,14 @@ export class AssetUrlService {
     return trimmed;
   }
 
-  /** Resolve icon/pgcr path; returns empty string when input is empty. */
+  /**
+   * Resolve an icon path for display. Empty / Bungie missing_icon placeholders
+   * return '' so callers can show a branded fallback instead of a broken img.
+   */
   resolveIcon(pathOrUrl: string | null | undefined): string {
+    if (!pathOrUrl || isPlaceholderBungieIcon(pathOrUrl)) {
+      return '';
+    }
     return this.resolve(pathOrUrl);
   }
 

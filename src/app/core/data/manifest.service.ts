@@ -16,6 +16,7 @@ import {
   D2_SRL_TYPE_HASH,
 } from '../../config/srl.config';
 import { bungieRequestUrl } from '../../utils/bungie-request-url';
+import { usableBungieIconPath } from '../../utils/bungie-icon-path';
 
 @Injectable({
   providedIn: 'root'
@@ -211,8 +212,10 @@ export class DestinyManifestService {
       return this.d1Manifest.getActivityIcon(referenceId);
     }
     if (!this.activityDefs) return '';
-    const def = this.activityDefs[referenceId];
-    return def && def.displayProperties?.icon ? this.assetUrl.resolve(def.displayProperties.icon) : '';
+    // Source: DestinyActivityDefinition.displayProperties.icon (empty when Bungie ships missing_icon_d2).
+    const def = this.activityDefs[String(referenceId)];
+    const icon = usableBungieIconPath(def?.displayProperties?.icon);
+    return icon ? this.assetUrl.resolve(icon) : '';
   }
 
   getActivityDefinitionRaw(referenceId: string | number): any {

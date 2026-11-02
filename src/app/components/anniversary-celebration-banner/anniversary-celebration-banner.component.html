@@ -13,8 +13,10 @@
 
   <div class="fireside-hero__body">
     <div class="fireside-hero__art" *ngIf="hero.pgcrImageUrl || hero.iconUrl">
-      <img *ngIf="hero.pgcrImageUrl" [src]="hero.pgcrImageUrl" alt="" class="fireside-hero__pgcr" />
-      <img *ngIf="hero.iconUrl" [src]="hero.iconUrl" alt="" class="fireside-hero__icon" />
+      <img *ngIf="hero.pgcrImageUrl" [src]="hero.pgcrImageUrl" alt="" class="fireside-hero__pgcr"
+           (error)="$any($event.target).style.display='none'" />
+      <img *ngIf="hero.iconUrl" [src]="hero.iconUrl" alt="" class="fireside-hero__icon"
+           (error)="$any($event.target).style.display='none'" />
     </div>
 
     <div class="fireside-hero__copy">
@@ -50,7 +52,8 @@
             class="fireside-hero__list-row"
             *ngFor="let anniversary of anniversaries; trackBy: trackByAnniversary"
             (click)="onNavigate(anniversary)">
-      <img *ngIf="anniversary.iconUrl" [src]="anniversary.iconUrl" alt="" class="fireside-hero__list-icon" />
+      <img *ngIf="anniversary.iconUrl" [src]="anniversary.iconUrl" alt="" class="fireside-hero__list-icon"
+           (error)="$any($event.target).style.display='none'" />
       <span class="fireside-hero__list-name">{{ anniversary.activityName }}</span>
       <span class="fireside-hero__list-meta">{{ getAnniversaryTypeLabel(anniversary) }} · {{ anniversary.yearsAgo }}y ago</span>
     </button>
