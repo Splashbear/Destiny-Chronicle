@@ -162,11 +162,13 @@ export class ArchiveService {
 
     try {
       onProgress('Building Chronicle.xlsx…', 86);
-      const xlsx = await this.archiveSpreadsheet.buildChronicleXlsx(
+      const xlsx = await this.archiveSpreadsheet.buildChronicleXlsx({
         accounts,
         activities,
-        (msg) => onProgress(msg, 87)
-      );
+        titlesSnapshot,
+        frozenAt: manifest.frozenAt,
+        onProgress: (msg) => onProgress(msg, 87),
+      });
       zip.file('Chronicle.xlsx', xlsx.buffer);
       console.info(
         `[Archive] Chronicle.xlsx: ${xlsx.activityRows} activity rows, ${xlsx.elapsedMs} ms, ~${Math.round(xlsx.buffer.byteLength / 1024)} KB`
