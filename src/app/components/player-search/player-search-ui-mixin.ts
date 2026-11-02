@@ -74,6 +74,7 @@ import {
 } from '../../utils/favorite-account';
 import { applyStopProfileLoadingFlags } from '../../utils/stop-profile-loading';
 import { clampDatePickerMonthDay } from '../../utils/date-picker-month-day';
+import { DATE_PICKER_SEARCH_DEBOUNCE_MS } from '../../utils/date-picker-search-debounce';
 import { buildAccountStatsActivitiesMap } from '../../utils/account-stats-activities-map';
 import {
   buildDisplayTitles,
@@ -97,6 +98,19 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.selectedMonth = next.month;
     this.selectedDay = next.day;
     this.cdr.markForCheck();
+    // Wait after month/day selects so Nov 1 → February → 22 only searches once for Feb 22.
+    this.scheduleDateSearchFromPicker();
+  }
+
+  /** Header month/day dropdowns: debounce search. ‹ › / Today stay immediate via onDateSearch(). */
+  protected scheduleDateSearchFromPicker(): void {
+    if (this.dateSearchDebounceTimer) {
+      clearTimeout(this.dateSearchDebounceTimer);
+    }
+    this.dateSearchDebounceTimer = setTimeout(() => {
+      this.dateSearchDebounceTimer = null;
+      this.onDateSearch();
+    }, DATE_PICKER_SEARCH_DEBOUNCE_MS);
   }
 
   protected computeAccountStatsWithService(): void {
