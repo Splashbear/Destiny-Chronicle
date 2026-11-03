@@ -149,9 +149,15 @@ export function mapMembershipsByIdResponse(
         ? membership.crossSaveOverride
         : membership.membershipType;
 
-    // Rule shared with isD1Player: Xbox/PSN without a cross-save override is D1.
+    // GetMembershipsById is a D2 profile endpoint, so cross-save fields on it are
+    // corroborated D2 evidence. An Xbox/PSN row with none of them stays D1.
     const isD1 =
-      gameFromMembership(membership.membershipType, membership.crossSaveOverride) === 'D1';
+      gameFromMembership(membership.membershipType, {
+        crossSaveOverride: membership.crossSaveOverride,
+        applicableMembershipTypes: membership.applicableMembershipTypes,
+        bungieGlobalDisplayNameCode: membership.bungieGlobalDisplayNameCode,
+        fromD2Endpoint: true,
+      }) === 'D1';
 
     const player: PlayerSearchDisplay = {
       displayName: bungieNetUser?.displayName || membership.displayName || 'Unknown',

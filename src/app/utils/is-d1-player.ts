@@ -3,7 +3,7 @@ import { resolveGameDetailed } from './destiny-game';
 /**
  * Detect Destiny 1 vs D2 for a search/display player.
  * Rules live in `destiny-game.ts` (explicit game, then membership type /
- * cross-save override).
+ * cross-save fields only count as D2 when corroborated, see tier 4 there).
  */
 export function isD1Player(
   player:
@@ -14,6 +14,8 @@ export function isD1Player(
         bungieGlobalDisplayName?: string;
         isCrossSavePrimary?: boolean;
         crossSaveOverride?: number;
+        applicableMembershipTypes?: number[];
+        bungieGlobalDisplayNameCode?: number | string;
       }
     | undefined
     | null
@@ -25,6 +27,8 @@ export function isD1Player(
     game: player.game,
     membershipType: player.membershipType,
     crossSaveOverride: player.crossSaveOverride,
+    applicableMembershipTypes: player.applicableMembershipTypes,
+    bungieGlobalDisplayNameCode: player.bungieGlobalDisplayNameCode,
   });
   if (source !== 'explicit') {
     console.warn(
