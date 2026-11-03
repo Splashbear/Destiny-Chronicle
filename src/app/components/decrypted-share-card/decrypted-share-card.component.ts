@@ -11,7 +11,6 @@ import {
   ChangeDetectorRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import html2canvas from 'html2canvas';
 import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
 
 /**
@@ -170,6 +169,7 @@ export class DecryptedShareCardComponent implements OnChanges {
     if (!el || !this.memory) return;
     this.exporting = true;
     try {
+      const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(el, {
         width: 1200,
         height: 630,
