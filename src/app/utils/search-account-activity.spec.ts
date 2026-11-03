@@ -50,7 +50,7 @@ describe('search-account-activity', () => {
         dateLastPlayed: '0001-01-01T00:00:00Z',
       },
     ]);
-    expect(accountHasGames({ dateLastPlayed: map.get('5|222')?.dateLastPlayed })).toBe(false);
+    expect(accountHasGames({ dateLastPlayed: map.get('D2|5|222')?.dateLastPlayed })).toBe(false);
     expect(
       sortSearchAccountsByPlayActivity([
         { membershipId: 'empty', hasGames: false },

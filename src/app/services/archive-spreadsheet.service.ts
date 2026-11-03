@@ -34,6 +34,7 @@ import {
   summarizeActivitiesForAccount,
 } from '../utils/chronicle-xlsx-summary';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
+import { canonicalAccountKey } from '../utils/account-key';
 
 export interface ChronicleXlsxBuildResult {
   buffer: ArrayBuffer;
@@ -131,7 +132,7 @@ export class ArchiveSpreadsheetService {
   }
 
   private accountKey(acct: ArchiveAccount): string {
-    return `${acct.game}|${acct.membershipType}|${acct.membershipId}`;
+    return canonicalAccountKey(acct);
   }
 
   private async collectAllFirsts(

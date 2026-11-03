@@ -2,6 +2,7 @@
  * GAME_FILTER_SPEC Phase 2.1 — which search hits have Destiny play time.
  * Prefer LinkedProfiles.dateLastPlayed / character presence; no history scans.
  */
+import { canonicalAccountKey } from './account-key';
 
 export interface SearchPlaySignals {
   dateLastPlayed?: string | null;
@@ -46,6 +47,11 @@ export function accountHasGames(signals: SearchPlaySignals): boolean | null {
   return null;
 }
 
+/**
+ * Index Bungie LinkedProfiles (a Destiny 2 data source) by canonical account key.
+ * Entries are D2 only: `D2|<type>|<id>`, plus a platform-agnostic `D2|0|<id>` fallback.
+ * D1 accounts are intentionally never matched against this data (a D1 id can equal a D2 id).
+ */
 export function linkedProfilePlayByMembership(
   profiles: LinkedProfilePlayCard[] | null | undefined
 ): Map<string, { dateLastPlayed?: string | null; isCrossSavePrimary?: boolean }> {
@@ -53,20 +59,30 @@ export function linkedProfilePlayByMembership(
   if (!Array.isArray(profiles)) return map;
   for (const p of profiles) {
     if (!p?.membershipId) continue;
-    const type = Number(p.membershipType);
-    const key = `${Number.isFinite(type) ? type : 0}|${p.membershipId}`;
-    map.set(key, {
+    const entry = {
       dateLastPlayed: p.dateLastPlayed,
       isCrossSavePrimary: p.isCrossSavePrimary,
-    });
-    if (!map.has(p.membershipId)) {
-      map.set(p.membershipId, {
-        dateLastPlayed: p.dateLastPlayed,
-        isCrossSavePrimary: p.isCrossSavePrimary,
-      });
-    }
+    };
+    map.set(
+      canonicalAccountKey({ game: 'D2', membershipType: p.membershipType, membershipId: p.membershipId }),
+      entry
+    );
+    const anyPlatform = canonicalAccountKey({ game: 'D2', membershipType: 0, membershipId: p.membershipId });
+    if (!map.has(anyPlatform)) map.set(anyPlatform, entry);
   }
   return map;
+}
+
+/** Look up a search hit in a `linkedProfilePlayByMembership` index. D1 hits never match. */
+export function lookupLinkedProfilePlay(
+  index: ReturnType<typeof linkedProfilePlayByMembership>,
+  player: { game?: string; membershipType?: number | string; membershipId: string }
+): { dateLastPlayed?: string | null; isCrossSavePrimary?: boolean } | undefined {
+  if (player.game === 'D1') return undefined;
+  return (
+    index.get(canonicalAccountKey({ game: 'D2', membershipType: player.membershipType, membershipId: player.membershipId })) ||
+    index.get(canonicalAccountKey({ game: 'D2', membershipType: 0, membershipId: player.membershipId }))
+  );
 }
 
 export interface SearchAccountForSort {

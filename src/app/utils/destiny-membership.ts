@@ -2,6 +2,7 @@
  * Bungie membership helpers shared by player search.
  * Type 254 (BungieNext) must use crossSaveOverride for Destiny2 Profile / history calls.
  */
+import { canonicalAccountKey } from './account-key';
 
 export function effectiveMembershipType(m: {
   membershipType: number;
@@ -65,7 +66,7 @@ export function mapLinkedProfilesToD2SearchRows(
   for (const p of profiles) {
     if (!p?.membershipId) continue;
     const membershipType = effectiveMembershipType(p);
-    const key = `${membershipType}|${p.membershipId}`;
+    const key = canonicalAccountKey({ game: 'D2', membershipType, membershipId: p.membershipId });
     if (seen.has(key)) continue;
     seen.add(key);
     const hasBungieName =

@@ -7,8 +7,10 @@ import {
   characterCountFromD2ProfileResponse,
   isMeaningfulLastPlayed,
   linkedProfilePlayByMembership,
+  lookupLinkedProfilePlay,
   sortSearchAccountsByPlayActivity,
 } from '../utils/search-account-activity';
+import { canonicalAccountKey } from '../utils/account-key';
 
 /** Platforms that are almost always unused link leftovers for cross-save Guardians. */
 const OFTEN_EMPTY_MEMBERSHIP_TYPES = new Set([5, 6]); // Stadia, Epic
@@ -50,9 +52,7 @@ export class SearchAccountPlayService {
 
     const byMem = linkedProfilePlayByMembership(profiles);
     const applyLinked = (player: PlayerSearchDisplay): PlayerSearchDisplay => {
-      const typed = byMem.get(`${player.membershipType}|${player.membershipId}`);
-      const bare = byMem.get(player.membershipId);
-      const hit = typed || bare;
+      const hit = lookupLinkedProfilePlay(byMem, player);
       if (hit && hit.dateLastPlayed !== undefined) {
         player.dateLastPlayed = hit.dateLastPlayed || undefined;
       }
@@ -90,7 +90,7 @@ export class SearchAccountPlayService {
     } else if (profiles.length > 0) {
       for (const player of d2) {
         if (!OFTEN_EMPTY_MEMBERSHIP_TYPES.has(Number(player.membershipType))) continue;
-        const typed = byMem.get(`${player.membershipType}|${player.membershipId}`);
+        const typed = byMem.get(canonicalAccountKey({ game: 'D2', membershipType: player.membershipType, membershipId: player.membershipId }));
         if (!typed || !isMeaningfulLastPlayed(typed.dateLastPlayed)) {
           player.hasGames = false;
         }

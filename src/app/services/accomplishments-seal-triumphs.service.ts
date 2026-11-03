@@ -9,6 +9,7 @@ import {
   AccomplishmentSealTriumph,
   AccountSealTriumphsResult,
 } from '../models/accomplishments-seal-triumphs.model';
+import { canonicalAccountKey } from '../utils/account-key';
 
 /** DestinyRecordState.RecordRedeemed — matches Titles & Seals completion check. */
 const RECORD_REDEEMED = 1;
@@ -27,7 +28,7 @@ export class AccomplishmentsSealTriumphsService {
   private readonly cache = new Map<string, AccountSealTriumphsResult>();
 
   cacheKey(membershipType: number, membershipId: string): string {
-    return `${membershipType}|${membershipId}`;
+    return canonicalAccountKey({ game: 'D2', membershipType, membershipId });
   }
 
   getCached(membershipType: number, membershipId: string): AccountSealTriumphsResult | null {

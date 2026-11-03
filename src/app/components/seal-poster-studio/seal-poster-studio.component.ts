@@ -5,6 +5,7 @@ import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-
 import { TitleItem } from '../../services/title.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 import { SiteAnalyticsService } from '../../services/site-analytics.service';
+import { canonicalAccountKey } from '../../utils/account-key';
 
 type ViewMode = 'browse' | 'poster' | 'heraldry';
 type SortType = 'release' | 'alpha' | 'category' | 'gilded';
@@ -31,6 +32,8 @@ interface GroupedSeals {
 export class SealPosterStudioComponent implements OnInit, OnChanges {
   @Input() titles: TitleItem[] = [];
   @Input() membershipId: string = '';
+  /** Bungie membershipType of the poster's D2 account; used for the canonical storage key. */
+  @Input() membershipType: number = 0;
 
   @ViewChild('posterCanvas', { static: false }) posterCanvas?: ElementRef<HTMLDivElement>;
 
@@ -74,10 +77,10 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    if (changes['membershipId']) {
+    if (changes['membershipId'] || changes['membershipType']) {
       this.reloadPersistedState();
     }
-    if (changes['titles'] || changes['membershipId']) {
+    if (changes['titles'] || changes['membershipId'] || changes['membershipType']) {
       this.updateDisplaySeals();
     }
   }
@@ -232,17 +235,42 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     this.updateDisplaySeals();
   }
 
+  /**
+   * Poster prefs are stored under the canonical account key (the poster only ever shows a D2
+   * account). Older builds used the bare membershipId; that key is still read as a fallback
+   * (it was always a D2 id here) and left in place.
+   */
+  private storageKey(prefix: string): string {
+    if (!this.membershipType) return `${prefix}.${this.membershipId}`;
+    return `${prefix}.${canonicalAccountKey({
+      game: 'D2',
+      membershipType: this.membershipType,
+      membershipId: this.membershipId,
+    })}`;
+  }
+
+  private legacyStorageKey(prefix: string): string {
+    return `${prefix}.${this.membershipId}`;
+  }
+
+  private readStored(prefix: string): string | null {
+    return (
+      localStorage.getItem(this.storageKey(prefix)) ??
+      localStorage.getItem(this.legacyStorageKey(prefix))
+    );
+  }
+
   private getManualOrderKey(): string {
-    return `destinyChronicle.sealPosterOrder.${this.membershipId}`;
+    return this.storageKey('destinyChronicle.sealPosterOrder');
   }
 
   private getHiddenKey(): string {
-    return `destinyChronicle.sealPosterHidden.${this.membershipId}`;
+    return this.storageKey('destinyChronicle.sealPosterHidden');
   }
 
   private loadManualOrder(): { [hash: number]: number } {
     try {
-      const stored = localStorage.getItem(this.getManualOrderKey());
+      const stored = this.readStored('destinyChronicle.sealPosterOrder');
       if (stored) {
         return JSON.parse(stored) as { [hash: number]: number };
       }
@@ -254,7 +282,7 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
 
   private loadHiddenHashes(): number[] {
     try {
-      const stored = localStorage.getItem(this.getHiddenKey());
+      const stored = this.readStored('destinyChronicle.sealPosterHidden');
       if (stored) {
         const parsed = JSON.parse(stored);
         return Array.isArray(parsed) ? parsed.map(Number) : [];
@@ -293,6 +321,7 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
   resetManualOrder() {
     try {
       localStorage.removeItem(this.getManualOrderKey());
+      localStorage.removeItem(this.legacyStorageKey('destinyChronicle.sealPosterOrder'));
       this.useManualOrder = false;
       this.updateDisplaySeals();
     } catch (error) {

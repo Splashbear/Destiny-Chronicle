@@ -13,6 +13,7 @@ import {
   MedalSubtypeId,
 } from '../models/accomplishments-medals.model';
 import { D2_MEDALS_ORDER } from '../data/d2-medals-catalog';
+import { canonicalAccountKey } from '../utils/account-key';
 
 @Injectable({ providedIn: 'root' })
 export class AccomplishmentsMedalsService {
@@ -25,7 +26,7 @@ export class AccomplishmentsMedalsService {
 
   cacheKey(membershipType: number, membershipId: string): string {
     // v4: full MEDALS_LIST rows (incl. unearned) + record-def icons
-    return `v4|${membershipType}|${membershipId}`;
+    return `v4|${canonicalAccountKey({ game: 'D2', membershipType, membershipId })}`;
   }
 
   getCached(membershipType: number, membershipId: string): AccountMedalsResult | null {

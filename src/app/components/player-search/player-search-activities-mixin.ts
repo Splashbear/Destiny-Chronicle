@@ -265,10 +265,7 @@ export abstract class PlayerSearchActivitiesMixin extends PlayerSearchBreakdownM
     membershipId?: string;
     membershipType?: number;
   }): string {
-    return buildAccountKey({
-      ...pl,
-      getPlatformName: (mt) => this.getPlatformName(mt),
-    });
+    return buildAccountKey(pl);
   }
 
   get hasAccountFilterForActivities(): boolean {

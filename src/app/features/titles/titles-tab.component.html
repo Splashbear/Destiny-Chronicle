@@ -40,7 +40,8 @@
   <app-seal-poster-studio
     *ngIf="!ps.loadingTitlesOverall && ps.aggregatedTitles.length > 0"
     [titles]="ps.aggregatedTitles"
-    [membershipId]="ps.getMainMembershipId()">
+    [membershipId]="ps.getMainMembershipId()"
+    [membershipType]="ps.getMainMembershipType()">
   </app-seal-poster-studio>
 </div>
 </ng-template>

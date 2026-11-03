@@ -1,5 +1,6 @@
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
 import { getPlatformName } from './platform-name';
+import { canonicalAccountKey } from './account-key';
 
 export interface PlayerSearchBundle {
   d1: PlayerSearchDisplay[];
@@ -7,12 +8,12 @@ export interface PlayerSearchBundle {
   crossSave: PlayerSearchDisplay | null;
 }
 
-/** Deduplicate by game|membershipId (D1 and D2 can share an id). */
+/** Deduplicate by canonical account key (D1 and D2 can share an id). */
 export function dedupePlayerSearchDisplay(arr: PlayerSearchDisplay[]): PlayerSearchDisplay[] {
   const seen = new Set<string>();
   const out: PlayerSearchDisplay[] = [];
   for (const p of arr) {
-    const key = `${(p as any).game || 'D2'}|${p.membershipId}`;
+    const key = playerSearchKey(p);
     if (!seen.has(key)) {
       seen.add(key);
       out.push(p);
@@ -21,8 +22,8 @@ export function dedupePlayerSearchDisplay(arr: PlayerSearchDisplay[]): PlayerSea
   return out;
 }
 
-export function playerSearchKey(p: { membershipId: string; game?: 'D1' | 'D2' }): string {
-  return `${p.game || 'D2'}|${p.membershipId}`;
+export function playerSearchKey(p: { membershipId: string; membershipType?: number; game?: 'D1' | 'D2' }): string {
+  return canonicalAccountKey(p);
 }
 
 /** Cross-save primary from D2 rows. */

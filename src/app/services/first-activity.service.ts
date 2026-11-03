@@ -2,10 +2,12 @@ import { Injectable } from '@angular/core';
 import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { ActivityHistory } from '../models/activity-history.model';
+import { canonicalAccountKey } from '../utils/account-key';
 
 export interface PlayerIdentityBasic {
   membershipId: string;
   game: 'D1' | 'D2';
+  membershipType?: number;
   characterIds?: string[]; // optional filter to scope earliest by specific characters
 }
 
@@ -19,7 +21,7 @@ export class FirstActivityService {
 
   private getKey(p: PlayerIdentityBasic): string {
     const chars = p.characterIds && p.characterIds.length ? `|${p.characterIds.sort().join(',')}` : '';
-    return `${p.game}|${p.membershipId}${chars}`;
+    return `${canonicalAccountKey(p)}${chars}`;
   }
 
   /**

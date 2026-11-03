@@ -4,6 +4,7 @@ import { ActivityHistory } from '../models/activity-history.model';
 import { TitleService, TitleItem } from './title.service';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
 import { DestinyManifestService } from './destiny-manifest.service';
+import { canonicalAccountKey } from '../utils/account-key';
 
 export interface ExportRequest {
   from: Date;
@@ -421,7 +422,7 @@ export class ExportService {
     if (options.includeTitles) {
       const titles: any[] = [];
       for (const player of selectedPlayers) {
-        const cacheKey = `${player.game}|${player.membershipId}`;
+        const cacheKey = canonicalAccountKey(player);
         // Use TitleService to get titles for the player (with cache)
         let titlesList = titleCache.get(cacheKey);
         if (!titlesList) {
@@ -461,7 +462,7 @@ export class ExportService {
         // Assume activityDb.getAccountSummary returns stats for the player
         const stats = await activityDb.getAccountSummary(player.membershipId);
         // Derive total seals from Bungie titles (cached if possible)
-        const cacheKey = `${player.game}|${player.membershipId}`;
+        const cacheKey = canonicalAccountKey(player);
         let titlesList = titleCache.get(cacheKey);
         if (!titlesList) {
           titlesList = await this.titleService.getPlayerTitles(player);

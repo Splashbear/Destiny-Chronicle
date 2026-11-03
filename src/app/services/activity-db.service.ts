@@ -28,6 +28,7 @@ import {
   activityDurationSeconds,
   sumActivityDurationSeconds,
 } from '../utils/activity-duration-seconds';
+import { canonicalAccountKey } from '../utils/account-key';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -2336,7 +2337,7 @@ export class ActivityDbService extends Dexie {
 
   // Helper to generate a composite key for a favorite account
   private getFavoriteKey(account: FavoriteAccount): string {
-    return `${account.membershipId}|${account.game}|${account.membershipType}`;
+    return canonicalAccountKey(account);
   }
 
   async addFavorite(account: FavoriteAccount) {
@@ -2364,7 +2365,22 @@ export class ActivityDbService extends Dexie {
 
   async getFavorites(): Promise<FavoriteAccount[]> {
     await this.initPromise;
-    return this.favorites.toArray();
+    const rows = await this.favorites.toArray();
+    // One-time lazy migration: older rows stored `membershipId|game|membershipType`. The key is
+    // rebuilt from the row's own fields (never guessed) and written in place; nothing is deleted.
+    for (const row of rows) {
+      const canonical = canonicalAccountKey(row);
+      if (row.compositeKey === canonical) continue;
+      row.compositeKey = canonical;
+      if (row.id !== undefined) {
+        try {
+          await this.favorites.update(row.id, { compositeKey: canonical });
+        } catch (err) {
+          console.warn('[ActivityDb] favorite compositeKey migration failed', err);
+        }
+      }
+    }
+    return rows;
   }
 
   async getActivitiesByGame(membershipId: string, characterId: string, game: 'D1' | 'D2'): Promise<StoredActivity[]> {
