@@ -1,6 +1,7 @@
 import {
   localDayWindow,
   matchesCalendarDay,
+  parseLocalCalendarDate,
   selectByCalendarDay,
   selectByIndexedDay,
 } from './calendar-day-query';
@@ -55,5 +56,18 @@ describe('calendar day query', () => {
       // UTC / east: same instant is still Feb 23 locally.
       expect(matchesCalendarDay(eveningUs, 2, 23)).toBe(true);
     }
+  });
+
+  it('parseLocalCalendarDate reads a bare YYYY-MM-DD as that calendar day in any timezone', () => {
+    expect(parseLocalCalendarDate('2022-02-22')).toEqual({ year: 2022, month: 2, day: 22 });
+    expect(parseLocalCalendarDate('not a date')).toBeNull();
+    const instant = new Date(2022, 1, 22, 23, 30);
+    expect(parseLocalCalendarDate(instant.toISOString())).toEqual({ year: 2022, month: 2, day: 22 });
+  });
+
+  it('selects a late-evening clear on its local day, not the UTC day (getActivitiesByDateCached rule)', () => {
+    const lateEvening = { id: 'late', period: localIso(2022, 2, 22, 23, 30) };
+    const target = parseLocalCalendarDate('2022-02-22')!;
+    expect(selectByCalendarDay([lateEvening], target.month, target.day, target.year)).toEqual([lateEvening]);
   });
 });
