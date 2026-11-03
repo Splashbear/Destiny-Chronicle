@@ -6,6 +6,11 @@ import {
   medalModeGroup,
   medalSubtype,
 } from './medal-mode-groups';
+import { loadMedalCatalogs } from '../data/medal-catalogs';
+
+beforeAll(async () => {
+  await loadMedalCatalogs();
+});
 
 describe('lookupD2MedalCatalog', () => {
   it('places Double Play under Crucible · Multi + Streak from MEDALS_LIST', () => {

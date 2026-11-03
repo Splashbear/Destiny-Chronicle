@@ -449,33 +449,46 @@
         </div>
 
         <div *ngIf="activeTab === 'breakdown'">
-          <app-breakdown-tab></app-breakdown-tab>
+          @defer (on immediate) {
+            <app-breakdown-tab></app-breakdown-tab>
+          } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 
         <div *ngIf="activeTab === 'firsts' && selectedPlayers.length > 0">
-          <app-firsts-tab></app-firsts-tab>
+          @defer (on immediate) {
+            <app-firsts-tab></app-firsts-tab>
+          } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 
         <div *ngIf="activeTab === 'titles'">
-          <app-titles-tab></app-titles-tab>
+          @defer (on immediate) {
+            <app-titles-tab></app-titles-tab>
+          } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 
         <div *ngIf="activeTab === 'accomplishments' && selectedPlayers.length > 0">
-          <app-accomplishments-tab></app-accomplishments-tab>
+          @defer (on immediate) {
+            <app-accomplishments-tab></app-accomplishments-tab>
+          } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 
         <div *ngIf="activeTab === 'heatmap'">
-          <app-activity-heatmap
-            [membershipIds]="heatmapMembershipIds"
-            [characterMeta]="heatmapCharacterMeta"
-            (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
+          @defer (on immediate) {
+            <app-activity-heatmap
+              [membershipIds]="heatmapMembershipIds"
+              [characterMeta]="heatmapCharacterMeta"
+              (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
+          } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 
         <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0">
-          <app-played-with *ngIf="playedWithAccounts.length; else playedWithD2Only" [accounts]="playedWithAccounts"></app-played-with>
-          <ng-template #playedWithD2Only>
+          @if (playedWithAccounts.length) {
+            @defer (on immediate) {
+              <app-played-with [accounts]="playedWithAccounts"></app-played-with>
+            } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
+          } @else {
             <p class="text-sm text-slate-400">{{ uiI18n.t('playedWith.d2Only') }}</p>
-          </ng-template>
+          }
         </div>
       </div>
     </div>

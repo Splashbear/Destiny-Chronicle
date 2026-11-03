@@ -97,11 +97,14 @@
         </div>
       </div>
       <div class="h-64 sm:h-80 min-h-[320px]">
-        <canvas baseChart
-                [data]="ps.breakdownChartData"
-                [options]="ps.breakdownChartType === 'pie' ? ps.breakdownChartOptions : ps.breakdownBarChartOptions"
-                [type]="ps.breakdownChartType">
-        </canvas>
+        @defer (on immediate) {
+          <app-breakdown-chart
+            [data]="ps.breakdownChartData"
+            [options]="ps.breakdownChartType === 'pie' ? ps.breakdownChartOptions : ps.breakdownBarChartOptions"
+            [type]="ps.breakdownChartType"></app-breakdown-chart>
+        } @placeholder {
+          <div class="h-full w-full"></div>
+        }
       </div>
     </div>
   </div>

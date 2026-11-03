@@ -23,10 +23,11 @@ import {
   medalSubtype,
 } from '../utils/medal-mode-groups';
 import {
-  D1_RECORD_BOOKS,
+  getD1RecordBooks,
+  loadMedalCatalogs,
   lookupD1RecordCatalog,
   normalizeD1RecordName,
-} from '../data/d1-record-books-catalog';
+} from '../data/medal-catalogs';
 import { canonicalAccountKey } from '../utils/account-key';
 
 /**
@@ -100,6 +101,7 @@ export class AccomplishmentsD1Service {
     if (hit) return hit;
 
     try {
+      await loadMedalCatalogs();
       const booksMap = await this.collectRecordBooksMap(membershipType, membershipId);
       if (booksMap == null) {
         return this.cacheBooks(key, {
@@ -149,6 +151,7 @@ export class AccomplishmentsD1Service {
     if (hit) return hit;
 
     try {
+      await loadMedalCatalogs();
       const defs = await this.ensureD1StatsDefs().catch(() => ({} as Record<string, any>));
       // Prefer Stats/Account (merged characters) — same source as D1 medal handoffs.
       // Character Stats/0 is fallback; avoid Mayhem in modes (Bungie ErrorCode 7).
@@ -474,8 +477,8 @@ export class AccomplishmentsD1Service {
         }
       } else if (hashes.length === 16) {
         // Common: Sparrow Racing (8) + Moments of Triumph Y2 (8) surfaced as one Advisors book
-        const mot = D1_RECORD_BOOKS.find((b) => b.name === 'Moments of Triumph');
-        const srl = D1_RECORD_BOOKS.find((b) => b.name === 'Sparrow Racing League');
+        const mot = getD1RecordBooks().find((b) => b.name === 'Moments of Triumph');
+        const srl = getD1RecordBooks().find((b) => b.name === 'Sparrow Racing League');
         if (mot && srl) {
           const combined = [...mot.pages, ...srl.pages];
           let offset = 0;
@@ -565,7 +568,7 @@ export class AccomplishmentsD1Service {
     const key = normalizeD1RecordName(bookName);
     const mapped = D1_BOOK_NAME_TO_CATALOG[key] || bookName;
     return (
-      D1_RECORD_BOOKS.find((b) => normalizeD1RecordName(b.name) === normalizeD1RecordName(mapped)) ||
+      getD1RecordBooks().find((b) => normalizeD1RecordName(b.name) === normalizeD1RecordName(mapped)) ||
       null
     );
   }

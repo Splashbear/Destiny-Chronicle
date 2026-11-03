@@ -3,8 +3,8 @@ import {
   MedalSubtypeId,
   MEDAL_SUBTYPE_ORDER,
 } from '../models/accomplishments-medals.model';
-import { D2_MEDALS_ORDER, D2MedalCatalogEntry } from '../data/d2-medals-catalog';
-import { D1_MEDALS_BY_STAT_ID } from '../data/d1-medals-catalog';
+import type { D2MedalCatalogEntry } from '../data/d2-medals-catalog';
+import { getD1MedalsByStatId, getD2MedalsOrder } from '../data/medal-catalogs';
 
 const MODE_SET = new Set<MedalModeGroupId>(['Crucible', 'Gambit', 'Vanguard', 'Other']);
 const SUBTYPE_SET = new Set<string>(MEDAL_SUBTYPE_ORDER);
@@ -13,8 +13,10 @@ const SUBTYPE_SET = new Set<string>(MEDAL_SUBTYPE_ORDER);
 let d2MedalsByName: Record<string, D2MedalCatalogEntry[]> | null = null;
 function getD2MedalsByName(): Record<string, D2MedalCatalogEntry[]> {
   if (d2MedalsByName) return d2MedalsByName;
+  const order = getD2MedalsOrder();
+  if (order.length === 0) return {}; // catalogs not loaded yet: do not cache an empty index
   const map: Record<string, D2MedalCatalogEntry[]> = {};
-  for (const entry of D2_MEDALS_ORDER) {
+  for (const entry of order) {
     const key = normalizeMedalName(entry.name);
     if (!map[key]) map[key] = [];
     map[key].push(entry);
@@ -140,10 +142,11 @@ export function lookupD1MedalCatalog(statId: string): {
   if (!key) return null;
   const alt = key.startsWith('medal') && !key.startsWith('medals') ? `medals${key.slice(5)}` : '';
   const alt2 = key.startsWith('medals') ? `medal${key.slice(6)}` : '';
+  const d1Medals = getD1MedalsByStatId();
   const entry =
-    D1_MEDALS_BY_STAT_ID[key] ||
-    (alt ? D1_MEDALS_BY_STAT_ID[alt] : undefined) ||
-    (alt2 ? D1_MEDALS_BY_STAT_ID[alt2] : undefined);
+    d1Medals[key] ||
+    (alt ? d1Medals[alt] : undefined) ||
+    (alt2 ? d1Medals[alt2] : undefined);
   if (!entry) return null;
   const mode = asMode(entry.mode);
   const subtype = asSubtype(entry.subtype);
