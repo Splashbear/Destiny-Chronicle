@@ -12,7 +12,7 @@ import {
   MedalModeGroupId,
   MedalSubtypeId,
 } from '../models/accomplishments-medals.model';
-import { D2_MEDALS_ORDER } from '../data/d2-medals-catalog';
+import { getD2MedalsOrder, loadMedalCatalogs } from '../data/medal-catalogs';
 import { canonicalAccountKey } from '../utils/account-key';
 
 @Injectable({ providedIn: 'root' })
@@ -43,6 +43,7 @@ export class AccomplishmentsMedalsService {
     if (hit) return hit;
 
     try {
+      await loadMedalCatalogs();
       if (!this.manifest.isLoadedSync) {
         await firstValueFrom(this.manifest.isLoaded().pipe(filter((v) => !!v)));
       }
@@ -86,7 +87,7 @@ export class AccomplishmentsMedalsService {
       const recordDefs = this.manifest.getTitleDefs() || {};
 
       const medals: AccomplishmentMedal[] = [];
-      for (const entry of D2_MEDALS_ORDER) {
+      for (const entry of getD2MedalsOrder()) {
         const mode = this.asMode(entry.mode);
         const subtype = this.asSubtype(entry.subtype);
         if (!mode || !subtype) continue;

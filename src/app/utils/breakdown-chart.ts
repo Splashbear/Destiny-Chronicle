@@ -1,4 +1,4 @@
-import { ChartConfiguration } from 'chart.js';
+import type { ChartConfiguration } from 'chart.js';
 import { formatSecondsToHoursMinutes } from './format-duration';
 
 /**

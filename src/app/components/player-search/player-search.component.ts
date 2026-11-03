@@ -62,14 +62,18 @@ import { DatePickerComponent } from '../date-picker/date-picker.component';
 import { AccountCardGridComponent } from '../account-card-grid/account-card-grid.component';
 import { ActivitiesTabComponent,
   ACTIVITIES_HOST } from '../../features/activities';
-import { BreakdownTabComponent,
-  BREAKDOWN_HOST } from '../../features/breakdown';
-import { FirstsTabComponent,
-  FIRSTS_HOST } from '../../features/firsts';
-import { TitlesTabComponent,
-  TITLES_HOST } from '../../features/titles';
-import { AccomplishmentsTabComponent,
-  ACCOMPLISHMENTS_HOST } from '../../features/accomplishments';
+// Tab component imported by file path (not the barrel) so @defer can split it out of main.
+import { BreakdownTabComponent } from '../../features/breakdown/breakdown-tab.component';
+import { BREAKDOWN_HOST } from '../../features/breakdown/breakdown-host.token';
+// Tab component imported by file path (not the barrel) so @defer can split it out of main.
+import { FirstsTabComponent } from '../../features/firsts/firsts-tab.component';
+import { FIRSTS_HOST } from '../../features/firsts/firsts-host.token';
+// Tab component imported by file path (not the barrel) so @defer can split it out of main.
+import { TitlesTabComponent } from '../../features/titles/titles-tab.component';
+import { TITLES_HOST } from '../../features/titles/titles-host.token';
+// Tab component imported by file path (not the barrel) so @defer can split it out of main.
+import { AccomplishmentsTabComponent } from '../../features/accomplishments/accomplishments-tab.component';
+import { ACCOMPLISHMENTS_HOST } from '../../features/accomplishments/accomplishments-host.token';
 import { DestinyLoaderComponent } from '../destiny-loader/destiny-loader.component';
 import { StatsService } from '../../services/stats.service';
 import { TitleService } from '../../services/title.service';
@@ -85,8 +89,8 @@ import {   type ActivitiesViewMode,
   type ActivitiesChronologicalSort,
   } from '../../utils/activities-view-prefs';
 import {   type RegressionBaseline } from '../../utils/regression-baseline';
-import { ActivityHeatmapComponent } from '../../features/heatmap';
-import { PlayedWithComponent } from '../../features/played-with';
+import { ActivityHeatmapComponent } from '../../features/heatmap/activity-heatmap.component';
+import { PlayedWithComponent } from '../../features/played-with/played-with.component';
 import { DecryptedShareCardComponent } from '../decrypted-share-card/decrypted-share-card.component';
 import { LoadEngramComponent } from '../../shared/ui/load-engram.component';
 import { DecryptLandingComponent } from '../decrypt-landing/decrypt-landing.component';
@@ -99,7 +103,6 @@ import {
 } from './player-search-regression';
 import { build_asPlayerSelectionRemoveHost } from './player-search-host-adapters';
 import { PlayerSearchUiMixin } from './player-search-ui-mixin';
-import './player-search-charts';
 
 const HIDE_GET_STARTED_KEY = 'destiny-chronicle-hide-get-started';
 
