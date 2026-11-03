@@ -2,7 +2,6 @@ import { Component, OnInit, OnChanges, SimpleChanges, Input, ViewChild, ElementR
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
-import html2canvas from 'html2canvas';
 import { TitleItem } from '../../services/title.service';
 import { getTitleCategory, TitleCategory, CATEGORY_DISPLAY_ORDER } from '../../config/title-categories';
 import { SiteAnalyticsService } from '../../services/site-analytics.service';
@@ -310,6 +309,7 @@ export class SealPosterStudioComponent implements OnInit, OnChanges {
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
 
+      const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(this.posterCanvas.nativeElement, {
         scale: 2,
         backgroundColor: '#1a1a1a',

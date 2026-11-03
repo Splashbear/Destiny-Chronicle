@@ -1,7 +1,6 @@
 import { Injectable, Injector } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { environment } from '../../environments/environment';
 import { ActivityDbService, FavoriteAccount, StoredActivity } from './activity-db.service';
@@ -137,6 +136,7 @@ export class ArchiveService {
     const gathered = await this.gatherArchiveData(accounts, options);
 
     onProgress(this.progress('archive.progress.buildingZip'), 82);
+    const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
     const {
       manifest,
@@ -387,6 +387,7 @@ export class ArchiveService {
   }
 
   async importArchive(file: File): Promise<ArchiveImportResult> {
+    const JSZip = (await import('jszip')).default;
     const zip = await JSZip.loadAsync(await file.arrayBuffer());
     const manifest = JSON.parse(await zip.file('manifest.json')!.async('string')) as ArchiveManifest;
     const assetMap = JSON.parse(await zip.file('asset-map.json')!.async('string')) as ArchiveAssetMap;
