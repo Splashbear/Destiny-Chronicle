@@ -2,6 +2,7 @@ import { ActivityTypeOption } from '../models/activity-types';
 import { ActivityWithMembership } from '../models/activity-with-membership.model';
 import { StoredActivity } from '../services/activity-db.service';
 import { isSrlActivity } from '../config/srl.config';
+import { canonicalAccountKey } from './account-key';
 
 export interface FilteredDatePlayer {
   membershipId: string;
@@ -17,16 +18,16 @@ export interface ActivityTypeManifest {
   getActivityIcon(referenceId: number | string | undefined, isD1: boolean): string | undefined;
 }
 
-/** Cache key for per-date filtered lists (accounts keyed by game:membershipId). */
+/** Cache key for per-date filtered lists (accounts keyed by canonical account key). */
 export function filteredActivitiesCacheKey(
   selectedDate: string,
-  players: Array<{ game?: string; membershipId: string }>,
+  players: Array<{ game?: string; membershipType?: number; membershipId: string }>,
   activityTypeLabel: string
 ): string {
   const accountKey = players
-    .map(player => `${player.game || ''}:${player.membershipId}`)
+    .map(player => canonicalAccountKey(player))
     .sort()
-    .join('|');
+    .join(',');
   return `filtered-${selectedDate}-${accountKey}-${activityTypeLabel}`;
 }
 

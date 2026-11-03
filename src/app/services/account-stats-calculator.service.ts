@@ -14,6 +14,7 @@ import {
 import { aggregateGuardianFirstsFromLists } from '../utils/guardian-firsts-dedupe';
 import { collectPlayerFirstCompletions } from '../utils/collect-guardian-firsts';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
+import { canonicalAccountKey } from '../utils/account-key';
 
 export interface AccountStatsSnapshot {
   totalTime: number;
@@ -94,7 +95,7 @@ export class AccountStatsCalculatorService {
           pl.membershipId,
           pl.game as 'D1' | 'D2'
         );
-        activityCountByKey.set(`${pl.membershipId}|${pl.game}`, count);
+        activityCountByKey.set(canonicalAccountKey(pl), count);
         totalActivities += count;
       }
 

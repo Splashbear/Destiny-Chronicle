@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ActivityHistory } from '../models/activity-history.model';
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
+import { canonicalAccountKey } from '../utils/account-key';
 
 export interface AccountStats {
   totalActivities: number;
@@ -48,7 +49,7 @@ export class StatsService {
     };
 
     for (const player of players) {
-      const playerKey = `${player.game}|${player.membershipId}`;
+      const playerKey = canonicalAccountKey(player);
       const activities = activitiesMap.get(playerKey) || [];
       
       // Update totals

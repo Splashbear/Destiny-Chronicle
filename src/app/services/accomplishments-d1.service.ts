@@ -27,6 +27,7 @@ import {
   lookupD1RecordCatalog,
   normalizeD1RecordName,
 } from '../data/d1-record-books-catalog';
+import { canonicalAccountKey } from '../utils/account-key';
 
 /**
  * Well-known D1 record book hashes → English names.
@@ -80,7 +81,7 @@ export class AccomplishmentsD1Service {
 
   cacheKey(membershipType: number, membershipId: string): string {
     // Bump when catalog / naming / medals parse fixes change so session cache cannot serve stale rows
-    return `d1|v5|${membershipType}|${membershipId}`;
+    return `v5|${canonicalAccountKey({ game: 'D1', membershipType, membershipId })}`;
   }
 
   clearSessionCache(): void {

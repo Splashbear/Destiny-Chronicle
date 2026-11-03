@@ -10,6 +10,7 @@ import {
   normalizeTitleName,
   titleReleaseRank,
 } from '../config/title-release-order';
+import { canonicalAccountKey, lookupByAccount } from '../utils/account-key';
 
 export interface TitleItem {
   hash: number;
@@ -193,7 +194,7 @@ export class TitleService {
    * logic previously inside PlayerSearchComponent.
    */
   public aggregateTitles(players: PlayerIdentityMin[], titlesByPlayerKey: { [key: string]: TitleItem[] }): TitleItem[] {
-    const getKey = (p: PlayerIdentityMin) => `${p.game}|${p.membershipId}`;
+    const getKey = (p: PlayerIdentityMin) => canonicalAccountKey(p);
 
     // Choose reference (main) player – first D2 primary/cross-save or first D2 account
     const mainPlayer = players.find(p => p.game === 'D2') || players[0];
@@ -351,8 +352,7 @@ export class TitleService {
         return [];
       }
       const map = JSON.parse(raw) as Record<string, TitleItem[]>;
-      const key = `${player.game}|${player.membershipType}|${player.membershipId}`;
-      return map[key] ?? [];
+      return lookupByAccount(map, player) ?? [];
     } catch {
       return [];
     }

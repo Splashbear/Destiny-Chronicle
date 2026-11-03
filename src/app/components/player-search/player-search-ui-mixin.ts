@@ -1177,12 +1177,20 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     await this.titleService.debugAllTitles();
   }
 
-  getMainMembershipId(): string {
-    const mainPlayer =
+  private getMainD2Player() {
+    return (
       this.selectedPlayers.find((p) => !this.isD1Player(p) && p.isPrimary) ||
       this.crossSavePlayer ||
-      this.selectedPlayers.find((p) => !this.isD1Player(p));
-    return mainPlayer?.membershipId || '';
+      this.selectedPlayers.find((p) => !this.isD1Player(p))
+    );
+  }
+
+  getMainMembershipId(): string {
+    return this.getMainD2Player()?.membershipId || '';
+  }
+
+  getMainMembershipType(): number {
+    return Number(this.getMainD2Player()?.membershipType) || 0;
   }
 
   async loadActivityBreakdown(options?: { preserveView?: boolean }): Promise<void> {

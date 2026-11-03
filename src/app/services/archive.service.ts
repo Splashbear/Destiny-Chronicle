@@ -32,6 +32,7 @@ import {
   normalizeBungiePath,
 } from '../utils/archive-hash';
 import { PrunedPgcr } from '../utils/pgcr-prune';
+import { canonicalAccountKey } from '../utils/account-key';
 
 type MediaCategory = 'pgcr' | 'seals' | 'avatars' | 'icons';
 
@@ -522,7 +523,7 @@ export class ArchiveService {
   }
 
   private membershipKey(acct: ArchiveAccount): string {
-    return `${acct.game}|${acct.membershipType}|${acct.membershipId}`;
+    return canonicalAccountKey(acct);
   }
 
   private collectMediaUrls(

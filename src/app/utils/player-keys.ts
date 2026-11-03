@@ -1,17 +1,11 @@
-/** Stable player / favorite keys (CODE_CLEANUP_SPEC). */
+/** Stable player / favorite keys. All account keys are canonical: see `utils/account-key.ts`. */
+import { AccountIdentity, canonicalAccountKey } from './account-key';
 
-export function getPlayerKey(p: {
-  membershipId: string;
-  game?: 'D1' | 'D2' | string;
-}): string {
-  return `${p.game || 'D2'}|${p.membershipId}`;
+export function getPlayerKey(p: AccountIdentity & { membershipId: string }): string {
+  return canonicalAccountKey(p);
 }
 
-/** Composite favorite key — order matches ActivityDb favorites. */
-export function getFavoriteKey(p: {
-  membershipId: string;
-  game?: 'D1' | 'D2' | string;
-  membershipType?: number;
-}): string {
-  return `${p.membershipId}|${p.game || 'D2'}|${p.membershipType ?? ''}`;
+/** Favorite `compositeKey`: the canonical account key. Older rows are rewritten on load. */
+export function getFavoriteKey(p: AccountIdentity & { membershipId: string }): string {
+  return canonicalAccountKey(p);
 }

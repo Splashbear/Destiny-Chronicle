@@ -19,12 +19,12 @@ describe('filtered-activities-for-date', () => {
       filteredActivitiesCacheKey(
         '2024-04-23',
         [
-          { game: 'D2', membershipId: 'b' },
-          { game: 'D1', membershipId: 'a' },
+          { game: 'D2', membershipType: 3, membershipId: 'b' },
+          { game: 'D1', membershipType: 1, membershipId: 'a' },
         ],
         'All'
       )
-    ).toBe('filtered-2024-04-23-D1:a|D2:b-All');
+    ).toBe('filtered-2024-04-23-D1|1|a,D2|3|b-All');
   });
 
   it('filters by mode when not All/Dungeon/SRL', () => {

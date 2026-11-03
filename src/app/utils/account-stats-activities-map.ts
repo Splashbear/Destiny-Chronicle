@@ -1,5 +1,6 @@
 import { ActivityHistory } from '../models/activity-history.model';
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
+import { canonicalAccountKey } from './account-key';
 
 export interface ActivityWithMembershipLike {
   membershipId?: string;
@@ -15,7 +16,7 @@ export function buildAccountStatsActivitiesMap(
 ): Map<string, ActivityHistory[]> {
   const activitiesMap = new Map<string, ActivityHistory[]>();
   for (const player of selectedPlayers) {
-    const playerKey = `${player.game}|${player.membershipId}`;
+    const playerKey = canonicalAccountKey(player);
     const playerActivities = filteredActivitiesForDate.filter(
       (activity) =>
         activity.membershipId === player.membershipId &&

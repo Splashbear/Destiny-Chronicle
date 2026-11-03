@@ -9,6 +9,7 @@ import {
   mapD2DestinyPlayerArray,
   pickCrossSavePlayer,
 } from '../utils/player-search-results';
+import { canonicalAccountKey } from '../utils/account-key';
 
 export type MembershipIdLookupResult =
   | { ok: true; bundle: PlayerSearchBundle }
@@ -127,8 +128,8 @@ export class PlayerSearchQueryService {
     }
 
     const unique = players.filter((p, idx, arr) => {
-      const key = `${p.game || 'D2'}|${p.membershipId}`;
-      return arr.findIndex(x => `${x.game || 'D2'}|${x.membershipId}` === key) === idx;
+      const key = canonicalAccountKey(p);
+      return arr.findIndex(x => canonicalAccountKey(x) === key) === idx;
     });
 
     return {

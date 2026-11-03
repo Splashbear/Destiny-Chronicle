@@ -2,6 +2,7 @@ import { getCharacterMinutesPlayed } from './character-profile';
 import { PlatformStats } from '../models/platform-stats.model';
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
 import { ActivityHistory } from '../models/activity-history.model';
+import { canonicalAccountKey } from './account-key';
 
 const ALLOWED_PER_TYPES = [
   'raid',
@@ -96,7 +97,7 @@ export interface PlatformRollupInput {
   players: PlayerSearchDisplay[];
   charactersByKey: { [key: string]: any[] | undefined };
   aggregatedTitles: any[] | null | undefined;
-  activityCountByKey: Map<string, number>; // `${membershipId}|${game}` → count
+  activityCountByKey: Map<string, number>; // canonical account key → count
   getPlayerKey: (p: PlayerSearchDisplay) => string;
   getClassName: (classType: number) => string;
 }
@@ -122,7 +123,7 @@ export function rollupPlatformStats(input: PlatformRollupInput): PlatformStats[]
       pl.displayName,
       pl.platform
     );
-    const acts = input.activityCountByKey.get(`${pl.membershipId}|${pl.game}`) ?? 0;
+    const acts = input.activityCountByKey.get(canonicalAccountKey(pl)) ?? 0;
 
     if (!platformStatsMap[key]) {
       platformStatsMap[key] = {

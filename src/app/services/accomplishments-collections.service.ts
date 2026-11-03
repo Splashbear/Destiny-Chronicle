@@ -9,6 +9,7 @@ import {
   AccomplishmentEmblem,
   AccountCollectionsResult,
 } from '../models/accomplishments-collections.model';
+import { canonicalAccountKey } from '../utils/account-key';
 
 /** DestinyCollectibleState.NotAcquired */
 const NOT_ACQUIRED = 1;
@@ -27,7 +28,7 @@ export class AccomplishmentsCollectionsService {
   private readonly cache = new Map<string, AccountCollectionsResult>();
 
   cacheKey(membershipType: number, membershipId: string): string {
-    return `${membershipType}|${membershipId}`;
+    return canonicalAccountKey({ game: 'D2', membershipType, membershipId });
   }
 
   getCached(membershipType: number, membershipId: string): AccountCollectionsResult | null {

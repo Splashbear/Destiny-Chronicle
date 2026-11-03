@@ -380,7 +380,7 @@ export abstract class PlayerSearchState {
   protected perCharacterExpanded: { [key: string]: boolean } = {};
 
   /** Unique key for a player independent of case. */
-  getPlayerKey(p: { membershipId: string; game?: 'D1' | 'D2' }): string {
+  getPlayerKey(p: { membershipId: string; membershipType: number; game?: 'D1' | 'D2' }): string {
     return getPlayerKeyUtil(p);
   }
 

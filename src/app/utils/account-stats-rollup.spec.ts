@@ -61,7 +61,7 @@ describe('account-stats-rollup', () => {
         platform: 'Steam',
       },
     ] as PlayerSearchDisplay[];
-    const counts = new Map([['1|D2', 3]]);
+    const counts = new Map([['D2|3|1', 3]]);
     const rows = rollupPlatformStats({
       players,
       charactersByKey: {
