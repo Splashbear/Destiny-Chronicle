@@ -14,13 +14,13 @@ describe('buildSharePermalinkUrl', () => {
         },
       ],
     });
-    expect(url.startsWith('/share?')).toBe(true);
+    expect(url.startsWith('/share/?')).toBe(true);
     expect(url).toContain('date=2021-04-23');
     expect(url).toContain('players=');
   });
 
   it('adds text view flag', () => {
-    expect(buildSharePermalinkUrl({ textView: true })).toBe('/share?view=text');
+    expect(buildSharePermalinkUrl({ textView: true })).toBe('/share/?view=text');
   });
 
   it('returns root when there is nothing to share', () => {
