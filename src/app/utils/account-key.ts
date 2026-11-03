@@ -27,10 +27,12 @@ export interface ParsedAccountKey {
   membershipId: string;
 }
 
+import { normalizeGame as normalizeDestinyGame } from './destiny-game';
+
 const SEP = '|';
 
 function normalizeGame(game: string | undefined | null): AccountGame {
-  return game === 'D1' ? 'D1' : 'D2';
+  return normalizeDestinyGame(game);
 }
 
 function normalizeType(type: AccountIdentity['membershipType']): number {

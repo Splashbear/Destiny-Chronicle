@@ -1,6 +1,9 @@
+import { resolveGameDetailed } from './destiny-game';
+
 /**
- * Detect Destiny 1 vs D2 for a search/display player (CODE_CLEANUP_SPEC).
- * Prefers explicit `game`; falls back to membership/cross-save heuristics.
+ * Detect Destiny 1 vs D2 for a search/display player.
+ * Rules live in `destiny-game.ts` (explicit game, then membership type /
+ * cross-save fields only count as D2 when corroborated, see tier 4 there).
  */
 export function isD1Player(
   player:
@@ -11,6 +14,8 @@ export function isD1Player(
         bungieGlobalDisplayName?: string;
         isCrossSavePrimary?: boolean;
         crossSaveOverride?: number;
+        applicableMembershipTypes?: number[];
+        bungieGlobalDisplayNameCode?: number | string;
       }
     | undefined
     | null
@@ -18,40 +23,18 @@ export function isD1Player(
   if (!player) {
     return false;
   }
-
-  // Explicit game is most reliable (set from which API was used).
-  if ((player as any).game) {
-    return (player as any).game === 'D1';
+  const { game, source } = resolveGameDetailed({
+    game: player.game,
+    membershipType: player.membershipType,
+    crossSaveOverride: player.crossSaveOverride,
+    applicableMembershipTypes: player.applicableMembershipTypes,
+    bungieGlobalDisplayNameCode: player.bungieGlobalDisplayNameCode,
+  });
+  if (source !== 'explicit') {
+    console.warn(
+      '[isD1Player] Game property not set, using fallback detection for player:',
+      player.displayName
+    );
   }
-
-  console.warn(
-    '[isD1Player] Game property not set, using fallback detection for player:',
-    player.displayName
-  );
-
-  const isXboxOrPlayStation =
-    player.membershipType === 1 || player.membershipType === 2;
-
-  if (isXboxOrPlayStation) {
-    const hasCrossSaveIndicators =
-      (player as any).bungieGlobalDisplayName ||
-      (player as any).isCrossSavePrimary ||
-      (player as any).crossSaveOverride;
-
-    if (!hasCrossSaveIndicators) {
-      return true;
-    }
-
-    const crossSaveOverride = (player as any).crossSaveOverride;
-    if (
-      crossSaveOverride &&
-      crossSaveOverride !== player.membershipType
-    ) {
-      return false;
-    }
-
-    return true;
-  }
-
-  return false;
+  return game === 'D1';
 }

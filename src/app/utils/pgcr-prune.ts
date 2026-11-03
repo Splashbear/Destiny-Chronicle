@@ -1,4 +1,5 @@
 import { resolvePgcrPlayerName } from './pgcr-player-name';
+import { resolveGame } from './destiny-game';
 
 export interface PrunedPgcr {
   id: string;
@@ -117,8 +118,7 @@ export interface PrunePgcrOptions {
 }
 
 export function isD1PgcrShape(pgcr: any): boolean {
-  const activity = pgcr?.activityDetails ?? {};
-  return activity.durationSeconds === undefined && Array.isArray(pgcr?.entries);
+  return resolveGame({ pgcr }) === 'D1';
 }
 
 export function filterToFireteamEntries(entries: any[], anchorMembershipId?: string): any[] {

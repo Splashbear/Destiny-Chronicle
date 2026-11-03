@@ -1,3 +1,4 @@
+import { resolveGame } from './destiny-game';
 import { activityDurationSeconds } from './activity-duration-seconds';
 import { localDateYmd } from './chronicle-xlsx';
 
@@ -34,7 +35,7 @@ export function summarizeActivitiesForAccount(
   let completions = 0;
   for (const a of activities) {
     if (a.membershipId !== membershipId) continue;
-    const rowGame = (a.game || 'D2') as string;
+    const rowGame = resolveGame({ game: a.game, instanceId: (a as any).instanceId ?? (a as any).activityDetails?.instanceId }) as string;
     if (rowGame !== game) continue;
     activitiesCount += 1;
     timeInActivitiesSeconds += activityDurationSeconds(a);

@@ -5,6 +5,8 @@
     "ng": "npx ng",
     "start": "npx ng serve --configuration development --proxy-config proxy.conf.js",
     "build": "npx ng build --configuration production",
+    "postbuild": "node scripts/generate-route-pages.mjs",
+    "test:utils": "node scripts/run-util-specs.mjs $(ls src/app/utils/*.spec.ts)",
     "watch": "npx ng build --watch --configuration development",
     "test": "npx ng test",
     "serve:ssr:destiny-chronicle": "node dist/destiny-chronicle/server/server.mjs",

@@ -31,6 +31,9 @@ jobs:
       - name: Build Angular app
         run: npx ng build --configuration production --base-href / --deploy-url /
 
+      - name: Generate static index.html for each parameter-free route (HTTP 200 instead of the 404.html fallback)
+        run: node scripts/generate-route-pages.mjs
+
       - name: Copy index.html to 404.html
         run: cp dist/destiny-chronicle/browser/index.html dist/destiny-chronicle/browser/404.html
 

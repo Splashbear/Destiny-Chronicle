@@ -1,3 +1,4 @@
+import { resolveGame } from './destiny-game';
 export interface HeatmapActivity {
   period?: string;
   membershipId?: string;
@@ -233,7 +234,7 @@ export function uniqueCharacters(
     const cls = resolvedCharacterClass(activity, classByKey);
     const membershipType = activity.membershipType || meta.membershipType || 0;
     const platform = platformShortName(membershipType);
-    const game = activity.game || 'D2';
+    const game = resolveGame({ game: activity.game, instanceId: (activity as any).activityDetails?.instanceId ?? (activity as any).instanceId });
     const displayName = meta.displayName?.trim() || '';
     const label = characterDisplayLabel(game, displayName, platform, cls);
     if (!existing) {

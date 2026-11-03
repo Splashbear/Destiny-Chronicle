@@ -1,6 +1,7 @@
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
 import { getPlatformName } from './platform-name';
 import { canonicalAccountKey } from './account-key';
+import { gameFromMembership } from './destiny-game';
 
 export interface PlayerSearchBundle {
   d1: PlayerSearchDisplay[];
@@ -148,8 +149,15 @@ export function mapMembershipsByIdResponse(
         ? membership.crossSaveOverride
         : membership.membershipType;
 
+    // GetMembershipsById is a D2 profile endpoint, so cross-save fields on it are
+    // corroborated D2 evidence. An Xbox/PSN row with none of them stays D1.
     const isD1 =
-      (membership.membershipType === 1 || membership.membershipType === 2) && !membership.crossSaveOverride;
+      gameFromMembership(membership.membershipType, {
+        crossSaveOverride: membership.crossSaveOverride,
+        applicableMembershipTypes: membership.applicableMembershipTypes,
+        bungieGlobalDisplayNameCode: membership.bungieGlobalDisplayNameCode,
+        fromD2Endpoint: true,
+      }) === 'D1';
 
     const player: PlayerSearchDisplay = {
       displayName: bungieNetUser?.displayName || membership.displayName || 'Unknown',

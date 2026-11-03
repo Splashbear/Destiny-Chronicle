@@ -1,6 +1,7 @@
 import { ActivityHistory } from '../models/activity-history.model';
 import { ActivityWithMembership } from '../models/activity-with-membership.model';
 import { isD1RaidReferenceId } from '../config/d1-raid-reference-ids';
+import { resolveGame } from './destiny-game';
 
 /** Filter activities by YYYY-MM-DD month/day (all years) (CODE_CLEANUP_SPEC). */
 export function filterActivitiesByMonthDay<T extends { period: string }>(
@@ -46,10 +47,14 @@ export function isD1ActivityByReferenceId(
   activity: ActivityHistory
 ): boolean {
   const refId = activity.activityDetails?.referenceId;
-  if (!refId) return false;
-  const refIdStr = String(refId);
+  if (refId && isD1RaidReferenceId(String(refId))) return true;
+  // Reference ids are 32-bit manifest hashes in both games, so their magnitude
+  // says nothing about the game. Use the shared chain instead.
   return (
-    isD1RaidReferenceId(refIdStr) || parseInt(refIdStr, 10) < 1000000000
+    resolveGame({
+      game: (activity as { game?: string }).game,
+      instanceId: activity.activityDetails?.instanceId,
+    }) === 'D1'
   );
 }
 
