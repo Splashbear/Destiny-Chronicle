@@ -7,7 +7,7 @@ export type SharePermalinkPlayer = {
 };
 
 /**
- * Build /share?date=&players=&view= query URL for permalink state.
+ * Build /share/?date=&players=&view= query URL for permalink state.
  */
 export function buildSharePermalinkUrl(opts: {
   date?: string | null;
@@ -34,5 +34,6 @@ export function buildSharePermalinkUrl(opts: {
   const qs = queryParams.toString();
   // Empty selection → site root so refresh shows the search gate, not a stale /share restore.
   if (!qs) return '/';
-  return `/share?${qs}`;
+  // Trailing slash: /share is prerendered as share/index.html, so /share would 301 to /share/.
+  return `/share/?${qs}`;
 }
