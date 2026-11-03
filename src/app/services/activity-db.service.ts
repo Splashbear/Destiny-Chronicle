@@ -20,7 +20,7 @@ import { PGCRCacheService } from './pgcr-cache.service';
 import { DungeonSoloFirst } from '../models/dungeon-solo-first.model';
 import { environment } from '../../environments/environment';
 import { AccountWriteIndex, placeholderIdsToDrop } from '../utils/account-write-index';
-import { localDayWindow, matchesCalendarDay, scanYears } from '../utils/calendar-day-query';
+import { localDayWindow, matchesCalendarDay, parseLocalCalendarDate, scanYears, selectByCalendarDay } from '../utils/calendar-day-query';
 import { noteIdbRead } from '../utils/idb-read-log';
 import { MembershipRowCache } from '../utils/membership-row-cache';
 import { fireteamNamesFromPgcr } from '../utils/firsts-fireteam';
@@ -3641,13 +3641,12 @@ export class ActivityDbService extends Dexie {
 
       // Filter by date if specified
       if (date !== 'all') {
-        const targetDate = new Date(date);
-        const targetDateStr = targetDate.toISOString().split('T')[0];
-        activities = activities.filter(activity => {
-          const activityDate = new Date(activity.period);
-          const activityDateStr = activityDate.toISOString().split('T')[0];
-          return activityDateStr === targetDateStr;
-        });
+        // Local calendar day, same rule as On This Day (calendar-day-query.ts); not the UTC day.
+        const target = parseLocalCalendarDate(date);
+        if (!target) {
+          throw new RangeError(`Invalid date: ${date}`);
+        }
+        activities = selectByCalendarDay(activities, target.month, target.day, target.year);
       }
 
       // Cache the result

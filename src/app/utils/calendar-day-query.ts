@@ -21,6 +21,23 @@ export function matchesCalendarDay(
   return year ? sameDay && date.getFullYear() === year : sameDay;
 }
 
+/**
+ * Local calendar day for a date argument. A bare "YYYY-MM-DD" names that calendar day as written
+ * (it must not go through `new Date`, which reads it as UTC midnight and can land on the previous
+ * local day); anything else is parsed as an instant and read in the user's timezone.
+ */
+export function parseLocalCalendarDate(value: string): { year: number; month: number; day: number } | null {
+  const bare = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (bare) {
+    return { year: Number(bare[1]), month: Number(bare[2]), day: Number(bare[3]) };
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return { year: parsed.getFullYear(), month: parsed.getMonth() + 1, day: parsed.getDate() };
+}
+
 /** Full-list filter. This is the result the UI already shows. */
 export function selectByCalendarDay<T extends { period?: string }>(
   rows: T[],
