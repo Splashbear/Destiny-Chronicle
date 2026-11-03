@@ -3,6 +3,7 @@
  * Flawless / Lighthouse / card wins are intentionally not derived here.
  */
 
+import { normalizeGame } from './destiny-game';
 import {
   classifyPvp,
   isTrialsBucket,
@@ -156,7 +157,7 @@ export function trialsWeekendKey(start: Date): string {
 }
 
 export function classifyTrialsActivity(a: TrialsHistoryLike): ReturnType<typeof classifyPvp> {
-  const game: DestinyGame = a.game === 'D1' ? 'D1' : 'D2';
+  const game: DestinyGame = normalizeGame(a.game);
   const details = a.activityDetails;
   const modes = details?.modes ?? a.modes;
   return classifyPvp({
@@ -190,7 +191,7 @@ export function aggregateTrialsBreakdown(
     const classified = classifyTrialsActivity(a);
     if (!isTrialsBucket(classified.bucket)) continue;
 
-    const game: DestinyGame = a.game === 'D1' ? 'D1' : 'D2';
+    const game: DestinyGame = normalizeGame(a.game);
     const iid = a.activityDetails?.instanceId;
     const key = pvpActivityKey(game, iid);
     if (iid != null && seen.has(key)) continue;

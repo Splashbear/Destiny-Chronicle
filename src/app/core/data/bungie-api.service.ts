@@ -6,6 +6,7 @@ import { environment } from '../../../environments/environment';
 import { BungieMembershipType } from 'bungie-api-ts/user';
 import { LocaleService } from '../../services/locale.service';
 import { unwrapD1PgcrBody } from '../../utils/pgcr-prune';
+import { isD1Player } from '../../utils/is-d1-player';
 import { bungieRequestUrl } from '../../utils/bungie-request-url';
 import { PgcrApiService } from './archive-api.service';
 
@@ -607,13 +608,7 @@ export class BungieApiService {
   }
 
   isD1Player(player: PlayerSearchResult): boolean {
-    // D1 players are identified by:
-    // 1. Having a membershipType of 1 (Xbox) or 2 (PlayStation)
-    // 2. Not having a bungieGlobalDisplayName (which is D2-specific)
-    // 3. Not having cross-save enabled
-    return (player.membershipType === 1 || player.membershipType === 2) && 
-           !player.bungieGlobalDisplayName &&
-           !player.isCrossSavePrimary;
+    return isD1Player(player as any);
   }
 
   searchDestinyPlayerByBungieName(displayName: string, displayNameCode: number): Observable<BungieResponse<PlayerSearchResult[]>> {

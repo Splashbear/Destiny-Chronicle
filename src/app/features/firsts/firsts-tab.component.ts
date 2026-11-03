@@ -4,6 +4,7 @@ import { ChangeDetectionStrategy, Component, Directive, ElementRef, HostListener
 import { FIRSTS_HOST } from './firsts-host.token';
 import { TextViewService } from '../../services/text-view.service';
 import { ActivityFirstCompletion } from '../../models/guardian-firsts.model';
+import { resolveGame } from '../../utils/destiny-game';
 import { completedClearRows, firstTags, pageSections, yearsAgoLabel } from '../../utils/text-tab-rows';
 
 const firstsClicks = new WeakMap<HTMLElement, { kind: string; payload: unknown; flag?: boolean }>();
@@ -112,7 +113,7 @@ export class FirstsTabComponent {
     }
     if (row.activity) {
       const game = row.activity.game;
-      const isD1 = game === 'D1' ? true : game === 'D2' ? false : !!row.isD1;
+      const isD1 = resolveGame({ game, instanceId: row.activity?.activityDetails?.instanceId, fallback: row.isD1 ? 'D1' : 'D2' }) === 'D1';
       this.ps.openExternalPGCR(row.activity, isD1, event);
     }
   }
@@ -301,7 +302,7 @@ export class FirstsTabComponent {
   }
 
   private rowFromActivity(activity: any, isD1: boolean): TextFirstRow {
-    const game = activity?.game === 'D1' || activity?.game === 'D2' ? activity.game : (isD1 ? 'D1' : 'D2');
+    const game = resolveGame({ game: activity?.game, instanceId: activity?.activityDetails?.instanceId ?? activity?.instanceId, fallback: isD1 ? 'D1' : 'D2' });
     const d1 = game === 'D1';
     const who = this.whoFor(activity?.membershipId, game);
     if (activity && !activity.displayName) {

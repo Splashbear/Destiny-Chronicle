@@ -14,7 +14,8 @@ import {
   MODE_TRIALS_OF_OSIRIS_D2,
 } from '../config/trials.config';
 
-export type DestinyGame = 'D1' | 'D2';
+import { normalizeGame, type DestinyGame } from './destiny-game';
+export type { DestinyGame };
 
 /** Fine-grained Trials / Crucible / other buckets. */
 export type PvpBucket =
@@ -83,7 +84,7 @@ function modesContainAny(effective: number[], targets: readonly number[]): boole
  */
 export function classifyPvp(input: ClassifyPvpInput): ClassifyPvpResult {
   const effectiveModes = resolveModes(input.modes, input.mode);
-  const game = input.game === 'D1' ? 'D1' : 'D2';
+  const game = normalizeGame(input.game);
 
   // D1 Trials — mode 14, playlist hash, or D1 Trials activityTypeHash (history often reports AllPvP=5).
   if (

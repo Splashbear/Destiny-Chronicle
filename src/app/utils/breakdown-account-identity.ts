@@ -1,3 +1,4 @@
+import { resolveGame } from './destiny-game';
 export interface BreakdownIdentityPlayer {
   game?: string;
   membershipId?: string;
@@ -58,7 +59,7 @@ export function breakdownActivityDedupeKey(
 ): string | null {
   const membershipId = activity.membershipId || '';
   const identity = identityByMembership?.[membershipId] || membershipId;
-  const game = activity.game || 'D2';
+  const game = resolveGame({ game: activity.game, instanceId: activity.activityDetails?.instanceId });
   const instanceId = activity.activityDetails?.instanceId;
   if (instanceId != null && String(instanceId) !== '') {
     return `${identity}|${game}|${instanceId}`;

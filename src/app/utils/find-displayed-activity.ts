@@ -1,3 +1,4 @@
+import { resolveGame } from './destiny-game';
 import { ActivityWithMembership } from '../models/activity-with-membership.model';
 
 /**
@@ -13,7 +14,7 @@ export function findDisplayedActivity(
       for (const typeGroup of yearGroup.typeGroups ?? []) {
         for (const activity of typeGroup.activities ?? []) {
           const id = activity?.activityDetails?.instanceId;
-          const activityIsD1 = (activity?.game || group.game) === 'D1';
+          const activityIsD1 = resolveGame({ game: activity?.game || group.game, instanceId: id }) === 'D1';
           if (
             id != null &&
             String(id) === instanceId &&

@@ -1,4 +1,5 @@
 import { ActivityHistory } from '../models/activity-history.model';
+import { resolveGame } from './destiny-game';
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
 
 export interface OpenExternalPgcrDeps {
@@ -41,7 +42,11 @@ export function openExternalPgcr(
     }
   }
   const d1 =
-    activity.game === 'D1' ? true : activity.game === 'D2' ? false : isD1;
+    resolveGame({
+      game: activity.game,
+      instanceId: activity.activityDetails?.instanceId,
+      fallback: isD1 ? 'D1' : 'D2',
+    }) === 'D1';
   if (
     deps.activeTab === 'activities' ||
     deps.activeTab === 'firsts' ||
@@ -77,7 +82,7 @@ export function openExternalPgcrForFirst(
   openFull: (instanceId: string | number, isD1: boolean) => void
 ): void {
   if (!first.instanceId) return;
-  const isD1 = first.game === 'D1';
+  const isD1 = resolveGame({ game: first.game, instanceId: first.instanceId }) === 'D1';
   if (activeTab === 'firsts') {
     openLite();
     return;

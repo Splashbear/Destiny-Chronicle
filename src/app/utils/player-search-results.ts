@@ -1,6 +1,7 @@
 import { PlayerSearchDisplay } from '../models/player-search-display.model';
 import { getPlatformName } from './platform-name';
 import { canonicalAccountKey } from './account-key';
+import { gameFromMembership } from './destiny-game';
 
 export interface PlayerSearchBundle {
   d1: PlayerSearchDisplay[];
@@ -148,8 +149,9 @@ export function mapMembershipsByIdResponse(
         ? membership.crossSaveOverride
         : membership.membershipType;
 
+    // Rule shared with isD1Player: Xbox/PSN without a cross-save override is D1.
     const isD1 =
-      (membership.membershipType === 1 || membership.membershipType === 2) && !membership.crossSaveOverride;
+      gameFromMembership(membership.membershipType, membership.crossSaveOverride) === 'D1';
 
     const player: PlayerSearchDisplay = {
       displayName: bungieNetUser?.displayName || membership.displayName || 'Unknown',
