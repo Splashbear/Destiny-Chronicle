@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { countSealsForPlatform } from '../../utils/account-stats-rollup';
 /** Anniversary / loading / archive UI helpers (CODE_CLEANUP_SPEC). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -791,6 +792,21 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   get dossierHeaderSealCount(): string {
+    // Seals come from Bungie's profile records alone, so show them as soon as titles load
+    // instead of waiting for the activity history fill (same per-account rule as the rollup).
+    const titles = this.aggregatedTitles;
+    if (titles?.length) {
+      const seen = new Set<string>();
+      let seals = 0;
+      for (const pl of this.selectedPlayers || []) {
+        if (pl.game === 'D1') continue;
+        const key = this.getPlayerKey(pl);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        seals += countSealsForPlatform(titles, pl.displayName, pl.platform);
+      }
+      return String(seals);
+    }
     if (this.accountStatsPending) return '—';
     return String(this.accountStats?.totalSeals || 0);
   }
@@ -808,7 +824,9 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
         seconds[name] += getCharacterMinutesPlayed(ch, game) * 60;
       }
     }
-    const pending = this.accountStatsPending;
+    // Class time is Bungie character playtime: ready once the characters are, not after the activity fill.
+    const haveChars = (this.selectedPlayers || []).some((pl) => (this.characters[this.getPlayerKey(pl)] || []).length > 0);
+    const pending = !haveChars && this.accountStatsPending;
     return (['Hunter', 'Titan', 'Warlock'] as const).map((name) => ({
       name,
       label: pending ? '—' : this.formatSecondsToHoursMinutes(seconds[name]),
