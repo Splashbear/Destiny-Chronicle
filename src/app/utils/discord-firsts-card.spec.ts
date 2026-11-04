@@ -1,6 +1,7 @@
 import {
   buildFirstsCard,
   firstsKindOf,
+  firstsInstances,
   formatFirstDate,
   groupFirsts,
 } from './discord-firsts-card';
@@ -21,6 +22,8 @@ const lookup: OtdDefLookup = (game, hash) => {
     'D2:13': { name: 'The Pantheon: Atraks Sovereign', modes: [4, 7], typeName: 'Raid' },
     'D2:14': { name: 'The Desert Perpetual (Epic): Standard', modes: [4, 7], typeName: 'Raid' },
     'D2:15': { name: 'Ghosts of the Deep: Eternity', modes: [82, 7], typeName: 'Dungeon' },
+    'D2:16': { name: 'Pantheon: Morgeth Surpassing: Customize', modes: [] },
+    'D2:17': { name: 'Featured Encore: Consecrated Mind: The Pantheon', modes: [] },
     'D1:10': { name: 'Vault of Glass', icon: '/d1/vog.png', typeName: 'Raid' },
     'D1:11': { name: 'Skyshock', typeName: 'Rumble' },
   };
@@ -230,5 +233,58 @@ describe('discord-firsts-card', () => {
     const card = buildFirstsCard({ player, kind: 'dungeons', groups: [], verified: {}, timeZone: TZ });
     expect(card.embed.description).toContain('No dungeon clears on this account.');
     expect(card.embed.footer.text).toBe('0 dungeons · 0 clears');
+  });
+
+  it("pantheon kind shows the site's Pantheon Events sections in the site's order", () => {
+    const rows = [
+      row({ instanceId: '1', period: '2024-05-21T20:00:00Z', activityHash: 13 }),
+      row({ instanceId: '2', period: '2026-06-15T20:00:00Z', activityHash: 16 }),
+      row({ instanceId: '3', period: '2025-06-01T20:00:00Z', activityHash: 15 }),
+      row({ instanceId: '4', period: '2026-06-20T20:00:00Z', activityHash: 17 }),
+      row({ instanceId: '5', period: '2020-01-01T20:00:00Z', activityHash: 1 }),
+    ];
+    const groups = groupFirsts(rows, 'pantheon', 'D2', lookup);
+    expect(groups.map((g) => g.baseName).sort()).toEqual([
+      'Atraks Sovereign',
+      'Ghosts of the Deep: Eternity',
+      'Morgeth Surpassing: Customize',
+    ]);
+    const verified = { '1': rows[0].period, '2': rows[1].period, '3': rows[2].period };
+    const card = buildFirstsCard({ player, kind: 'pantheon', groups, verified, timeZone: TZ });
+    const d = card.embed.description.split('\n');
+    expect(d.slice(0, 6).map((l) => l.replace(/ · .*/, ''))).toEqual([
+      '**The Pantheon**',
+      'Atraks Sovereign',
+      '**Monument of Triumph Pantheon**',
+      'Morgeth Surpassing: Customize',
+      '**Rite of the Nine**',
+      'Ghosts of the Deep: Eternity',
+    ]);
+    expect(card.embed.title).toBe('First clears: Splashbear#1078 · Pantheon Events');
+    expect(card.model.lines.map((l) => l.kind)).toEqual(['header', 'first', 'header', 'first', 'header', 'first']);
+    expect(card.embed.footer.text).toBe('3 activities · 3 clears');
+    // Raids and dungeons cards never list Pantheon Events.
+    expect(groupFirsts(rows, 'raids', 'D2', lookup).map((g) => g.baseName)).toEqual(['Last Wish']);
+    expect(groupFirsts(rows, 'dungeons', 'D2', lookup)).toEqual([]);
+  });
+
+  it("counts clears from Bungie's report verdicts when given, dated by the report", () => {
+    const rows = [
+      row({ instanceId: '1', period: '2018-11-10T20:00:00Z', completed: true }),
+      row({ instanceId: '2', period: '2018-11-12T20:00:00Z', completed: false }),
+      row({ instanceId: '2', period: '2018-11-12T20:00:00Z', completed: false }),
+      row({ instanceId: '3', period: '2018-11-20T20:00:00Z', completed: true }),
+      row({ instanceId: '4', period: '2018-11-25T20:00:00Z', completed: true }),
+    ];
+    expect(firstsInstances(rows, 'raids', 'D2', lookup).sort()).toEqual(['1', '2', '3', '4']);
+    const reports = {
+      '1': { cleared: false, period: '2018-11-10T20:00:00Z' }, // e.g. completed = 1 but completionReason "Failed"
+      '2': { cleared: true, period: '2018-11-12T20:05:00Z' }, // an alt character finished it
+      '3': { cleared: true, period: '2018-11-20T20:00:00Z' },
+      // '4' unreadable: falls back to the history flag
+    };
+    const [g] = groupFirsts(rows, 'raids', 'D2', lookup, reports);
+    expect(g.clears).toBe(3);
+    expect(g.candidates[0]).toEqual({ instanceId: '2', period: '2018-11-12T20:05:00Z', activityHash: '1' });
   });
 });

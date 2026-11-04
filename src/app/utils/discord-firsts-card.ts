@@ -19,6 +19,7 @@ import {
 } from './d2-activity-variants';
 import { D1_RAID_VARIANT_DEFS_AGGREGATE } from './d1-raid-variants';
 import { baseActivityNameFromVersioned } from './date-activity-grouping';
+import { pantheonEventForActivity } from '../config/pantheon.config';
 import {
   CardGame,
   OtdDefinition,
@@ -28,7 +29,11 @@ import {
   zonedParts,
 } from './discord-otd-card';
 
-export type FirstsKind = 'raids' | 'dungeons';
+export type FirstsKind = 'raids' | 'dungeons' | 'pantheon';
+
+/** Section titles of the site's "Pantheon Events" block, in the site's order. */
+export const PANTHEON_SECTIONS = ['The Pantheon', 'Monument of Triumph Pantheon', 'Rite of the Nine'] as const;
+const RITE_DUNGEON_ORDER = ['Spire of the Watcher', 'Ghosts of the Deep', 'Prophecy'];
 
 export const FIRSTS_MODE = { Raid: 4, Dungeon: 82 } as const;
 export const FIRSTS_EMBED_COLOR = 0xc9a227;
@@ -41,7 +46,7 @@ export const FIRSTS_VERIFY_CANDIDATES = 3;
  * The type name wins: Bungie files one Crota's End activity under the dungeon mode but the Raid type.
  * D1 has raids only.
  */
-export function firstsKindOf(def: OtdDefinition | undefined, game: CardGame): FirstsKind | null {
+export function firstsKindOf(def: OtdDefinition | undefined, game: CardGame): 'raids' | 'dungeons' | null {
   if (!def) return null;
   const type = (def.typeName ?? '').trim().toLowerCase();
   if (type === 'raid') return 'raids';
@@ -68,6 +73,65 @@ export function firstsFamily(name: string, kind: FirstsKind, game: CardGame): st
   return defs.has(family) ? family : null;
 }
 
+/**
+ * Where an activity sits in the site's Pantheon Events block, using the site's own rules
+ * (pantheon.config hashes/names, Rite of the Nine dungeon names). One line per activity version,
+ * as on the site: "Atraks Sovereign", "Calus Resplendent: Customize", "Prophecy: Eternity".
+ */
+export function pantheonEntry(hash: string, name: string): { section: string; label: string } | null {
+  const n = name.trim();
+  const event = pantheonEventForActivity(hash, n);
+  if (event === 'legacy-pantheon') return { section: PANTHEON_SECTIONS[0], label: n.replace(/^The Pantheon:\s*/, '') };
+  if (event === 'mot-pantheon') return { section: PANTHEON_SECTIONS[1], label: n.replace(/^Pantheon:\s*/, '') };
+  if (isRiteOfTheNineDungeonName(n) && RITE_DUNGEON_ORDER.some((d) => n.startsWith(d))) {
+    return { section: PANTHEON_SECTIONS[2], label: n };
+  }
+  return null;
+}
+
+/** Family (and Pantheon section) of one activity for a card kind, or null when that card does not list it. */
+export function firstsClassify(
+  def: OtdDefinition | undefined,
+  hash: string,
+  kind: FirstsKind,
+  game: CardGame
+): { baseName: string; section?: string } | null {
+  const name = (def?.name ?? '').trim();
+  if (!name) return null;
+  if (kind === 'pantheon') {
+    if (game !== 'D2') return null;
+    const e = pantheonEntry(hash, name);
+    return e ? { baseName: e.label, section: e.section } : null;
+  }
+  if (firstsKindOf(def, game) !== kind) return null;
+  const baseName = firstsFamily(name, kind, game);
+  return baseName ? { baseName } : null;
+}
+
+/** Every instance (completed or not) of activities a card kind lists: the ones to check in Bungie's reports. */
+export function firstsInstances(rows: OtdRow[], kind: FirstsKind, game: CardGame, lookup: OtdDefLookup): string[] {
+  const out = new Set<string>();
+  for (const r of rows) {
+    if (r.game !== game || !r.instanceId) continue;
+    const hash = String(r.activityHash);
+    if (firstsClassify(lookup(game, hash), hash, kind, game)) out.add(String(r.instanceId));
+  }
+  return [...out];
+}
+
+/**
+ * Bungie's report (PGCR) verdict for one instance: did any of the account's own entries finish it
+ * (completed = 1 and, where Bungie gives one, completionReason 0 = objective completed)?
+ */
+export interface FirstsReport {
+  cleared: boolean;
+  period: string;
+}
+
+export function firstsKindNoun(kind: FirstsKind): string {
+  return kind === 'raids' ? 'raid' : kind === 'dungeons' ? 'dungeon' : 'Pantheon event';
+}
+
 export interface FirstsCandidate {
   instanceId: string;
   period: string;
@@ -85,17 +149,23 @@ export interface FirstsGroup {
   icon: string | null;
   /** Bungie mode for the fallback icon. */
   iconMode: number;
+  /** Pantheon Events section (pantheon kind only). */
+  section?: string;
 }
 
-/** Group completed clears of one kind into raid/dungeon families. */
+/**
+ * Group clears of one kind into families. With `reports` (instanceId -> Bungie's report verdict) a clear is
+ * whatever Bungie's report says for the account's own entries, dated by the report; instances without a
+ * report fall back to the history rows' completed flag (any character).
+ */
 export function groupFirsts(
   rows: OtdRow[],
   kind: FirstsKind,
   game: CardGame,
-  lookup: OtdDefLookup
+  lookup: OtdDefLookup,
+  reports?: Record<string, FirstsReport | null | undefined>
 ): FirstsGroup[] {
   // One instance can carry several rows for the account (one per character that was in it).
-  // The account cleared it if any of them completed, so merge by game + instance id first.
   const merged = new Map<string, OtdRow>();
   for (const r of rows) {
     if (r.game !== game || !r.instanceId || !r.period) continue;
@@ -103,33 +173,39 @@ export function groupFirsts(
     const prev = merged.get(key);
     if (!prev || (r.completed && !prev.completed)) merged.set(key, r);
   }
+  const clears: Array<{ row: OtdRow; period: string }> = [];
+  for (const row of merged.values()) {
+    const rep = reports?.[String(row.instanceId)];
+    if (rep) {
+      if (rep.cleared) clears.push({ row, period: rep.period || row.period });
+    } else if (row.completed) {
+      clears.push({ row, period: row.period });
+    }
+  }
+  clears.sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
   const byName = new Map<string, FirstsGroup>();
-  const sorted = [...merged.values()]
-    .filter((r) => r.completed)
-    .sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
-  for (const row of sorted) {
+  for (const { row, period } of clears) {
     const hash = String(row.activityHash);
     const def = lookup(game, hash);
-    if (firstsKindOf(def, game) !== kind) continue;
-    const name = (def?.name ?? '').trim();
-    if (!name) continue;
-    const baseName = firstsFamily(name, kind, game);
-    if (!baseName) continue;
-    let group = byName.get(baseName);
+    const c = firstsClassify(def, hash, kind, game);
+    if (!c) continue;
+    const key = `${c.section ?? ''}|${c.baseName}`;
+    let group = byName.get(key);
     if (!group) {
       group = {
-        baseName,
+        baseName: c.baseName,
         game,
         clears: 0,
         candidates: [],
         icon: def?.icon ?? null,
-        iconMode: kind === 'raids' ? FIRSTS_MODE.Raid : FIRSTS_MODE.Dungeon,
+        iconMode: kind === 'dungeons' ? FIRSTS_MODE.Dungeon : FIRSTS_MODE.Raid,
+        ...(c.section ? { section: c.section } : {}),
       };
-      byName.set(baseName, group);
+      byName.set(key, group);
     }
     group.clears++;
     if (group.candidates.length < FIRSTS_VERIFY_CANDIDATES) {
-      group.candidates.push({ instanceId: String(row.instanceId), period: row.period, activityHash: hash });
+      group.candidates.push({ instanceId: String(row.instanceId), period, activityHash: hash });
     }
     if (!group.icon && def?.icon) group.icon = def.icon;
   }
@@ -160,6 +236,7 @@ export interface FirstsCardOptions {
 
 export interface FirstsLine {
   kind: 'first';
+  section?: string;
   name: string;
   game: CardGame;
   /** ISO period of the verified first clear, or null when it could not be verified. */
@@ -185,7 +262,7 @@ export interface FirstsCard {
     hidden: number;
     total: number;
     clears: number;
-    lines: Array<{ kind: 'first'; icon: string | null }>;
+    lines: Array<{ kind: 'first' | 'header'; icon: string | null }>;
     url: string;
   };
 }
@@ -197,7 +274,7 @@ export function formatFirstDate(period: string, timeZone: string): string | null
 
 export function buildFirstsCard(opts: FirstsCardOptions): FirstsCard {
   const maxLines = opts.maxLines ?? 25;
-  const noun = opts.kind === 'raids' ? 'raid' : 'dungeon';
+  const noun = firstsKindNoun(opts.kind);
   const lines: FirstsLine[] = opts.groups.map((g) => {
     // The first clear is the earliest one whose date Bungie's own report confirmed.
     const confirmed = g.candidates.find((c) => opts.verified[c.instanceId]);
@@ -206,6 +283,7 @@ export function buildFirstsCard(opts: FirstsCardOptions): FirstsCard {
     const icon = g.icon ?? opts.modeIconFor?.(g.game, g.iconMode) ?? null;
     return {
       kind: 'first',
+      ...(g.section ? { section: g.section } : {}),
       name: g.baseName,
       game: g.game,
       period,
@@ -224,6 +302,18 @@ export function buildFirstsCard(opts: FirstsCardOptions): FirstsCard {
     return a.name.localeCompare(b.name);
   });
 
+  if (opts.kind === 'pantheon') {
+    // The site's Pantheon Events order: section, then Pantheon bosses by name,
+    // Rite of the Nine by dungeon with its runs in the order they were first cleared.
+    const sec = (l: FirstsLine) => PANTHEON_SECTIONS.indexOf((l.section ?? '') as (typeof PANTHEON_SECTIONS)[number]);
+    const rite = (l: FirstsLine) => RITE_DUNGEON_ORDER.findIndex((d) => l.name.startsWith(d));
+    const t = (l: FirstsLine) => (l.period ? Date.parse(l.period) : Number.MAX_SAFE_INTEGER);
+    lines.sort((a, b) => {
+      if (sec(a) !== sec(b)) return sec(a) - sec(b);
+      if (a.section === PANTHEON_SECTIONS[2]) return rite(a) - rite(b) || t(a) - t(b);
+      return a.name.localeCompare(b.name);
+    });
+  }
   const total = lines.length;
   const clears = lines.reduce((n, l) => n + l.clears, 0);
   const shown = lines.slice(0, maxLines);
@@ -237,7 +327,15 @@ export function buildFirstsCard(opts: FirstsCardOptions): FirstsCard {
   });
 
   const out: string[] = [];
+  const modelLines: FirstsCard['model']['lines'] = [];
+  let section: string | undefined;
   for (const l of shown) {
+    if (l.section && l.section !== section) {
+      section = l.section;
+      out.push(`**${l.section}**`);
+      modelLines.push({ kind: 'header', icon: null });
+    }
+    modelLines.push({ kind: 'first', icon: l.icon });
     const e = l.icon ? opts.emojiFor?.(l.icon) : undefined;
     const bits = [l.name + (l.game === 'D1' ? ' · D1' : '')];
     if (l.dateLabel) bits.push(l.dateLabel);
@@ -248,13 +346,14 @@ export function buildFirstsCard(opts: FirstsCardOptions): FirstsCard {
   if (hidden > 0) out.push(`[+${hidden} more](${url})`);
   out.push(`[Open in Destiny Chronicle](${url})`);
 
-  const title = `First clears: ${opts.player.name} · ${opts.kind === 'raids' ? 'Raids' : 'Dungeons'}`;
+  const kindTitle = opts.kind === 'raids' ? 'Raids' : opts.kind === 'dungeons' ? 'Dungeons' : 'Pantheon Events';
+  const title = `First clears: ${opts.player.name} · ${kindTitle}`;
   return {
     embed: {
       title,
       description: out.join('\n'),
       color: FIRSTS_EMBED_COLOR,
-      footer: { text: `${total} ${noun}${total === 1 ? '' : 's'} · ${clears} ${clears === 1 ? 'clear' : 'clears'}` },
+      footer: { text: `${total} ${opts.kind === 'pantheon' ? (total === 1 ? 'activity' : 'activities') : noun + (total === 1 ? '' : 's')} · ${clears} ${clears === 1 ? 'clear' : 'clears'}` },
     },
     model: {
       title,
@@ -263,7 +362,7 @@ export function buildFirstsCard(opts: FirstsCardOptions): FirstsCard {
       hidden,
       total,
       clears,
-      lines: shown.map((l) => ({ kind: 'first', icon: l.icon })),
+      lines: modelLines,
       url,
     },
   };

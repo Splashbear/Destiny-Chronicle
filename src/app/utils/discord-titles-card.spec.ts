@@ -91,7 +91,7 @@ describe('discord-titles-card', () => {
     expect(card.embed.title).toBe('Titles: Splashbear#1078 (5/8)');
     expect(card.model.earned).toBe(5);
     expect(card.model.total).toBe(8);
-    expect(card.model.missing).toBe(3);
+    expect(card.model.missing).toBe(2); // the unearned legacy Conqueror can no longer be earned
     expect(card.model.gilded).toBe(1);
     expect(card.embed.footer.text).toBe('5 of 8 titles · 1 gilded');
   });
@@ -101,7 +101,8 @@ describe('discord-titles-card', () => {
     const d = card.embed.description;
     expect(d).toContain('**Competitive** 2/3 · 1 gilded');
     expect(d).toContain('**Dredgen** ×3');
-    expect(d).toContain('**Missing (3)**');
+    expect(d).toContain('**Missing (2)**');
+    expect(d).not.toContain('Conqueror (Season of Arrivals)');
     expect(d).toContain('Raid: Fatebreaker');
     expect(d).not.toMatch(/\b(19|20)\d{2}\b/);
     expect(d).toContain(
@@ -146,6 +147,6 @@ describe('discord-titles-card', () => {
     const card = buildTitlesCard({ player, items: buildTitleItems(nodes, {}) });
     expect(card.model.earned).toBe(0);
     expect(card.embed.title).toBe('Titles: Splashbear#1078 (0/8)');
-    expect(card.embed.description).toContain('**Missing (8)**');
+    expect(card.embed.description).toContain('**Missing (6)**'); // 8 titles, 2 of them legacy
   });
 });

@@ -6,8 +6,8 @@ export const firstsCommandDefinition = {
   description: 'First clear date and clears for each raid or dungeon',
   options: [
     {
-      type: 3, name: 'kind', description: 'Raids or dungeons', required: true,
-      choices: [{ name: 'raids', value: 'raids' }, { name: 'dungeons', value: 'dungeons' }],
+      type: 3, name: 'kind', description: 'Raids, dungeons or Pantheon events', required: true,
+      choices: [{ name: 'raids', value: 'raids' }, { name: 'dungeons', value: 'dungeons' }, { name: 'pantheon events', value: 'pantheon' }],
     },
     { type: 3, name: 'player', description: 'Linked player', required: false },
   ],
@@ -24,8 +24,8 @@ export async function handleFirsts(accountLink, kind) {
     const msg = err instanceof Error ? err.message : String(err);
     console.log(`[firsts] failed account=${accountLink} kind=${kind} ${msg}`);
     return {
-      content: /no dungeons/.test(msg)
-        ? 'Destiny 1 has no dungeons.'
+      content: /raids only/.test(msg)
+        ? 'Destiny 1 has raids only.'
         : 'Could not load that player right now. Try again in a moment.',
       ephemeral: true,
     };

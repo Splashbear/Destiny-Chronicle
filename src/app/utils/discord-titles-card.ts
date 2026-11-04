@@ -204,7 +204,8 @@ export function buildTitlesCard(opts: TitlesCardOptions): TitlesCard {
       gilded: owned.filter((t) => t.isGilded).length,
       icon: owned[0]?.icon ?? null,
       owned: owned.map((t) => ({ name: t.name, timesGilded: t.timesGilded })),
-      missing: list.filter((t) => !t.completed).map((t) => t.name),
+      // Only titles that can still be earned: Bungie files retired seals under its Legacy seals node.
+      missing: list.filter((t) => !t.completed && !t.legacy).map((t) => t.name),
       hiddenOwned: 0,
       hiddenMissing: 0,
     });
@@ -212,7 +213,7 @@ export function buildTitlesCard(opts: TitlesCardOptions): TitlesCard {
   const earned = groups.reduce((n, g) => n + g.earned, 0);
   const total = groups.reduce((n, g) => n + g.total, 0);
   const gilded = groups.reduce((n, g) => n + g.gilded, 0);
-  const missing = total - earned;
+  const missing = groups.reduce((n, g) => n + g.missing.length, 0);
 
   const base = opts.siteBase ?? 'https://destinychronicle.com';
   const url = buildDeepLinkUrl(base, {

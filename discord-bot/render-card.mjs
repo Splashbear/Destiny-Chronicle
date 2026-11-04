@@ -17,6 +17,10 @@ const modelLines = card.model.years ? card.model.years.flatMap((y) => y.lines) :
 let li = 0;
 const rows = card.embed.description.split('\n').map((raw) => {
   if (!raw.trim()) return '<div class="gap"></div>';
+  if (!card.model.years && modelLines[li]?.kind === 'header') {
+    li++;
+    return `<div class="year">${inline(raw)}</div>`;
+  }
   if (/^\*\*\d{4}( · D1)?\*\*$/.test(raw) || /^\*\*Missing \(\d+\)\*\*$/.test(raw)) {
     if (!card.model.years) li++;
     return `<div class="year">${inline(raw)}</div>`;
