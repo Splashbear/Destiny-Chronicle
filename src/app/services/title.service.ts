@@ -68,7 +68,7 @@ export class TitleService {
     }
     // Load manifest if not yet ready
     if (!this.manifest.isLoadedSync) {
-      await this.manifest.isLoaded().toPromise();
+      await this.manifest.whenLoaded();
     }
 
     const presentationNodes = this.manifest.getPresentationNodes();
@@ -252,7 +252,7 @@ export class TitleService {
   async checkForNewTitles(): Promise<{ newTitles: TitleItem[], totalTitles: number }> {
     // Load manifest if not yet ready
     if (!this.manifest.isLoadedSync) {
-      await this.manifest.isLoaded().toPromise();
+      await this.manifest.whenLoaded();
     }
 
     const presentationNodes = this.manifest.getPresentationNodes();
@@ -289,7 +289,7 @@ export class TitleService {
    */
   async debugAllTitles(): Promise<void> {
     if (!this.manifest.isLoadedSync) {
-      await this.manifest.isLoaded().toPromise();
+      await this.manifest.whenLoaded();
     }
 
     const presentationNodes = this.manifest.getPresentationNodes();
