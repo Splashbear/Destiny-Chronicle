@@ -6,6 +6,7 @@ import { ShareService } from './share.service';
 import { SharedStateService } from './shared-state.service';
 import { ArchiveService } from './archive.service';
 import { DeepLinkService } from './deep-link.service';
+import { TitleService } from './title.service';
 import { DeepLinkTab, parseDeepLink } from '../utils/deep-link';
 
 /** Host for player-search ngOnInit bootstrap (CODE_CLEANUP_SPEC). */
@@ -38,6 +39,7 @@ export interface PlayerSearchInitHost {
 @Injectable({ providedIn: 'root' })
 export class PlayerSearchInitService {
   constructor(
+    private titleService: TitleService,
     private route: ActivatedRoute,
     private activityDb: ActivityDbService,
     private firstActivityService: FirstActivityService,
@@ -83,6 +85,10 @@ export class PlayerSearchInitService {
     const deepLink = parseDeepLink(queryParams);
     let deepLinkTab: DeepLinkTab | null = null;
     if (deepLink && !host.getPendingPlayerData()) {
+      // Titles need only Bungie's profile records: start that call now, alongside account resolution.
+      for (const acct of deepLink.accounts) {
+        if (acct.game !== 'D1') this.titleService.prefetchProfileRecords(acct.membershipType, acct.membershipId);
+      }
       try {
         host.setPendingPlayerData(await this.deepLinkService.resolvePlayers(deepLink));
         host.applyPermalinkDate(deepLink.date);

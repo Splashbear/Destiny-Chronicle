@@ -47,6 +47,27 @@ export class TitleService {
     private archiveRuntime: ArchiveRuntimeService
   ) {}
 
+  /** In-flight / just-fetched profile records by `type:id`, so a deep link can start the call before the account resolves. */
+  private recordsInFlight = new Map<string, { at: number; promise: Promise<any> }>();
+  private static readonly RECORDS_REUSE_MS = 30_000;
+
+  /** Bungie profile records (component 900), shared by concurrent callers for a few seconds. */
+  profileRecords(membershipType: number, membershipId: string): Promise<any> {
+    const key = `${membershipType}:${membershipId}`;
+    const hit = this.recordsInFlight.get(key);
+    if (hit && Date.now() - hit.at < TitleService.RECORDS_REUSE_MS) return hit.promise;
+    const promise = firstValueFrom(this.bungie.getPlayerTitles(membershipType, membershipId));
+    this.recordsInFlight.set(key, { at: Date.now(), promise });
+    promise.catch(() => this.recordsInFlight.delete(key));
+    return promise;
+  }
+
+  /** Start the records call early (deep link: type + id are known before the account resolves). */
+  prefetchProfileRecords(membershipType: number, membershipId: string): void {
+    if (this.archiveRuntime.isReadOnly) return;
+    this.profileRecords(membershipType, membershipId).catch(() => undefined);
+  }
+
   /**
    * Fetches the player's title records and returns a raw map of record hashes
    * to record objects. Low-level helper mostly for internal use.
@@ -66,7 +87,8 @@ export class TitleService {
     if (this.archiveRuntime.isReadOnly) {
       return this.getOfflineTitles(player);
     }
-    // Load manifest if not yet ready
+    // Records and manifest load in parallel; neither waits on the other.
+    const recordsPromise = this.profileRecords(player.membershipType, player.membershipId);
     if (!this.manifest.isLoadedSync) {
       await this.manifest.whenLoaded();
     }
@@ -84,8 +106,7 @@ export class TitleService {
       allTitleNodes.push(...parentNode.children.presentationNodes.map((n: any) => presentationNodes[n.presentationNodeHash]).filter(Boolean));
     }
 
-    // Fetch records from Bungie
-    const response = await firstValueFrom(this.bungie.getPlayerTitles(player.membershipType, player.membershipId));
+    const response = await recordsPromise;
     const records = response.Response?.profileRecords?.data?.records || {};
     const charRecords = response.Response?.characterRecords?.data as { [c: string]: { records?: any } } || {};
 

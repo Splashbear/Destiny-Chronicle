@@ -112,6 +112,12 @@ export class PlayerAccountSyncService {
     host: PlayerAccountSyncHost,
     player: PlayerSearchDisplay
   ): Promise<void> {
+    // Titles need only profile records; don't queue them behind the activity history fill.
+    if (!host.isD1Player(player)) {
+      void host.loadTitlesForPlayer(player).catch((err: any) =>
+        console.warn('[appendPlayer] Background title load skipped', err)
+      );
+    }
     await host.runWithPlayerSyncLimit(async () => {
       await host.loadCharacterHistory(player);
       host.scheduleAfterBrowseReady(() => {
@@ -123,11 +129,5 @@ export class PlayerAccountSyncService {
         });
       });
     });
-
-    if (!host.isD1Player(player)) {
-      void host.loadTitlesForPlayer(player).catch((err: any) =>
-        console.warn('[appendPlayer] Background title load skipped', err)
-      );
-    }
   }
 }
