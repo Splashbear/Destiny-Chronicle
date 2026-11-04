@@ -1,21 +1,30 @@
 // Renders an /otd card as a phone-width PNG that approximates how Discord shows the embed.
-//   node discord-bot/render-card.mjs card.json out.png [--width 390]
+//   node discord-bot/render-card.mjs card.json out.png [--width 390] [--cmd otd|titles|firsts]
 // Icons are fetched from bungie.net. Set CHROME=/path/to/chrome if Playwright has no browser installed.
 import { readFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 
 const [, , inFile, outFile, ...rest] = process.argv;
 const width = Number(rest[rest.indexOf('--width') + 1]) || 390;
+const cmd = rest.includes('--cmd') ? rest[rest.indexOf('--cmd') + 1] : 'otd';
 const { card } = JSON.parse(readFileSync(inFile, 'utf8'));
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const inline = (s) =>
   esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
-const modelLines = card.model.years.flatMap((y) => y.lines);
+// /otd keeps its lines per year; /titles and /firsts keep one flat list (kind + icon per non-link line).
+const modelLines = card.model.years ? card.model.years.flatMap((y) => y.lines) : card.model.lines;
 let li = 0;
 const rows = card.embed.description.split('\n').map((raw) => {
   if (!raw.trim()) return '<div class="gap"></div>';
-  if (/^\*\*\d{4}( · D1)?\*\*$/.test(raw)) return `<div class="year">${inline(raw)}</div>`;
+  if (/^\*\*\d{4}( · D1)?\*\*$/.test(raw) || /^\*\*Missing \(\d+\)\*\*$/.test(raw)) {
+    if (!card.model.years) li++;
+    return `<div class="year">${inline(raw)}</div>`;
+  }
+  if (!card.model.years && modelLines[li]?.kind === 'missing') {
+    li++;
+    return `<div class="line plain"><span>${inline(raw)}</span></div>`;
+  }
   if (raw.startsWith('🏆')) return `<div class="first">${inline(raw)}</div>`;
   if (/^\[(Open in|\+\d+ more)/.test(raw)) return `<div class="more">${inline(raw)}</div>`;
   const icon = modelLines[li++]?.icon;
@@ -33,9 +42,9 @@ const html = `<!doctype html><meta charset="utf-8"><style>
 .line img,.noimg{width:20px;height:20px;border-radius:3px;flex:none;background:#4a4636;margin-top:1px}
 a{color:#00a8fc;text-decoration:none}.gap{height:2px}
 .first{background:#4a3f1d;border-radius:4px;padding:6px 8px;margin-bottom:6px;font-size:14px;color:#ffe9a8}
-.more{margin-top:8px;font-size:13px}.foot{margin-top:8px;font-size:12px;color:#b5bac1}
+.line.plain{padding-left:0}.more{margin-top:8px;font-size:13px}.foot{margin-top:8px;font-size:12px;color:#b5bac1}
 </style>
-<div class="who">Splashbear used <b>/otd</b></div><div class="app">Destiny Chronicle<i>APP</i></div>
+<div class="who">Splashbear used <b>/${cmd}</b></div><div class="app">Destiny Chronicle<i>APP</i></div>
 <div class="embed"><div class="title">${esc(card.embed.title)}</div>${rows.join('')}<div class="foot">${esc(card.embed.footer.text)}</div></div>`;
 
 const browser = await chromium.launch({

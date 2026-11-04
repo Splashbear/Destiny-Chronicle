@@ -13,23 +13,23 @@ const BUNGIE = 'https://www.bungie.net';
 const ACCOUNT = /^([1-6])-(\d{1,20})-(d1|d2)$/;
 
 /** Bundle the pure TypeScript card builder once, so the bot and the site share one implementation. */
-export async function loadCardBuilder() {
-  const dir = mkdtempSync(join(tmpdir(), 'dc-otd-'));
+export async function loadCardBuilder(entry = 'discord-otd-card.ts') {
+  const dir = mkdtempSync(join(tmpdir(), 'dc-card-'));
   const outfile = join(dir, 'card.mjs');
   await build({
-    entryPoints: [resolve(here, '../src/app/utils/discord-otd-card.ts')],
+    entryPoints: [resolve(here, '../src/app/utils', entry)],
     bundle: true, platform: 'node', format: 'esm', outfile, logLevel: 'error',
   });
   return import(pathToFileURL(outfile).href);
 }
 
-function bungieHeaders() {
+export function bungieHeaders() {
   const key = process.env.BUNGIE_API_KEY;
   if (!key) throw new Error('BUNGIE_API_KEY is not set');
   return { 'X-API-Key': key };
 }
 
-async function getJson(url, headers = {}) {
+export async function getJson(url, headers = {}) {
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`${res.status} for ${url.split('?')[0]}`);
   return res.json();
@@ -134,7 +134,7 @@ export async function fetchDefinitions(hashesByGame, cacheFile = join(tmpdir(), 
     } catch { cache[tk] = null; }
   });
   // Mode-level icons (D2): the mode definition for each mode the card consolidates.
-  const MODES = [5, 6, 18, 63, 75, 87];
+  const MODES = [4, 5, 6, 18, 63, 75, 82, 87];
   const modeTodo = [];
   for (const [k, d] of Object.entries(cache)) {
     if (!k.startsWith('D2:') || !d?.modes) continue;
@@ -160,6 +160,19 @@ export async function fetchDefinitions(hashesByGame, cacheFile = join(tmpdir(), 
   return cache;
 }
 
+/** Archive rows plus (D2) Bungie's own newer history: the same rows every card works from. */
+export async function loadAccountRows(membershipType, membershipId, game) {
+  const archive = await fetchArchiveRows(membershipId, game);
+  let rows = archive.rows;
+  let recentRows = 0;
+  if (game === 'D2') {
+    const recent = await fetchBungieSince(membershipType, membershipId, archive.maxPeriod);
+    recentRows = recent.length;
+    rows = rows.concat(recent);
+  }
+  return { rows, archive, recentRows };
+}
+
 /** Everything the card needs for one pinned account link, e.g. "2-4611686018465122437-d2". */
 export async function buildOtdForAccount(accountLink, { timeZone = 'America/New_York', date } = {}) {
   const m = ACCOUNT.exec(accountLink);
@@ -172,14 +185,7 @@ export async function buildOtdForAccount(accountLink, { timeZone = 'America/New_
   const now = card.zonedParts(new Date().toISOString(), timeZone);
   const [month, day] = date ? date.split('-').map(Number) : [now.month, now.day];
 
-  const archive = await fetchArchiveRows(membershipId, game);
-  let rows = archive.rows;
-  let recentRows = 0;
-  if (game === 'D2') {
-    const recent = await fetchBungieSince(membershipType, membershipId, archive.maxPeriod);
-    recentRows = recent.length;
-    rows = rows.concat(recent);
-  }
+  const { rows, archive, recentRows } = await loadAccountRows(membershipType, membershipId, game);
   const hashes = { D1: new Set(), D2: new Set() };
   for (const r of rows) {
     const p = card.zonedParts(r.period, timeZone);
