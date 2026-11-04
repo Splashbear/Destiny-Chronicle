@@ -569,6 +569,7 @@ export function build_asPlayerSelectionRemoveHost(c: any) {
     },
     clearSelectedAccountKeysForActivities: () => {
       c.selectedAccountKeysForActivities = new Set();
+      c.selectedAccountKeysForAccomplishments = new Set();
     },
     clearSelectedAccountKeysForBreakdown: () => {
       c.selectedAccountKeysForBreakdown = new Set();

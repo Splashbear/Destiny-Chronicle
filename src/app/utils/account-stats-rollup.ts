@@ -108,7 +108,9 @@ export function rollupPlatformStats(input: PlatformRollupInput): PlatformStats[]
 
   for (const pl of input.players) {
     const platformName = pl.platform;
-    const key = `${pl.game}-${platformName}-${pl.membershipId}`;
+    // Must match buildAccountKey / card selection filters (D2|3|mid), not legacy
+    // game-platform-membershipId — that mismatch blanked Activities/Firsts/Breakdown.
+    const key = canonicalAccountKey(pl);
     const chars = input.charactersByKey[input.getPlayerKey(pl)];
     let time = 0;
     if (chars && chars.length > 0) {
@@ -123,7 +125,7 @@ export function rollupPlatformStats(input: PlatformRollupInput): PlatformStats[]
       pl.displayName,
       pl.platform
     );
-    const acts = input.activityCountByKey.get(canonicalAccountKey(pl)) ?? 0;
+    const acts = input.activityCountByKey.get(key) ?? 0;
 
     if (!platformStatsMap[key]) {
       platformStatsMap[key] = {

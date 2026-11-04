@@ -244,6 +244,18 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.heatmapIdCache = cache.value;
     return ids;
   }
+  /** Canonical account keys from header cards; empty when no card filter is active. */
+  get heatmapAccountKeys(): string[] {
+    const key = Array.from(this.selectedAccountKeysForActivities || [])
+      .sort()
+      .join('\n');
+    if (key === this.heatmapAccountKeysCacheKey) {
+      return this.heatmapAccountKeysCache;
+    }
+    this.heatmapAccountKeysCacheKey = key;
+    this.heatmapAccountKeysCache = key ? key.split('\n') : [];
+    return this.heatmapAccountKeysCache;
+  }
   get heatmapCharacterMeta(): Record<string, HeatmapCharacterLookup> {
     const cache = { key: this.heatmapClassCacheKey, value: this.heatmapClassCache };
     const meta = getCachedHeatmapCharacterMeta(

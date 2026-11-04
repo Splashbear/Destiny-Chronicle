@@ -273,11 +273,7 @@ export abstract class PlayerSearchActivitiesMixin extends PlayerSearchBreakdownM
   }
 
   onAccomplishmentsAccountCardToggle(accountKey: string): void {
-    this.selectedAccountKeysForAccomplishments = toggleInSet(
-      this.selectedAccountKeysForAccomplishments,
-      accountKey
-    );
-    this.cdr.markForCheck();
+    this.onSiteAccountCardToggle(accountKey);
   }
 
   getAccomplishmentsFilteredPlayers(): any[] {

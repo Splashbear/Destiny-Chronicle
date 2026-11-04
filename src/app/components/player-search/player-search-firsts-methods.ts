@@ -16,7 +16,7 @@ import {
 import { findDungeonSoloFirstForLabel } from '../../utils/dungeon-solo-lookup';
 import { platformShortName } from '../../utils/platform-display';
 import { baseActivityNameFromVersioned } from '../../utils/date-activity-grouping';
-import { filterBySelectedAccountKeys, toggleInSet } from '../../utils/selection-set';
+import { filterBySelectedAccountKeys } from '../../utils/selection-set';
 import { pickFirstEverFromFirsts } from '../../utils/first-ever-from-firsts';
 import {
   buildD2VariantGroups,
@@ -511,11 +511,8 @@ export function build_getAggregateFirstEverByPlatform(c: any, game: 'D1' | 'D2',
 }
 
 export function build_onFirstsAccountCardToggle(c: any, accountKey: string): void {
-  c.selectedAccountKeysForFirsts = toggleInSet(
-    c.selectedAccountKeysForFirsts,
-    accountKey
-  );
-  c.cdr.markForCheck();
+  // Same filter as header / Activities / Breakdown / Accomplishments / Heatmap.
+  c.onSiteAccountCardToggle(accountKey);
 }
 
 export function build_getFirstsFilteredPlayers(c: any): PlayerSearchDisplay[] {

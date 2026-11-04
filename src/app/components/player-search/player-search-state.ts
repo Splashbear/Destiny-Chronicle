@@ -56,6 +56,8 @@ export abstract class PlayerSearchState {
   selectedPlayers: PlayerSearchDisplay[] = [];
   protected heatmapIdCacheKey = '';
   protected heatmapIdCache: string[] = [];
+  protected heatmapAccountKeysCacheKey = '';
+  protected heatmapAccountKeysCache: string[] = [];
   protected playedWithAccountCacheKey = '';
   protected playedWithAccountCache: PlayedWithAccountChoice[] = [];
   protected heatmapClassCacheKey = '';

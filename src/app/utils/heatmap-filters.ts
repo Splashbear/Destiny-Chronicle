@@ -1,4 +1,5 @@
 import { resolveGame } from './destiny-game';
+import { canonicalAccountKey } from './account-key';
 export interface HeatmapActivity {
   period?: string;
   membershipId?: string;
@@ -130,17 +131,41 @@ export function filterHeatmapActivities(
   activities: HeatmapActivity[],
   opts: {
     membershipIds?: string[] | null;
+    /** Canonical `game|membershipType|membershipId` keys from header account cards. */
+    accountKeys?: string[] | Set<string> | null;
     membershipType?: number | null;
     characterKey?: string | null;
     year?: number | null;
   }
 ): HeatmapActivity[] {
   const membershipSet = opts.membershipIds?.length ? new Set(opts.membershipIds) : null;
+  const accountKeySet =
+    opts.accountKeys == null
+      ? null
+      : opts.accountKeys instanceof Set
+        ? opts.accountKeys.size > 0
+          ? opts.accountKeys
+          : null
+        : opts.accountKeys.length > 0
+          ? new Set(opts.accountKeys)
+          : null;
   return activities.filter(activity => {
     if (!activity.period) {
       return false;
     }
     if (membershipSet && activity.membershipId && !membershipSet.has(activity.membershipId)) {
+      return false;
+    }
+    if (
+      accountKeySet &&
+      !accountKeySet.has(
+        canonicalAccountKey({
+          game: activity.game,
+          membershipType: activity.membershipType,
+          membershipId: activity.membershipId,
+        })
+      )
+    ) {
       return false;
     }
     if (opts.membershipType != null && activity.membershipType !== opts.membershipType) {
@@ -423,30 +448,13 @@ export function heatmapHasActivity(
   activities: HeatmapActivity[],
   opts: {
     membershipIds?: string[] | null;
+    accountKeys?: string[] | Set<string> | null;
     membershipType?: number | null;
     characterKey?: string | null;
     year?: number | null;
   }
 ): boolean {
-  const membershipSet = opts.membershipIds?.length ? new Set(opts.membershipIds) : null;
-  return activities.some(activity => {
-    if (!activity.period) {
-      return false;
-    }
-    if (membershipSet && activity.membershipId && !membershipSet.has(activity.membershipId)) {
-      return false;
-    }
-    if (opts.membershipType != null && activity.membershipType !== opts.membershipType) {
-      return false;
-    }
-    if (opts.characterKey && characterKey(activity) !== opts.characterKey) {
-      return false;
-    }
-    if (opts.year != null && new Date(activity.period).getFullYear() !== opts.year) {
-      return false;
-    }
-    return true;
-  });
+  return filterHeatmapActivities(activities, opts).length > 0;
 }
 
 export function formatDaysHours(totalSeconds: number, daysPlayed: number): string {

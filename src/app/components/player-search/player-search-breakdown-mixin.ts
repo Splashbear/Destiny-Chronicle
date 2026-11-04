@@ -229,21 +229,9 @@ export abstract class PlayerSearchBreakdownMixin extends PlayerSearchFirstsMixin
     return breakdownIdentityByMembership(this.selectedPlayers);
   }
 
-  /** Toggle account card selection for Breakdown tab; reloads breakdown data. */
+  /** Toggle account card selection; shares the site-wide account filter with every tab. */
   async onBreakdownAccountCardToggle(accountKey: string): Promise<void> {
-    this.selectedAccountKeysForBreakdown = toggleInSet(
-      this.selectedAccountKeysForBreakdown,
-      accountKey
-    );
-
-    const selectedGames = this.getBreakdownSelectedGames();
-    this.breakdownChartGame =
-      selectedGames.length === 1 ? selectedGames[0] : 'all';
-
-    this.cdr.markForCheck();
-    if (this.selectedPlayers.length > 0) {
-      await this.loadActivityBreakdown();
-    }
+    this.onSiteAccountCardToggle(accountKey);
   }
 
   /** Games represented by the currently selected Breakdown account cards. Empty = both games allowed. */

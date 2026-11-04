@@ -82,6 +82,7 @@ describe('account-stats-rollup', () => {
       getClassName: () => 'Hunter',
     });
     expect(rows.length).toBe(1);
+    expect(rows[0].accountKey).toBe('D2|3|1');
     expect(rows[0].totalActivities).toBe(3);
     expect(rows[0].emblemIcon).toBe('/e.png');
     expect(rows[0].className).toBe('Hunter');

@@ -72,6 +72,19 @@ describe('heatmap filters', () => {
       .toEqual(['222']);
   });
 
+  it('filters by canonical account keys from header cards (game|type|id)', () => {
+    const all = [xboxTitan, steamHunter, d1Psn];
+    // Same membershipId 111 on D2 Xbox vs D1 PSN — keys must not collide.
+    expect(
+      filterHeatmapActivities(all, { accountKeys: ['D1|2|111'] }).map(a => a.characterId)
+    ).toEqual(['char-d1']);
+    expect(
+      filterHeatmapActivities(all, { accountKeys: ['D2|1|111', 'D2|3|222'] }).map(a => a.characterId)
+    ).toEqual(['char-titan', 'char-hunter']);
+    expect(filterHeatmapActivities(all, { accountKeys: [] }).map(a => a.characterId))
+      .toEqual(['char-titan', 'char-hunter', 'char-d1']);
+  });
+
   it('lists unique platforms, characters, and years', () => {
     const all = [xboxTitan, steamHunter, d1Psn];
     expect(uniquePlatforms(all).map(p => p.name)).toEqual(['Xbox', 'PSN', 'Steam']);

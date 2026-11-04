@@ -28,6 +28,11 @@ import { TextViewService } from '../../services/text-view.service';
 import { noteIdbRead } from '../../utils/idb-read-log';
 import { heatmapLoadAction } from '../../utils/heatmap-load-plan';
 import { textYearCalendar, TextHeatDay, TextHeatMonth } from '../../utils/text-tab-rows';
+import {
+  buildHeatmapViewSummary,
+  describeScopedCharacters,
+  describeScopedPlatforms,
+} from '../../utils/heatmap-view-summary';
 
 interface DayCell {
   day: number;
@@ -92,14 +97,14 @@ interface NamedRange {
           <label class="filter-field">
             <span>Platform</span>
             <select [(ngModel)]="platformFilter" (ngModelChange)="onPlatformChange()" [title]="selectedPlatformLabel()">
-              <option value="all">All platforms</option>
+              <option value="all">{{ allPlatformsOptionLabel() }}</option>
               <option *ngFor="let p of platforms; trackBy: trackPlatform" [value]="p.type.toString()" [disabled]="p.disabled">{{ p.name }}</option>
             </select>
           </label>
           <label class="filter-field filter-field-wide">
             <span>Character</span>
             <select [(ngModel)]="characterFilter" (ngModelChange)="onCharacterChange()" [title]="selectedCharacterLabel()">
-              <option value="all">All characters</option>
+              <option value="all">{{ allCharactersOptionLabel() }}</option>
               <option *ngFor="let c of characters; trackBy: trackCharacter" [value]="c.key" [disabled]="c.disabled">{{ c.label }}</option>
             </select>
           </label>
@@ -322,6 +327,8 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   private activityByDay = new Map<string, { count: number; seconds: number }>();
 
   @Input() membershipIds: string[] = [];
+  /** Header account-card filter (canonical keys). Empty = all loaded memberships. */
+  @Input() accountKeys: string[] = [];
   @Input() characterMeta: Record<string, HeatmapCharacterLookup> = {};
   @Output() navigateToDate = new EventEmitter<Date>();
 
@@ -449,12 +456,18 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
     const membershipChanged = !!ids
       && !ids.firstChange
       && !sameMembershipIds(ids.previousValue, ids.currentValue);
+    const keys = changes['accountKeys'];
+    const accountKeysChanged =
+      !!keys &&
+      !keys.firstChange &&
+      !sameMembershipIds(keys.previousValue, keys.currentValue);
     const meta = changes['characterMeta'];
     const metaChanged = !!meta && !meta.firstChange && meta.previousValue !== meta.currentValue;
-    if (!membershipChanged && !metaChanged) {
+    if (!membershipChanged && !metaChanged && !accountKeysChanged) {
       return;
     }
-    if (metaChanged && !membershipChanged && this.tableReady) {
+    // Card toggles only re-scope the painted grid; membership load stays intact.
+    if ((metaChanged || accountKeysChanged) && !membershipChanged && this.tableReady) {
       this.rebuild();
       this.cdr.markForCheck();
       return;
@@ -494,18 +507,47 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
     this.rebuild();
   }
 
+  private accountFilterActive(): boolean {
+    return (this.accountKeys?.length || 0) > 0;
+  }
+
+  /** Top "all" option mirrors platforms present under the current account-card scope. */
+  allPlatformsOptionLabel(): string {
+    return describeScopedPlatforms(
+      this.platforms.map((platform) => platform.name),
+      { accountFilterActive: this.accountFilterActive() }
+    );
+  }
+
+  allCharactersOptionLabel(): string {
+    return describeScopedCharacters(
+      this.characters.map((character) => character.label),
+      { accountFilterActive: this.accountFilterActive() }
+    );
+  }
+
   selectedPlatformLabel(): string {
-    if (this.platformFilter === 'all') {
-      return 'All platforms';
-    }
-    return this.platforms.find(platform => String(platform.type) === this.platformFilter)?.name || 'Selected platform';
+    const selected =
+      this.platformFilter === 'all'
+        ? null
+        : this.platforms.find((platform) => String(platform.type) === this.platformFilter)?.name ||
+          'Selected platform';
+    return describeScopedPlatforms(
+      this.platforms.map((platform) => platform.name),
+      { accountFilterActive: this.accountFilterActive(), selectedName: selected }
+    );
   }
 
   selectedCharacterLabel(): string {
-    if (this.characterFilter === 'all') {
-      return 'All characters';
-    }
-    return this.characters.find(character => character.key === this.characterFilter)?.label || 'Selected character';
+    const selected =
+      this.characterFilter === 'all'
+        ? null
+        : this.characters.find((character) => character.key === this.characterFilter)?.label ||
+          'Selected character';
+    return describeScopedCharacters(
+      this.characters.map((character) => character.label),
+      { accountFilterActive: this.accountFilterActive(), selectedLabel: selected }
+    );
   }
 
   selectedYearLabel(): string {
@@ -578,10 +620,15 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
     return activities.map(activity => projectHeatmapRow(activity, meta, typeByMembership));
   }
 
+  private accountKeyFilter(): string[] | null {
+    return this.accountKeys?.length ? this.accountKeys : null;
+  }
+
   rebuild(): void {
     const decorated = this.withCharacterMeta(this.allActivities);
     const membershipIds = this.membershipIds?.length ? this.membershipIds : null;
-    const accountScoped = filterHeatmapActivities(decorated, { membershipIds });
+    const accountKeys = this.accountKeyFilter();
+    const accountScoped = filterHeatmapActivities(decorated, { membershipIds, accountKeys });
     this.ensureFilterOptions(accountScoped);
     this.dropStaleSelections();
 
@@ -701,6 +748,13 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
     if (this.yearFilter !== 'all' && !this.years.some(year => String(year) === this.yearFilter)) {
       this.yearFilter = 'all';
     }
+    // One card / one platform → lock the dropdown to that platform so it matches the card.
+    if (this.accountFilterActive() && this.platforms.length === 1) {
+      this.platformFilter = String(this.platforms[0].type);
+    }
+    if (this.accountFilterActive() && this.characters.length === 1) {
+      this.characterFilter = this.characters[0].key;
+    }
   }
 
   private applyOptionAvailability(
@@ -735,7 +789,8 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   private syncIncompatibleFilters(): void {
     const decorated = this.withCharacterMeta(this.allActivities);
     const membershipIds = this.membershipIds?.length ? this.membershipIds : null;
-    const accountScoped = filterHeatmapActivities(decorated, { membershipIds });
+    const accountKeys = this.accountKeyFilter();
+    const accountScoped = filterHeatmapActivities(decorated, { membershipIds, accountKeys });
     const yearNum = this.yearFilter === 'all' ? null : Number(this.yearFilter);
     let platformType = this.platformFilter === 'all' ? null : Number(this.platformFilter);
 
@@ -756,18 +811,17 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private buildViewSummary(): string {
-    const parts: string[] = [];
-    if (this.characterFilter !== 'all') {
-      parts.push(this.selectedCharacterLabel());
-    } else {
-      parts.push('All characters');
-      parts.push(this.selectedPlatformLabel());
-    }
-    parts.push(this.selectedYearLabel());
-    if (this.groupBy === 'season' && this.seasonFilter !== 'all') {
-      parts.push(this.seasonFilter);
-    }
-    return parts.join(' · ');
+    const characterIsSpecific = this.characterFilter !== 'all';
+    return buildHeatmapViewSummary({
+      character: this.selectedCharacterLabel(),
+      platform: this.selectedPlatformLabel(),
+      year: this.selectedYearLabel(),
+      season:
+        this.groupBy === 'season' && this.seasonFilter !== 'all'
+          ? this.seasonFilter
+          : null,
+      characterIsSpecific,
+    });
   }
 
   getIntensityColor(intensity: number): string {

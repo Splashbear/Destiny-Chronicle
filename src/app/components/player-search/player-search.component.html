@@ -476,6 +476,7 @@
           @defer (on immediate) {
             <app-activity-heatmap
               [membershipIds]="heatmapMembershipIds"
+              [accountKeys]="heatmapAccountKeys"
               [characterMeta]="heatmapCharacterMeta"
               (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
