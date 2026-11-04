@@ -160,7 +160,7 @@ export class DestinyManifestService {
 
   async getTitleDefinition(hash: string): Promise<any> {
     if (!this.manifestLoaded.value) {
-      await this.isLoaded().toPromise();
+      await this.whenLoaded();
     }
     const definition = this.titleDefs[hash];
     if (!definition) {
@@ -660,6 +660,15 @@ export class DestinyManifestService {
     }
 
     return variant;
+  }
+
+  /**
+   * Resolves once the manifest is loaded. (`isLoaded().toPromise()` never resolves: the
+   * BehaviorSubject does not complete, so callers that arrived early waited forever.)
+   */
+  async whenLoaded(): Promise<void> {
+    if (this.manifestLoaded.value) return;
+    await firstValueFrom(this.isLoaded().pipe(filter((v) => !!v)));
   }
 
   isLoaded(): Observable<boolean> {

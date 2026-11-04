@@ -44,6 +44,10 @@ export function build_asPlayerSearchInitHost(c: any) {
       }
     },
     getSelectedPlayersLength: () => c.selectedPlayers.length,
+    setActiveTab: (tab: any) => {
+      c.activeTab = tab;
+    },
+    onTabChange: (tab: any) => c.onTabChange(tab),
   };
 }
 
@@ -354,7 +358,7 @@ export function build_asFilteredActivitiesBrowseHost(c: any) {
     scheduleBatchedUpdate: () => c.scheduleBatchedUpdate(),
     ensureManifestLoaded: async () => {
       if (!c.manifest.isLoadedSync) {
-        await c.manifest.isLoaded().toPromise();
+        await c.manifest.whenLoaded();
       }
     },
     processAndGroupActivities: (message) => {
