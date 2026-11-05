@@ -19,8 +19,10 @@ export interface AnniversaryFirst {
   iconUrl?: string | null;
   /** Bungie PGCR / activity hero art when available. */
   pgcrImageUrl?: string | null;
-  /** e.g. "Fireteam of 6" or "alone" — facts only. */
+  /** e.g. "Fireteam of 6" or "alone" when we don't have names. */
   fireteamLabel?: string | null;
+  /** Short display names from the first-clear PGCR, entry order. */
+  fireteamNames?: string[];
 }
 
 @Component({

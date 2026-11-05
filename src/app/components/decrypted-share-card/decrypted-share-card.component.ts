@@ -54,9 +54,13 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
               <div class="dsc-card__meta">
                 {{ memory.dateLabel || (memory.completionDate | date:'MMM d, y') }}
                 <ng-container *ngIf="memory.platform"> · {{ memory.platform }}</ng-container>
-                <ng-container *ngIf="memory.fireteamLabel"> · {{ memory.fireteamLabel }}</ng-container>
+                <ng-container *ngIf="memory.fireteamLabel && !memory.fireteamNames?.length"> · {{ memory.fireteamLabel }}</ng-container>
                 <br />
                 {{ flavorLine }}
+              </div>
+              <div class="dsc-card__fireteam" *ngIf="memory.fireteamNames?.length">
+                <div class="dsc-card__fireteam-kicker">FIRETEAM</div>
+                <div class="dsc-card__fireteam-names">{{ memory.fireteamNames!.join('  ·  ') }}</div>
               </div>
             </div>
             <div class="dsc-card__watermark">destinychronicle.com</div>
@@ -114,6 +118,13 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
       margin: 12px 0 10px; line-height: 1.2;
     }
     .dsc-card__meta { color: #c9b38a; font-size: 18px; line-height: 1.6; }
+    .dsc-card__fireteam { margin-top: 18px; max-width: 940px; }
+    .dsc-card__fireteam-kicker {
+      color: #e67e22; font-size: 13px; letter-spacing: .16em; margin-bottom: 6px;
+    }
+    .dsc-card__fireteam-names {
+      color: #f3e2b8; font-size: 22px; line-height: 1.45;
+    }
     .dsc-card__watermark {
       position: absolute; right: 20px; bottom: 16px; color: #5a6470; font-size: 14px; z-index: 1;
     }

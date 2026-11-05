@@ -29,6 +29,9 @@
         <ng-container *ngIf="hero.platform"> · {{ hero.platform }}</ng-container>
         <ng-container *ngIf="hero.fireteamLabel"> · {{ hero.fireteamLabel }}</ng-container>
       </p>
+      <p class="fireside-hero__fireteam" *ngIf="hero.fireteamNames?.length">
+        Fireteam: {{ hero.fireteamNames!.join(' · ') }}
+      </p>
 
       <div class="fireside-hero__chips">
         <button type="button" class="fireside-hero__chip" (click)="onNavigate(hero)">

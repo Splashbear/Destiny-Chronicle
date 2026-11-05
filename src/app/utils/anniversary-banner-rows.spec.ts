@@ -1,4 +1,4 @@
-import { buildAnniversaryBannerRows } from './anniversary-banner-rows';
+import { anniversaryFireteamFacts, buildAnniversaryBannerRows } from './anniversary-banner-rows';
 import { ActivityFirstCompletion } from '../models/guardian-firsts.model';
 
 describe('buildAnniversaryBannerRows', () => {
@@ -126,5 +126,51 @@ describe('buildAnniversaryBannerRows', () => {
     expect(rows[0].pgcrImageUrl).toBe(
       'https://www.bungie.net/img/destiny_content/pgcr/dungeon_pit_of_heresy.jpg'
     );
+    expect(rows[0].fireteamLabel).toBe('Fireteam of 4');
+    expect(rows[0].fireteamNames).toEqual([]);
+  });
+
+  it('puts PGCR fireteam names on the anniversary row for the share card', () => {
+    const first: ActivityFirstCompletion = {
+      type: 'raid',
+      name: 'Last Wish',
+      game: 'D2',
+      period: '2020-06-15T12:00:00Z',
+      completionDate: '2020-06-15T12:00:00Z',
+      instanceId: '9',
+      referenceId: '123',
+      mode: 4,
+      characterId: 'c',
+      membershipId: 'm',
+      completed: 1,
+      fireteamSize: 6,
+      fireteamNames: ['Splashbear', 'PuddleCubs', 'Knight'],
+    };
+    const rows = buildAnniversaryBannerRows({
+      selectedDate: '2024-06-15',
+      selectedPlayersLength: 1,
+      rawFirstsByPlayer: [[first]],
+      displayedRaidDungeonFirsts: [first],
+      firstEvers: [],
+      resolvers: {
+        getActivityName: () => 'Last Wish',
+        formatDate: () => 'Jun 15, 2020',
+        resolveIconUrl: () => null,
+        resolveFirstCompletionImage: () => null,
+        resolvePgcrImageUrl: () => null,
+        getFirstClearFireteam: () => 'Ignored, Other',
+        resolvePlatform: () => 'Steam',
+      },
+    });
+    expect(rows[0].fireteamNames).toEqual(['Splashbear', 'PuddleCubs', 'Knight']);
+    expect(rows[0].fireteamLabel).toBeNull();
+  });
+
+  it('keeps solo clears as alone with no roster', () => {
+    const first = { isSolo: true, fireteamNames: ['Splashbear'] } as ActivityFirstCompletion;
+    expect(anniversaryFireteamFacts(first, 'solo', () => 'Splashbear')).toEqual({
+      label: 'alone',
+      names: [],
+    });
   });
 });

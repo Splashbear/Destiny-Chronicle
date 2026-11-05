@@ -119,19 +119,8 @@ export function buildAnniversaryBannerRows(input: {
       }
     }
 
-    let fireteamLabel: string | null = null;
     const ft = first as ActivityFirstCompletion;
-    if (match.type === 'solo' || match.type === 'solo-flawless' || ft.isSolo || ft.isSoloFlawless) {
-      fireteamLabel = 'alone';
-    } else if (typeof ft.fireteamSize === 'number' && ft.fireteamSize > 0) {
-      fireteamLabel = `Fireteam of ${ft.fireteamSize}`;
-    } else {
-      const names = resolvers.getFirstClearFireteam(ft);
-      if (names) {
-        const count = names.split(',').map(s => s.trim()).filter(Boolean).length;
-        fireteamLabel = count > 0 ? `Fireteam of ${count}` : null;
-      }
-    }
+    const fireteam = anniversaryFireteamFacts(ft, match.type, resolvers.getFirstClearFireteam);
 
     anniversaries.push({
       first: match.first,
@@ -146,9 +135,38 @@ export function buildAnniversaryBannerRows(input: {
       instanceId,
       iconUrl,
       pgcrImageUrl,
-      fireteamLabel,
+      fireteamLabel: fireteam.label,
+      fireteamNames: fireteam.names,
     });
   }
 
   return anniversaries;
+}
+
+/**
+ * Names from the first-clear PGCR. Solo clears stay "alone" (no roster).
+ * When names are missing, fall back to a size label — never invent guardians.
+ */
+export function anniversaryFireteamFacts(
+  first: ActivityFirstCompletion,
+  type: AnniversaryFirst['type'],
+  getFirstClearFireteam: (first: ActivityFirstCompletion) => string | null
+): { label: string | null; names: string[] } {
+  if (type === 'solo' || type === 'solo-flawless' || first.isSolo || first.isSoloFlawless) {
+    return { label: 'alone', names: [] };
+  }
+  const direct = (first.fireteamNames || []).map((n) => String(n).trim()).filter(Boolean);
+  const fromLabel = direct.length
+    ? direct
+    : (getFirstClearFireteam(first) || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+  if (fromLabel.length) {
+    return { label: null, names: fromLabel };
+  }
+  if (typeof first.fireteamSize === 'number' && first.fireteamSize > 0) {
+    return { label: `Fireteam of ${first.fireteamSize}`, names: [] };
+  }
+  return { label: null, names: [] };
 }
