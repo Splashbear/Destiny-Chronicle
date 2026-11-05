@@ -1,0 +1,2 @@
+import{Y as t}from"./chunk-K4ARGVPE.js";var R=new t("");function p(o,n){n=encodeURIComponent(n);for(let e of o.split(";")){let r=e.indexOf("="),[i,s]=r==-1?[e,""]:[e.slice(0,r),e.slice(r+1)];if(i.trim()===n)return decodeURIComponent(s)}return null}var u="browser",f="server";function d(o){return o===u}function k(o){return o===f}var c=class{};export{R as a,p as b,u as c,d,k as e,c as f};
+//# sourceMappingURL=chunk-3V4JYYIY.js.map
