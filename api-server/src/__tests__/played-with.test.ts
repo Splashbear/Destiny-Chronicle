@@ -94,9 +94,12 @@ describe('Played With dual-format read', () => {
     ]);
     await svc.close();
     const byId = Object.fromEntries(r.partners.map((p) => [p.membershipId, p]));
-    expect(byId['2']).toMatchObject({ activitiesTogether: 3, timeTogetherSeconds: 600, displayName: 'FriendNew' });
-    expect(byId['3']).toMatchObject({ activitiesTogether: 1, displayName: 'Other' });
-    expect(byId['4']).toMatchObject({ activitiesTogether: 1, displayName: 'NameFromPgcr' });
+    expect(byId['2']).toMatchObject({
+      activitiesTogether: 3, timeTogetherSeconds: 600, displayName: 'FriendNew',
+      firstPlayedTogether: '2020-01-01T00:00:00Z', lastPlayedTogether: '2021-01-01T00:00:00Z',
+    });
+    expect(byId['3']).toMatchObject({ activitiesTogether: 1, displayName: 'Other', firstPlayedTogether: '2020-02-01T00:00:00Z' });
+    expect(byId['4']).toMatchObject({ activitiesTogether: 1, displayName: 'NameFromPgcr', firstPlayedTogether: '2021-01-01T00:00:00Z' });
     expect(byId['1']).toBeUndefined();
     expect(byId['9']).toBeUndefined();
     expect(byId['8']).toBeUndefined(); // mode 40 hub

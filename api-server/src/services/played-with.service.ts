@@ -172,6 +172,10 @@ export interface PartnerRow {
   displayName: string;
   activitiesTogether: number;
   timeTogetherSeconds: number;
+  /** Earliest shared game period (ISO). */
+  firstPlayedTogether?: string;
+  /** Earliest shared instance id. */
+  firstInstanceId?: string;
   lastPlayedTogether?: string;
   /** most recent shared instance (used to fill missing names from the PGCR). */
   lastInstanceId?: string;
@@ -467,12 +471,18 @@ export class PlayedWithService {
                max(display_name) FILTER (WHERE display_name IS NOT NULL) AS name
         FROM shared GROUP BY membership_id, instance_id
       )
-      SELECT membership_id, count(*) AS n, sum(d) AS t, max(period) AS last_period,
+      SELECT membership_id, count(*) AS n, sum(d) AS t,
+             min(period) AS first_period, max(period) AS last_period,
              arg_max(name, period) FILTER (WHERE name IS NOT NULL) AS name,
+             CAST(arg_min(instance_id, period) AS VARCHAR) AS first_iid,
              CAST(arg_max(instance_id, period) AS VARCHAR) AS last_iid
       FROM per_inst GROUP BY membership_id
       ORDER BY n DESC, t DESC LIMIT ${Math.max(1, Math.min(5000, Math.floor(limit)))}`;
-    const rows = (await db.all(sql)) as Array<{ membership_id: string; n: number | bigint; t: number | bigint | null; last_period: string | null; name: string | null; last_iid: string | null }>;
+    const rows = (await db.all(sql)) as Array<{
+      membership_id: string; n: number | bigint; t: number | bigint | null;
+      first_period: string | null; last_period: string | null; name: string | null;
+      first_iid: string | null; last_iid: string | null;
+    }>;
     await db.all('DROP TABLE IF EXISTS pw_mine');
     await db.all('DROP TABLE IF EXISTS pw_rows');
 
@@ -481,6 +491,8 @@ export class PlayedWithService {
       displayName: r.name || '',
       activitiesTogether: Number(r.n),
       timeTogetherSeconds: Number(r.t || 0),
+      firstPlayedTogether: r.first_period || undefined,
+      firstInstanceId: r.first_iid || undefined,
       lastPlayedTogether: r.last_period || undefined,
       lastInstanceId: r.last_iid || undefined,
     }));

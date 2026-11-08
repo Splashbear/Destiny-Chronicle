@@ -97,20 +97,64 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
           refreshing: st.status === 'running' || (st.status === 'pending' && due), games: s.games, archiveGames: s.archiveGames, bungieGames: s.bungieGames, d1Games: s.d1Games,
           builtAt: s.builtAt, checkedAt: s.checkedAt, included: include.includes(id), bungie: (s.coverage as any)?.bungie ?? null };
       }
+      // Queue says "done" from a pre-v2 (legacy combined) build, but summaries/acct/<id>.json.gz
+      // is missing — First Played only exists on the v2 path. Force a refresh rebuild.
+      if (st.status === 'done') {
+        toRefresh.push(id);
+        return { id, name: null, membershipType: null, platform: null, game: 'D2', status: 'queued', position: st.position, progress: st.progress ?? null, included: include.includes(id) };
+      }
       if (st.status === 'requested' || st.status === 'failed') toQueue.push(id);
       return { id, name: null, membershipType: null, platform: null, game: 'D2', status: st.status === 'running' ? 'building' : 'queued', position: st.position, progress: st.progress ?? null, included: include.includes(id) };
     });
     if (toQueue.length) store.request(toQueue, 'lookup');
-    if (toRefresh.length) store.request(toRefresh, 'refresh');
+    if (toRefresh.length) store.request([...new Set(toRefresh)], 'refresh');
     const ready = include.filter((id) => sums.has(id)).map((id) => sums.get(id)!);
     const building = accounts.filter((a) => a.status !== 'ready');
     if (!ready.length) {
       // Fallback while per-account builds run: an older combined summary for exactly these accounts.
+      // Those Oct-2026 files only store lastPlayedTogether — never firstPlayedTogether (PR #50).
       const legacy = store.readSummary(summaryKey(ids));
+      const legacyPartners = legacy
+        ? (legacy.partners as PartnerRow[]).slice(0, limit).map((p) => ({ ...p }))
+        : [];
+      const legacyHasFirst = legacyPartners.some((p) => !!p.firstPlayedTogether);
+      if (legacy && legacyHasFirst) {
+        const nameRefresh = names ? await names.refresh(legacyPartners) : undefined;
+        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh });
+      }
+      // Prefer a live index lookup (now includes firstPlayed) over last-only legacy dashes.
+      if (pw) {
+        const key = `firstfill|${ids.join(',')}|${limit}`;
+        let job = jobs.get(key);
+        if (job && job.finished && (job.error || Date.now() - job.finished > CACHE_MS)) {
+          jobs.delete(key);
+          job = undefined;
+        }
+        if (!job) job = startJob(key, ids, limit, game);
+        if (!job.finished) {
+          await Promise.race([job.promise, new Promise((r) => setTimeout(r, WAIT_MS))]);
+        }
+        if (!job.finished) {
+          return res.status(202).json({
+            pending: true, queued: true, status: 'running', position: null, progress: null,
+            accounts, partners: [], elapsedMs: Date.now() - job.started,
+            note: 'Rebuilding Played With so First Played dates are available',
+          });
+        }
+        if (!job.error && job.result?.partners?.length) {
+          const partners = job.result.partners.map((p) => ({ ...p }));
+          const nameRefresh = names ? await names.refresh(partners) : undefined;
+          for (const p of partners) if (!p.displayName) { p.displayName = PRIVATE_GUARDIAN; p.nameSource = 'private'; }
+          return res.json({
+            pending: false, partial: true, source: 'index', games: job.result.coverage?.coveredInstances ?? partners.length,
+            partners, coverage: job.result.coverage, accounts, nameRefresh, ms: (job.finished || Date.now()) - job.started,
+          });
+        }
+      }
       if (legacy) {
-        const partners = (legacy.partners as PartnerRow[]).slice(0, limit).map((p) => ({ ...p }));
-        const nameRefresh = names ? await names.refresh(partners) : undefined;
-        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners, coverage: legacy.coverage, accounts, nameRefresh });
+        // Last resort: keep the list visible (Last Played only) while v2 rebuilds.
+        const nameRefresh = names ? await names.refresh(legacyPartners) : undefined;
+        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh });
       }
       const b = building.find((a) => a.status === 'building') || building[0];
       return res.status(202).json({ pending: true, queued: true, status: b?.status === 'building' ? 'running' : 'pending', position: (b as any)?.position ?? null, progress: (b as any)?.progress ?? null, accounts, partners: [] });
@@ -120,7 +164,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
     const mergeMs = Date.now() - t0;
     const unnamed = partners.filter((p) => !p.displayName);
     if (unnamed.length && pw?.fillNames) {
-      const rows: PartnerRow[] = unnamed.slice(0, 200).map((p) => ({ membershipId: p.membershipId, displayName: '', activitiesTogether: p.activitiesTogether, timeTogetherSeconds: p.timeTogetherSeconds, lastPlayedTogether: p.lastPlayedTogether, lastInstanceId: p.lastInstanceId }));
+      const rows: PartnerRow[] = unnamed.slice(0, 200).map((p) => ({ membershipId: p.membershipId, displayName: '', activitiesTogether: p.activitiesTogether, timeTogetherSeconds: p.timeTogetherSeconds, firstPlayedTogether: p.firstPlayedTogether, firstInstanceId: p.firstInstanceId, lastPlayedTogether: p.lastPlayedTogether, lastInstanceId: p.lastInstanceId }));
       try { await pw.fillNames(rows); } catch (e) { logger.debug('Played With name fill failed', { error: String(e) }); }
       rows.forEach((r, i) => { if (r.displayName) { unnamed[i].displayName = r.displayName; unnamed[i].nameSource = r.nameSource; } });
     }

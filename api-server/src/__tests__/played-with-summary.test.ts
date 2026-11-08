@@ -36,17 +36,63 @@ describe('Played With summary queue', () => {
 
   test('route serves a summary, or queues and returns 202 pending', async () => {
     const s = new SummaryStore(tmp()); s.ensure();
-    s.writeSummary({ key: '5', ids: ['5'], builtAt: 'x', games: 2, maxInstanceId: '9', partners: [{ membershipId: '6' }, { membershipId: '7' }], coverage: {} });
+    // Legacy last-only summary (no firstPlayedTogether) is last-resort; with first dates it is preferred.
+    s.writeSummary({
+      key: '5', ids: ['5'], builtAt: 'x', games: 2, maxInstanceId: '9',
+      partners: [
+        { membershipId: '6', firstPlayedTogether: '2020-01-01T00:00:00Z', lastPlayedTogether: '2026-01-01T00:00:00Z' },
+        { membershipId: '7', firstPlayedTogether: '2021-01-01T00:00:00Z', lastPlayedTogether: '2025-01-01T00:00:00Z' },
+      ],
+      coverage: {},
+    });
     const app = express(); app.use(express.json()); app.use('/played-with', createPlayedWithRouter({} as any, {} as any, s));
     const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
     const call = (ids: string[]) => fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ membershipIds: ids, limit: 1 }) });
     try {
       const hit = await call(['5']); expect(hit.status).toBe(200);
       const hj: any = await hit.json(); expect(hj.source).toBe('summary'); expect(hj.partners).toHaveLength(1);
+      expect(hj.partners[0].firstPlayedTogether).toBe('2020-01-01T00:00:00Z');
       const miss = await call(['8']); expect(miss.status).toBe(202);
       expect(((await miss.json()) as any).pending).toBe(true);
       expect(fs.readFileSync(s.requestsPath, 'utf8')).toContain('"8"');
     } finally { srv.close(); }
+  });
+
+  test('done-without-v2-acct requeues refresh and prefers index First Played over last-only legacy', async () => {
+    process.env.PLAYED_WITH_WAIT_MS = '50';
+    jest.resetModules();
+    const { createPlayedWithRouter: mk } = require('../routes/played-with.routes');
+    const { SummaryStore: Store } = require('../services/played-with-summary.store');
+    const s = new Store(tmp()); s.ensure();
+    s.writeQueue({
+      items: {
+        '5': { key: '5', ids: ['5'], priority: 0, source: 'seed', status: 'done', enqueuedAt: 'x', attempts: 0, builtAt: '2026-10-12T00:00:00Z', checkedAt: '2026-10-12T00:00:00Z' },
+      },
+    });
+    // Pre-PR#50 legacy: Last Played only — UI would show "—" for First Played.
+    s.writeSummary({
+      key: '5', ids: ['5'], builtAt: '2026-10-12T00:00:00Z', games: 2, maxInstanceId: '9',
+      partners: [{ membershipId: '6', displayName: 'Buddy', activitiesTogether: 3, timeTogetherSeconds: 100, lastPlayedTogether: '2026-09-01T00:00:00Z' }],
+      coverage: {},
+    });
+    const archive = { getPlayerActivitiesMultiTier: async () => ({ activities: [{ instance_id: '1', duration_seconds: 10, period: '2020-01-01T00:00:00Z' }], tier: {} }) };
+    const pw = {
+      getPartners: async () => ({
+        partners: [{ membershipId: '6', displayName: 'Buddy', activitiesTogether: 3, timeTogetherSeconds: 100, firstPlayedTogether: '2018-06-01T00:00:00Z', lastPlayedTogether: '2026-09-01T00:00:00Z' }],
+        coverage: { complete: true, coveredInstances: 1 },
+      }),
+    };
+    const app = express(); app.use(express.json()); app.use('/played-with', mk(archive, pw, s));
+    const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ membershipIds: ['5'] }) });
+      expect(r.status).toBe(200);
+      const j: any = await r.json();
+      expect(j.source).toBe('index');
+      expect(j.partners[0]).toMatchObject({ membershipId: '6', firstPlayedTogether: '2018-06-01T00:00:00Z', lastPlayedTogether: '2026-09-01T00:00:00Z' });
+      expect(fs.readFileSync(s.requestsPath, 'utf8')).toMatch(/"source":"refresh"/);
+      expect(fs.readFileSync(s.requestsPath, 'utf8')).toContain('"5"');
+    } finally { srv.close(); delete process.env.PLAYED_WITH_WAIT_MS; }
   });
 
   test('202 for a running build reports the worker\'s real progress counts', async () => {
