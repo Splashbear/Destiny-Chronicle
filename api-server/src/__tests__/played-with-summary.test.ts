@@ -95,6 +95,69 @@ describe('Played With summary queue', () => {
     } finally { srv.close(); delete process.env.PLAYED_WITH_WAIT_MS; }
   });
 
+  test('excluded-account + cache-isolation: firstfill scans include only and keys cache by include set', async () => {
+    process.env.PLAYED_WITH_WAIT_MS = '50';
+    jest.resetModules();
+    const { createPlayedWithRouter: mk } = require('../routes/played-with.routes');
+    const { SummaryStore: Store } = require('../services/played-with-summary.store');
+    const s = new Store(tmp()); s.ensure();
+    s.writeQueue({
+      items: {
+        '5': { key: '5', ids: ['5'], priority: 0, source: 'seed', status: 'done', enqueuedAt: 'x', attempts: 0, builtAt: '2026-10-12T00:00:00Z', checkedAt: '2026-10-12T00:00:00Z' },
+        '7': { key: '7', ids: ['7'], priority: 0, source: 'seed', status: 'done', enqueuedAt: 'x', attempts: 0, builtAt: '2026-10-12T00:00:00Z', checkedAt: '2026-10-12T00:00:00Z' },
+      },
+    });
+    const scanned: string[] = [];
+    const partnerCalls: Array<{ excludeIds: string[]; instanceCount: number }> = [];
+    const archive = {
+      getPlayerActivitiesMultiTier: async (mid: string) => {
+        scanned.push(mid);
+        return {
+          activities: mid === '5'
+            ? [{ instance_id: '10', duration_seconds: 10, period: '2020-01-01T00:00:00Z' }]
+            : [{ instance_id: '99', duration_seconds: 999, period: '2019-01-01T00:00:00Z' }],
+          tier: {},
+        };
+      },
+    };
+    const pw = {
+      getPartners: async (excludeIds: string[], instances: Array<{ instanceId: string }>) => {
+        partnerCalls.push({ excludeIds: [...excludeIds], instanceCount: instances.length });
+        const onlyIncludedGame = instances.every((i) => i.instanceId === '10');
+        return {
+          partners: onlyIncludedGame
+            ? [{ membershipId: '6', displayName: 'Buddy', activitiesTogether: 1, timeTogetherSeconds: 10, firstPlayedTogether: '2020-01-01T00:00:00Z', lastPlayedTogether: '2020-01-01T00:00:00Z' }]
+            : [{ membershipId: '8', displayName: 'FromExcluded', activitiesTogether: 1, timeTogetherSeconds: 999, firstPlayedTogether: '2019-01-01T00:00:00Z', lastPlayedTogether: '2019-01-01T00:00:00Z' }],
+          coverage: { complete: true, coveredInstances: instances.length },
+        };
+      },
+    };
+    const app = express(); app.use(express.json()); app.use('/played-with', mk(archive, pw, s));
+    const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
+    const post = (body: object) => fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    try {
+      const r1 = await post({ membershipIds: ['5', '7'], include: ['5'] });
+      expect(r1.status).toBe(200);
+      const j1: any = await r1.json();
+      expect(j1.source).toBe('index');
+      expect(j1.partners[0].membershipId).toBe('6');
+      expect(scanned).toEqual(['5']);
+      expect(partnerCalls[0]).toEqual({ excludeIds: ['5', '7'], instanceCount: 1 });
+      const req = fs.readFileSync(s.requestsPath, 'utf8');
+      expect(req).toContain('"5"');
+      expect(req).not.toMatch(/"ids":\["7"\]/);
+
+      // Different include set must not reuse the firstfill cache (would return Buddy again).
+      scanned.length = 0;
+      const r2 = await post({ membershipIds: ['5', '7'], include: ['7'] });
+      expect(r2.status).toBe(200);
+      const j2: any = await r2.json();
+      expect(j2.partners[0].membershipId).toBe('8');
+      expect(scanned).toEqual(['7']);
+      expect(partnerCalls).toHaveLength(2);
+    } finally { srv.close(); delete process.env.PLAYED_WITH_WAIT_MS; }
+  });
+
   test('202 for a running build reports the worker\'s real progress counts', async () => {
     const s = new SummaryStore(tmp()); s.ensure();
     const progress = { stage: 'scanning' as const, accountsLoaded: 4, accountsTotal: 4, games: 27215, batchesDone: 12, batchesTotal: 40, updatedAt: '2026-10-13T12:17:00Z' };

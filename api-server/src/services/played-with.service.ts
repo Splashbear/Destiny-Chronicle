@@ -474,8 +474,9 @@ export class PlayedWithService {
       SELECT membership_id, count(*) AS n, sum(d) AS t,
              min(period) AS first_period, max(period) AS last_period,
              arg_max(name, period) FILTER (WHERE name IS NOT NULL) AS name,
-             CAST(arg_min(instance_id, period) AS VARCHAR) AS first_iid,
-             CAST(arg_max(instance_id, period) AS VARCHAR) AS last_iid
+             -- Tie-break same-period games by instance id (min for first, max for last).
+             CAST(arg_min(instance_id, (period, instance_id)) AS VARCHAR) AS first_iid,
+             CAST(arg_max(instance_id, (period, instance_id)) AS VARCHAR) AS last_iid
       FROM per_inst GROUP BY membership_id
       ORDER BY n DESC, t DESC LIMIT ${Math.max(1, Math.min(5000, Math.floor(limit)))}`;
     const rows = (await db.all(sql)) as Array<{

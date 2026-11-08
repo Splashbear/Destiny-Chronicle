@@ -108,6 +108,39 @@ describe('Played With dual-format read', () => {
     expect(r.coverage).toMatchObject({ complete: false, totalInstances: 6, coveredInstances: 5, uncoveredInstances: 1 });
     expect(r.coverage.uncoveredReasons).toEqual({ band_not_built: 1 });
   });
+
+  test('tied-instance: same-period games pick min/max instance id for first/last', async () => {
+    const tieRoot = path.join(tmp, 'tie');
+    const L = path.join(tieRoot, 'legacy', 'by_iid_1m', 'iid_band=5000');
+    fs.mkdirSync(L, { recursive: true });
+    const db = await Database.create(':memory:');
+    const q = (p: string) => p.replace(/\\/g, '/');
+    // Two shared games with partner 2 at the exact same period; instance ids differ.
+    await db.all(`COPY (SELECT * FROM (VALUES
+      (5000000100::BIGINT, '1'::VARCHAR, 'Me', '2020-06-01T12:00:00Z', 1::TINYINT, 4::SMALLINT, 1::UINTEGER),
+      (5000000100, '2', 'Tied', '2020-06-01T12:00:00Z', 1, 4, 1),
+      (5000000200, '1', 'Me', '2020-06-01T12:00:00Z', 1, 4, 1),
+      (5000000200, '2', 'Tied', '2020-06-01T12:00:00Z', 1, 4, 1)
+    ) t(instance_id, membership_id, display_name, period, team, mode, activity_hash)) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
+    await db.close();
+    const svc = new PlayedWithService({
+      legacyRoot: path.join(tieRoot, 'legacy', 'by_iid_1m'),
+      compactRoot: '', compactDoneDir: '', splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000, threads: 1, memoryLimit: '512MB',
+    }, async () => null);
+    const r = await svc.getPartners(['1'], [
+      { instanceId: '5000000100', durationSeconds: 60 },
+      { instanceId: '5000000200', durationSeconds: 60 },
+    ]);
+    await svc.close();
+    expect(r.partners).toHaveLength(1);
+    expect(r.partners[0]).toMatchObject({
+      membershipId: '2',
+      firstPlayedTogether: '2020-06-01T12:00:00Z',
+      lastPlayedTogether: '2020-06-01T12:00:00Z',
+      firstInstanceId: '5000000100',
+      lastInstanceId: '5000000200',
+    });
+  });
 });
 
 describe('Played With route (background job + polling)', () => {

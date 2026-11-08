@@ -31,12 +31,16 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
   const router = Router();
   const jobs = new Map<string, Job>();
 
-  const startJob = (key: string, ids: string[], limit: number, game?: 'D1' | 'D2'): Job => {
+  /**
+   * @param scanIds accounts whose games are counted (the `include` subset on the per-account path)
+   * @param excludeIds every looked-up own account — still excluded from partners even when not scanned
+   */
+  const startJob = (key: string, scanIds: string[], excludeIds: string[], limit: number, game?: 'D1' | 'D2'): Job => {
     const job: Job = { started: Date.now(), promise: Promise.resolve() };
     job.promise = (async () => {
       try {
         const instances: PlayerInstance[] = [];
-        for (const mid of ids) {
+        for (const mid of scanIds) {
           const r = await archive.getPlayerActivitiesMultiTier(mid, { limit: 1_000_000, game });
           for (const a of r.activities) {
             // Skip social hubs before planning band reads (rows with real mode/hash). Compact-only rows
@@ -45,7 +49,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
             instances.push({ instanceId: String(a.instance_id), durationSeconds: Number(a.duration_seconds) || 0, period: a.period });
           }
         }
-        job.result = await pw.getPartners(ids, instances, limit, undefined, game);
+        job.result = await pw.getPartners(excludeIds, instances, limit, undefined, game);
       } catch (error) {
         job.error = String(error);
         logger.error('Played With job failed', { key, error: job.error });
@@ -98,10 +102,14 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
           builtAt: s.builtAt, checkedAt: s.checkedAt, included: include.includes(id), bungie: (s.coverage as any)?.bungie ?? null };
       }
       // Queue says "done" from a pre-v2 (legacy combined) build, but summaries/acct/<id>.json.gz
-      // is missing — First Played only exists on the v2 path. Force a refresh rebuild.
+      // is missing — First Played only exists on the v2 path. Force a refresh rebuild for included
+      // accounts only (unchecked/excluded accounts stay out of the rebuild + index fill).
       if (st.status === 'done') {
+        if (!include.includes(id)) {
+          return { id, name: null, membershipType: null, platform: null, game: 'D2', status: 'queued', position: null, progress: null, included: false };
+        }
         toRefresh.push(id);
-        return { id, name: null, membershipType: null, platform: null, game: 'D2', status: 'queued', position: st.position, progress: st.progress ?? null, included: include.includes(id) };
+        return { id, name: null, membershipType: null, platform: null, game: 'D2', status: 'queued', position: st.position, progress: st.progress ?? null, included: true };
       }
       if (st.status === 'requested' || st.status === 'failed') toQueue.push(id);
       return { id, name: null, membershipType: null, platform: null, game: 'D2', status: st.status === 'running' ? 'building' : 'queued', position: st.position, progress: st.progress ?? null, included: include.includes(id) };
@@ -123,14 +131,16 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
         return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh });
       }
       // Prefer a live index lookup (now includes firstPlayed) over last-only legacy dashes.
-      if (pw) {
-        const key = `firstfill|${ids.join(',')}|${limit}`;
+      // Scan only `include` (parity with mergeAccounts); exclude every looked-up id from partners.
+      // Cache key is isolated from the no-summary job keys and from other include subsets.
+      if (pw && include.length) {
+        const key = `firstfill|${ids.join(',')}|incl=${include.join(',')}|${limit}|${game || ''}`;
         let job = jobs.get(key);
         if (job && job.finished && (job.error || Date.now() - job.finished > CACHE_MS)) {
           jobs.delete(key);
           job = undefined;
         }
-        if (!job) job = startJob(key, ids, limit, game);
+        if (!job) job = startJob(key, include, ids, limit, game);
         if (!job.finished) {
           await Promise.race([job.promise, new Promise((r) => setTimeout(r, WAIT_MS))]);
         }
@@ -196,7 +206,7 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
       jobs.delete(key);
       job = undefined;
     }
-    if (!job) job = startJob(key, ids, limit, game);
+    if (!job) job = startJob(key, ids, ids, limit, game);
     if (!job.finished) {
       await Promise.race([job.promise, new Promise((r) => setTimeout(r, WAIT_MS))]);
     }
