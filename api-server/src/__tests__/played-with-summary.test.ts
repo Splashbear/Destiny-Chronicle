@@ -95,6 +95,67 @@ describe('Played With summary queue', () => {
     } finally { srv.close(); delete process.env.PLAYED_WITH_WAIT_MS; }
   });
 
+  test('firstfill sortBy before LIMIT: two accounts, limit=1, account leader ≠ aggregate leader', async () => {
+    process.env.PLAYED_WITH_WAIT_MS = '50';
+    jest.resetModules();
+    const { createPlayedWithRouter: mk } = require('../routes/played-with.routes');
+    const { SummaryStore: Store } = require('../services/played-with-summary.store');
+    const s = new Store(tmp()); s.ensure();
+    const doneItem = (id: string) => ({ key: id, ids: [id], priority: 0, source: 'seed' as const, status: 'done' as const, enqueuedAt: 'x', attempts: 0, builtAt: '2026-10-12T00:00:00Z', checkedAt: '2026-10-12T00:00:00Z' });
+    s.writeQueue({ items: { '11': doneItem('11'), '12': doneItem('12') } });
+    const archive = {
+      getPlayerActivitiesMultiTier: async (mid: string) => ({
+        activities: mid === '11'
+          ? [
+              { instance_id: '1', duration_seconds: 60, period: '2020-01-01T00:00:00Z' },
+              { instance_id: '2', duration_seconds: 60, period: '2020-01-02T00:00:00Z' },
+              { instance_id: '3', duration_seconds: 60, period: '2020-01-03T00:00:00Z' },
+            ]
+          : [
+              { instance_id: '4', duration_seconds: 60, period: '2020-02-01T00:00:00Z' },
+              { instance_id: '5', duration_seconds: 60, period: '2020-02-02T00:00:00Z' },
+            ],
+        tier: {},
+      }),
+    };
+    const calls: Array<{ sortBy?: string; limit: number; sources: string[] }> = [];
+    const pw = {
+      getPartners: async (_excl: string[], instances: Array<{ sourceMembershipId?: string }>, limit: number, _p?: unknown, _g?: unknown, sortBy?: string) => {
+        calls.push({ sortBy, limit, sources: [...new Set(instances.map((i) => i.sourceMembershipId || ''))].sort() });
+        // AggregateLead (100) wins total (3 from 11 + 0 from 12 would be wrong — give 100 three and 200 two overall,
+        // but on account 12 only 200 appears). Simulate mergeAccounts order before LIMIT.
+        const byTotal = [
+          { membershipId: '100', displayName: 'AggregateLead', activitiesTogether: 3, timeTogetherSeconds: 180, firstPlayedTogether: '2020-01-01T00:00:00Z', lastPlayedTogether: '2020-01-03T00:00:00Z' },
+          { membershipId: '200', displayName: 'AccountLead', activitiesTogether: 2, timeTogetherSeconds: 120, firstPlayedTogether: '2020-02-01T00:00:00Z', lastPlayedTogether: '2020-02-02T00:00:00Z' },
+        ];
+        const by12 = [
+          { membershipId: '200', displayName: 'AccountLead', activitiesTogether: 2, timeTogetherSeconds: 120, firstPlayedTogether: '2020-02-01T00:00:00Z', lastPlayedTogether: '2020-02-02T00:00:00Z' },
+          { membershipId: '100', displayName: 'AggregateLead', activitiesTogether: 3, timeTogetherSeconds: 180, firstPlayedTogether: '2020-01-01T00:00:00Z', lastPlayedTogether: '2020-01-03T00:00:00Z' },
+        ];
+        const ordered = sortBy === '12' ? by12 : byTotal;
+        return { partners: ordered.slice(0, limit), coverage: { complete: true, coveredInstances: instances.length } };
+      },
+    };
+    const app = express(); app.use(express.json()); app.use('/played-with', mk(archive, pw, s));
+    const srv = app.listen(0); const port = (srv.address() as AddressInfo).port;
+    const post = (body: object) => fetch(`http://127.0.0.1:${port}/played-with/stats`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    try {
+      const total = await post({ membershipIds: ['11', '12'], include: ['11', '12'], sortBy: 'total', limit: 1 });
+      const by12 = await post({ membershipIds: ['11', '12'], include: ['11', '12'], sortBy: '12', limit: 1 });
+      expect(total.status).toBe(200);
+      expect(by12.status).toBe(200);
+      const jt: any = await total.json();
+      const j12: any = await by12.json();
+      expect(jt.source).toBe('index');
+      expect(jt.partners).toHaveLength(1);
+      expect(jt.partners[0].membershipId).toBe('100');
+      expect(j12.partners).toHaveLength(1);
+      expect(j12.partners[0].membershipId).toBe('200');
+      expect(j12.sortBy).toBe('12');
+      expect(calls.some((c) => c.sortBy === '12' && c.limit === 1 && c.sources.join(',') === '11,12')).toBe(true);
+    } finally { srv.close(); delete process.env.PLAYED_WITH_WAIT_MS; }
+  });
+
   test('excluded-account + cache-isolation: firstfill scans include only and keys cache by include set', async () => {
     process.env.PLAYED_WITH_WAIT_MS = '50';
     jest.resetModules();

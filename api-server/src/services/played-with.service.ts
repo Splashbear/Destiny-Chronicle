@@ -165,6 +165,8 @@ export interface PlayerInstance {
   instanceId: string;
   durationSeconds: number;
   period?: string;
+  /** Which looked-up account this game came from (for account-specific sortBy before LIMIT). */
+  sourceMembershipId?: string;
 }
 
 export interface PartnerRow {
@@ -338,8 +340,8 @@ export class PlayedWithService {
   }
 
   /** One request at a time on the shared connection (temp tables). */
-  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn, game?: 'D1' | 'D2'): Promise<PlayedWithResult> {
-    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress, undefined, game));
+  async getPartners(selfIds: string[], instances: PlayerInstance[], limit = 500, onProgress?: ScanProgressFn, game?: 'D1' | 'D2', sortBy?: string): Promise<PlayedWithResult> {
+    const run = this.queue.then(() => this.getPartnersInner(selfIds, instances, limit, onProgress, undefined, game, sortBy));
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -369,10 +371,22 @@ export class PlayedWithService {
     await run;
   }
 
-  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }, game?: 'D1' | 'D2'): Promise<PlayedWithResult> {
+  private async getPartnersInner(selfIds: string[], instances: PlayerInstance[], limit: number, onProgress?: ScanProgressFn, rawOut?: { rows?: unknown[][] }, game?: 'D1' | 'D2', sortBy?: string): Promise<PlayedWithResult> {
     const durations = new Map<string, number>();
-    for (const i of instances) if (i.instanceId) durations.set(String(i.instanceId), Number(i.durationSeconds) || 0);
+    const sources = new Map<string, Set<string>>();
+    for (const i of instances) {
+      if (!i.instanceId) continue;
+      const id = String(i.instanceId);
+      const d = Number(i.durationSeconds) || 0;
+      durations.set(id, Math.max(durations.get(id) || 0, d));
+      if (i.sourceMembershipId) {
+        let set = sources.get(id);
+        if (!set) { set = new Set(); sources.set(id, set); }
+        set.add(String(i.sourceMembershipId));
+      }
+    }
     const plan = planBands(durations.keys(), this.cfg, this.readCompactDoneStems(), this.readMinimalBands(), game);
+    const sortMid = sortBy && sortBy !== 'total' && /^\d{1,20}$/.test(sortBy) ? sortBy : undefined;
 
     // Per band: files + this player's ids. Each band is read with its own IN-list so DuckDB
     // can skip row groups by min/max (files are sorted by instance_id); a join would scan whole bands.
@@ -413,12 +427,23 @@ export class PlayedWithService {
     const tStart = Date.now();
     const db = await this.getDb();
     await db.all('DROP TABLE IF EXISTS pw_mine');
+    await db.all('DROP TABLE IF EXISTS pw_src');
     await db.all('DROP TABLE IF EXISTS pw_rows');
     await db.all('CREATE TEMP TABLE pw_mine (instance_id BIGINT, duration_seconds INTEGER)');
+    await db.all('CREATE TEMP TABLE pw_src (instance_id BIGINT, source_mid VARCHAR)');
     await db.all('CREATE TEMP TABLE pw_rows (instance_id BIGINT, membership_id VARCHAR, display_name VARCHAR, period VARCHAR)');
     for (let i = 0; i < covered.length; i += 2000) {
       const chunk = covered.slice(i, i + 2000).map((id) => `(${BigInt(id)}, ${Math.round(durations.get(id) || 0)})`);
       await db.all(`INSERT INTO pw_mine VALUES ${chunk.join(',')}`);
+    }
+    if (sortMid) {
+      const srcRows: string[] = [];
+      for (const id of covered) {
+        for (const mid of sources.get(id) || []) srcRows.push(`(${BigInt(id)}, ${sqlStr(mid)})`);
+      }
+      for (let i = 0; i < srcRows.length; i += 2000) {
+        await db.all(`INSERT INTO pw_src VALUES ${srcRows.slice(i, i + 2000).join(',')}`);
+      }
     }
     const self = selfIds.length ? selfIds.map((s) => sqlStr(String(s))).join(',') : "''";
     const bots = this.cfg.excludeIds && this.cfg.excludeIds.length
@@ -464,7 +489,34 @@ export class PlayedWithService {
       if (vals.length) await db.all(`INSERT INTO pw_rows VALUES ${vals.join(',')}`);
     }
     const tRead = Date.now();
-    const sql = `
+    const lim = Math.max(1, Math.min(5000, Math.floor(limit)));
+    // Account-specific sortBy ranks by that source account's shared games before LIMIT (mergeAccounts parity).
+    const sql = sortMid ? `
+      WITH shared AS (SELECT r.*, m.duration_seconds FROM pw_rows r JOIN pw_mine m USING (instance_id)),
+      per_inst AS (
+        SELECT membership_id, instance_id, any_value(duration_seconds) AS d, max(period) AS period,
+               max(display_name) FILTER (WHERE display_name IS NOT NULL) AS name
+        FROM shared GROUP BY membership_id, instance_id
+      ),
+      agg AS (
+        SELECT membership_id, count(*) AS n, sum(d) AS t,
+               min(period) AS first_period, max(period) AS last_period,
+               arg_max(name, period) FILTER (WHERE name IS NOT NULL) AS name,
+               CAST(arg_min(instance_id, (period, instance_id)) AS VARCHAR) AS first_iid,
+               CAST(arg_max(instance_id, (period, instance_id)) AS VARCHAR) AS last_iid
+        FROM per_inst GROUP BY membership_id
+      ),
+      sort_n AS (
+        SELECT p.membership_id, count(*) AS sn
+        FROM per_inst p
+        INNER JOIN pw_src s ON p.instance_id = s.instance_id
+        WHERE s.source_mid = ${sqlStr(sortMid)}
+        GROUP BY p.membership_id
+      )
+      SELECT a.membership_id, a.n, a.t, a.first_period, a.last_period, a.name, a.first_iid, a.last_iid
+      FROM agg a LEFT JOIN sort_n s USING (membership_id)
+      ORDER BY COALESCE(s.sn, 0) DESC, a.n DESC, a.t DESC
+      LIMIT ${lim}` : `
       WITH shared AS (SELECT r.*, m.duration_seconds FROM pw_rows r JOIN pw_mine m USING (instance_id)),
       per_inst AS (
         SELECT membership_id, instance_id, any_value(duration_seconds) AS d, max(period) AS period,
@@ -478,13 +530,14 @@ export class PlayedWithService {
              CAST(arg_min(instance_id, (period, instance_id)) AS VARCHAR) AS first_iid,
              CAST(arg_max(instance_id, (period, instance_id)) AS VARCHAR) AS last_iid
       FROM per_inst GROUP BY membership_id
-      ORDER BY n DESC, t DESC LIMIT ${Math.max(1, Math.min(5000, Math.floor(limit)))}`;
+      ORDER BY n DESC, t DESC LIMIT ${lim}`;
     const rows = (await db.all(sql)) as Array<{
       membership_id: string; n: number | bigint; t: number | bigint | null;
       first_period: string | null; last_period: string | null; name: string | null;
       first_iid: string | null; last_iid: string | null;
     }>;
     await db.all('DROP TABLE IF EXISTS pw_mine');
+    await db.all('DROP TABLE IF EXISTS pw_src');
     await db.all('DROP TABLE IF EXISTS pw_rows');
 
     const partners: PartnerRow[] = rows.map((r) => ({

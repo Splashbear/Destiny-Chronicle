@@ -34,8 +34,9 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
   /**
    * @param scanIds accounts whose games are counted (the `include` subset on the per-account path)
    * @param excludeIds every looked-up own account — still excluded from partners even when not scanned
+   * @param sortBy 'total' or one scanned membership id (ranked before LIMIT, same as mergeAccounts)
    */
-  const startJob = (key: string, scanIds: string[], excludeIds: string[], limit: number, game?: 'D1' | 'D2'): Job => {
+  const startJob = (key: string, scanIds: string[], excludeIds: string[], limit: number, game?: 'D1' | 'D2', sortBy?: string): Job => {
     const job: Job = { started: Date.now(), promise: Promise.resolve() };
     job.promise = (async () => {
       try {
@@ -46,10 +47,15 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
             // Skip social hubs before planning band reads (rows with real mode/hash). Compact-only rows
             // come back as mode 0 / hash 0 and are kept here; the band scan drops their hub rows (HUB_CLAUSE).
             if (isSocialHubActivity(a)) continue;
-            instances.push({ instanceId: String(a.instance_id), durationSeconds: Number(a.duration_seconds) || 0, period: a.period });
+            instances.push({
+              instanceId: String(a.instance_id),
+              durationSeconds: Number(a.duration_seconds) || 0,
+              period: a.period,
+              sourceMembershipId: mid,
+            });
           }
         }
-        job.result = await pw.getPartners(excludeIds, instances, limit, undefined, game);
+        job.result = await pw.getPartners(excludeIds, instances, limit, undefined, game, sortBy);
       } catch (error) {
         job.error = String(error);
         logger.error('Played With job failed', { key, error: job.error });
@@ -121,33 +127,35 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
     if (!ready.length) {
       // Fallback while per-account builds run: an older combined summary for exactly these accounts.
       // Those Oct-2026 files only store lastPlayedTogether — never firstPlayedTogether (PR #50).
-      const legacy = store.readSummary(summaryKey(ids));
+      // Legacy lists are ordered by aggregate total only — skip them when sortBy is account-specific.
+      const accountSort = sortBy !== 'total';
+      const legacy = !accountSort ? store.readSummary(summaryKey(ids)) : null;
       const legacyPartners = legacy
         ? (legacy.partners as PartnerRow[]).slice(0, limit).map((p) => ({ ...p }))
         : [];
       const legacyHasFirst = legacyPartners.some((p) => !!p.firstPlayedTogether);
       if (legacy && legacyHasFirst) {
         const nameRefresh = names ? await names.refresh(legacyPartners) : undefined;
-        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh });
+        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh, sortBy });
       }
       // Prefer a live index lookup (now includes firstPlayed) over last-only legacy dashes.
       // Scan only `include` (parity with mergeAccounts); exclude every looked-up id from partners.
-      // Cache key is isolated from the no-summary job keys and from other include subsets.
+      // Cache key is isolated from the no-summary job keys and from other include / sortBy subsets.
       if (pw && include.length) {
-        const key = `firstfill|${ids.join(',')}|incl=${include.join(',')}|${limit}|${game || ''}`;
+        const key = `firstfill|${ids.join(',')}|incl=${include.join(',')}|sort=${sortBy}|${limit}|${game || ''}`;
         let job = jobs.get(key);
         if (job && job.finished && (job.error || Date.now() - job.finished > CACHE_MS)) {
           jobs.delete(key);
           job = undefined;
         }
-        if (!job) job = startJob(key, include, ids, limit, game);
+        if (!job) job = startJob(key, include, ids, limit, game, sortBy);
         if (!job.finished) {
           await Promise.race([job.promise, new Promise((r) => setTimeout(r, WAIT_MS))]);
         }
         if (!job.finished) {
           return res.status(202).json({
             pending: true, queued: true, status: 'running', position: null, progress: null,
-            accounts, partners: [], elapsedMs: Date.now() - job.started,
+            accounts, partners: [], elapsedMs: Date.now() - job.started, sortBy,
             note: 'Rebuilding Played With so First Played dates are available',
           });
         }
@@ -157,17 +165,17 @@ export function createPlayedWithRouter(archive: ArchiveService, pw: PlayedWithSe
           for (const p of partners) if (!p.displayName) { p.displayName = PRIVATE_GUARDIAN; p.nameSource = 'private'; }
           return res.json({
             pending: false, partial: true, source: 'index', games: job.result.coverage?.coveredInstances ?? partners.length,
-            partners, coverage: job.result.coverage, accounts, nameRefresh, ms: (job.finished || Date.now()) - job.started,
+            partners, coverage: job.result.coverage, accounts, nameRefresh, sortBy, ms: (job.finished || Date.now()) - job.started,
           });
         }
       }
       if (legacy) {
         // Last resort: keep the list visible (Last Played only) while v2 rebuilds.
         const nameRefresh = names ? await names.refresh(legacyPartners) : undefined;
-        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh });
+        return res.json({ pending: false, partial: true, source: 'summary', builtAt: legacy.builtAt, games: legacy.games, partners: legacyPartners, coverage: legacy.coverage, accounts, nameRefresh, sortBy });
       }
       const b = building.find((a) => a.status === 'building') || building[0];
-      return res.status(202).json({ pending: true, queued: true, status: b?.status === 'building' ? 'running' : 'pending', position: (b as any)?.position ?? null, progress: (b as any)?.progress ?? null, accounts, partners: [] });
+      return res.status(202).json({ pending: true, queued: true, status: b?.status === 'building' ? 'running' : 'pending', position: (b as any)?.position ?? null, progress: (b as any)?.progress ?? null, accounts, partners: [], sortBy });
     }
     const merged = mergeAccounts(ready, ids, limit, sortBy);
     const partners = merged.partners;

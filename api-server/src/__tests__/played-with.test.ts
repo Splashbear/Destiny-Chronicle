@@ -109,6 +109,56 @@ describe('Played With dual-format read', () => {
     expect(r.coverage.uncoveredReasons).toEqual({ band_not_built: 1 });
   });
 
+  test('sortBy before LIMIT: account leader can differ from aggregate leader', async () => {
+    const sortRoot = path.join(tmp, 'sortby');
+    const L = path.join(sortRoot, 'legacy', 'by_iid_1m', 'iid_band=5000');
+    fs.mkdirSync(L, { recursive: true });
+    const db = await Database.create(':memory:');
+    const q = (p: string) => p.replace(/\\/g, '/');
+    // Account 11 shares 3 games with AggregateLead and 1 with AccountLead.
+    // Account 12 shares 1 game with AggregateLead and 3 with AccountLead.
+    await db.all(`COPY (SELECT * FROM (VALUES
+      (5000001001::BIGINT, '11'::VARCHAR, 'MeA', '2020-01-01T00:00:00Z', 1::TINYINT, 4::SMALLINT, 1::UINTEGER),
+      (5000001001, '100', 'AggregateLead', '2020-01-01T00:00:00Z', 1, 4, 1),
+      (5000001002, '11', 'MeA', '2020-01-02T00:00:00Z', 1, 4, 1),
+      (5000001002, '100', 'AggregateLead', '2020-01-02T00:00:00Z', 1, 4, 1),
+      (5000001003, '11', 'MeA', '2020-01-03T00:00:00Z', 1, 4, 1),
+      (5000001003, '100', 'AggregateLead', '2020-01-03T00:00:00Z', 1, 4, 1),
+      (5000001004, '11', 'MeA', '2020-01-04T00:00:00Z', 1, 4, 1),
+      (5000001004, '200', 'AccountLead', '2020-01-04T00:00:00Z', 1, 4, 1),
+      (5000002001, '12', 'MeB', '2020-02-01T00:00:00Z', 1, 4, 1),
+      (5000002001, '200', 'AccountLead', '2020-02-01T00:00:00Z', 1, 4, 1),
+      (5000002002, '12', 'MeB', '2020-02-02T00:00:00Z', 1, 4, 1),
+      (5000002002, '200', 'AccountLead', '2020-02-02T00:00:00Z', 1, 4, 1),
+      (5000002003, '12', 'MeB', '2020-02-03T00:00:00Z', 1, 4, 1),
+      (5000002003, '200', 'AccountLead', '2020-02-03T00:00:00Z', 1, 4, 1),
+      (5000002004, '12', 'MeB', '2020-02-04T00:00:00Z', 1, 4, 1),
+      (5000002004, '100', 'AggregateLead', '2020-02-04T00:00:00Z', 1, 4, 1)
+    ) t(instance_id, membership_id, display_name, period, team, mode, activity_hash)) TO '${q(path.join(L, 'instances.parquet'))}' (FORMAT parquet)`);
+    await db.close();
+    const svc = new PlayedWithService({
+      legacyRoot: path.join(sortRoot, 'legacy', 'by_iid_1m'),
+      compactRoot: '', compactDoneDir: '', splitIid: 10_000_000_000, compactMaxIid: 16_000_000_000, threads: 1, memoryLimit: '512MB',
+    }, async () => null);
+    const instances = [
+      { instanceId: '5000001001', durationSeconds: 60, sourceMembershipId: '11' },
+      { instanceId: '5000001002', durationSeconds: 60, sourceMembershipId: '11' },
+      { instanceId: '5000001003', durationSeconds: 60, sourceMembershipId: '11' },
+      { instanceId: '5000001004', durationSeconds: 60, sourceMembershipId: '11' },
+      { instanceId: '5000002001', durationSeconds: 60, sourceMembershipId: '12' },
+      { instanceId: '5000002002', durationSeconds: 60, sourceMembershipId: '12' },
+      { instanceId: '5000002003', durationSeconds: 60, sourceMembershipId: '12' },
+      { instanceId: '5000002004', durationSeconds: 60, sourceMembershipId: '12' },
+    ];
+    const byTotal = await svc.getPartners(['11', '12'], instances, 1, undefined, undefined, 'total');
+    const byAcct = await svc.getPartners(['11', '12'], instances, 1, undefined, undefined, '12');
+    await svc.close();
+    expect(byTotal.partners).toHaveLength(1);
+    expect(byTotal.partners[0].membershipId).toBe('100'); // AggregateLead: 4 total
+    expect(byAcct.partners).toHaveLength(1);
+    expect(byAcct.partners[0].membershipId).toBe('200'); // AccountLead: 3 on account 12 vs AggregateLead's 1
+  });
+
   test('tied-instance: same-period games pick min/max instance id for first/last', async () => {
     const tieRoot = path.join(tmp, 'tie');
     const L = path.join(tieRoot, 'legacy', 'by_iid_1m', 'iid_band=5000');
