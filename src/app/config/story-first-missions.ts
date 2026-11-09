@@ -73,6 +73,15 @@ export const STORY_RELEASE_ANCHORS: StoryReleaseAnchor[] = [
     sortOrder: 200,
     referenceIds: ['877831883', '1658347443', '3679941640', '4034557395'],
   },
+  // New Light / Beyond Light onward: the Cosmodrome intro replaces Homecoming for new characters.
+  {
+    releaseId: 'd2-new-light',
+    label: 'A Guardian Rises',
+    subtitle: 'New Light',
+    game: 'D2',
+    sortOrder: 201,
+    referenceIds: ['3906017155'],
+  },
   {
     releaseId: 'd2-coo',
     label: 'The Gateway',
