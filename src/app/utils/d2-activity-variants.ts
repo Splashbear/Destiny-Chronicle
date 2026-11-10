@@ -18,6 +18,8 @@ export const D2_RAID_VARIANT_DEFS = new Map<string, string[]>([
   ['Leviathan', ['Normal', 'Prestige']],
   ['Leviathan, Eater of Worlds', ['Normal', 'Prestige']],
   ['Leviathan, Spire of Stars', ['Normal', 'Prestige']],
+  ['Last Wish', ['Standard', 'Normal']],
+  ['Scourge of the Past', ['Normal']],
   ['Crown of Sorrow', ['Normal']],
   ['Garden of Salvation', ['Normal']],
   ['Deep Stone Crypt', ['Normal']],
@@ -27,7 +29,6 @@ export const D2_RAID_VARIANT_DEFS = new Map<string, string[]>([
   ['Root of Nightmares', ['Normal', 'Master']],
   ["Crota's End", ['Standard', 'Normal', 'Master', 'Legend']],
   ["Salvation's Edge", ['Standard', 'Master']],
-  ['Last Wish', ['Standard', 'Normal']],
   ['The Desert Perpetual', ['Standard', 'Normal', 'Contest', 'Epic: Contest', 'Epic: Standard']],
 ]);
 

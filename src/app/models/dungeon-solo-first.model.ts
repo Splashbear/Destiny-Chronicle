@@ -7,4 +7,6 @@ export interface DungeonSoloFirst {
   firstSolo?: import('./activity-history.model').ActivityHistory & { period: string };
   /** First solo flawless completion for this specific version (playerCount = 1, deaths = 0, completed = 1) */
   firstFlawless?: import('./activity-history.model').ActivityHistory & { period: string };
+  /** True when any clear of this version had 0 deaths across the roster (PGCR). */
+  hasFlawless?: boolean;
 } 

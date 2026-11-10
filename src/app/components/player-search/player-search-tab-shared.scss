@@ -561,3 +561,29 @@ img[src*='class-'] {
   .text-day-row, .text-frow, .text-trow, .text-prow { grid-template-columns: 1fr 1fr; }
   .text-day-name { grid-column: 1 / -1; font-weight: 700; }
 }
+
+/* Vertical Flawless ribbon on raid/dungeon Firsts card art (matches Solo Flawless green-400). */
+.firsts-flawless-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  min-height: 100%;
+  padding: 0.4rem 0;
+  background: #4ade80; /* tailwind green-400 — same as Solo Flawless text */
+  color: #0b1220;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}

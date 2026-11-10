@@ -78,7 +78,11 @@ export class PGCRCacheService {
   }
 
   async cacheD2PGCR(activityId: string, pgcr: any): Promise<void> {
-    return this.set(pgcr);
+    const pruned = prunePgcr(pgcr);
+    // Always key by the caller's instance id — Bungie body instanceId can be missing/mismatched.
+    pruned.id = String(activityId);
+    await (await this.dbPromise).put('pgcr', pruned);
+    this.stored$.next();
   }
 
   async getD1PGCR(activityId: string, activityPeriod?: string): Promise<PrunedPgcr | undefined> {

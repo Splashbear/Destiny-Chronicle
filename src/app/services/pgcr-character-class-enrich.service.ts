@@ -59,7 +59,9 @@ export class PgcrCharacterClassEnrichService {
       }
       if (totalBatches === 0) return;
 
-      host.updateLoadingProgress('pgcr', 0, totalBatches, 'Loading post-game reports (PGCRs)…');
+      // Do NOT write host.updateLoadingProgress here. Background class enrich used to
+      // leave loadingProgress stuck on "PGCRs… N of N", which blocked
+      // scheduleAfterBrowseReady (Firsts solos / flawless / clear counts never ran).
       let currentBatch = 0;
 
       for (const player of players) {
@@ -90,12 +92,6 @@ export class PgcrCharacterClassEnrichService {
           }
           const validated = await host.validatePgcrBatch(actsForPlayer, character, idx);
           currentBatch += 1;
-          host.updateLoadingProgress(
-            'pgcr',
-            currentBatch,
-            totalBatches,
-            `Loading post-game reports (PGCRs)… ${currentBatch} of ${totalBatches}`
-          );
           if (!validated || validated.length === 0) continue;
 
           const clsByInstance = new Map<string, string | undefined>();

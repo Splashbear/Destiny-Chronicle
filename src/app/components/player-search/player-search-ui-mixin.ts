@@ -1046,7 +1046,18 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
 
   protected scheduleAfterBrowseReady(fn: () => void): void {
     scheduleAfterReady(
-      () => !this.showLoadingModal && !this.loadingProgress,
+      () => {
+        if (this.showLoadingModal) return false;
+        // Null/undefined = idle. A stuck leftover progress object must not block
+        // Firsts solos / flawless / clear-count side work forever.
+        const p = this.loadingProgress;
+        if (!p) return true;
+        if (typeof p.current === 'number' && typeof p.total === 'number' && p.total > 0 && p.current >= p.total) {
+          this.loadingProgress = null;
+          return true;
+        }
+        return false;
+      },
       fn
     );
   }

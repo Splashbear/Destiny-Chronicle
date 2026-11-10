@@ -29,6 +29,9 @@ import {
   sumActivityDurationSeconds,
 } from '../utils/activity-duration-seconds';
 import { canonicalAccountKey } from '../utils/account-key';
+import { flawlessFromPgcr, soloFromPgcr } from '../utils/solo-from-pgcr';
+import { countClearsByBaseName } from '../utils/family-clear-counts';
+import { baseActivityNameFromVersioned } from '../utils/date-activity-grouping';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -2642,76 +2645,43 @@ export class ActivityDbService extends Dexie {
       first.period = pgcr.activityDetails.period;
     }
     
-    // Method 1: Use PGCR entries (most accurate) - Primary detection method
-    if (pgcr && pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
-      // Extract unique players from entries
-      const uniquePlayers = new Set(
-        pgcr.entries
-          .map((e: any) => e.player?.destinyUserInfo?.membershipId)
-          .filter(Boolean)
-      );
-      const playerCount = uniquePlayers.size;
-      const names = fireteamNamesFromPgcr(pgcr);
-      if (names.length) {
-        first.fireteamNames = names;
-      }
-      first.fireteamSize = playerCount;
+    const names = fireteamNamesFromPgcr(pgcr);
+    if (names.length) {
+      first.fireteamNames = names;
+    }
 
-      // For dungeons, check solo and flawless status
+    const solo = soloFromPgcr(pgcr);
+    if (solo.resolved) {
+      first.fireteamSize = solo.isSolo
+        ? 1
+        : (Array.isArray(pgcr.players) && pgcr.players.length
+            ? new Set(pgcr.players.map((p: any) => p.id).filter(Boolean)).size
+            : new Set(
+                (pgcr.entries || [])
+                  .map((e: any) => e.player?.destinyUserInfo?.membershipId)
+                  .filter(Boolean)
+              ).size);
       if (first.type === 'dungeon') {
-        first.isSolo = playerCount === 1;
-
-        if (first.isSolo) {
-          // Check if all entries have 0 deaths for solo flawless
-          const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
-          const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
-          first.isSoloFlawless = totalDeaths === 0;
-        }
+        first.isSolo = solo.isSolo;
+        first.isSoloFlawless = solo.isSoloFlawless;
       }
+    }
 
-      // For raids, check flawless status (all players with 0 deaths)
-      if (first.type === 'raid') {
-        const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
-        const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
-        first.isFlawless = totalDeaths === 0;
+    // Raids and dungeons: fireteam flawless = 0 deaths across the roster.
+    if (first.type === 'raid' || first.type === 'dungeon') {
+      const flawless = flawlessFromPgcr(pgcr);
+      if (flawless != null) {
+        first.isFlawless = flawless;
       }
+    }
 
-      // Attach class and membershipType for per-character view (membershipId match is sufficient)
+    if (pgcr && pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
       const me = pgcr.entries.find((e: any) => e.player?.destinyUserInfo?.membershipId === membershipId);
       if (me) {
         first.characterClass = me.player?.characterClass;
         first.membershipType = me.player?.destinyUserInfo?.membershipType;
       }
-    }
-    // Method 2: Fallback to PGCR players array (alternative format)
-    else if (pgcr && pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
-      const uniquePlayers = new Set(
-        pgcr.players.map((p: any) => p.id).filter(Boolean)
-      );
-      const playerCount = uniquePlayers.size;
-      const names = fireteamNamesFromPgcr(pgcr);
-      if (names.length) {
-        first.fireteamNames = names;
-      }
-      first.fireteamSize = playerCount;
-
-      // For dungeons, check solo and flawless status
-      if (first.type === 'dungeon') {
-        first.isSolo = playerCount === 1;
-
-        if (first.isSolo) {
-          const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
-          first.isSoloFlawless = totalDeaths === 0;
-        }
-      }
-
-      // For raids, check flawless status
-      if (first.type === 'raid') {
-        const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
-        first.isFlawless = totalDeaths === 0;
-      }
-
-      // Try to find player info from players array
+    } else if (pgcr && pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
       const me = pgcr.players.find((p: any) => p.id === membershipId);
       if (me && pgcr.entries && Array.isArray(pgcr.entries)) {
         const meEntry = pgcr.entries.find((e: any) =>
@@ -2724,11 +2694,6 @@ export class ActivityDbService extends Dexie {
         }
       }
     }
-    // Method 3: Fallback to activity values (least reliable but always available)
-    // Note: This fallback is only used if PGCR structure is incomplete.
-    // If we have a PGCR object but it doesn't have entries/players, we can't determine solo status from it.
-    // In this case, we leave isSolo/isSoloFlawless as false (initialized values).
-    // The activity history values are only used in getDungeonSoloFirsts when we can't fetch the PGCR at all.
   }
 
   /**
@@ -2805,7 +2770,6 @@ export class ActivityDbService extends Dexie {
   private async detectSoloFromPGCR(activity: StoredActivity, membershipId: string): Promise<{ isSolo: boolean; isSoloFlawless: boolean }> {
     const instanceId = activity.activityDetails?.instanceId;
     if (!instanceId) {
-      // Fallback to activity values if no instanceId
       return {
         isSolo: this.isSolo(activity),
         isSoloFlawless: this.isSoloFlawless(activity)
@@ -2813,61 +2777,18 @@ export class ActivityDbService extends Dexie {
     }
 
     try {
-      // Try to get PGCR from cache
       const pgcr = await this.pgcrCacheService.getD2PGCR(instanceId);
-      
-      if (!pgcr) {
-        // Fallback to activity values if PGCR not available
-        return {
-          isSolo: this.isSolo(activity),
-          isSoloFlawless: this.isSoloFlawless(activity)
-        };
-      }
-
-      // Method 1: Use PGCR entries (most accurate) - Primary detection method
-      if (pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
-        const uniquePlayers = new Set(
-          pgcr.entries
-            .map((e: any) => e.player?.destinyUserInfo?.membershipId)
-            .filter(Boolean)
-        );
-        const isSolo = uniquePlayers.size === 1;
-        
-        if (isSolo) {
-          // Check if all entries have 0 deaths for solo flawless
-          const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
-          const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
-          return {
-            isSolo: true,
-            isSoloFlawless: totalDeaths === 0
-          };
+      if (pgcr) {
+        const fromPgcr = soloFromPgcr(pgcr);
+        if (fromPgcr.resolved) {
+          return { isSolo: fromPgcr.isSolo, isSoloFlawless: fromPgcr.isSoloFlawless };
         }
-        
-        return { isSolo: false, isSoloFlawless: false };
-      }
-      
-      // Method 2: Fallback to PGCR players array (alternative format)
-      if (pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
-        const uniquePlayers = new Set(
-          pgcr.players.map((p: any) => p.id).filter(Boolean)
-        );
-        const isSolo = uniquePlayers.size === 1;
-        
-        if (isSolo) {
-          const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
-          return {
-            isSolo: true,
-            isSoloFlawless: totalDeaths === 0
-          };
-        }
-        
-        return { isSolo: false, isSoloFlawless: false };
       }
     } catch (error) {
       console.warn(`[DungeonSoloFirsts] Failed to fetch PGCR for ${instanceId}, using fallback:`, error);
     }
 
-    // Method 3: Fallback to activity values (least reliable but always available)
+    // Archive lean rows often omit playerCount — this fallback only helps Bungie history rows.
     return {
       isSolo: this.isSolo(activity),
       isSoloFlawless: this.isSoloFlawless(activity)
@@ -2892,7 +2813,10 @@ export class ActivityDbService extends Dexie {
     // Sort by period ascending so the earliest completions are encountered first.
     activities.sort((a, b) => new Date(a.period).getTime() - new Date(b.period).getTime());
 
-    const firstsMap = new Map<string, { firstSolo?: StoredActivity; firstFlawless?: StoredActivity }>();
+    const firstsMap = new Map<
+      string,
+      { firstSolo?: StoredActivity; firstFlawless?: StoredActivity; hasFlawless?: boolean }
+    >();
 
     // Ensure we only consider activities that belong to the requested account
     const ownerActivities = activities.filter(a => a.membershipId === membershipId);
@@ -3001,13 +2925,15 @@ export class ActivityDbService extends Dexie {
       const instanceId = activity.activityDetails?.instanceId;
       let solo = false;
       let flawless = false;
+      let fireteamFlawless: boolean | null = null;
 
       if (instanceId && pgcrMap.has(instanceId)) {
         // Use cached/fetched PGCR data
         const pgcr = pgcrMap.get(instanceId);
-        const result = await this.detectSoloFromPGCRWithData(activity, pgcr, membershipId);
+        const result = this.detectSoloFromPGCRWithData(activity, pgcr, membershipId);
         solo = result.isSolo;
         flawless = result.isSoloFlawless;
+        fireteamFlawless = flawlessFromPgcr(pgcr);
       } else {
         // Fallback to async PGCR lookup or activity values
         const result = await this.detectSoloFromPGCR(activity, membershipId);
@@ -3080,6 +3006,10 @@ export class ActivityDbService extends Dexie {
           entry.firstFlawless = activity;
         }
       }
+
+      if (fireteamFlawless === true || flawless) {
+        entry.hasFlawless = true;
+      }
     }
 
     // Convert to the public model.
@@ -3091,7 +3021,8 @@ export class ActivityDbService extends Dexie {
         family: baseDungeonName, 
         fullName: key,
         firstSolo: value.firstSolo, 
-        firstFlawless: value.firstFlawless 
+        firstFlawless: value.firstFlawless,
+        hasFlawless: !!value.hasFlawless || !!value.firstFlawless,
       };
       result.push(entry);
     });
@@ -3106,48 +3037,12 @@ export class ActivityDbService extends Dexie {
    * Detects solo and solo flawless status from provided PGCR data.
    * Used when PGCR data is already available (from batch fetch).
    */
-  private detectSoloFromPGCRWithData(activity: StoredActivity, pgcr: any, membershipId: string): { isSolo: boolean; isSoloFlawless: boolean } {
-    // Method 1: Use PGCR entries (most accurate) - Primary detection method
-    if (pgcr && pgcr.entries && Array.isArray(pgcr.entries) && pgcr.entries.length > 0) {
-      const uniquePlayers = new Set(
-        pgcr.entries
-          .map((e: any) => e.player?.destinyUserInfo?.membershipId)
-          .filter(Boolean)
-      );
-      const isSolo = uniquePlayers.size === 1;
-      
-      if (isSolo) {
-        // Check if all entries have 0 deaths for solo flawless
-        const allDeaths = pgcr.entries.map((e: any) => e.values?.deaths?.basic?.value ?? 0);
-        const totalDeaths = allDeaths.reduce((sum: number, d: number) => sum + d, 0);
-        return {
-          isSolo: true,
-          isSoloFlawless: totalDeaths === 0
-        };
-      }
-      
-      return { isSolo: false, isSoloFlawless: false };
+  private detectSoloFromPGCRWithData(activity: StoredActivity, pgcr: any, _membershipId: string): { isSolo: boolean; isSoloFlawless: boolean } {
+    const fromPgcr = soloFromPgcr(pgcr);
+    if (fromPgcr.resolved) {
+      return { isSolo: fromPgcr.isSolo, isSoloFlawless: fromPgcr.isSoloFlawless };
     }
-    
-    // Method 2: Fallback to PGCR players array (alternative format)
-    if (pgcr && pgcr.players && Array.isArray(pgcr.players) && pgcr.players.length > 0) {
-      const uniquePlayers = new Set(
-        pgcr.players.map((p: any) => p.id).filter(Boolean)
-      );
-      const isSolo = uniquePlayers.size === 1;
-      
-      if (isSolo) {
-        const totalDeaths = pgcr.players.reduce((sum: number, p: any) => sum + (p.deaths ?? 0), 0);
-        return {
-          isSolo: true,
-          isSoloFlawless: totalDeaths === 0
-        };
-      }
-      
-      return { isSolo: false, isSoloFlawless: false };
-    }
-
-    // Method 3: Fallback to activity values (least reliable but always available)
+    // Archive lean rows often omit playerCount — only reliable when Bungie history filled it.
     return {
       isSolo: this.isSolo(activity),
       isSoloFlawless: this.isSoloFlawless(activity)
@@ -3349,6 +3244,176 @@ export class ActivityDbService extends Dexie {
       .between(startPeriod, endPeriod, true, true)
       .and(activity => activity.membershipId === membershipId)
       .toArray();
+  }
+
+  /**
+   * Completed raid/dungeon clears per family base name from stored history
+   * (IndexedDB rows with completed === 1, unique by game+instanceId).
+   */
+  async getRaidDungeonClearCounts(
+    membershipId: string,
+    game: 'D1' | 'D2',
+    /** When set, only count clears stored for this platform account (non–cross-save / per-card). */
+    membershipType?: number
+  ): Promise<Map<string, number>> {
+    await this.initPromise;
+    const acts = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => {
+        if (a.game !== game) return false;
+        // Per-account: match platform when present; legacy rows with no membershipType
+        // still count for this membershipId so non–cross-save cards are not blanked.
+        if (membershipType == null || !Number.isFinite(membershipType)) return true;
+        const rowType = Number(a.membershipType);
+        if (!Number.isFinite(rowType) || rowType === 0) return true;
+        return rowType === Number(membershipType);
+      })
+      .toArray();
+    const familyMap =
+      game === 'D1'
+        ? ActivityDbService.D1_FAMILY_MAP
+        : ActivityDbService.ACTIVITY_FAMILY_MAP;
+    return countClearsByBaseName(acts, {
+      game,
+      familyMap,
+      isCompletion: a => this.isCompletion(a as StoredActivity),
+      isRaidOrDungeon: (referenceId, mode) => {
+        const type = this.manifest.getActivityType(referenceId, mode);
+        return type === 'raid' || type === 'dungeon';
+      },
+    });
+  }
+
+  /**
+   * Base names of D2 raids (incl. Pantheon) with at least one fireteam flawless clear.
+   * Uses PGCR roster deaths — not only the first-clear Firsts record — so later
+   * flawless clears still light the banner. Checkpoint Pantheon clears count.
+   */
+  async getFlawlessRaidBaseNames(
+    membershipId: string,
+    /** When set, only scan clears stored for this platform account (non–cross-save / per-card). */
+    membershipType?: number
+  ): Promise<string[]> {
+    await this.initPromise;
+    const acts = await this.activities
+      .where('membershipId')
+      .equals(membershipId)
+      .and(a => {
+        if (a.game !== 'D2') return false;
+        if (membershipType == null || !Number.isFinite(membershipType)) return true;
+        const rowType = Number(a.membershipType);
+        if (!Number.isFinite(rowType) || rowType === 0) return true;
+        return rowType === Number(membershipType);
+      })
+      .toArray();
+
+    // One row per instance; prefer a character row with known 0 deaths when present.
+    const byInstance = new Map<string, { activity: StoredActivity; family: string }>();
+    for (const a of acts) {
+      if (!this.isCompletion(a)) continue;
+      const { referenceId, mode, instanceId } = a.activityDetails || ({} as any);
+      if (!instanceId || !referenceId) continue;
+      const type = this.manifest.getActivityType(referenceId, mode);
+      // Skip known dungeons — those use the solo/flawless dungeon scanner.
+      if (type === 'dungeon' || mode === 82) continue;
+
+      let family = ActivityDbService.ACTIVITY_FAMILY_MAP[String(referenceId)];
+      if (!family) {
+        // Unmapped raid/Pantheon hashes: fall back to manifest title when mode/type says raid.
+        if (type === 'raid' || mode === 4) {
+          const manifestName = this.manifest.getActivityName(referenceId, false);
+          if (manifestName && manifestName !== 'Unknown Activity') {
+            family = manifestName;
+          }
+        }
+      }
+      if (!family) continue;
+      const familyLower = String(family).toLowerCase();
+      const looksRaid =
+        type === 'raid' ||
+        mode === 4 ||
+        familyLower.includes('pantheon') ||
+        // Mapped raid families are versioned ("Last Wish: Standard"); dungeons are filtered above.
+        family.includes(': ');
+      if (!looksRaid) continue;
+
+      const key = String(instanceId);
+      const deaths = a.values?.deaths?.basic?.value;
+      // Player deaths > 0 ⇒ cannot be fireteam flawless.
+      if (typeof deaths === 'number' && deaths > 0) continue;
+
+      const prev = byInstance.get(key);
+      if (!prev) {
+        byInstance.set(key, { activity: a, family });
+        continue;
+      }
+      const prevDeaths = prev.activity.values?.deaths?.basic?.value;
+      if (typeof deaths === 'number' && deaths === 0 && prevDeaths !== 0) {
+        byInstance.set(key, { activity: a, family });
+      }
+    }
+
+    const candidates = [...byInstance.values()];
+    if (candidates.length === 0) return [];
+
+    const instanceIds = candidates
+      .map(c => c.activity.activityDetails?.instanceId)
+      .filter((id): id is string => !!id)
+      .map(String);
+
+    let pgcrMap = new Map<string, any>();
+    try {
+      pgcrMap = await this.pgcrCacheService.getBatch(instanceIds);
+      const missing = await this.pgcrCacheService.getMissingPGCRs(instanceIds);
+      if (missing.length > 0) {
+        const chunks = this.chunkArray(missing, 3);
+        for (const chunk of chunks) {
+          const results = await Promise.allSettled(
+            chunk.map(async instanceId => {
+              try {
+                const pgcr = await firstValueFrom(this.bungieService.getPGCR(instanceId, false));
+                await this.pgcrCacheService.cacheD2PGCR(instanceId, pgcr);
+                return { instanceId, pgcr };
+              } catch (error) {
+                console.warn(`[RaidFlawless] Failed to fetch PGCR ${instanceId}:`, error);
+                return null;
+              }
+            })
+          );
+          for (const result of results) {
+            if (result.status === 'fulfilled' && result.value) {
+              pgcrMap.set(result.value.instanceId, result.value.pgcr);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[RaidFlawless] Batch PGCR fetch failed:', error);
+    }
+
+    const flawlessBases = new Set<string>();
+    for (const { activity, family } of candidates) {
+      const instanceId = String(activity.activityDetails?.instanceId || '');
+      if (!family || !instanceId) continue;
+      const baseName = baseActivityNameFromVersioned(family);
+      if (!baseName || flawlessBases.has(baseName)) continue;
+
+      let pgcr = pgcrMap.get(instanceId);
+      if (!pgcr) {
+        try {
+          pgcr = await this.pgcrCacheService.getD2PGCR(instanceId);
+        } catch {
+          pgcr = undefined;
+        }
+      }
+      const verdict = flawlessFromPgcr(pgcr);
+      if (verdict === true) {
+        flawlessBases.add(baseName);
+      }
+    }
+
+    return [...flawlessBases];
   }
 
   /**

@@ -432,6 +432,13 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
 
   async calculateAccountStats() {
     await this.accountStatsCalculator.calculateAccountStats(this.asAccountStatsCalculatorHost());
+    // Account-stats firsts refresh does not go through scheduleAfterBrowseReady — still
+    // need dungeon solos, clear counts, and raid flawless banners for the Firsts tab.
+    for (const player of this.selectedPlayers || []) {
+      void this.loadDungeonSoloFirsts(player).catch((err: unknown) => {
+        console.warn('[Sync] DungeonSolo/flawless skipped after account stats for', player.membershipId, err);
+      });
+    }
   }
 
   // Helper method to format duration
