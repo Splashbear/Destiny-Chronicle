@@ -476,7 +476,7 @@
           @defer (on immediate) {
             <app-activity-heatmap
               [membershipIds]="heatmapMembershipIds"
-              [accountKeys]="heatmapAccountKeys"
+              [accountKeys]="siteAccountFilterKeys"
               [characterMeta]="heatmapCharacterMeta"
               (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
@@ -485,7 +485,9 @@
         <div *ngIf="enablePlayedWith && activeTab === 'playedWith' && selectedPlayers.length > 0">
           @if (playedWithAccounts.length) {
             @defer (on immediate) {
-              <app-played-with [accounts]="playedWithAccounts"></app-played-with>
+              <app-played-with
+                [accounts]="playedWithAccounts"
+                [accountKeys]="siteAccountFilterKeys"></app-played-with>
             } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
           } @else {
             <p class="text-sm text-slate-400">{{ uiI18n.t('playedWith.d2Only') }}</p>
@@ -761,6 +763,7 @@
   <app-decrypted-share-card
     [open]="shareMemoryOpen"
     [memory]="shareMemoryItem"
+    [memories]="shareMemoryList"
     [flavorLine]="shareMemoryFlavor"
     (close)="closeShareMemoryCard()">
   </app-decrypted-share-card>

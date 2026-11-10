@@ -56,8 +56,8 @@ export abstract class PlayerSearchState {
   selectedPlayers: PlayerSearchDisplay[] = [];
   protected heatmapIdCacheKey = '';
   protected heatmapIdCache: string[] = [];
-  protected heatmapAccountKeysCacheKey = '';
-  protected heatmapAccountKeysCache: string[] = [];
+  protected siteAccountFilterKeysCacheKey = '';
+  protected siteAccountFilterKeysCache: string[] = [];
   protected playedWithAccountCacheKey = '';
   protected playedWithAccountCache: PlayedWithAccountChoice[] = [];
   protected heatmapClassCacheKey = '';
@@ -186,6 +186,8 @@ export abstract class PlayerSearchState {
   showAnniversaryBanner: boolean = false;
   shareMemoryOpen = false;
   shareMemoryItem: AnniversaryFirst | null = null;
+  /** Full On-This-Day list so the share PNG matches the site anniversary card. */
+  shareMemoryList: AnniversaryFirst[] = [];
   shareMemoryFlavor = '';
   protected dismissedAnniversaries = new Set<string>();
   activeFirstsTab: string = 'all';

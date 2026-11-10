@@ -149,56 +149,6 @@
   color: #ffe9a8;
 }
 
-.fireside-hero__list {
-  position: relative;
-  z-index: 1;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(90, 58, 28, 0.7);
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.fireside-hero__list-row {
-  display: grid;
-  grid-template-columns: 1.75rem 1fr auto;
-  gap: 0.65rem;
-  align-items: center;
-  width: 100%;
-  text-align: left;
-  background: rgba(12, 14, 16, 0.4);
-  border: 1px solid rgba(90, 58, 28, 0.55);
-  border-radius: 8px;
-  padding: 0.5rem 0.75rem;
-  color: #d8e4ee;
-  cursor: pointer;
-}
-
-.fireside-hero__list-row:hover {
-  border-color: #c9a227;
-}
-
-.fireside-hero__list-icon {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 4px;
-}
-
-.fireside-hero__list-name {
-  font-weight: 600;
-  color: #fff;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fireside-hero__list-meta {
-  color: #c9b38a;
-  font-size: 0.75rem;
-  white-space: nowrap;
-}
-
 @media (max-width: 640px) {
   .fireside-hero__body {
     flex-direction: column;

@@ -12,7 +12,7 @@ import { anniversaryBannerPrecheck } from '../../utils/anniversary-banner-check'
 import { computeAnniversariesForSelectedDate as computeAnniversariesForDate } from '../../utils/compute-anniversaries-for-date';
 import { buildComputeAnniversariesDeps } from '../../utils/compute-anniversaries-deps';
 import { collectDisplayedRaidDungeonFirstsForPlayers } from '../../utils/collect-player-variant-groups';
-import { anniversaryShareFlavor } from '../../utils/anniversary-share-flavor';
+import { anniversaryCardFlavor } from '../../utils/anniversary-share-flavor';
 import { formatSelectedDateLabel as formatDateLabel } from '../../utils/format-selected-date-label';
 import { sumTotalTimeForSelectedDate } from '../../utils/total-time-for-date';
 import {
@@ -245,17 +245,24 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.heatmapIdCache = cache.value;
     return ids;
   }
-  /** Canonical account keys from header cards; empty when no card filter is active. */
-  get heatmapAccountKeys(): string[] {
+  /**
+   * Site-wide header account-card filter (canonical keys).
+   * Empty = all accounts. Shared by Activities, Firsts, Breakdown, Heatmap, Played With, etc.
+   */
+  get siteAccountFilterKeys(): string[] {
     const key = Array.from(this.selectedAccountKeysForActivities || [])
       .sort()
       .join('\n');
-    if (key === this.heatmapAccountKeysCacheKey) {
-      return this.heatmapAccountKeysCache;
+    if (key === this.siteAccountFilterKeysCacheKey) {
+      return this.siteAccountFilterKeysCache;
     }
-    this.heatmapAccountKeysCacheKey = key;
-    this.heatmapAccountKeysCache = key ? key.split('\n') : [];
-    return this.heatmapAccountKeysCache;
+    this.siteAccountFilterKeysCacheKey = key;
+    this.siteAccountFilterKeysCache = key ? key.split('\n') : [];
+    return this.siteAccountFilterKeysCache;
+  }
+  /** @deprecated Prefer siteAccountFilterKeys — same site-wide card filter. */
+  get heatmapAccountKeys(): string[] {
+    return this.siteAccountFilterKeys;
   }
   get heatmapCharacterMeta(): Record<string, HeatmapCharacterLookup> {
     const cache = { key: this.heatmapClassCacheKey, value: this.heatmapClassCache };
@@ -462,16 +469,19 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     this.cdr.markForCheck();
   }
 
-  /** Open the decrypted-memory share card (Phase 2). */
+  /** Open the decrypted-memory share card — same consolidated copy as the On This Day banner. */
   onShareAnniversaryMemory(anniversary: AnniversaryFirst): void {
+    const list = this.anniversaryFirsts?.length ? this.anniversaryFirsts : [anniversary];
     this.shareMemoryItem = anniversary;
-    this.shareMemoryFlavor = anniversaryShareFlavor(anniversary.yearsAgo);
+    this.shareMemoryList = list.slice();
+    this.shareMemoryFlavor = anniversaryCardFlavor(list);
     this.shareMemoryOpen = true;
     this.cdr.markForCheck();
   }
   closeShareMemoryCard(): void {
     this.shareMemoryOpen = false;
     this.shareMemoryItem = null;
+    this.shareMemoryList = [];
     this.cdr.markForCheck();
   }
 

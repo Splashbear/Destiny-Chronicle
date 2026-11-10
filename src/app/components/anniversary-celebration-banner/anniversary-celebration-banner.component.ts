@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from 
 import { CommonModule } from '@angular/common';
 import { ActivityFirstCompletion } from '../../models/guardian-firsts.model';
 import { ActivityHistory } from '../../models/activity-history.model';
+import { anniversaryCardFlavor } from '../../utils/anniversary-share-flavor';
 
 export interface AnniversaryFirst {
   first: ActivityFirstCompletion | ActivityHistory;
@@ -38,9 +39,8 @@ export class AnniversaryCelebrationBannerComponent {
   @Input() selectedDate: string = '';
   @Output() dismiss = new EventEmitter<void>();
   @Output() navigateToFirst = new EventEmitter<AnniversaryFirst>();
+  /** Emits the featured first; parent shares the full On-This-Day list. */
   @Output() shareMemory = new EventEmitter<AnniversaryFirst>();
-
-  showAll = false;
 
   get featured(): AnniversaryFirst | null {
     return this.anniversaries[0] || null;
@@ -51,6 +51,20 @@ export class AnniversaryCelebrationBannerComponent {
     const d = new Date(this.selectedDate + 'T12:00:00');
     if (Number.isNaN(d.getTime())) return this.selectedDate;
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  /** One consolidated headline for every first that night (matches the share PNG). */
+  get headline(): string {
+    return anniversaryCardFlavor(this.anniversaries);
+  }
+
+  get typeSummary(): string {
+    if (this.anniversaries.length <= 1) {
+      return this.featured ? this.getAnniversaryTypeLabel(this.featured) : '';
+    }
+    const labels = this.anniversaries.map(a => this.getAnniversaryTypeLabel(a));
+    const unique = [...new Set(labels)];
+    return unique.join(' · ');
   }
 
   onDismiss(): void {
@@ -65,33 +79,9 @@ export class AnniversaryCelebrationBannerComponent {
     this.shareMemory.emit(anniversary);
   }
 
-  /** Original Chronicle flavor — never presented as Bungie-written. */
+  /** @deprecated Prefer `headline` — kept for older call sites/tests. */
   flavorLine(anniversary: AnniversaryFirst): string {
-    const name = anniversary.activityName || 'that activity';
-    const years = anniversary.yearsAgo;
-    const when =
-      years <= 0 ? 'Today' :
-      years === 1 ? 'One year ago tonight' :
-      `${this.numberWord(years)} years ago tonight`;
-
-    switch (anniversary.type) {
-      case 'solo-flawless':
-        return `${when}, you solo flawless'd ${name}.`;
-      case 'solo':
-        return `${when}, you cleared ${name} alone.`;
-      case 'first-ever':
-        return `${when}, your journey began in ${name}.`;
-      default:
-        return `${when}, you stood in ${name}.`;
-    }
-  }
-
-  private numberWord(n: number): string {
-    const words = [
-      '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen'
-    ];
-    return words[n] || String(n);
+    return anniversaryCardFlavor([anniversary]);
   }
 
   getAnniversaryTypeLabel(anniversary: AnniversaryFirst): string {
