@@ -178,7 +178,9 @@ export abstract class PlayerSearchState {
   /** True while favorites (or any multi-profile sync) is still running. */
   profileLoadInProgress = false;
   dbReady: boolean = false;
-  activeTab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith' = 'activities';
+  activeTab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith' | 'timeStory' = 'activities';
+  /** When set, Activities tab is filtered to this time-story group. */
+  timeStoryGroupFilter: string | null = null;
   readonly enablePlayedWith = environment.enablePlayedWith;
   
   // Anniversary celebration banner state

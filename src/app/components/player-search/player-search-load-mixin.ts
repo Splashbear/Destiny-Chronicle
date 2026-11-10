@@ -564,6 +564,7 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
   }
 
   onActivityTypeChange(event: Event): void {
+    this.timeStoryGroupFilter = null;
     this.cdr.detectChanges();
   }
 

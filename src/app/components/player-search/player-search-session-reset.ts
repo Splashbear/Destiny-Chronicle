@@ -26,6 +26,7 @@ export function resetSessionForPrimarySelect(c: any): void {
   c.processedActivities = [];
   c.filteredActivities$.next([]);
   c.filteredActivitiesForDate = [];
+  c.timeStoryGroupFilter = null;
   c.loadingAccountStats = true;
   c.accountStats = {
     totalTime: 0,

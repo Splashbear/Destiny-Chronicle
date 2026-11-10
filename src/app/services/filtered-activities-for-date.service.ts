@@ -38,6 +38,8 @@ export interface FilteredActivitiesForDateHost {
   getManifest(): ActivityTypeManifest;
   setFilteredActivitiesForDate(list: ActivityWithMembership[]): void;
   computeAccountStats(): void;
+  getTimeStoryGroupFilter?(): string | null;
+  activityMatchesTimeStoryGroup?(activity: StoredActivity, group: string): boolean;
 }
 
 /**
@@ -56,10 +58,11 @@ export class FilteredActivitiesForDateService {
 
     const selectedPlayers = host.getSelectedPlayers();
     const selectedActivityType = host.getSelectedActivityType();
+    const groupFilter = host.getTimeStoryGroupFilter?.() || '';
     const cacheKey = filteredActivitiesCacheKey(
       selectedDate,
       selectedPlayers,
-      selectedActivityType.label
+      selectedActivityType.label + (groupFilter ? `|ts:${groupFilter}` : '')
     );
     const cachedEntry = host.getCacheEntry(cacheKey);
     if (cachedEntry && !forceRefresh && !cachedEntry.dirty && host.isFirstFullSyncDone()) {
@@ -87,6 +90,11 @@ export class FilteredActivitiesForDateService {
         selectedActivityType,
         manifest
       );
+      if (groupFilter && host.activityMatchesTimeStoryGroup) {
+        playerActivities = playerActivities.filter((activity) =>
+          host.activityMatchesTimeStoryGroup!(activity, groupFilter)
+        );
+      }
       return stampActivitiesForPlayer(playerActivities, player, manifest);
     });
 

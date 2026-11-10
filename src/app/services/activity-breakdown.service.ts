@@ -10,6 +10,7 @@ import {
   type TrialsTeammateRow,
 } from '../utils/trials-breakdown';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
+import { timeStoryGroupFromSection, type TimeStoryGroupId } from '../utils/time-story-groups';
 
 /** One membership + game scope for Breakdown (avoids D1/D2 bleed on shared mids). */
 export interface BreakdownMembershipScope {
@@ -481,6 +482,15 @@ export class ActivityBreakdownService {
       return cached;
     }
 
+    const allActivities = await this.loadScopedActivities(scopes);
+    return this.aggregateActivityCounts(allActivities, cacheKey, identityByMembership);
+  }
+
+  /**
+   * Raw activity rows for explicit membership+game scopes (D1/D2 never bleed).
+   * Shared by Activity Breakdown and "Your Destiny, by the hours".
+   */
+  async loadScopedActivities(scopes: BreakdownMembershipScope[]): Promise<StoredActivity[]> {
     const allActivities: StoredActivity[] = [];
     for (const scope of scopes) {
       let list = await this.activityDb.getActivitiesForMembershipAndGame(scope.membershipId, scope.game);
@@ -503,8 +513,78 @@ export class ActivityBreakdownService {
         allActivities.push({ ...a, game: scope.game });
       }
     }
+    return allActivities;
+  }
 
-    return this.aggregateActivityCounts(allActivities, cacheKey, identityByMembership);
+  /** Breakdown section key (override or mode-N) for a count row. */
+  sectionKeyForRow(row: ActivityCountRow): string {
+    return this.getSectionOverride(row) ?? `mode-${row.mode ?? 0}`;
+  }
+
+  timeStoryGroupForRow(row: ActivityCountRow): TimeStoryGroupId {
+    return timeStoryGroupFromSection(this.sectionKeyForRow(row), row.mode ?? 0);
+  }
+
+  /**
+   * Classify one stored/history activity with the same rules as Activity Breakdown.
+   * Returns null for excluded encounter nodes so both views skip them.
+   */
+  timeStoryGroupForActivity(activity: StoredActivity): TimeStoryGroupId | null {
+    const row = this.countRowStubForActivity(activity);
+    if (!row) return null;
+    return this.timeStoryGroupForRow(row);
+  }
+
+  /** Build the fields getSectionOverride needs from a stored activity. */
+  private countRowStubForActivity(a: StoredActivity): ActivityCountRow | null {
+    const refId = a.activityDetails?.referenceId;
+    if (refId == null || refId === '') return null;
+    const game: 'D1' | 'D2' = a.game || 'D2';
+    const details = a.activityDetails as {
+      mode?: number;
+      modes?: number[];
+      directorActivityHash?: string | number;
+      referenceId?: string | number;
+      activityTypeHash?: string | number;
+    };
+    const rawMode = srlGroupingMode(a, game) ?? details?.mode ?? 0;
+    const classified = classifyPvp({
+      game,
+      modes: details?.modes ?? (a as { modes?: number[] }).modes,
+      mode: rawMode,
+      directorActivityHash: details?.directorActivityHash,
+      referenceId: refId,
+      activityTypeHash: details?.activityTypeHash,
+    });
+    let effectiveMode = rawMode;
+    if (classified.bucket === 'trials-nine') effectiveMode = 39;
+    else if (classified.bucket === 'trials-d1') effectiveMode = 14;
+    else if (classified.bucket === 'trials-too' || classified.bucket === 'trials-freelance') effectiveMode = 84;
+    else if (rawMode === 94 || rawMode === 29) effectiveMode = rawMode;
+
+    const isD1 = game === 'D1';
+    const referenceId = String(refId);
+    const name = this.manifest.getActivityName(referenceId, isD1);
+    let baseName: string;
+    if (isD1) {
+      const d1Family = ActivityDbService.getD1FamilyName(referenceId);
+      baseName = d1Family || name || `Unknown (${referenceId})`;
+    } else {
+      baseName = this.manifest.getActivityFamilyName(referenceId) || name || `Unknown (${referenceId})`;
+    }
+    if (EXCLUDE_FROM_BREAKDOWN.has(baseName.toLowerCase().trim())) return null;
+
+    return {
+      referenceId,
+      game,
+      baseName,
+      variantName: '',
+      mode: effectiveMode,
+      runs: 1,
+      clears: 0,
+      fails: 0,
+      timeSeconds: 0,
+    };
   }
 
   /**

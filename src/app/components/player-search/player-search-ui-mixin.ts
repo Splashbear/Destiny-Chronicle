@@ -31,6 +31,9 @@ import { getCharacterMinutesPlayed } from '../../utils/character-profile';
 import { applyArchiveWatermark } from '../../utils/archive-watermark';
 import { buildAccountLookupPayload } from '../../utils/lookup-analytics-send';
 import { formatStatusDisplay as formatStatusDisplayUtil } from '../../utils/format-status-display';
+import { effectiveGame, type EffectiveGame } from '../../utils/effective-game';
+import { TIME_STORY_GROUP_LABELS, type TimeStoryGroupId } from '../../utils/time-story-groups';
+import type { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
 import { addSearchChip, removeSearchChip } from '../../utils/search-chips';
 import { searchModeErrorMessage } from '../../utils/search-mode-warning';
 import {
@@ -1251,6 +1254,72 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     );
   }
 
+
+  get timeStoryEffectiveGame(): EffectiveGame {
+    return effectiveGame(this.timeStorySelectedPlayers, 'Both');
+  }
+
+  get timeStoryDataRevision(): string {
+    const count = this.accountStats?.totalActivityCount || this.overallActivitiesProcessed || 0;
+    return `${count}|${this.profileLoadInProgress ? 1 : 0}|${this.firstFullSyncDone ? 1 : 0}`;
+  }
+
+
+  get timeStorySelectedPlayers(): any[] {
+    const keys = this.siteAccountFilterKeys;
+    let players = this.selectedPlayers || [];
+    if (keys.length) {
+      const set = new Set(keys);
+      players = players.filter((p) => set.has(this.getPlayerKey(p)));
+    }
+    return players;
+  }
+
+  get timeStoryScopes(): BreakdownMembershipScope[] {
+    const game = this.timeStoryEffectiveGame;
+    const seen = new Set();
+    const scopes = [];
+    for (const player of this.timeStorySelectedPlayers) {
+      const playerGame = player.game === 'D1' ? 'D1' : 'D2';
+      if (game !== 'Both' && playerGame !== game) continue;
+      const key = playerGame + ':' + player.membershipId;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      scopes.push({ membershipId: player.membershipId, game: playerGame });
+    }
+    return scopes;
+  }
+
+  get timeStoryAccountChips(): Array<{ platform: string; game: 'D1' | 'D2' }> {
+    return this.timeStoryScopes.map((scope) => {
+      const player = this.timeStorySelectedPlayers.find(
+        (p) => p.membershipId === scope.membershipId && (p.game === 'D1' ? 'D1' : 'D2') === scope.game
+      );
+      return { platform: player?.platform || 'Unknown', game: scope.game };
+    });
+  }
+
+  get timeStoryFilterLabel(): string {
+    const group = this.timeStoryGroupFilter;
+    return group && TIME_STORY_GROUP_LABELS[group] ? TIME_STORY_GROUP_LABELS[group] : '';
+  }
+
+  async openTimeStoryGroup(event: { group: TimeStoryGroupId; year: number }): Promise<void> {
+    this.timeStoryGroupFilter = event.group;
+    this.filteredActivitiesCache.clear();
+    await this.onTabChange('activities');
+    await this.getAllFilteredActivitiesForDate(true);
+    this.cdr.detectChanges();
+  }
+
+  async clearTimeStoryGroupFilter(): Promise<void> {
+    if (!this.timeStoryGroupFilter) return;
+    this.timeStoryGroupFilter = null;
+    this.filteredActivitiesCache.clear();
+    await this.getAllFilteredActivitiesForDate(true);
+    this.cdr.detectChanges();
+  }
+
   async onTabChange(
     tab:
       | 'activities'
@@ -1260,6 +1329,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
       | 'breakdown'
       | 'heatmap'
       | 'playedWith'
+      | 'timeStory'
   ) {
     await this.playerSearchTabChange.onTabChange(
       build_asPlayerSearchTabChangeHost(this),

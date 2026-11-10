@@ -1,0 +1,73 @@
+<div class="time-story">
+  <dc-empty-state *ngIf="!hasSelectedPlayers">
+    Search for and select at least one profile to see time in activities by year.
+  </dc-empty-state>
+
+  <section *ngIf="hasSelectedPlayers" class="time-story__panel destiny-surface-panel" aria-labelledby="time-story-title">
+    <header class="time-story__header">
+      <div class="time-story__heading">
+        <h2 id="time-story-title" class="time-story__title">Your Destiny, by the hours</h2>
+        <p class="time-story__lede">
+          Time in activities
+          <strong class="time-story__total">{{ formatTime(result?.totalSeconds || 0) }}</strong>
+          <span class="time-story__meta"> · {{ gameCaption }} · {{ result?.totalGames || 0 | number }} games</span>
+        </p>
+        <p class="time-story__note">
+          Hours are the sum of each game's reported duration. Orbit, the Tower, and loading screens are not included.
+          The headline time on this page is unchanged.
+        </p>
+      </div>
+      <p *ngIf="accounts.length > 1" class="time-story__accounts">
+        Combining {{ accounts.length }} accounts
+        <span *ngFor="let acct of accounts" class="time-story__chip">{{ acct.platform }} · {{ acct.game }}</span>
+      </p>
+    </header>
+
+    <div *ngIf="loading" class="time-story__loading">
+      <app-destiny-loader size="sm"></app-destiny-loader>
+      <span>Loading time in activities…</span>
+    </div>
+
+    <p *ngIf="!loading && result && result.years.length === 0" class="time-story__empty">
+      No activities found for this selection.
+    </p>
+
+    <div *ngIf="result && result.years.length > 0" class="time-story__chart-wrap">
+      <div class="time-story__chart" role="list" aria-label="Time in activities by year">
+        <div class="time-story__col" *ngFor="let bar of result.years" role="listitem">
+          <div class="time-story__col-total" [attr.title]="formatTime(bar.seconds)">{{ formatTime(bar.seconds) }}</div>
+          <div class="time-story__stack" [style.height.%]="barHeightPercent(bar)">
+            <button
+              *ngFor="let part of bar.groups"
+              type="button"
+              class="time-story__seg"
+              [style.flex-grow]="part.seconds"
+              [style.background]="colors[part.group]"
+              [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
+              (mouseenter)="showTip(bar, part.group, part.seconds, part.games)"
+              (mouseleave)="hideTip()"
+              (focus)="showTip(bar, part.group, part.seconds, part.games)"
+              (blur)="hideTip()"
+              (click)="onSegmentActivate(bar, part.group)">
+            </button>
+          </div>
+          <div class="time-story__year">{{ bar.year }}</div>
+        </div>
+      </div>
+
+      <div *ngIf="tooltip" class="time-story__tip" role="status">
+        <div class="time-story__tip-year">{{ tooltip.year }} · {{ labels[tooltip.group] }}</div>
+        <div class="time-story__tip-stat">{{ formatTime(tooltip.seconds) }}</div>
+        <div class="time-story__tip-meta">{{ tooltip.percent | number:'1.0-1' }}% · {{ tooltip.games | number }} {{ tooltip.games === 1 ? 'game' : 'games' }}</div>
+        <div class="time-story__tip-hint">Opens Activities filtered to this group</div>
+      </div>
+    </div>
+
+    <ul *ngIf="result && result.years.length > 0" class="time-story__legend">
+      <li *ngFor="let id of groupIds">
+        <span class="time-story__swatch" [style.background]="colors[id]"></span>
+        {{ labels[id] }}
+      </li>
+    </ul>
+  </section>
+</div>

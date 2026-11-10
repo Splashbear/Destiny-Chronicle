@@ -19,7 +19,8 @@ export type DeepLinkTab =
   | 'accomplishments'
   | 'breakdown'
   | 'heatmap'
-  | 'playedWith';
+  | 'playedWith'
+  | 'timeStory';
 
 export interface DeepLinkAccount {
   membershipType: number;
@@ -49,6 +50,9 @@ const TAB_BY_NAME: Record<string, DeepLinkTab> = {
   playedwith: 'playedWith',
   breakdown: 'breakdown',
   accomplishments: 'accomplishments',
+  timestory: 'timeStory',
+  hours: 'timeStory',
+  'time-story': 'timeStory',
 };
 
 export function parseDeepLinkTab(raw: unknown): DeepLinkTab {

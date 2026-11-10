@@ -26,5 +26,8 @@ export function buildFilteredActivitiesForDateHost(c: any) {
       c.filteredActivitiesForDate = list;
     },
     computeAccountStats: () => c.computeAccountStatsWithService(),
+    getTimeStoryGroupFilter: () => c.timeStoryGroupFilter || null,
+    activityMatchesTimeStoryGroup: (activity: any, group: string) =>
+      c.activityBreakdownService.timeStoryGroupForActivity(activity) === group,
   };
 }

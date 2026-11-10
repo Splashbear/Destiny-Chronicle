@@ -8,7 +8,8 @@ export type PlayerSearchTab =
   | 'accomplishments'
   | 'breakdown'
   | 'heatmap'
-  | 'playedWith';
+  | 'playedWith'
+  | 'timeStory';
 
 /** Host for tab-change side effects (CODE_CLEANUP_SPEC). */
 export interface PlayerSearchTabChangeHost {
@@ -51,6 +52,8 @@ export class PlayerSearchTabChangeService {
       );
     } else if (tab === 'playedWith') {
       this.siteAnalytics.trackFeatureView('played_with');
+    } else if (tab === 'timeStory') {
+      this.siteAnalytics.trackFeatureView('time_story');
     }
     if (tab === 'heatmap') {
       host.markForCheck();
