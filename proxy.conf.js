@@ -49,6 +49,8 @@ module.exports = {
   '/Platform': bungieProxy('https://www.bungie.net'),
   '/d1': bungieProxy('https://www.bungie.net'),
   '/common': bungieProxy('https://www.bungie.net'),
+  // Same-origin PGCR / activity art so share-card html2canvas can export it.
+  '/img': bungieProxy('https://www.bungie.net'),
   // The public archive does not send Access-Control-Allow-Origin for this
   // dev origin, and nothing is listening on :3001. Same-origin proxy.
   '/dc-archive': {

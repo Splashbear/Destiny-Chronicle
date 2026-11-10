@@ -23,7 +23,10 @@ import { PrunedPgcr } from '../../utils/pgcr-prune';
 import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-loader.component';
 import { UiI18nService } from '../../services/ui-i18n.service';
 import { PlayedWithBuildProgress } from '../../services/pgcr-api.service';
-import { PlayedWithAccountChoice } from '../../utils/played-with-accounts';
+import {
+  PlayedWithAccountChoice,
+  playedWithMembershipIdFromAccountKeys,
+} from '../../utils/played-with-accounts';
 import { TextViewService } from '../../services/text-view.service';
 import { pageSections, playedWithDisplayName } from '../../utils/text-tab-rows';
 import { ActivityDbService } from '../../services/activity-db.service';
@@ -93,7 +96,10 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   textPages = 1;
   /** Destiny 2 accounts the parent loaded. The dropdown selects one; the list is that account only. */
   @Input() accounts: PlayedWithAccountChoice[] = [];
+  /** Header account-card keys (site-wide filter). Empty = no card filter. */
+  @Input() accountKeys: string[] = [];
   selectedId = '';
+  private accountKeysKey = '';
 
   session: FireteamStatsSession | null = null;
   coverage: FireteamCoverage | null = null;
@@ -129,25 +135,51 @@ export class PlayedWithComponent implements OnChanges, OnDestroy {
   ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
+    let accountsChanged = false;
     if (changes['accounts']) {
       // Parent passes a fresh array each change-detection pass; only reload when the set
       // of ids actually changes. Otherwise every CD cycle restarted the load and discarded
       // the in-flight result, leaving the tab blank forever.
       const key = membershipIdsKey((this.accounts || []).map(account => account.id));
-      if (key === this.idsKey && !changes['accounts'].firstChange) {
-        return;
+      if (key !== this.idsKey || changes['accounts'].firstChange) {
+        accountsChanged = key !== this.idsKey || changes['accounts'].firstChange;
+        const keepSelection = this.accounts.some(account => account.id === this.selectedId);
+        this.idsKey = key;
+        if (!keepSelection) {
+          this.selectedId = this.accounts[0]?.id || '';
+        }
+        this.buildWaitStartedAt = null;
+        this.buildTimedOut = false;
+        // Count views when the feature is shown with accounts; never send the IDs.
+        if (this.accounts.length > 0 && accountsChanged) {
+          this.siteAnalytics.trackFeatureView('played_with');
+        }
       }
-      const keepSelection = this.accounts.some(account => account.id === this.selectedId);
-      this.idsKey = key;
-      if (!keepSelection) {
-        this.selectedId = this.accounts[0]?.id || '';
-      }
+    }
+
+    const keysFingerprint = (this.accountKeys || []).slice().sort().join('\n');
+    const keysChanged =
+      !!changes['accountKeys'] &&
+      (changes['accountKeys'].firstChange || keysFingerprint !== this.accountKeysKey);
+    if (keysChanged) {
+      this.accountKeysKey = keysFingerprint;
+    }
+
+    // Header cards share the site-wide account filter; mirror a matching D2 card into the dropdown.
+    const fromCards = playedWithMembershipIdFromAccountKeys(
+      this.accountKeys,
+      this.accounts,
+      this.selectedId
+    );
+    if (fromCards && fromCards !== this.selectedId) {
+      this.selectedId = fromCards;
       this.buildWaitStartedAt = null;
       this.buildTimedOut = false;
-      // Count views when the feature is shown with accounts; never send the IDs.
-      if (this.accounts.length > 0) {
-        this.siteAnalytics.trackFeatureView('played_with');
-      }
+      void this.reload();
+      return;
+    }
+
+    if (accountsChanged) {
       void this.reload();
     }
   }

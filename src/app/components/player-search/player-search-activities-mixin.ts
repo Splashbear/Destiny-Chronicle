@@ -230,13 +230,18 @@ export abstract class PlayerSearchActivitiesMixin extends PlayerSearchBreakdownM
     this.onSiteAccountCardToggle(accountKey);
   }
 
-  /** Header cards are the one account filter for every tab. */
+  /**
+   * Header cards are the one account filter for the whole dossier
+   * (Activities, Firsts, Breakdown, Accomplishments, Heatmap, Played With).
+   */
   onSiteAccountCardToggle(accountKey: string): void {
     const next = toggleInSet(this.selectedAccountKeysForActivities, accountKey);
     this.selectedAccountKeysForActivities = next;
     this.selectedAccountKeysForFirsts = new Set(next);
     this.selectedAccountKeysForAccomplishments = new Set(next);
     this.selectedAccountKeysForBreakdown = new Set(next);
+    this.siteAccountFilterKeysCacheKey = '';
+    this.siteAccountFilterKeysCache = [];
 
     const selectedGames = this.getBreakdownSelectedGames();
     this.breakdownChartGame =

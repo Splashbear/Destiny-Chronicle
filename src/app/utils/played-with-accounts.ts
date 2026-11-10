@@ -1,6 +1,41 @@
+import { parseAccountKey } from './account-key';
+
 export interface PlayedWithAccountChoice {
   id: string;
   label: string;
+}
+
+/**
+ * Map header account-card keys onto a Played With dropdown membership id.
+ * Empty keys = no card filter (leave the current dropdown alone).
+ * Prefers the current id when it is still among the selected D2 cards.
+ */
+export function playedWithMembershipIdFromAccountKeys(
+  accountKeys: readonly string[] | null | undefined,
+  accounts: readonly PlayedWithAccountChoice[] | null | undefined,
+  currentId: string | null | undefined
+): string | null {
+  if (!accountKeys?.length || !accounts?.length) {
+    return null;
+  }
+  const selectedIds = new Set<string>();
+  for (const key of accountKeys) {
+    const parsed = parseAccountKey(key);
+    if (parsed?.game === 'D2' && parsed.membershipId) {
+      selectedIds.add(parsed.membershipId);
+    }
+  }
+  if (!selectedIds.size) {
+    return null;
+  }
+  const matching = accounts.filter(account => selectedIds.has(account.id));
+  if (!matching.length) {
+    return null;
+  }
+  if (currentId && matching.some(account => account.id === currentId)) {
+    return currentId;
+  }
+  return matching[0].id;
 }
 
 /** Destiny 2 profiles for the Played With account menu. A Destiny 1-only membership is omitted; a shared id stays when a Destiny 2 profile is loaded. */

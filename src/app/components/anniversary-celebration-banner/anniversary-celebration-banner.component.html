@@ -21,13 +21,19 @@
 
     <div class="fireside-hero__copy">
       <div class="fireside-hero__kicker">On this day · {{ selectedDateLabel }}</div>
-      <h3 class="fireside-hero__headline">{{ flavorLine(hero) }}</h3>
+      <h3 class="fireside-hero__headline">{{ headline }}</h3>
       <p class="fireside-hero__meta">
-        {{ hero.dateLabel || hero.completionDate | date:'yyyy-MM-dd' }}
-        · {{ getAnniversaryTypeLabel(hero) }}
-        · {{ hero.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
-        <ng-container *ngIf="hero.platform"> · {{ hero.platform }}</ng-container>
-        <ng-container *ngIf="hero.fireteamLabel"> · {{ hero.fireteamLabel }}</ng-container>
+        <ng-container *ngIf="anniversaries.length === 1">
+          {{ hero.dateLabel || hero.completionDate | date:'yyyy-MM-dd' }}
+          · {{ typeSummary }}
+          · {{ hero.game === 'D1' ? 'Destiny 1' : 'Destiny 2' }}
+          <ng-container *ngIf="hero.platform"> · {{ hero.platform }}</ng-container>
+          <ng-container *ngIf="hero.fireteamLabel"> · {{ hero.fireteamLabel }}</ng-container>
+        </ng-container>
+        <ng-container *ngIf="anniversaries.length > 1">
+          {{ anniversaries.length }} firsts
+          · {{ typeSummary }}
+        </ng-container>
       </p>
       <p class="fireside-hero__fireteam" *ngIf="hero.fireteamNames?.length">
         Fireteam: {{ hero.fireteamNames!.join(' · ') }}
@@ -35,30 +41,12 @@
 
       <div class="fireside-hero__chips">
         <button type="button" class="fireside-hero__chip" (click)="onNavigate(hero)">
-          ⚑ {{ getAnniversaryTypeLabel(hero) }}
-        </button>
-        <button *ngIf="anniversaries.length > 1"
-                type="button"
-                class="fireside-hero__chip"
-                (click)="showAll = !showAll">
-          {{ showAll ? 'Hide list' : '+' + (anniversaries.length - 1) + ' more that night' }}
+          ⚑ {{ anniversaries.length > 1 ? 'View Firsts' : getAnniversaryTypeLabel(hero) }}
         </button>
         <button type="button" class="fireside-hero__chip" (click)="onShare(hero)">
           Share this memory ⇪
         </button>
       </div>
     </div>
-  </div>
-
-  <div class="fireside-hero__list" *ngIf="showAll && anniversaries.length > 1">
-    <button type="button"
-            class="fireside-hero__list-row"
-            *ngFor="let anniversary of anniversaries; trackBy: trackByAnniversary"
-            (click)="onNavigate(anniversary)">
-      <img *ngIf="anniversary.iconUrl" [src]="anniversary.iconUrl" alt="" class="fireside-hero__list-icon"
-           (error)="$any($event.target).style.display='none'" />
-      <span class="fireside-hero__list-name">{{ anniversary.activityName }}</span>
-      <span class="fireside-hero__list-meta">{{ getAnniversaryTypeLabel(anniversary) }} · {{ anniversary.yearsAgo }}y ago</span>
-    </button>
   </div>
 </div>

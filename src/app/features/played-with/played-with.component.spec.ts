@@ -94,6 +94,31 @@ describe('PlayedWithComponent reload guard', () => {
     expect(createSession.calls.allArgs().map(args => args[0])).toEqual([['xbox'], ['psn']]);
     c.ngOnDestroy();
   });
+
+  it('mirrors the site-wide account-card filter into the dropdown selection', async () => {
+    const createSession = jasmine.createSpy('createSession').and.callFake(async () => readySession());
+    const c = makeComponent(createSession);
+    c.accounts = [
+      { id: '4611686018429785995', label: 'Splashbear#1078 (Xbox)' },
+      { id: '4611686018465122437', label: 'Splashbear#1078 (PSN)' }
+    ];
+    c.accountKeys = [];
+    c.ngOnChanges({
+      accounts: new SimpleChange(undefined, c.accounts, true),
+      accountKeys: new SimpleChange(undefined, c.accountKeys, true)
+    });
+    await new Promise(r => setTimeout(r, 0));
+    expect(c.selectedId).toBe('4611686018429785995');
+
+    const prevKeys = c.accountKeys;
+    c.accountKeys = ['D2|2|4611686018465122437'];
+    c.ngOnChanges({ accountKeys: new SimpleChange(prevKeys, c.accountKeys, false) });
+    await new Promise(r => setTimeout(r, 0));
+    await new Promise(r => setTimeout(r, 0));
+    expect(c.selectedId).toBe('4611686018465122437');
+    expect(createSession.calls.mostRecent().args[0]).toEqual(['4611686018465122437']);
+    c.ngOnDestroy();
+  });
 });
 
 import { formatBuildProgress } from './played-with.component';

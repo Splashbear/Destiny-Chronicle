@@ -12,10 +12,12 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-celebration-banner.component';
+import { anniversaryCardFlavor } from '../../utils/anniversary-share-flavor';
+import { inlineImageDataUrl } from '../../utils/inline-image-data-url';
 
 /**
- * Discord/X share card (1200×630). Facts from PGCR/Firsts; flavor line is ours.
- * Uses Bungie activity art/icons when provided — never invents seal glyphs.
+ * Discord/X share card (1200×630). Matches the On-This-Day anniversary banner:
+ * consolidated headline for every first that night + PGCR art when available.
  */
 @Component({
   selector: 'app-decrypted-share-card',
@@ -34,29 +36,28 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
             <button type="button" class="dsc-btn" (click)="close.emit()">Close</button>
           </div>
         </div>
-        <p class="dsc-hint">1200×630 for Discord and X. Facts from your history; the flavor line is Chronicle’s wording.</p>
+        <p class="dsc-hint">1200×630 for Discord and X. Same wording as the On This Day card on the site.</p>
         <div class="dsc-stage">
           <div #cardEl class="dsc-card" [style.width.px]="1200" [style.height.px]="630">
-            <img *ngIf="memory.pgcrImageUrl" [src]="memory.pgcrImageUrl" alt="" class="dsc-card__bg"
-                 (error)="onBgError()" />
+            <img *ngIf="bgSrc" [src]="bgSrc" alt="" class="dsc-card__bg" (error)="onBgError()" />
             <div class="dsc-card__shade"></div>
-            <div class="dsc-card__engram">
+            <div class="dsc-card__art" *ngIf="artSrc || memory.iconUrl">
+              <img *ngIf="artSrc" [src]="artSrc" alt="" class="dsc-card__pgcr" (error)="onArtError()" />
               <img *ngIf="memory.iconUrl && !iconBroken" [src]="memory.iconUrl" alt=""
                    class="dsc-card__activity-icon" (error)="onIconError()" />
-              <svg *ngIf="!memory.iconUrl || iconBroken" width="140" height="160" viewBox="0 0 140 160" aria-hidden="true">
-                <polygon points="70,8 128,44 128,116 70,152 12,116 12,44" fill="none" stroke="#c9a227" stroke-width="3"/>
-                <polygon points="70,30 108,54 108,106 70,130 32,106 32,54" fill="#c9a227" opacity=".55"/>
-              </svg>
             </div>
             <div class="dsc-card__text">
               <div class="dsc-card__kicker">DECRYPTED MEMORY · DESTINY CHRONICLE</div>
-              <div class="dsc-card__title">{{ memory.activityName }}{{ typeSuffix }}</div>
+              <div class="dsc-card__title">{{ displayHeadline }}</div>
               <div class="dsc-card__meta">
-                {{ memory.dateLabel || (memory.completionDate | date:'MMM d, y') }}
-                <ng-container *ngIf="memory.platform"> · {{ memory.platform }}</ng-container>
-                <ng-container *ngIf="memory.fireteamLabel && !memory.fireteamNames?.length"> · {{ memory.fireteamLabel }}</ng-container>
-                <br />
-                {{ flavorLine }}
+                <ng-container *ngIf="memories.length <= 1">
+                  {{ memory.dateLabel || (memory.completionDate | date:'MMM d, y') }}
+                  <ng-container *ngIf="memory.platform"> · {{ memory.platform }}</ng-container>
+                  <ng-container *ngIf="typeLabel"> · {{ typeLabel }}</ng-container>
+                </ng-container>
+                <ng-container *ngIf="memories.length > 1">
+                  {{ memories.length }} firsts · {{ typeSummary }}
+                </ng-container>
               </div>
               <div class="dsc-card__fireteam" *ngIf="memory.fireteamNames?.length">
                 <div class="dsc-card__fireteam-kicker">FIRETEAM</div>
@@ -92,33 +93,36 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
     .dsc-stage { overflow: auto; max-height: min(70vh, 700px); border-radius: 8px; background: #0c0e10; }
     .dsc-card {
       position: relative; overflow: hidden; flex-shrink: 0;
-      background: radial-gradient(circle at 26% 50%, #ffe9a855, #7a341033 35%, #0c0e10 70%), #0c0e10;
+      background: radial-gradient(ellipse at 50% 120%, #7a3410 0%, #2a1408 40%, #0c0e10 75%);
       border: 1px solid #5a4a1c; border-radius: 12px; color: #d8e4ee;
       transform-origin: top left;
     }
     .dsc-card__bg {
-      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .28;
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .22;
     }
     .dsc-card__shade {
       position: absolute; inset: 0;
-      background: linear-gradient(90deg, rgba(12,14,16,.92) 0%, rgba(12,14,16,.55) 55%, rgba(12,14,16,.35) 100%);
+      background: linear-gradient(90deg, rgba(12,14,16,.55) 0%, rgba(12,14,16,.72) 42%, rgba(12,14,16,.88) 100%);
     }
-    .dsc-card__engram {
-      position: absolute; left: 40px; top: 56px; width: 140px; height: 160px;
-      display: flex; align-items: center; justify-content: center; z-index: 1;
+    .dsc-card__art {
+      position: absolute; left: 48px; top: 64px; width: 200px; height: 280px; z-index: 1;
+      border-radius: 10px; overflow: hidden; border: 1px solid #5a3a1c; background: #0c0e10;
+    }
+    .dsc-card__pgcr {
+      width: 100%; height: 100%; object-fit: cover;
     }
     .dsc-card__activity-icon {
-      width: 120px; height: 120px; object-fit: contain;
-      filter: drop-shadow(0 0 18px rgba(201,162,39,.35));
+      position: absolute; right: 10px; bottom: 10px; width: 48px; height: 48px; object-fit: contain;
+      filter: drop-shadow(0 0 10px rgba(201,162,39,.35));
     }
-    .dsc-card__text { position: absolute; left: 210px; top: 44px; right: 24px; z-index: 1; }
+    .dsc-card__text { position: absolute; left: 280px; top: 72px; right: 40px; z-index: 1; }
     .dsc-card__kicker { color: #e67e22; font-size: 14px; letter-spacing: .16em; }
     .dsc-card__title {
-      font-family: Georgia, 'Times New Roman', serif; font-size: 36px; color: #f3e2b8;
-      margin: 12px 0 10px; line-height: 1.2;
+      font-family: Georgia, 'Times New Roman', serif; font-size: 34px; color: #f3e2b8;
+      margin: 14px 0 12px; line-height: 1.25;
     }
-    .dsc-card__meta { color: #c9b38a; font-size: 18px; line-height: 1.6; }
-    .dsc-card__fireteam { margin-top: 18px; max-width: 940px; }
+    .dsc-card__meta { color: #c9b38a; font-size: 18px; line-height: 1.55; }
+    .dsc-card__fireteam { margin-top: 22px; max-width: 860px; }
     .dsc-card__fireteam-kicker {
       color: #e67e22; font-size: 13px; letter-spacing: .16em; margin-bottom: 6px;
     }
@@ -136,31 +140,55 @@ import { AnniversaryFirst } from '../anniversary-celebration-banner/anniversary-
 })
 export class DecryptedShareCardComponent implements OnChanges {
   @Input() open = false;
+  /** Featured first (art / fireteam). */
   @Input() memory: AnniversaryFirst | null = null;
+  /** All On-This-Day firsts — share PNG lists every one, same as the site card. */
+  @Input() memories: AnniversaryFirst[] = [];
+  /** Optional override; defaults to the consolidated anniversary headline. */
   @Input() flavorLine = '';
   @Output() close = new EventEmitter<void>();
 
   @ViewChild('cardEl') cardEl?: ElementRef<HTMLDivElement>;
   exporting = false;
-  /** Hide broken CDN icons; show Chronicle engram instead of browser slash. */
   iconBroken = false;
+  artBroken = false;
+  /** Same-origin / data URL for export-safe PGCR art. */
+  private inlinedArt: string | null = null;
 
   constructor(private readonly cdr: ChangeDetectorRef) {}
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['memory']) {
+    if (changes['memory'] || changes['open'] || changes['memories']) {
       this.iconBroken = false;
+      this.artBroken = false;
+      this.inlinedArt = null;
+      if (this.open && this.memory?.pgcrImageUrl) {
+        void this.prepareArt(this.memory.pgcrImageUrl);
+      }
     }
   }
 
-  get typeSuffix(): string {
-    if (!this.memory) return '';
-    switch (this.memory.type) {
-      case 'solo-flawless': return ', solo flawless';
-      case 'solo': return ', solo';
-      case 'first-ever': return ', first ever';
-      default: return ', first clear';
-    }
+  get displayHeadline(): string {
+    const list = this.memories?.length ? this.memories : (this.memory ? [this.memory] : []);
+    return this.flavorLine || anniversaryCardFlavor(list);
+  }
+
+  get bgSrc(): string | null {
+    return this.artSrc;
+  }
+
+  get artSrc(): string | null {
+    if (this.artBroken) return null;
+    return this.inlinedArt || this.memory?.pgcrImageUrl || null;
+  }
+
+  get typeLabel(): string {
+    return this.memory ? this.labelFor(this.memory) : '';
+  }
+
+  get typeSummary(): string {
+    const list = this.memories?.length ? this.memories : (this.memory ? [this.memory] : []);
+    return [...new Set(list.map(m => this.labelFor(m)))].join(' · ');
   }
 
   onIconError(): void {
@@ -168,18 +196,25 @@ export class DecryptedShareCardComponent implements OnChanges {
     this.cdr.markForCheck();
   }
 
+  onArtError(): void {
+    this.artBroken = true;
+    this.cdr.markForCheck();
+  }
+
   onBgError(): void {
-    const el = this.cardEl?.nativeElement?.querySelector('.dsc-card__bg') as HTMLImageElement | null;
-    if (el) {
-      el.remove();
-    }
+    // Background uses the same art source; ignore if the left panel still shows it.
   }
 
   async exportPng(): Promise<void> {
     const el = this.cardEl?.nativeElement;
     if (!el || !this.memory) return;
     this.exporting = true;
+    this.cdr.markForCheck();
     try {
+      if (this.memory.pgcrImageUrl && !this.inlinedArt) {
+        await this.prepareArt(this.memory.pgcrImageUrl);
+        await new Promise(r => setTimeout(r, 50));
+      }
       const html2canvas = (await import('html2canvas')).default;
       const canvas = await html2canvas(el, {
         width: 1200,
@@ -187,7 +222,7 @@ export class DecryptedShareCardComponent implements OnChanges {
         scale: 1,
         backgroundColor: '#0c0e10',
         useCORS: true,
-        allowTaint: true,
+        allowTaint: false,
       });
       const a = document.createElement('a');
       const safe = (this.memory.activityName || 'memory').replace(/[^\w\-]+/g, '_').slice(0, 48);
@@ -196,6 +231,34 @@ export class DecryptedShareCardComponent implements OnChanges {
       a.click();
     } finally {
       this.exporting = false;
+      this.cdr.markForCheck();
+    }
+  }
+
+  private labelFor(anniversary: AnniversaryFirst): string {
+    switch (anniversary.type) {
+      case 'first-ever':
+        return 'First Ever Activity';
+      case 'solo':
+        return 'Solo';
+      case 'solo-flawless':
+        return 'Solo Flawless';
+      default: {
+        const first = anniversary.first as { type?: string };
+        if (first?.type === 'story') return 'Story First';
+        if (first?.type === 'raid') return 'Raid First';
+        if (first?.type === 'dungeon') return 'Dungeon First';
+        return 'Guardian First';
+      }
+    }
+  }
+
+  private async prepareArt(url: string): Promise<void> {
+    const dataUrl = await inlineImageDataUrl(url);
+    if (dataUrl) {
+      this.inlinedArt = dataUrl;
+      this.artBroken = false;
+      this.cdr.markForCheck();
     }
   }
 }

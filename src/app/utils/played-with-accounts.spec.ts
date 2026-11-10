@@ -1,4 +1,44 @@
-import { d2PlayedWithAccounts, d2PlayedWithMembershipIds } from './played-with-accounts';
+import {
+  d2PlayedWithAccounts,
+  d2PlayedWithMembershipIds,
+  playedWithMembershipIdFromAccountKeys,
+} from './played-with-accounts';
+
+describe('playedWithMembershipIdFromAccountKeys', () => {
+  const accounts = [
+    { id: '4611686018465122437', label: 'Splashbear#1078 (PlayStation)' },
+    { id: '4611686018467188288', label: 'Splashbear#1078 (Steam)' },
+    { id: '4611686018429785995', label: 'Splashbear#1078 (Xbox)' },
+  ];
+
+  it('returns null when no account cards are selected', () => {
+    expect(playedWithMembershipIdFromAccountKeys([], accounts, '4611686018465122437')).toBeNull();
+  });
+
+  it('selects the D2 membership for a single selected account card', () => {
+    expect(playedWithMembershipIdFromAccountKeys(
+      ['D2|3|4611686018467188288'],
+      accounts,
+      '4611686018465122437'
+    )).toBe('4611686018467188288');
+  });
+
+  it('keeps the current dropdown account when it is still among selected cards', () => {
+    expect(playedWithMembershipIdFromAccountKeys(
+      ['D2|2|4611686018465122437', 'D2|3|4611686018467188288'],
+      accounts,
+      '4611686018467188288'
+    )).toBe('4611686018467188288');
+  });
+
+  it('ignores Destiny 1-only card selections', () => {
+    expect(playedWithMembershipIdFromAccountKeys(
+      ['D1|2|4611686018465122437'],
+      accounts,
+      '4611686018467188288'
+    )).toBeNull();
+  });
+});
 
 describe('d2PlayedWithMembershipIds', () => {
   it('keeps Destiny 2 profiles and drops a Destiny 1-only membership', () => {
