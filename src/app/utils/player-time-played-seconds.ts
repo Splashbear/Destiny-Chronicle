@@ -17,23 +17,33 @@ function basicOrNumber(field: unknown): number | null {
   return numericSeconds(field);
 }
 
-export function playerTimePlayedSeconds(activity: any): number {
+function capSeconds(value: number): number {
+  return value > 86400 ? 86400 : value;
+}
+
+/** Player's own time, or null when the row has only instance/archive duration. */
+export function ownPlayerTimePlayedSeconds(activity: any): number | null {
   const values = activity?.values;
   const playerTime =
     basicOrNumber(values?.timePlayedSeconds) ??
     basicOrNumber(values?.secondsPlayed) ??
     numericSeconds(activity?.timePlayedSeconds) ??
     numericSeconds(activity?.secondsPlayed);
+  if (playerTime == null) return null;
+  return capSeconds(playerTime);
+}
 
+export function playerTimePlayedSeconds(activity: any): number {
+  const playerTime = ownPlayerTimePlayedSeconds(activity);
   if (playerTime != null) {
-    return playerTime > 86400 ? 86400 : playerTime;
+    return playerTime;
   }
 
   // Only when no player-time field exists: archive light rows expose durationSeconds.
   const fallback =
     numericSeconds(activity?.durationSeconds) ??
-    basicOrNumber(values?.activityDurationSeconds) ??
+    basicOrNumber(activity?.values?.activityDurationSeconds) ??
     numericSeconds(activity?.activityDurationSeconds) ??
     0;
-  return fallback > 86400 ? 86400 : fallback;
+  return capSeconds(fallback);
 }
