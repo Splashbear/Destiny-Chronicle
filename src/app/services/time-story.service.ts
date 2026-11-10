@@ -10,6 +10,15 @@ import {
   buildTimeStoryByYear,
   type TimeStoryByYearResult,
 } from '../utils/time-story-by-year';
+import type { TimeStoryGroupId } from '../utils/time-story-groups';
+
+/** Lean fields the year chart needs; full activity objects are not kept. */
+export interface TimeStoryLeanRow {
+  instanceId?: string;
+  period?: string;
+  group: TimeStoryGroupId | null;
+  timeSeconds: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class TimeStoryService {
@@ -24,24 +33,22 @@ export class TimeStoryService {
       return { years: [], totalSeconds: 0, totalGames: 0 };
     }
     const activities = await this.breakdown.loadScopedActivities(scopes);
-    const unique: StoredActivity[] = [];
     const seen = new Set<string>();
+    const lean: TimeStoryLeanRow[] = [];
     for (const activity of activities) {
       const key = breakdownActivityDedupeKey(activity, identityByMembership);
       if (key) {
         if (seen.has(key)) continue;
         seen.add(key);
       }
-      unique.push(activity);
-    }
-    return buildTimeStoryByYear(
-      unique.map(activity => ({
+      const instanceId = activity.activityDetails?.instanceId;
+      lean.push({
+        instanceId: instanceId != null && String(instanceId) !== '' ? String(instanceId) : undefined,
         period: activity.period,
         timeSeconds: playerTimePlayedSeconds(activity),
-        activity,
-      })),
-      activity => this.breakdown.timeStoryGroupForActivity(activity as unknown as StoredActivity),
-      timeZone
-    );
+        group: this.breakdown.timeStoryGroupForActivity(activity as StoredActivity),
+      });
+    }
+    return buildTimeStoryByYear(lean, row => row.group, timeZone);
   }
 }

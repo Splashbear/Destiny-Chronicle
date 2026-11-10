@@ -1259,11 +1259,6 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     return effectiveGame(this.timeStorySelectedPlayers, 'Both');
   }
 
-  get timeStoryDataRevision(): string {
-    const count = this.accountStats?.totalActivityCount || this.overallActivitiesProcessed || 0;
-    return `${count}|${this.profileLoadInProgress ? 1 : 0}|${this.firstFullSyncDone ? 1 : 0}`;
-  }
-
 
   get timeStorySelectedPlayers(): any[] {
     const keys = this.siteAccountFilterKeys;

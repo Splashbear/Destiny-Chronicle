@@ -50,4 +50,21 @@ describe('buildTimeStoryByYear', () => {
     expect(result.totalGames).toBe(1);
     expect(result.years[0].groups.every(g => g.group === 'raids')).toBeTrue();
   });
+
+  it('buckets lean rows that already have a group and timeSeconds, without a full activity object', () => {
+    const result = buildTimeStoryByYear(
+      [
+        { period: '2023-06-01T12:00:00Z', timeSeconds: 3600, group: 'raids' },
+        { period: '2023-07-01T12:00:00Z', timeSeconds: 1800, group: 'unknown' },
+        { period: '2024-03-01T12:00:00Z', timeSeconds: 7200, group: 'trials' },
+      ] as any,
+      (row: { group?: TimeStoryGroupId }) => row.group ?? null,
+      'UTC'
+    );
+    expect(result.years.map(y => y.year)).toEqual([2024, 2023]);
+    expect(result.years.find(y => y.year === 2023)?.seconds).toBe(5400);
+    expect(result.years.find(y => y.year === 2023)?.groups.map(g => g.group).sort()).toEqual(['raids', 'unknown']);
+    expect(result.totalSeconds).toBe(12600);
+    expect(timeStoryGroupsReconcile(result)).toBeTrue();
+  });
 });

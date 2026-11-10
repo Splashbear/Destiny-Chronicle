@@ -6,7 +6,6 @@ import {
   EventEmitter,
   Input,
   OnChanges,
-  OnDestroy,
   Output,
   SimpleChanges,
 } from '@angular/core';
@@ -47,14 +46,13 @@ interface TimeStoryTooltip {
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class TimeStoryTabComponent implements OnChanges, OnDestroy {
+export class TimeStoryTabComponent implements OnChanges {
   @Input() scopes: BreakdownMembershipScope[] = [];
   @Input() identityByMembership: Record<string, string> = {};
   @Input() accounts: TimeStoryAccountChip[] = [];
   @Input() effectiveGame: 'D1' | 'D2' | 'Both' = 'Both';
   @Input() hasSelectedPlayers = false;
-  /** Changes when more activities land in IndexedDB so the chart can refresh mid-load. */
-  @Input() dataRevision: string | number = '';
+  /** When true, history is still writing; wait and compute once after it finishes. */
   @Input() syncInProgress = false;
   @Output() openGroup = new EventEmitter<{ group: TimeStoryGroupId; year: number }>();
 
@@ -68,8 +66,6 @@ export class TimeStoryTabComponent implements OnChanges, OnDestroy {
   readonly share = groupSharePercent;
 
   private loadGen = 0;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
-
 
   constructor(
     private timeStory: TimeStoryService,
@@ -77,19 +73,34 @@ export class TimeStoryTabComponent implements OnChanges, OnDestroy {
   ) {}
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
-    if (
-      changes['scopes'] ||
-      changes['identityByMembership'] ||
-      changes['effectiveGame'] ||
-      changes['dataRevision']
-    ) {
+    if (!this.hasSelectedPlayers || this.scopes.length === 0) {
+      this.result = null;
+      this.loading = false;
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const syncJustFinished =
+      !!changes['syncInProgress'] &&
+      this.syncInProgress === false &&
+      changes['syncInProgress'].previousValue === true;
+
+    const inputsChanged =
+      !!changes['scopes'] ||
+      !!changes['identityByMembership'] ||
+      !!changes['effectiveGame'];
+
+    if (this.syncInProgress) {
+      if (!this.result?.years.length) {
+        this.loading = true;
+        this.cdr.markForCheck();
+      }
+      return;
+    }
+
+    if (syncJustFinished || inputsChanged || !this.result) {
       await this.reload();
     }
-    this.syncPolling();
-  }
-
-  ngOnDestroy(): void {
-    this.stopPolling();
   }
 
   get maxYearSeconds(): number {
@@ -132,23 +143,6 @@ export class TimeStoryTabComponent implements OnChanges, OnDestroy {
     this.openGroup.emit({ group, year: bar.year });
   }
 
-  private syncPolling(): void {
-    const shouldPoll = this.hasSelectedPlayers && (this.syncInProgress || !this.result?.years.length);
-    if (shouldPoll && !this.pollTimer) {
-      this.pollTimer = setInterval(() => {
-        void this.reload();
-      }, 3000);
-    }
-    if (!shouldPoll) this.stopPolling();
-  }
-
-  private stopPolling(): void {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
-  }
-
   private async reload(): Promise<void> {
     const gen = ++this.loadGen;
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
@@ -165,7 +159,6 @@ export class TimeStoryTabComponent implements OnChanges, OnDestroy {
       const result = await this.timeStory.getYearBars(this.scopes, this.identityByMembership, timeZone);
       if (gen !== this.loadGen) return;
       this.result = result;
-      this.syncPolling();
     } catch (err) {
       if (gen !== this.loadGen) return;
       console.error('Time story year bars failed', err);
