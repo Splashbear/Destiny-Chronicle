@@ -65,6 +65,7 @@ import { ActivitiesTabComponent,
 // Tab component imported by file path (not the barrel) so @defer can split it out of main.
 import { BreakdownTabComponent } from '../../features/breakdown/breakdown-tab.component';
 import { TimeStoryTabComponent } from '../../features/time-story/time-story-tab.component';
+import { TimeStoryErasComponent } from '../../features/time-story/time-story-eras.component';
 import { BREAKDOWN_HOST } from '../../features/breakdown/breakdown-host.token';
 // Tab component imported by file path (not the barrel) so @defer can split it out of main.
 import { FirstsTabComponent } from '../../features/firsts/firsts-tab.component';
@@ -134,6 +135,7 @@ export type {
     ActivitiesTabComponent,
     BreakdownTabComponent,
     TimeStoryTabComponent,
+    TimeStoryErasComponent,
     FirstsTabComponent,
     TitlesTabComponent,
     AccomplishmentsTabComponent,

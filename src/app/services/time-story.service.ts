@@ -5,7 +5,8 @@ import {
 } from './activity-breakdown.service';
 import { ActivityHistoryLoaderService } from './activity-history-loader.service';
 import { PgcrApiService } from '../core/data/archive-api.service';
-import { StoredActivity } from './activity-db.service';
+import { ActivityDbService, StoredActivity } from './activity-db.service';
+import { DestinyManifestService } from './destiny-manifest.service';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
 import {
   leanFromArchiveLight,
@@ -18,6 +19,11 @@ import {
   type TimeStoryByYearResult,
 } from '../utils/time-story-by-year';
 import type { TimeStoryGroupId } from '../utils/time-story-groups';
+import {
+  buildTimeStoryEras,
+  TIME_STORY_UNKNOWN_ACTIVITY,
+  type TimeStoryEraItem,
+} from '../utils/time-story-eras';
 
 /** Lean fields the year chart needs; full activity objects are not kept. */
 export interface TimeStoryLeanRow {
@@ -32,7 +38,8 @@ export class TimeStoryService {
   constructor(
     private breakdown: ActivityBreakdownService,
     private loader: ActivityHistoryLoaderService,
-    private archiveApi: PgcrApiService
+    private archiveApi: PgcrApiService,
+    private manifest: DestinyManifestService
   ) {}
 
   async getYearBars(
@@ -43,9 +50,50 @@ export class TimeStoryService {
     if (!scopes.length) {
       return { years: [], totalSeconds: 0, totalGames: 0 };
     }
+    const sources = await this.dedupedSourceRows(scopes, identityByMembership);
+    const lean: TimeStoryLeanRow[] = sources.map(row => ({
+      instanceId: row.instanceId,
+      period: row.period,
+      timeSeconds: timeStorySourceSeconds(row),
+      group: this.breakdown.timeStoryGroupForActivity(this.stubForDedupeAndGroup(row) as StoredActivity),
+    }));
+    return buildTimeStoryByYear(lean, r => r.group, timeZone);
+  }
+
+  async getEras(
+    scopes: BreakdownMembershipScope[],
+    identityByMembership?: Record<string, string>,
+    timeZone?: string
+  ): Promise<TimeStoryEraItem[]> {
+    if (!scopes.length) return [];
+    const sources = await this.dedupedSourceRows(scopes, identityByMembership);
+    const games = Array.from(new Set(scopes.map(s => s.game)));
+    return buildTimeStoryEras(
+      sources.map(row => ({
+        period: row.period,
+        game: row.game,
+        activityHash: row.activityHash,
+        timeSeconds: timeStorySourceSeconds(row),
+      })),
+      {
+        timeZone,
+        games,
+        resolveActivityName: (game, hash) => this.activityNameForEra(game, hash),
+      }
+    );
+  }
+
+  /**
+   * Lean archive list already held by the loader (plus Bungie fill rows),
+   * falling back to the in-memory archive activities cache. Never reads IDB.
+   */
+  private async dedupedSourceRows(
+    scopes: BreakdownMembershipScope[],
+    identityByMembership?: Record<string, string>
+  ): Promise<TimeStorySourceRow[]> {
     const sources = await this.collectSourceRows(scopes);
     const seen = new Set<string>();
-    const lean: TimeStoryLeanRow[] = [];
+    const rows: TimeStorySourceRow[] = [];
     for (const row of sources) {
       const stub = this.stubForDedupeAndGroup(row);
       const key = breakdownActivityDedupeKey(stub, identityByMembership);
@@ -53,20 +101,22 @@ export class TimeStoryService {
         if (seen.has(key)) continue;
         seen.add(key);
       }
-      lean.push({
-        instanceId: row.instanceId,
-        period: row.period,
-        timeSeconds: timeStorySourceSeconds(row),
-        group: this.breakdown.timeStoryGroupForActivity(stub as StoredActivity),
-      });
+      rows.push(row);
     }
-    return buildTimeStoryByYear(lean, r => r.group, timeZone);
+    return rows;
   }
 
-  /**
-   * Lean archive list already held by the loader (plus Bungie fill rows),
-   * falling back to the in-memory archive activities cache. Never reads IDB.
-   */
+  private activityNameForEra(game: 'D1' | 'D2', hash: string): string {
+    const raw =
+      game === 'D1'
+        ? ActivityDbService.getD1FamilyName(hash) || this.manifest.getActivityName(hash, true)
+        : this.manifest.getActivityFamilyName(hash) || this.manifest.getActivityName(hash, false);
+    if (!raw || raw === 'Unknown Activity' || raw === 'Loading...') {
+      return TIME_STORY_UNKNOWN_ACTIVITY;
+    }
+    return raw;
+  }
+
   private async collectSourceRows(scopes: BreakdownMembershipScope[]): Promise<TimeStorySourceRow[]> {
     const merged: TimeStorySourceRow[] = [];
     const seenScope = new Set<string>();
