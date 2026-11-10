@@ -3,6 +3,10 @@ import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { ActivityHistory } from '../models/activity-history.model';
 import { canonicalAccountKey } from '../utils/account-key';
+import {
+  FIRST_EVER_TUTORIAL_NAMES,
+  firstEverTutorialReferenceIds,
+} from '../utils/first-ever-from-firsts';
 
 export interface PlayerIdentityBasic {
   membershipId: string;
@@ -84,14 +88,17 @@ export class FirstActivityService {
         acts = completedActs;
       }
 
-      // Prefer the tutorial mission "A Guardian Rises" when present (D1 only)
-      if (player.game === 'D1' && acts.length) {
-        const D1_TUTORIAL_HASHES = new Set<string>(['1846390409', '1856964953']);
+      // First Ever is only the true intro mission — never an arbitrary story/playlist (e.g. Battlegrounds).
+      // D1: A Guardian Rises. D2: Homecoming (Red War) or A Guardian Rises (New Light).
+      if (acts.length) {
+        const tutorialHashes = firstEverTutorialReferenceIds(player.game);
+        const tutorialNames = FIRST_EVER_TUTORIAL_NAMES[player.game];
+        const isD1 = player.game === 'D1';
         const tutorialActs = acts.filter(a => {
           const refStr = String((a as any)?.activityDetails?.referenceId ?? '');
-          if (refStr && D1_TUTORIAL_HASHES.has(refStr)) return true;
-          const name = this.manifest.getActivityName(refStr, true);
-          return name === 'A Guardian Rises';
+          if (refStr && tutorialHashes.has(refStr)) return true;
+          const name = (this.manifest.getActivityName(refStr, isD1) || '').trim();
+          return !!name && tutorialNames.has(name);
         });
         if (tutorialActs.length) {
           tutorialActs.sort((x, y) => new Date(x.period).getTime() - new Date(y.period).getTime());
@@ -100,67 +107,9 @@ export class FirstActivityService {
         }
       }
 
-      // Prefer D2 tutorial mission when present (e.g., "Homecoming")
-      if (player.game === 'D2' && acts.length) {
-        const D2_TUTORIAL_HASHES = new Set<string>(['1658347443']);
-        const tutorialActs = acts.filter(a => {
-          const ref = String((a as any)?.activityDetails?.referenceId ?? '');
-          if (ref && D2_TUTORIAL_HASHES.has(ref)) return true;
-          const name = this.manifest.getActivityName(ref, false);
-          return name === 'Homecoming';
-        });
-        if (tutorialActs.length) {
-          tutorialActs.sort((x, y) => new Date(x.period).getTime() - new Date(y.period).getTime());
-          this.cache[key] = tutorialActs[0] || null;
-          return tutorialActs[0];
-        }
-      }
-
-      // Next preference: any Story mission (avoids Patrols like "Patrol the Dreadnought" being selected)
-      if (acts.length) {
-        const storyActs = acts.filter(a => {
-          const ref = (a as any)?.activityDetails?.referenceId;
-          const mode = (a as any)?.activityDetails?.mode;
-          const type = this.manifest.getActivityType(String(ref), mode);
-          return type === 'story';
-        });
-        if (storyActs.length) {
-          storyActs.sort((x, y) => new Date(x.period).getTime() - new Date(y.period).getTime());
-          this.cache[key] = storyActs[0] || null;
-          return storyActs[0];
-        }
-      }
-
-      // Exclude Patrols by default when picking the generic earliest completed activity
-      let candidateActs = acts;
-      const nonPatrolActs = acts.filter(a => {
-        const ref = (a as any)?.activityDetails?.referenceId;
-        const mode = (a as any)?.activityDetails?.mode;
-        const type = this.manifest.getActivityType(String(ref), mode);
-        return type !== 'patrol';
-      });
-      if (nonPatrolActs.length) {
-        candidateActs = nonPatrolActs;
-      }
-
-      // Guard against duplicate-timestamp ordering issues by applying a stable tie-breaker
-      // Choose the smallest numeric instanceId among the earliest timestamp set.
-      let first: StoredActivity | undefined = candidateActs.length ? candidateActs[0] : undefined;
-      if (first) {
-        const firstTs = first.period;
-        const sameTs = candidateActs.filter(a => a.period === firstTs);
-        if (sameTs.length > 1) {
-          const withNumericId = sameTs
-            .map(a => ({ a, n: Number(a.activityDetails?.instanceId || 0) }))
-            .filter(x => !Number.isNaN(x.n) && x.n > 0);
-          if (withNumericId.length > 0) {
-            withNumericId.sort((x, y) => x.n - y.n);
-            first = withNumericId[0].a;
-          }
-        }
-      }
-      this.cache[key] = first || null;
-      return first;
+      // No intro found in stored history — leave First Ever empty rather than invent a wrong activity.
+      this.cache[key] = null;
+      return undefined;
     } catch (err) {
       console.error('[FirstActivityService] Failed to load first activity', err);
       this.cache[key] = null;
