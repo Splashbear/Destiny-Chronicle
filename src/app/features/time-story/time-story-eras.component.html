@@ -2,6 +2,7 @@
   <header class="time-story-eras__header">
     <h3 id="time-story-eras-title" class="time-story-eras__title">Eras</h3>
     <p class="time-story-eras__note" [attr.title]="labelTooltip">{{ note }}</p>
+    <p class="time-story-eras__coverage">{{ coverageNote }}</p>
   </header>
 
   <div *ngIf="loading" class="time-story-eras__loading">
@@ -14,9 +15,12 @@
   </p>
 
   <ul *ngIf="eras && eras.length > 0" class="time-story-eras__strip" role="list" [attr.aria-label]="'Most-played activity in each era (' + labelText + ')'">
-    <li *ngFor="let era of eras" class="time-story-eras__item" role="listitem">
+    <li *ngFor="let era of eras" class="time-story-eras__item" role="listitem" [attr.aria-label]="era.label">
       <span *ngIf="showGameBadge" class="time-story-eras__game">{{ era.game }}</span>
-      <span class="time-story-eras__label" [attr.title]="era.label + ' · ' + labelTooltip">{{ era.label }}</span>
+      <span class="time-story-eras__body">
+        <span class="time-story-eras__names" [attr.title]="era.label + ' · ' + labelTooltip">{{ era.eraName }} · {{ era.activityName }}</span>
+        <span class="time-story-eras__hours">{{ era.hoursLabel }}</span>
+      </span>
     </li>
   </ul>
 </section>

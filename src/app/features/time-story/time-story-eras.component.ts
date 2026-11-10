@@ -11,6 +11,7 @@ import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-
 import { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
 import { TimeStoryService } from '../../services/time-story.service';
 import { TIME_STORY_LABEL, TIME_STORY_LABEL_TOOLTIP } from '../../utils/time-story-copy';
+import { TIME_STORY_ERA_COVERAGE_NOTE } from '../../utils/time-story-era-starts';
 import type { TimeStoryEraItem } from '../../utils/time-story-eras';
 
 @Component({
@@ -34,6 +35,7 @@ export class TimeStoryErasComponent implements OnChanges {
   readonly labelTooltip = TIME_STORY_LABEL_TOOLTIP;
   readonly note =
     'Most-played activity in each season, episode, or expansion. Uses the same Time in activities rules as the year chart.';
+  readonly coverageNote = TIME_STORY_ERA_COVERAGE_NOTE;
 
   private loadGen = 0;
   private lastScopeKey = '';

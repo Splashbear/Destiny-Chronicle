@@ -1,4 +1,5 @@
-import { eraNameForYmd, seasonEraRanges, type SeasonStartYmd } from './season-starts';
+import { type SeasonStartYmd } from './season-starts';
+import { timeStoryEraNameForYmd, timeStoryEraRanges } from './time-story-era-starts';
 
 export interface TimeStoryEraRow {
   period?: string;
@@ -15,6 +16,7 @@ export interface TimeStoryEraItem {
   activityName: string;
   seconds: number;
   games: number;
+  hoursLabel: string;
   /** Example: "Forsaken · Last Wish · 140h" */
   label: string;
 }
@@ -52,7 +54,7 @@ export function eraNameForPeriod(
 ): string | null {
   const ymd = ymdInTimeZone(period, timeZone);
   if (!ymd) return null;
-  return eraNameForYmd(game, ymd.year, ymd.month, ymd.day);
+  return timeStoryEraNameForYmd(game, ymd.year, ymd.month, ymd.day);
 }
 
 /** Compact hours for the era strip (spec example: "140h"). Under one hour, show minutes. */
@@ -64,6 +66,19 @@ export function formatTimeStoryEraHours(seconds: number): string {
     return `${minutes}m`;
   }
   return `${hours}h`;
+}
+
+/**
+ * Prefer a canonical family name: drop variant suffixes after ": "
+ * (e.g. "Last Wish: Standard" -> "Last Wish"). Live data should already
+ * come from getActivityFamilyName; this keeps local aliases short too.
+ */
+export function canonicalEraActivityName(name: string | undefined | null): string {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return TIME_STORY_UNKNOWN_ACTIVITY;
+  const colon = trimmed.indexOf(': ');
+  const base = (colon !== -1 ? trimmed.slice(0, colon) : trimmed).trim();
+  return base || TIME_STORY_UNKNOWN_ACTIVITY;
 }
 
 export function formatTimeStoryEraLabel(eraName: string, activityName: string, seconds: number): string {
@@ -115,13 +130,15 @@ export function buildTimeStoryEras(
     }
   }
 
-  const ranges = games.flatMap(game => seasonEraRanges(game));
+  const ranges = games.flatMap(game => timeStoryEraRanges(game));
   const items: TimeStoryEraItem[] = [];
   for (const range of ranges) {
     const winner = winners.get(`${range.game}|${range.name}`);
     if (!winner) continue;
-    const activityName =
-      resolve?.(winner.game, winner.activityHash)?.trim() || TIME_STORY_UNKNOWN_ACTIVITY;
+    const activityName = canonicalEraActivityName(
+      resolve?.(winner.game, winner.activityHash) || TIME_STORY_UNKNOWN_ACTIVITY
+    );
+    const hoursLabel = formatTimeStoryEraHours(winner.seconds);
     items.push({
       game: winner.game,
       eraName: winner.eraName,
@@ -130,6 +147,7 @@ export function buildTimeStoryEras(
       activityName,
       seconds: winner.seconds,
       games: winner.games,
+      hoursLabel,
       label: formatTimeStoryEraLabel(winner.eraName, activityName, winner.seconds),
     });
   }
