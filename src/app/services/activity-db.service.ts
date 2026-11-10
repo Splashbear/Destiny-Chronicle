@@ -3252,13 +3252,23 @@ export class ActivityDbService extends Dexie {
    */
   async getRaidDungeonClearCounts(
     membershipId: string,
-    game: 'D1' | 'D2'
+    game: 'D1' | 'D2',
+    /** When set, only count clears stored for this platform account (non–cross-save / per-card). */
+    membershipType?: number
   ): Promise<Map<string, number>> {
     await this.initPromise;
     const acts = await this.activities
       .where('membershipId')
       .equals(membershipId)
-      .and(a => a.game === game)
+      .and(a => {
+        if (a.game !== game) return false;
+        // Per-account: match platform when present; legacy rows with no membershipType
+        // still count for this membershipId so non–cross-save cards are not blanked.
+        if (membershipType == null || !Number.isFinite(membershipType)) return true;
+        const rowType = Number(a.membershipType);
+        if (!Number.isFinite(rowType) || rowType === 0) return true;
+        return rowType === Number(membershipType);
+      })
       .toArray();
     const familyMap =
       game === 'D1'
@@ -3280,12 +3290,22 @@ export class ActivityDbService extends Dexie {
    * Uses PGCR roster deaths — not only the first-clear Firsts record — so later
    * flawless clears still light the banner. Checkpoint Pantheon clears count.
    */
-  async getFlawlessRaidBaseNames(membershipId: string): Promise<string[]> {
+  async getFlawlessRaidBaseNames(
+    membershipId: string,
+    /** When set, only scan clears stored for this platform account (non–cross-save / per-card). */
+    membershipType?: number
+  ): Promise<string[]> {
     await this.initPromise;
     const acts = await this.activities
       .where('membershipId')
       .equals(membershipId)
-      .and(a => a.game === 'D2')
+      .and(a => {
+        if (a.game !== 'D2') return false;
+        if (membershipType == null || !Number.isFinite(membershipType)) return true;
+        const rowType = Number(a.membershipType);
+        if (!Number.isFinite(rowType) || rowType === 0) return true;
+        return rowType === Number(membershipType);
+      })
       .toArray();
 
     // One row per instance; prefer a character row with known 0 deaths when present.

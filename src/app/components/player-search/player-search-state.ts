@@ -288,11 +288,11 @@ export abstract class PlayerSearchState {
   loadingDungeonSoloFirsts: { [membershipId: string]: boolean } = {};
   /**
    * Completed raid/dungeon clears per family from stored history (IndexedDB).
-   * Outer key: membershipId. Inner key: `${game}:${baseName}`.
+   * Outer key: accountKey (`game|membershipType|membershipId`). Inner: `${game}:${baseName}`.
    */
-  familyClearCountsByMembership: { [membershipId: string]: { [key: string]: number } } = {};
-  /** D2 raid/Pantheon base names with at least one fireteam flawless clear (PGCR). */
-  flawlessRaidBaseNamesByMembership: { [membershipId: string]: string[] } = {};
+  familyClearCountsByMembership: { [accountKey: string]: { [key: string]: number } } = {};
+  /** D2 raid/Pantheon base names with at least one fireteam flawless clear (PGCR), per accountKey. */
+  flawlessRaidBaseNamesByMembership: { [accountKey: string]: string[] } = {};
   /** Stores firsts per membershipId */
   guardianFirstsMap: { [membershipId: string]: ActivityFirstCompletion[] } = {};
   /** Aggregated (all-platform) firsts across selected players */

@@ -103,7 +103,7 @@
 </ng-template>
 
 <!-- Stacked pinnacle card: PGCR image on top, details below (matches Story milestones) -->
-<ng-template #firstsPantheonEventCard let-groups="groups" let-emptyMessage="emptyMessage">
+<ng-template #firstsPantheonEventCard let-groups="groups" let-emptyMessage="emptyMessage" let-clearsAccountKey="clearsAccountKey">
   <div *ngIf="groups?.length > 0" class="space-y-4 mb-4">
     <div *ngFor="let group of groups"
          class="rounded-lg overflow-hidden destiny-modal-section flex flex-col">
@@ -114,14 +114,26 @@
           <span *ngIf="img && typeof img !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="img"></span>
         </ng-container>
         <div class="pgcr-image-scrim"></div>
-        <span *ngIf="ps.cardHasFlawlessClear(group, false)"
+        <span *ngIf="ps.cardHasFlawlessClear(group, false, clearsAccountKey)"
               class="firsts-flawless-banner"
               aria-label="Flawless clear">
           Flawless
         </span>
       </div>
       <div class="pgcr-image-caption px-3 py-2 min-w-0">
-        <h5 class="text-lg font-bold text-white mb-1">{{ group.cardTitle || group.baseName }}</h5>
+        <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-1 min-w-0">
+          <h5 class="text-lg font-bold text-white mb-0">{{ group.cardTitle || group.baseName }}</h5>
+          <span *ngIf="ps.getFamilyClearCount(group.baseName, 'D2', clearsAccountKey) as pantheonClears"
+                class="text-sm font-semibold text-white/90 tabular-nums"
+                title="Completed clears from stored activity history">
+            <ng-container *ngIf="pantheonClears > 0">
+              {{ pantheonClears }}
+              <span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                {{ pantheonClears === 1 ? 'clear' : 'clears' }}
+              </span>
+            </ng-container>
+          </span>
+        </div>
         <div class="space-y-1">
           <div *ngFor="let first of group.versions" class="space-y-0.5 min-w-0">
             <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -178,7 +190,7 @@
 </ng-template>
 
 <!-- Stacked raid/dungeon card: PGCR image on top, variants below (matches Story / Pantheon) -->
-<ng-template #firstsStackedVariantCard let-item="item" let-showSoloFlawless="showSoloFlawless" let-titleClass="titleClass" let-clearsGame="clearsGame" let-clearsMembershipId="clearsMembershipId">
+<ng-template #firstsStackedVariantCard let-item="item" let-showSoloFlawless="showSoloFlawless" let-titleClass="titleClass" let-clearsGame="clearsGame" let-clearsAccountKey="clearsAccountKey">
   <div class="rounded-lg overflow-hidden destiny-modal-section flex flex-col min-w-0">
     <div class="relative min-h-[5.5rem] bg-cover bg-center"
          [ngStyle]="typeof ps.getFirstCompletionImageForRaid(item) === 'string'
@@ -187,7 +199,7 @@
         <span *ngIf="cardImg && typeof cardImg !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="cardImg"></span>
       </ng-container>
       <div class="pgcr-image-scrim"></div>
-      <span *ngIf="ps.cardHasFlawlessClear(item, !!showSoloFlawless, clearsMembershipId)"
+      <span *ngIf="ps.cardHasFlawlessClear(item, !!showSoloFlawless, clearsAccountKey)"
             class="firsts-flawless-banner"
             aria-label="Flawless clear">
         Flawless
@@ -196,12 +208,15 @@
     <div class="pgcr-image-caption px-3 py-2 min-w-0">
       <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-1 min-w-0">
         <h5 [ngClass]="titleClass || 'text-lg sm:text-xl font-bold text-white mb-0'">{{ item.baseName }}</h5>
-        <span class="text-sm font-semibold text-white/90 tabular-nums"
+        <span *ngIf="ps.getFamilyClearCount(item.baseName, clearsGame || 'D2', clearsAccountKey) as familyClears"
+              class="text-sm font-semibold text-white/90 tabular-nums"
               title="Completed clears from stored activity history">
-          {{ ps.getFamilyClearCount(item.baseName, clearsGame || 'D2', clearsMembershipId) }}
-          <span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">
-            {{ ps.getFamilyClearCount(item.baseName, clearsGame || 'D2', clearsMembershipId) === 1 ? 'clear' : 'clears' }}
-          </span>
+          <ng-container *ngIf="familyClears > 0">
+            {{ familyClears }}
+            <span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+              {{ familyClears === 1 ? 'clear' : 'clears' }}
+            </span>
+          </ng-container>
         </span>
       </div>
       <div class="space-y-1 min-w-0">
@@ -240,11 +255,11 @@
   </div>
 </ng-template>
 
-<ng-template #firstsStackedRaidDungeonCard let-items="items" let-showSoloFlawless="showSoloFlawless" let-layout="layout" let-titleClass="titleClass" let-clearsGame="clearsGame" let-clearsMembershipId="clearsMembershipId">
+<ng-template #firstsStackedRaidDungeonCard let-items="items" let-showSoloFlawless="showSoloFlawless" let-layout="layout" let-titleClass="titleClass" let-clearsGame="clearsGame" let-clearsAccountKey="clearsAccountKey">
   <div *ngIf="items?.length"
        [ngClass]="layout === 'stack' ? 'space-y-3' : (layout === 'stack-loose' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3')">
     <ng-container *ngFor="let item of items">
-      <ng-container *ngTemplateOutlet="firstsStackedVariantCard; context: { item: item, showSoloFlawless: !!showSoloFlawless, titleClass: titleClass, clearsGame: clearsGame || 'D2', clearsMembershipId: clearsMembershipId }"></ng-container>
+      <ng-container *ngTemplateOutlet="firstsStackedVariantCard; context: { item: item, showSoloFlawless: !!showSoloFlawless, titleClass: titleClass, clearsGame: clearsGame || 'D2', clearsAccountKey: clearsAccountKey }"></ng-container>
     </ng-container>
   </div>
 </ng-template>
@@ -262,8 +277,8 @@
 <ng-template #pantheonEventsPlayerSection let-player="player">
   <ng-container *ngIf="ps.showFirstsSection('pantheon-events')">
     <h4 class="text-md font-semibold text-purple-300 mb-2 mt-4">Pantheon Events</h4>
-    <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedPantheonRaidsForPlayer(player, 'legacy-pantheon'), emptyMessage: 'No legacy Pantheon firsts found.' }"></ng-container>
-    <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedPantheonRaidsForPlayer(player, 'mot-pantheon'), emptyMessage: 'No Monument of Triumph Pantheon firsts yet.' }"></ng-container>
+    <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedPantheonRaidsForPlayer(player, 'legacy-pantheon'), emptyMessage: 'No legacy Pantheon firsts found.', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
+    <ng-container *ngTemplateOutlet="firstsPantheonEventCard; context: { groups: ps.getGroupedPantheonRaidsForPlayer(player, 'mot-pantheon'), emptyMessage: 'No Monument of Triumph Pantheon firsts yet.', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
     <ng-container *ngTemplateOutlet="firstsRiteStackedCard; context: { riteGroups: ps.getPlayerRiteOfTheNineVariants(player), emptyMessage: 'No Rite of the Nine firsts found.' }"></ng-container>
   </ng-container>
 </ng-template>
@@ -455,7 +470,7 @@
               <ng-container *ngIf="ps.isD1Player(player) && ps.showFirstsSection('raids')">
                 <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
                 <div class="mb-4">
-                  <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD1RaidVariants(player), layout: 'stack', titleClass: 'text-sm sm:text-base font-bold text-white mb-1', clearsGame: 'D1', clearsMembershipId: player.membershipId }"></ng-container>
+                  <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD1RaidVariants(player), layout: 'stack', titleClass: 'text-sm sm:text-base font-bold text-white mb-1', clearsGame: 'D1', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
                 </div>
                 <div *ngIf="ps.getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
                   No raid firsts found for D1.
@@ -468,7 +483,7 @@
                 <!-- D2 Raids -->
                 <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">D2 Raids</h4>
                 <div class="mb-4">
-                  <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2RaidVariants(player), layout: 'stack', clearsGame: 'D2', clearsMembershipId: player.membershipId }"></ng-container>
+                  <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2RaidVariants(player), layout: 'stack', clearsGame: 'D2', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
                 </div>
                 <div *ngIf="ps.getPlayerRegularRaids(player,'D2').length === 0" class="text-center text-slate-400 py-2">
                   No raid firsts found for D2.
@@ -476,7 +491,7 @@
                 </ng-container>
                 <ng-container *ngIf="ps.showFirstsSection('dungeons')">
                 <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
-                <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2DungeonVariants(player), layout: 'stack', showSoloFlawless: true, clearsGame: 'D2', clearsMembershipId: player.membershipId }"></ng-container>
+                <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2DungeonVariants(player), layout: 'stack', showSoloFlawless: true, clearsGame: 'D2', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
                 </ng-container>
               </ng-container>
             </div>
@@ -533,7 +548,7 @@
         <ng-container *ngIf="ps.isD1Player(player) && ps.showFirstsSection('raids')">
           <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
           <div class="mb-4">
-            <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD1RaidVariants(player), layout: 'stack', titleClass: 'text-sm sm:text-base font-bold text-white mb-1', clearsGame: 'D1', clearsMembershipId: player.membershipId }"></ng-container>
+            <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD1RaidVariants(player), layout: 'stack', titleClass: 'text-sm sm:text-base font-bold text-white mb-1', clearsGame: 'D1', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
           </div>
           <div *ngIf="ps.getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
             No raid firsts found for D1.
@@ -546,7 +561,7 @@
           <!-- D2 Raids -->
           <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">D2 Raids</h4>
           <div class="mb-4">
-            <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2RaidVariants(player), layout: 'stack', clearsGame: 'D2', clearsMembershipId: player.membershipId }"></ng-container>
+            <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2RaidVariants(player), layout: 'stack', clearsGame: 'D2', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
           </div>
           <div *ngIf="ps.getPlayerRegularRaids(player,'D2').length === 0" class="text-center text-slate-400 py-2">
             No raid firsts found for D2.
@@ -554,7 +569,7 @@
           </ng-container>
           <ng-container *ngIf="ps.showFirstsSection('dungeons')">
           <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
-          <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2DungeonVariants(player), layout: 'stack', showSoloFlawless: true, clearsGame: 'D2', clearsMembershipId: player.membershipId }"></ng-container>
+          <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2DungeonVariants(player), layout: 'stack', showSoloFlawless: true, clearsGame: 'D2', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
         </ng-container>
         </ng-container>
       </div>
@@ -606,7 +621,7 @@
           <ng-container *ngIf="ps.isD1Player(player) && ps.showFirstsSection('raids')">
             <h4 class="text-md font-semibold text-yellow-300 mb-2">D1 Raids</h4>
             <div class="mb-4">
-              <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD1RaidVariants(player), layout: 'stack-loose', titleClass: 'text-sm sm:text-base font-bold text-white mb-1', clearsGame: 'D1', clearsMembershipId: player.membershipId }"></ng-container>
+              <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD1RaidVariants(player), layout: 'stack-loose', titleClass: 'text-sm sm:text-base font-bold text-white mb-1', clearsGame: 'D1', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
             </div>
             <div *ngIf="ps.getPlayerRaids(player,'D1').length === 0" class="text-center text-slate-400 py-2">
               No raid firsts found for D1.
@@ -619,7 +634,7 @@
             <!-- D2 Raids -->
             <h4 class="text-md font-semibold text-yellow-300 mb-2 mt-4">D2 Raids</h4>
             <div class="mb-4">
-              <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2RaidVariants(player), layout: 'stack-loose', clearsGame: 'D2', clearsMembershipId: player.membershipId }"></ng-container>
+              <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2RaidVariants(player), layout: 'stack-loose', clearsGame: 'D2', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
             </div>
             <div *ngIf="ps.getPlayerRegularRaids(player,'D2').length === 0" class="text-center text-slate-400 py-2">
               No raid firsts found for D2.
@@ -627,7 +642,7 @@
             </ng-container>
             <ng-container *ngIf="ps.showFirstsSection('dungeons')">
             <h4 class="text-md font-semibold text-green-300 mb-2 mt-4">D2 Dungeons</h4>
-            <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2DungeonVariants(player), layout: 'stack-loose', showSoloFlawless: true, clearsGame: 'D2', clearsMembershipId: player.membershipId }"></ng-container>
+            <ng-container *ngTemplateOutlet="firstsStackedRaidDungeonCard; context: { items: ps.getPlayerD2DungeonVariants(player), layout: 'stack-loose', showSoloFlawless: true, clearsGame: 'D2', clearsAccountKey: ps.getAccountKeyForPlayer(player) }"></ng-container>
           </ng-container>
           </ng-container>
         </div>
