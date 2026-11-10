@@ -66,6 +66,9 @@ export class TimeStoryTabComponent implements OnChanges {
   readonly share = groupSharePercent;
 
   private loadGen = 0;
+  private lastScopeKey = '';
+  private lastIdentityKey = '';
+  private lastGame: 'D1' | 'D2' | 'Both' | '' = '';
 
   constructor(
     private timeStory: TimeStoryService,
@@ -76,19 +79,29 @@ export class TimeStoryTabComponent implements OnChanges {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
       this.loading = false;
+      this.lastScopeKey = '';
+      this.lastIdentityKey = '';
+      this.lastGame = '';
       this.cdr.markForCheck();
       return;
     }
+
+    const scopeKey = this.scopes
+      .map(s => `${s.game}:${s.membershipId}`)
+      .sort()
+      .join(',');
+    const identityKey = Object.entries(this.identityByMembership || {})
+      .map(([id, ident]) => `${id}=${ident}`)
+      .sort()
+      .join(',');
+    const scopesChanged = scopeKey !== this.lastScopeKey;
+    const identityChanged = identityKey !== this.lastIdentityKey;
+    const gameChanged = this.effectiveGame !== this.lastGame;
 
     const syncJustFinished =
       !!changes['syncInProgress'] &&
       this.syncInProgress === false &&
       changes['syncInProgress'].previousValue === true;
-
-    const inputsChanged =
-      !!changes['scopes'] ||
-      !!changes['identityByMembership'] ||
-      !!changes['effectiveGame'];
 
     if (this.syncInProgress) {
       if (!this.result?.years.length) {
@@ -98,7 +111,10 @@ export class TimeStoryTabComponent implements OnChanges {
       return;
     }
 
-    if (syncJustFinished || inputsChanged || !this.result) {
+    if (syncJustFinished || scopesChanged || identityChanged || gameChanged || !this.result) {
+      this.lastScopeKey = scopeKey;
+      this.lastIdentityKey = identityKey;
+      this.lastGame = this.effectiveGame;
       await this.reload();
     }
   }

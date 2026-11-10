@@ -1255,6 +1255,15 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
 
+  /** True while account history is still being written (deep link, select, or favorites). */
+  get timeStorySyncInProgress(): boolean {
+    if (this.profileLoadInProgress) return true;
+    if (!(this.selectedPlayers || []).length) return false;
+    const statuses = this.accountLoadingStatuses || [];
+    if (!statuses.length) return true;
+    return statuses.some(s => s.status !== 'complete' && s.status !== 'error');
+  }
+
   get timeStoryEffectiveGame(): EffectiveGame {
     return effectiveGame(this.timeStorySelectedPlayers, 'Both');
   }

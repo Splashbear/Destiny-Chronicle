@@ -479,7 +479,7 @@
               [accounts]="timeStoryAccountChips"
               [effectiveGame]="timeStoryEffectiveGame"
               [hasSelectedPlayers]="selectedPlayers.length > 0"
-              [syncInProgress]="profileLoadInProgress"
+              [syncInProgress]="timeStorySyncInProgress"
               (openGroup)="openTimeStoryGroup($event)"></app-time-story-tab>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
