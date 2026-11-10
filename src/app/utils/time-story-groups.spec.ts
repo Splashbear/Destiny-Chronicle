@@ -5,7 +5,7 @@ import {
 } from './time-story-groups';
 
 describe('timeStoryGroupFromSection', () => {
-  it('maps Activity Breakdown keys onto the eight time-story groups', () => {
+  it('maps Activity Breakdown keys onto the time-story groups', () => {
     expect(timeStoryGroupFromSection('mode-4', 4)).toBe('raids');
     expect(timeStoryGroupFromSection('dungeon', 82)).toBe('dungeons');
     expect(timeStoryGroupFromSection('pvp', 10)).toBe('crucible');
@@ -21,8 +21,15 @@ describe('timeStoryGroupFromSection', () => {
     expect(timeStoryGroupFromSection('exotic-story-missions', 2)).toBe('story-patrol-seasonal');
     expect(timeStoryGroupFromSection('story-strikes', 2)).toBe('story-patrol-seasonal');
     expect(timeStoryGroupFromSection('prison-of-elders', 21)).toBe('story-patrol-seasonal');
-    expect(timeStoryGroupFromSection('mode-0', 0)).toBe('other');
+    expect(timeStoryGroupFromSection('mode-0', 0)).toBe('unknown');
     expect(timeStoryGroupFromSection('sparrow-racing-league', 29)).toBe('other');
+  });
+
+  it('keeps unlabeled mode-0 as Unknown activity, not Other', () => {
+    expect(timeStoryGroupFromSection('mode-0', 0)).toBe('unknown');
+    expect(TIME_STORY_GROUP_LABELS.unknown).toBe('Unknown activity');
+    expect(timeStoryGroupFromSection('gambit', 0)).toBe('gambit');
+    expect(timeStoryGroupFromSection('pvp', 0)).toBe('crucible');
   });
 
   it('keeps Trials out of Crucible', () => {

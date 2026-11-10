@@ -12,6 +12,7 @@ export const TIME_STORY_GROUP_IDS = [
   'strikes-nightfalls',
   'story-patrol-seasonal',
   'other',
+  'unknown',
 ] as const;
 
 export type TimeStoryGroupId = (typeof TIME_STORY_GROUP_IDS)[number];
@@ -25,6 +26,7 @@ export const TIME_STORY_GROUP_LABELS: Record<TimeStoryGroupId, string> = {
   'strikes-nightfalls': 'Strikes & Nightfalls',
   'story-patrol-seasonal': 'Story/Patrol/Seasonal',
   other: 'Other',
+  unknown: 'Unknown activity',
 };
 
 /** Colors chosen for contrast on near-black panels (#14110D). */
@@ -37,6 +39,7 @@ export const TIME_STORY_GROUP_COLORS: Record<TimeStoryGroupId, string> = {
   'strikes-nightfalls': '#5B8AD6',
   'story-patrol-seasonal': '#9B7AC8',
   other: '#8A8276',
+  unknown: '#C4B8A4',
 };
 
 /** PvE rotator / story / patrol modes that collapse into Story/Patrol/Seasonal. */
@@ -79,7 +82,14 @@ export function timeStoryGroupFromSection(
   if (STORY_PATROL_SEASONAL_SECTIONS.has(sectionKey) || STORY_PATROL_SEASONAL_MODES.has(mode)) {
     return 'story-patrol-seasonal';
   }
+  // Unlabeled mode-0 stays its own group; typed mode-0 overrides already returned above.
+  if (sectionKey === 'mode-0') return 'unknown';
   return 'other';
+}
+
+/** True when Breakdown left the row as untyped mode 0 ("Unknown activity"). */
+export function isUnlabeledModeZero(sectionKey: string, mode: number = 0): boolean {
+  return timeStoryGroupFromSection(sectionKey, mode) === 'unknown';
 }
 
 export function isTimeStoryGroupId(value: unknown): value is TimeStoryGroupId {

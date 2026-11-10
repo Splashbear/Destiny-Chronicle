@@ -4,7 +4,7 @@ import {
   BreakdownMembershipScope,
 } from './activity-breakdown.service';
 import { StoredActivity } from './activity-db.service';
-import { activityDurationSeconds } from '../utils/activity-duration-seconds';
+import { playerTimePlayedSeconds } from '../utils/player-time-played-seconds';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
 import {
   buildTimeStoryByYear,
@@ -37,7 +37,7 @@ export class TimeStoryService {
     return buildTimeStoryByYear(
       unique.map(activity => ({
         period: activity.period,
-        timeSeconds: activityDurationSeconds(activity),
+        timeSeconds: playerTimePlayedSeconds(activity),
         activity,
       })),
       activity => this.breakdown.timeStoryGroupForActivity(activity as unknown as StoredActivity),
