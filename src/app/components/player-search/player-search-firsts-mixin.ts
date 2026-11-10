@@ -17,6 +17,8 @@ import { buildGroupedPantheonEventCards } from '../../utils/pantheon-firsts';
 import { resolveFirstCompletionImageForRaid } from '../../utils/first-completion-image';
 import { ActivityDbService } from '../../services/activity-db.service';
 import { gameIconUrl, platformIconUrl } from '../../utils/platform-display';
+import { findDungeonSoloFirstForLabel } from '../../utils/dungeon-solo-lookup';
+import { anyFlawlessFamilyMatches } from '../../utils/flawless-family-match';
 import { PlayerSearchHostAdaptersMixin } from './player-search-host-adapters-mixin';
 
 /**
@@ -287,18 +289,133 @@ export abstract class PlayerSearchFirstsMixin extends PlayerSearchHostAdaptersMi
   }
 
   protected async loadDungeonSoloFirsts(player: PlayerSearchDisplay): Promise<void> {
-    await this.guardianFirstsLoad.loadDungeonSoloFirsts(
-      {
-        setLoadingSolo: (membershipId, loading) => {
-          this.loadingDungeonSoloFirsts[membershipId] = loading;
+    // Clear counts + raid flawless must not wait behind the dungeon-solo PGCR storm.
+    const sideWork = Promise.all([
+      this.refreshFamilyClearCountsForPlayer(player),
+      this.refreshFlawlessRaidBaseNamesForPlayer(player),
+    ]);
+    await Promise.all([
+      this.guardianFirstsLoad.loadDungeonSoloFirsts(
+        {
+          setLoadingSolo: (membershipId, loading) => {
+            this.loadingDungeonSoloFirsts[membershipId] = loading;
+          },
+          setDungeonSoloFirsts: (membershipId, data) => {
+            this.dungeonSoloFirsts[membershipId] = data as any;
+          },
+          detectChanges: () => this.cdr.detectChanges(),
         },
-        setDungeonSoloFirsts: (membershipId, data) => {
-          this.dungeonSoloFirsts[membershipId] = data as any;
-        },
-        detectChanges: () => this.cdr.detectChanges(),
-      },
-      player.membershipId
+        player.membershipId
+      ),
+      sideWork,
+    ]);
+  }
+
+  /** Stored-history clear totals for raid/dungeon Firsts cards (not profile minutes). */
+  protected async refreshFamilyClearCountsForPlayer(player: PlayerSearchDisplay): Promise<void> {
+    const game = this.isD1Player(player) ? 'D1' : 'D2';
+    try {
+      const counts = await this.activityDb.getRaidDungeonClearCounts(player.membershipId, game);
+      const next: { [key: string]: number } = {};
+      for (const [baseName, n] of counts) {
+        next[`${game}:${baseName}`] = n;
+      }
+      // New object reference so OnPush parent re-renders Firsts cards.
+      this.familyClearCountsByMembership = {
+        ...this.familyClearCountsByMembership,
+        [player.membershipId]: next,
+      };
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('[Firsts] Clear counts skipped for', player.membershipId, err);
+    }
+  }
+
+  /** Any fireteam flawless raid/Pantheon clear from PGCR (not only the first-clear Firsts row). */
+  protected async refreshFlawlessRaidBaseNamesForPlayer(player: PlayerSearchDisplay): Promise<void> {
+    if (this.isD1Player(player)) {
+      this.flawlessRaidBaseNamesByMembership = {
+        ...this.flawlessRaidBaseNamesByMembership,
+        [player.membershipId]: [],
+      };
+      return;
+    }
+    try {
+      const names = await this.activityDb.getFlawlessRaidBaseNames(player.membershipId);
+      this.flawlessRaidBaseNamesByMembership = {
+        ...this.flawlessRaidBaseNamesByMembership,
+        [player.membershipId]: names,
+      };
+      if (names.length) {
+        console.log('[Firsts] Flawless raid families for', player.membershipId, names);
+      } else {
+        console.warn('[Firsts] No flawless raid families found for', player.membershipId);
+      }
+      this.cdr.markForCheck();
+      this.cdr.detectChanges();
+    } catch (err) {
+      console.warn('[Firsts] Raid flawless scan skipped for', player.membershipId, err);
+      this.flawlessRaidBaseNamesByMembership = {
+        ...this.flawlessRaidBaseNamesByMembership,
+        [player.membershipId]: [],
+      };
+    }
+  }
+
+  getFamilyClearCount(baseName: string, game: 'D1' | 'D2' = 'D2', membershipId?: string): number {
+    const key = `${game}:${baseName}`;
+    if (membershipId) {
+      return this.familyClearCountsByMembership[membershipId]?.[key] ?? 0;
+    }
+    const players = this.getFirstsFilteredPlayers().filter((p: any) =>
+      game === 'D1' ? this.isD1Player(p) : !this.isD1Player(p)
     );
+    const mids = players.length
+      ? players.map((p: any) => p.membershipId)
+      : Object.keys(this.familyClearCountsByMembership);
+    let total = 0;
+    for (const mid of mids) {
+      total += this.familyClearCountsByMembership[mid]?.[key] ?? 0;
+    }
+    return total;
+  }
+
+  /** True when scanned flawless families match this Firsts card base name. */
+  familyHasFlawlessRaidClear(baseName: string, membershipId?: string): boolean {
+    if (!baseName) return false;
+    const lists = membershipId
+      ? [this.flawlessRaidBaseNamesByMembership[membershipId] || []]
+      : this.getFirstsFilteredPlayers()
+          .filter((p: any) => !this.isD1Player(p))
+          .map((p: any) => this.flawlessRaidBaseNamesByMembership[p.membershipId] || []);
+    return lists.some((names: string[]) => anyFlawlessFamilyMatches(baseName, names));
+  }
+
+  cardHasFlawlessClear(
+    item: { baseName: string; variants?: Array<{ hasClear: boolean; first?: ActivityFirstCompletion }>; cardTitle?: string },
+    showSoloFlawless = false,
+    membershipId?: string
+  ): boolean {
+    if (this.familyHasFlawlessRaidClear(item.baseName, membershipId)) return true;
+    if (item.cardTitle && this.familyHasFlawlessRaidClear(item.cardTitle, membershipId)) return true;
+
+    for (const variant of item.variants || []) {
+      const first = variant.first;
+      if (!first) continue;
+      if (first.isFlawless || first.isSoloFlawless) return true;
+      if (!showSoloFlawless) continue;
+      const sf = this.getSoloFirstForFirst(first);
+      if (sf?.firstFlawless || sf?.hasFlawless) return true;
+    }
+    if (showSoloFlawless) {
+      for (const list of Object.values(this.dungeonSoloFirsts)) {
+        if (list?.some(d => d.family === item.baseName && (d.hasFlawless || d.firstFlawless))) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   openExternalPGCRForFirst(first: ActivityFirstCompletion, _event?: MouseEvent) {
@@ -354,8 +471,11 @@ export abstract class PlayerSearchFirstsMixin extends PlayerSearchHostAdaptersMi
   getSoloFirstForFirst(first: ActivityFirstCompletion): any {
     if (!first || !first.membershipId) return undefined;
     const player = this.selectedPlayers.find((p) => p.membershipId === first.membershipId);
-    if (!player) return undefined;
-    return this.getDungeonSoloFirstForPlayer(player, first.name);
+    if (player) {
+      return this.getDungeonSoloFirstForPlayer(player, first.name);
+    }
+    // Aggregate cards: membership may still have solo rows even if find-by-player misses.
+    return findDungeonSoloFirstForLabel(this.dungeonSoloFirsts[first.membershipId], first.name);
   }
 
   getRiteOfTheNineDungeonGroups(

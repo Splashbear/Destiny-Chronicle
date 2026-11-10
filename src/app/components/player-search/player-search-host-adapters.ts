@@ -641,6 +641,9 @@ export function build_asPlayerSelectionClearHost(c: any) {
     },
     clearGuardianFirstsMap: () => {
       c.guardianFirstsMap = {};
+      c.dungeonSoloFirsts = {};
+      c.familyClearCountsByMembership = {};
+      c.flawlessRaidBaseNamesByMembership = {};
     },
     clearComputedAccountStats: () => {
       c.computedAccountStats = null;
