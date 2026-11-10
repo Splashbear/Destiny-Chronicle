@@ -32,6 +32,12 @@
   text-shadow: 0 0 12px rgba(232, 195, 106, 0.25);
 }
 
+.time-story__label {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.15em;
+}
+
 .time-story__lede {
   margin: 0.35rem 0 0;
   color: #b8a890;

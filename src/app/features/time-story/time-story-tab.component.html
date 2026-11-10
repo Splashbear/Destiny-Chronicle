@@ -6,15 +6,14 @@
   <section *ngIf="hasSelectedPlayers" class="time-story__panel destiny-surface-panel" aria-labelledby="time-story-title">
     <header class="time-story__header">
       <div class="time-story__heading">
-        <h2 id="time-story-title" class="time-story__title">Your Destiny, by the hours</h2>
+        <h2 id="time-story-title" class="time-story__title">{{ titleText }}</h2>
         <p class="time-story__lede">
-          Time in activities
+          <span class="time-story__label" [attr.title]="labelTooltip">{{ labelText }}</span>
           <strong class="time-story__total">{{ formatTime(result?.totalSeconds || 0) }}</strong>
           <span class="time-story__meta"> · {{ gameCaption }} · {{ result?.totalGames || 0 | number }} games</span>
         </p>
-        <p class="time-story__note">
-          Hours are the sum of each game's reported duration. Orbit, the Tower, and loading screens are not included.
-          The headline time on this page is unchanged.
+        <p class="time-story__note" [attr.title]="labelTooltip">
+          {{ measurementNote }}
         </p>
       </div>
       <p *ngIf="accounts.length > 1" class="time-story__accounts">
@@ -33,7 +32,7 @@
     </p>
 
     <div *ngIf="result && result.years.length > 0" class="time-story__chart-wrap">
-      <div class="time-story__chart" role="list" aria-label="Time in activities by year">
+      <div class="time-story__chart" role="list" [attr.aria-label]="chartAriaLabel">
         <div class="time-story__col" *ngFor="let bar of result.years" role="listitem">
           <div class="time-story__col-total" [attr.title]="formatTime(bar.seconds)">{{ formatTime(bar.seconds) }}</div>
           <div class="time-story__stack" [style.height.%]="barHeightPercent(bar)">

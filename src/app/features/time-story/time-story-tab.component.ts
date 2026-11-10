@@ -21,6 +21,13 @@ import {
   TIME_STORY_GROUP_LABELS,
   type TimeStoryGroupId,
 } from '../../utils/time-story-groups';
+import {
+  TIME_STORY_CHART_ARIA_LABEL,
+  TIME_STORY_LABEL,
+  TIME_STORY_LABEL_TOOLTIP,
+  TIME_STORY_MEASUREMENT_NOTE,
+  TIME_STORY_TITLE,
+} from '../../utils/time-story-copy';
 
 export interface TimeStoryAccountChip {
   platform: string;
@@ -64,6 +71,11 @@ export class TimeStoryTabComponent implements OnChanges {
   readonly colors = TIME_STORY_GROUP_COLORS;
   readonly formatTime = formatSecondsToHoursMinutes;
   readonly share = groupSharePercent;
+  readonly titleText = TIME_STORY_TITLE;
+  readonly labelText = TIME_STORY_LABEL;
+  readonly labelTooltip = TIME_STORY_LABEL_TOOLTIP;
+  readonly measurementNote = TIME_STORY_MEASUREMENT_NOTE;
+  readonly chartAriaLabel = TIME_STORY_CHART_ARIA_LABEL;
 
   private loadGen = 0;
   private lastScopeKey = '';
