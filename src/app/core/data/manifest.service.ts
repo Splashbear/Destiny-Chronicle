@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { BehaviorSubject, Observable, firstValueFrom } from 'rxjs';
-import { filter } from 'rxjs/operators';
+import { BehaviorSubject, Observable, combineLatest, firstValueFrom } from 'rxjs';
+import { filter, take } from 'rxjs/operators';
 import { Destiny1ManifestService } from '../../services/destiny1-manifest.service';
 import { ActivityDbService } from '../../services/activity-db.service';
 import { LocaleService } from '../../services/locale.service';
@@ -31,6 +31,8 @@ export class DestinyManifestService {
   private collectibleDefsLoaded = false;
   private collectibleDefsPromise: Promise<void> | null = null;
   private manifestLoaded = new BehaviorSubject<boolean>(false);
+  /** True after a loadManifest attempt finishes, whether it succeeded or failed. */
+  private manifestLoadSettled = new BehaviorSubject<boolean>(false);
   private loadedCulture: string | null = null;
   private lastManifestMeta: { version: string; culture: string; culturePath: any } | null = null;
   
@@ -50,6 +52,8 @@ export class DestinyManifestService {
   ) {
     if (!this.archiveRuntime.isOfflineMode) {
       this.loadManifest();
+    } else {
+      this.manifestLoadSettled.next(true);
     }
   }
 
@@ -88,8 +92,10 @@ export class DestinyManifestService {
 
   async loadManifest() {
     if (this.archiveRuntime.isOfflineMode && !this.archiveRuntime.allowLiveApi) {
+      this.manifestLoadSettled.next(true);
       return;
     }
+    this.manifestLoadSettled.next(false);
     try {
       // Step 1: Get manifest metadata
       const manifestMeta: any = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net/Platform/Destiny2/Manifest/')));
@@ -149,6 +155,8 @@ export class DestinyManifestService {
         console.error('[Manifest] Error loading D2 manifest:', msg);
       }
       this.manifestLoaded.next(false);
+    } finally {
+      this.manifestLoadSettled.next(true);
     }
   }
 
@@ -663,12 +671,19 @@ export class DestinyManifestService {
   }
 
   /**
-   * Resolves once the manifest is loaded. (`isLoaded().toPromise()` never resolves: the
-   * BehaviorSubject does not complete, so callers that arrived early waited forever.)
+   * Resolves once a load attempt has finished. Success sets isLoadedSync true.
+   * A finished failure also resolves (isLoadedSync stays false) so callers such as
+   * date-browse / Time Story are not left waiting forever for a true that never comes.
+   * (`isLoaded().toPromise()` never resolves: the BehaviorSubject does not complete.)
    */
   async whenLoaded(): Promise<void> {
     if (this.manifestLoaded.value) return;
-    await firstValueFrom(this.isLoaded().pipe(filter((v) => !!v)));
+    await firstValueFrom(
+      combineLatest([this.manifestLoaded, this.manifestLoadSettled]).pipe(
+        filter(([loaded, settled]) => loaded || settled),
+        take(1)
+      )
+    );
   }
 
   isLoaded(): Observable<boolean> {

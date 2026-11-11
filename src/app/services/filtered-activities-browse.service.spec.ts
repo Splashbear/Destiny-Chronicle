@@ -128,4 +128,55 @@ describe('FilteredActivitiesBrowseService', () => {
     expect(statuses[0]).toBe('displaying-activities');
     expect(statuses).toContain('complete');
   });
+
+  it('marks complete on final load after a settled failed manifest wait (names are optional)', async () => {
+    let token = 1;
+    const statuses: string[] = [];
+    const host: FilteredActivitiesBrowseHost = {
+      beginLoadToken: (markComplete) => (markComplete ? ++token : token),
+      getCurrentLoadToken: () => token,
+      getSelectedPlayers: () => [player('a')],
+      getSelectedDate: () => '2024-01-01',
+      getPlayerKey: (p) => `D2|${p.membershipId}`,
+      isD1Player: () => false,
+      getPlatformName: () => 'PlayStation',
+      updateAccountLoadingStatus: (_k, _n, _p, _g, _m, status) => {
+        statuses.push(status);
+      },
+      getAccountLoadingStatus: () => ({
+        status: 'displaying-activities',
+        displayName: 'a',
+        platform: 'PlayStation',
+        game: 'D2',
+        membershipType: 2,
+      }),
+      updateLoadingProgress: () => undefined,
+      clearLoadingProgress: () => undefined,
+      detectChanges: () => undefined,
+      fetchFilteredActivities: async () => [],
+      buildReportCountMessage: () => '0',
+      getReportSummaryLine: () => 'none',
+      enrichActivitiesWithCharacterClass: async () => undefined,
+      setFilteredActivitiesForDate: () => undefined,
+      getFilteredActivitiesForDateLength: () => 0,
+      scheduleBatchedUpdate: () => undefined,
+      // Mirrors whenLoaded after a finished HTTP 500: settles without isLoadedSync.
+      ensureManifestLoaded: async () => undefined,
+      processAndGroupActivities: () => undefined,
+      startBackgroundProcessing: () => undefined,
+      updateActivityDisplay: () => undefined,
+      setDateActivityLoading: () => undefined,
+      checkAndShowAnniversaryBanner: () => undefined,
+    };
+
+    spyOn(globalThis, 'setTimeout').and.callFake(((fn: TimerHandler) => {
+      if (typeof fn === 'function') {
+        fn();
+      }
+      return 0 as any;
+    }) as any);
+
+    await svc.loadAllFilteredActivities(host, false, true);
+    expect(statuses).toContain('complete');
+  });
 });

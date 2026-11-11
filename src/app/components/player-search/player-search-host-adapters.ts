@@ -357,8 +357,13 @@ export function build_asFilteredActivitiesBrowseHost(c: any) {
     getFilteredActivitiesForDateLength: () => c.filteredActivitiesForDate.length,
     scheduleBatchedUpdate: () => c.scheduleBatchedUpdate(),
     ensureManifestLoaded: async () => {
-      if (!c.manifest.isLoadedSync) {
-        await c.manifest.whenLoaded();
+      // Names can stay unresolved; do not block browse-complete / Time Story bars.
+      try {
+        if (!c.manifest.isLoadedSync) {
+          await c.manifest.whenLoaded();
+        }
+      } catch {
+        /* manifest failure is non-fatal for aggregation */
       }
     },
     processAndGroupActivities: (message) => {
