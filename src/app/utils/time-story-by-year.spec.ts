@@ -1,4 +1,4 @@
-import { buildTimeStoryByYear, resetYearOfPeriodFormatters, timeStoryGroupsReconcile, yearOfPeriod } from './time-story-by-year';
+import { buildTimeStoryByYear, resetYearOfPeriodFormatters, timeStoryGroupTable, timeStoryGroupsReconcile, yearOfPeriod } from './time-story-by-year';
 import type { TimeStoryGroupId } from './time-story-groups';
 
 describe('yearOfPeriod', () => {
@@ -89,5 +89,43 @@ describe('buildTimeStoryByYear', () => {
     expect(result.years.find(y => y.year === 2023)?.groups.map(g => g.group).sort()).toEqual(['raids', 'unknown']);
     expect(result.totalSeconds).toBe(12600);
     expect(timeStoryGroupsReconcile(result)).toBeTrue();
+  });
+});
+
+describe('timeStoryGroupTable', () => {
+  const result = buildTimeStoryByYear(
+    [
+      { period: '2024-03-01T12:00:00Z', timeSeconds: 7200, group: 'trials' },
+      { period: '2024-04-01T12:00:00Z', timeSeconds: 1800, group: 'crucible' },
+      { period: '2023-06-01T12:00:00Z', timeSeconds: 3600, group: 'raids' },
+      { period: '2023-07-01T12:00:00Z', timeSeconds: 1800, group: 'unknown' },
+    ] as any,
+    (row: { group?: TimeStoryGroupId }) => row.group ?? null,
+    'UTC'
+  );
+
+  it('reconciles a selected year with that year bar', () => {
+    const table = timeStoryGroupTable(result, 2024);
+    expect(table.year).toBe(2024);
+    expect(table.seconds).toBe(result.years.find(y => y.year === 2024)?.seconds);
+    expect(table.games).toBe(result.years.find(y => y.year === 2024)?.games);
+    expect(table.rows.reduce((sum, row) => sum + row.seconds, 0)).toBe(table.seconds);
+    expect(table.rows.reduce((sum, row) => sum + row.games, 0)).toBe(table.games);
+    expect(table.rows.map(row => row.group).sort()).toEqual(['crucible', 'trials']);
+    const pct = table.rows.reduce((sum, row) => sum + row.percent, 0);
+    expect(pct).toBeCloseTo(100, 5);
+  });
+
+  it('All years aggregates every bar and still matches chart totals', () => {
+    const table = timeStoryGroupTable(result, 'all');
+    expect(table.seconds).toBe(result.totalSeconds);
+    expect(table.games).toBe(result.totalGames);
+    expect(table.rows.reduce((sum, row) => sum + row.seconds, 0)).toBe(result.totalSeconds);
+    expect(table.rows.reduce((sum, row) => sum + row.games, 0)).toBe(result.totalGames);
+  });
+
+  it('reset/All years after a year filter returns the full aggregation', () => {
+    expect(timeStoryGroupTable(result, 2023).seconds).toBe(5400);
+    expect(timeStoryGroupTable(result, 'all').seconds).toBe(14400);
   });
 });

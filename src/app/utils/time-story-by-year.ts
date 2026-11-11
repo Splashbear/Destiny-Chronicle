@@ -133,3 +133,53 @@ export function groupSharePercent(seconds: number, yearSeconds: number): number 
   if (!yearSeconds) return 0;
   return (seconds / yearSeconds) * 100;
 }
+
+export type TimeStoryYearFilter = number | 'all';
+
+export interface TimeStoryGroupTableRow {
+  group: TimeStoryGroupId;
+  seconds: number;
+  games: number;
+  percent: number;
+}
+
+export interface TimeStoryGroupTable {
+  year: TimeStoryYearFilter;
+  seconds: number;
+  games: number;
+  rows: TimeStoryGroupTableRow[];
+}
+
+/** Group rows for one year or all years, using the same totals as the year bars. */
+export function timeStoryGroupTable(
+  result: TimeStoryByYearResult | null | undefined,
+  year: TimeStoryYearFilter = 'all'
+): TimeStoryGroupTable {
+  const empty: TimeStoryGroupTable = { year, seconds: 0, games: 0, rows: [] };
+  if (!result?.years.length) return empty;
+  const bars = year === 'all' ? result.years : result.years.filter(bar => bar.year === year);
+  if (!bars.length) return empty;
+  const byGroup = new Map<TimeStoryGroupId, { seconds: number; games: number }>();
+  let seconds = 0;
+  let games = 0;
+  for (const bar of bars) {
+    seconds += bar.seconds;
+    games += bar.games;
+    for (const part of bar.groups) {
+      const cur = byGroup.get(part.group) || { seconds: 0, games: 0 };
+      cur.seconds += part.seconds;
+      cur.games += part.games;
+      byGroup.set(part.group, cur);
+    }
+  }
+  const rows = TIME_STORY_GROUP_IDS.map(group => {
+    const cur = byGroup.get(group) || { seconds: 0, games: 0 };
+    return {
+      group,
+      seconds: cur.seconds,
+      games: cur.games,
+      percent: groupSharePercent(cur.seconds, seconds),
+    };
+  }).filter(row => row.games > 0 || row.seconds > 0);
+  return { year, seconds, games, rows };
+}

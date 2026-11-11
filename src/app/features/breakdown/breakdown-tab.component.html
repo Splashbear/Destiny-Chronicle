@@ -40,6 +40,7 @@
   <h3 class="text-xl font-bold text-white">Activity Breakdown ({{ ps.selectedAccountKeysForBreakdown.size }} selected)</h3>
 </div>
 <div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.activityBreakdownGroups.length > 0" class="space-y-8">
+  <p class="text-slate-400 text-sm">All-time activity view. The pie, tiles, and table below are not filtered by the year chart above, and they use a separate activity classification, so they are not claimed to match the yearly Time in activities totals.</p>
   <div *ngIf="ps.activityBreakdownSummaryCards.length > 0" class="destiny-surface-panel p-4 mb-6">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">

@@ -329,16 +329,6 @@
             </button>
             <button
               type="button"
-              (click)="onTabChange('timeStory')"
-              class="main-tab"
-              [ngClass]="{ 'main-tab--active': activeTab === 'timeStory' }"
-              role="tab"
-              [attr.aria-selected]="activeTab === 'timeStory'"
-              [title]="uiI18n.t('tab.timeStory')">
-              ⏳ {{ uiI18n.t('tab.timeStory') }}
-            </button>
-            <button
-              type="button"
               (click)="onTabChange('heatmap')"
               class="main-tab"
               [ngClass]="{ 'main-tab--active': activeTab === 'heatmap' }"
@@ -382,9 +372,6 @@
           <button type="button" (click)="onTabChange('breakdown')" class="main-tab"
                   [ngClass]="{ 'main-tab--active': activeTab === 'breakdown' }" role="tab"
                   [attr.aria-selected]="activeTab === 'breakdown'">📋 {{ uiI18n.t('tab.breakdown') }}</button>
-          <button type="button" (click)="onTabChange('timeStory')" class="main-tab"
-                  [ngClass]="{ 'main-tab--active': activeTab === 'timeStory' }" role="tab"
-                  [attr.aria-selected]="activeTab === 'timeStory'">⏳ {{ uiI18n.t('tab.timeStory') }}</button>
           <button type="button" (click)="onTabChange('heatmap')" class="main-tab"
                   [ngClass]="{ 'main-tab--active': activeTab === 'heatmap' }" role="tab"
                   [attr.aria-selected]="activeTab === 'heatmap'">🔥 {{ uiI18n.t('tab.heatmap') }}</button>
@@ -467,12 +454,6 @@
 
         <div *ngIf="activeTab === 'breakdown'">
           @defer (on immediate) {
-            <app-breakdown-tab></app-breakdown-tab>
-          } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
-        </div>
-
-        <div *ngIf="activeTab === 'timeStory'">
-          @defer (on immediate) {
             <app-time-story-tab
               [scopes]="timeStoryScopes"
               [identityByMembership]="getBreakdownIdentityByMembership()"
@@ -481,6 +462,7 @@
               [hasSelectedPlayers]="selectedPlayers.length > 0"
               [syncInProgress]="timeStorySyncInProgress"
               (openGroup)="openTimeStoryGroup($event)"></app-time-story-tab>
+            <app-breakdown-tab></app-breakdown-tab>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 

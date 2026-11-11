@@ -1299,12 +1299,13 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     return scopes;
   }
 
-  get timeStoryAccountChips(): Array<{ platform: string; game: 'D1' | 'D2' }> {
+  get timeStoryAccountChips(): Array<{ displayName?: string; platform: string; game: 'D1' | 'D2' }> {
     return this.timeStoryScopes.map((scope) => {
       const player = this.timeStorySelectedPlayers.find(
         (p) => p.membershipId === scope.membershipId && (p.game === 'D1' ? 'D1' : 'D2') === scope.game
       );
-      return { platform: player?.platform || 'Unknown', game: scope.game };
+      const displayName = (player?.displayName || player?.bungieGlobalDisplayName || '').trim() || undefined;
+      return { displayName, platform: player?.platform || 'Unknown', game: scope.game };
     });
   }
 

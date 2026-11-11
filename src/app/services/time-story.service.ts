@@ -17,6 +17,7 @@ import {
 import {
   buildTimeStoryByYear,
   type TimeStoryByYearResult,
+  type TimeStoryYearFilter,
 } from '../utils/time-story-by-year';
 import {
   buildTimeStoryYearGroupResults,
@@ -71,7 +72,7 @@ export class TimeStoryService {
   async getYearGroupResults(
     scopes: BreakdownMembershipScope[],
     identityByMembership: Record<string, string> | undefined,
-    year: number,
+    year: TimeStoryYearFilter,
     group: TimeStoryGroupId,
     timeZone?: string,
     chartGames?: number | null

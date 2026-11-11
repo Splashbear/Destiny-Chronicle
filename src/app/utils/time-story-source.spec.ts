@@ -61,6 +61,17 @@ describe('time story source rows', () => {
     expect(timeStorySourceSeconds(merged[0])).toBe(4187);
   });
 
+  it('does not treat converter-copied values.timePlayedSeconds on an archive light as personal time', () => {
+    const poisoned = {
+      ...archiveLight,
+      values: { timePlayedSeconds: { basic: { value: 4187 } } },
+    };
+    const row = leanFromArchiveLight(poisoned);
+    expect(row?.timePlayedSeconds).toBeNull();
+    expect(row?.durationSeconds).toBe(4187);
+    expect(timeStorySourceSeconds(row!)).toBe(4187);
+  });
+
   it('does not use convertLightActivityToHistory aliased duration as player time', () => {
     const converted = convertLightActivityToHistory(archiveLight);
     // The site-wide converter still copies durationSeconds into

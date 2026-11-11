@@ -350,4 +350,45 @@ describe('TimeStoryTabComponent details panel selection', () => {
     expect(comp.selection?.seconds).toBe(2000);
     expect(comp.selection?.percent).toBe(40);
   });
+
+  it('filters the group table to a selected year and All years reset reconciles with the chart', async () => {
+    const officialBars: TimeStoryByYearResult = {
+      years: [
+        {
+          year: 2024,
+          seconds: 5000,
+          games: 4,
+          groups: [
+            { group: 'raids', seconds: 2000, games: 1 },
+            { group: 'strikes-nightfalls', seconds: 3000, games: 3 },
+          ],
+        },
+        {
+          year: 2023,
+          seconds: 4187,
+          games: 1,
+          groups: [{ group: 'raids', seconds: 4187, games: 1 }],
+        },
+      ],
+      totalSeconds: 9187,
+      totalGames: 5,
+    };
+    await load(officialBars);
+    expect(comp.yearFilter).toBe(2024);
+    expect(comp.groupTable.seconds).toBe(officialBars.years[0].seconds);
+    expect(comp.groupTable.games).toBe(officialBars.years[0].games);
+    expect(comp.groupTable.rows.reduce((sum, row) => sum + row.seconds, 0)).toBe(comp.groupTable.seconds);
+    expect(comp.groupTable.rows.map(row => row.group)).toEqual(['raids', 'strikes-nightfalls']);
+    expect(comp.groupTable.rows.reduce((sum, row) => sum + row.percent, 0)).toBe(100);
+    comp.selectYear(2023);
+    expect(comp.yearFilter).toBe(2023);
+    expect(comp.groupTable.seconds).toBe(4187);
+    expect(comp.groupTable.rows.map(row => row.group)).toEqual(['raids']);
+    expect(comp.phoneBar?.year).toBe(2023);
+    comp.resetYearFilter();
+    expect(comp.yearFilter).toBe('all');
+    expect(comp.groupTable.seconds).toBe(officialBars.totalSeconds);
+    expect(comp.groupTable.games).toBe(officialBars.totalGames);
+    expect(comp.phoneBar).toBeNull();
+  });
 });

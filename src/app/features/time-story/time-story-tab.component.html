@@ -16,9 +16,9 @@
           {{ measurementNote }}
         </p>
       </div>
-      <p *ngIf="accounts.length > 1" class="time-story__accounts">
-        Combining {{ accounts.length }} accounts
-        <span *ngFor="let acct of accounts" class="time-story__chip">{{ acct.platform }} · {{ acct.game }}</span>
+      <p *ngIf="accounts.length" class="time-story__accounts">
+        <span *ngIf="accounts.length > 1">Combining {{ accounts.length }} accounts</span>
+        <span *ngFor="let acct of accounts" class="time-story__chip">{{ acct.displayName ? acct.displayName + ' · ' : '' }}{{ acct.platform }} · {{ acct.game }}</span>
       </p>
     </header>
 
@@ -39,7 +39,7 @@
     <section *ngIf="results && !resultsLoading" class="time-story__results" [attr.aria-label]="(labels[results.group] || results.group) + ' in ' + results.year">
       <header class="time-story__results-header">
         <button type="button" class="time-story__back" (click)="clearResultsView()">{{ backToHoursLabel }}</button>
-        <h3 class="time-story__results-title">{{ results.year }} · {{ labels[results.group] }}</h3>
+        <h3 class="time-story__results-title">{{ results.year === 'all' ? allYearsLabel : results.year }} · {{ labels[results.group] }}</h3>
         <p class="time-story__results-meta">
           <strong>{{ results.totalGames | number }} {{ results.totalGames === 1 ? 'game' : 'games' }}</strong>
           <span> · {{ resultsScopeCaption() }}</span>
@@ -84,8 +84,23 @@
     </section>
 
     <div *ngIf="!results && !resultsLoading && result && result.years.length > 0" class="time-story__chart-wrap">
-      <div class="time-story__chart" role="list" [attr.aria-label]="chartAriaLabel">
-        <div class="time-story__col" *ngFor="let bar of result.years" role="listitem">
+      <div class="time-story__toolbar">
+        <label class="time-story__year-picker">
+          <span>Year</span>
+          <select
+            [value]="yearFilter === 'all' ? 'all' : '' + yearFilter"
+            (change)="onYearPickerChange($event)"
+            [attr.aria-label]="'Select year. Currently ' + yearFilterLabel()">
+            <option value="all">{{ allYearsLabel }}</option>
+            <option *ngFor="let bar of result.years" [value]="bar.year">{{ bar.year }}</option>
+          </select>
+        </label>
+        <button type="button" class="time-story__reset" (click)="resetYearFilter()" [disabled]="yearFilter === 'all'">{{ allYearsLabel }}</button>
+        <span class="time-story__year-status">Showing {{ yearFilterLabel() }}</span>
+      </div>
+
+      <div class="time-story__chart time-story__chart--desktop" role="list" [attr.aria-label]="chartAriaLabel">
+        <div class="time-story__col" *ngFor="let bar of result.years" role="listitem" [class.time-story__col--selected]="isYearSelected(bar)">
           <div class="time-story__col-total" [attr.title]="formatTime(bar.seconds)">{{ formatTime(bar.seconds) }}</div>
           <div class="time-story__stack" [style.height.%]="barHeightPercent(bar)">
             <button
@@ -100,13 +115,40 @@
               (click)="selectSegment(bar, part.group, part.seconds, part.games)">
             </button>
           </div>
-          <div class="time-story__year">{{ bar.year }}</div>
+          <button
+            type="button"
+            class="time-story__year"
+            [class.time-story__year--selected]="isYearSelected(bar)"
+            [attr.aria-pressed]="isYearSelected(bar)"
+            [attr.aria-label]="'Show ' + bar.year"
+            (click)="selectYear(bar.year)">{{ bar.year }}</button>
         </div>
       </div>
 
+      <div *ngIf="phoneBar as bar" class="time-story__chart time-story__chart--phone" role="list" [attr.aria-label]="bar.year + ' time in activities'">
+        <div class="time-story__col time-story__col--selected" role="listitem">
+          <div class="time-story__col-total" [attr.title]="formatTime(bar.seconds)">{{ formatTime(bar.seconds) }}</div>
+          <div class="time-story__stack" [style.height.%]="100">
+            <button
+              *ngFor="let part of bar.groups"
+              type="button"
+              class="time-story__seg"
+              [class.time-story__seg--selected]="isSelected(bar, part.group)"
+              [style.flex-grow]="part.seconds"
+              [style.background]="colors[part.group]"
+              [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
+              [attr.aria-pressed]="isSelected(bar, part.group)"
+              (click)="selectSegment(bar, part.group, part.seconds, part.games)">
+            </button>
+          </div>
+          <div class="time-story__year time-story__year--selected">{{ bar.year }}</div>
+        </div>
+      </div>
+      <p *ngIf="yearFilter === 'all'" class="time-story__phone-all">Pick a year to see its bar. The table below shows all years.</p>
+
       <div class="time-story__detail" role="status">
         <ng-container *ngIf="selection; else detailPromptTpl">
-          <div class="time-story__detail-year">{{ selection.year }} · {{ labels[selection.group] }}</div>
+          <div class="time-story__detail-year">{{ yearFilterLabel() }} · {{ labels[selection.group] }}</div>
           <div class="time-story__detail-stat">{{ formatTime(selection.seconds) }}</div>
           <div class="time-story__detail-meta">{{ selection.percent | number:'1.0-1' }}% · {{ selection.games | number }} {{ selection.games === 1 ? 'game' : 'games' }}</div>
           <button
@@ -119,6 +161,35 @@
         <ng-template #detailPromptTpl>
           <div class="time-story__detail-prompt">{{ detailPrompt }}</div>
         </ng-template>
+      </div>
+
+      <div class="time-story__table-wrap" *ngIf="groupTable as table">
+        <h3 class="time-story__table-title">Time in activities · {{ yearFilterLabel() }}</h3>
+        <p class="time-story__table-total">
+          {{ table.games | number }} {{ table.games === 1 ? 'game' : 'games' }}
+          · {{ formatTime(table.seconds) }}
+        </p>
+        <table class="time-story__table">
+          <thead>
+            <tr>
+              <th>Activity</th>
+              <th>Games</th>
+              <th>Time in activities</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of table.rows" [class.time-story__table-row--selected]="selection?.group === row.group">
+              <td>
+                <button type="button" class="time-story__table-link" (click)="openTableGroup(row)">{{ labels[row.group] }}</button>
+              </td>
+              <td>{{ row.games | number }}</td>
+              <td>{{ formatTime(row.seconds) }}</td>
+              <td>{{ row.percent | number:'1.0-1' }}%</td>
+            </tr>
+          </tbody>
+        </table>
+        <p *ngIf="table.rows.length === 0" class="time-story__empty">No activities match this year for the selected accounts.</p>
       </div>
     </div>
 

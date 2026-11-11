@@ -50,9 +50,9 @@ const TAB_BY_NAME: Record<string, DeepLinkTab> = {
   playedwith: 'playedWith',
   breakdown: 'breakdown',
   accomplishments: 'accomplishments',
-  timestory: 'timeStory',
-  hours: 'timeStory',
-  'time-story': 'timeStory',
+  timestory: 'breakdown',
+  hours: 'breakdown',
+  'time-story': 'breakdown',
 };
 
 export function parseDeepLinkTab(raw: unknown): DeepLinkTab {

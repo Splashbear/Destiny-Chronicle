@@ -14,7 +14,7 @@ import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
 import { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
 import { TimeStoryService } from '../../services/time-story.service';
 import { formatSecondsToHoursMinutes } from '../../utils/format-duration';
-import { groupSharePercent, type TimeStoryByYearResult, type TimeStoryYearBar } from '../../utils/time-story-by-year';
+import { groupSharePercent, timeStoryGroupTable, type TimeStoryByYearResult, type TimeStoryGroupTableRow, type TimeStoryYearBar, type TimeStoryYearFilter } from '../../utils/time-story-by-year';
 import {
   TIME_STORY_RESULTS_PAGE_SIZE,
   formatTimeStoryResultDate,
@@ -42,6 +42,7 @@ import {
 } from '../../utils/time-story-copy';
 
 export interface TimeStoryAccountChip {
+  displayName?: string;
   platform: string;
   game: 'D1' | 'D2';
 }
@@ -99,6 +100,9 @@ export class TimeStoryTabComponent implements OnChanges {
   results: TimeStoryYearGroupResults | null = null;
   resultsPage: TimeStoryYearGroupPage | null = null;
   resultsLoading = false;
+  /** Table / results year: a calendar year or all years. */
+  yearFilter: TimeStoryYearFilter = 'all';
+  readonly allYearsLabel = 'All years';
   private resultsLoadGen = 0;
 
   private loadGen = 0;
@@ -116,6 +120,7 @@ export class TimeStoryTabComponent implements OnChanges {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
       this.selection = null;
+      this.yearFilter = 'all';
       this.clearResultsView();
       this.loading = false;
       this.lastScopeKey = '';
@@ -188,6 +193,7 @@ export class TimeStoryTabComponent implements OnChanges {
 
   /** Click/tap or native button activation (Enter/Space). Hover and focus alone do not select. */
   selectSegment(bar: TimeStoryYearBar, group: TimeStoryGroupId, seconds: number, games: number): void {
+    this.yearFilter = bar.year;
     this.selection = {
       year: bar.year,
       group,
@@ -198,26 +204,96 @@ export class TimeStoryTabComponent implements OnChanges {
     this.cdr.markForCheck();
   }
 
+  isYearSelected(bar: TimeStoryYearBar): boolean {
+    return this.yearFilter === bar.year;
+  }
+
+  selectYear(year: number): void {
+    if (!this.result) return;
+    this.yearFilter = year;
+    const bar = this.result.years.find(item => item.year === year);
+    if (!bar) {
+      this.cdr.markForCheck();
+      return;
+    }
+    const group = this.selection?.group;
+    const part = (group && bar.groups.find(item => item.group === group)) ||
+      bar.groups.reduce((best, item) => (item.seconds > best.seconds ? item : best), bar.groups[0]);
+    if (part) {
+      this.selection = {
+        year: bar.year,
+        group: part.group,
+        seconds: part.seconds,
+        games: part.games,
+        percent: groupSharePercent(part.seconds, bar.seconds),
+      };
+    }
+    this.cdr.markForCheck();
+  }
+
+  resetYearFilter(): void {
+    this.yearFilter = 'all';
+    this.cdr.markForCheck();
+  }
+
+  onYearPickerChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement)?.value;
+    if (!value || value === 'all') {
+      this.resetYearFilter();
+      return;
+    }
+    const year = Number(value);
+    if (Number.isFinite(year)) this.selectYear(year);
+  }
+
+  get groupTable() {
+    return timeStoryGroupTable(this.result, this.yearFilter);
+  }
+
+  get phoneBar(): TimeStoryYearBar | null {
+    if (this.yearFilter === 'all') return null;
+    return this.result?.years.find(bar => bar.year === this.yearFilter) ?? null;
+  }
+
+  yearFilterLabel(): string {
+    return this.yearFilter === 'all' ? this.allYearsLabel : String(this.yearFilter);
+  }
+
+  openTableGroup(row: TimeStoryGroupTableRow): void {
+    const year = this.yearFilter === 'all' ? (this.selection?.year ?? this.result?.years[0]?.year ?? 0) : this.yearFilter;
+    this.selection = {
+      year,
+      group: row.group,
+      seconds: row.seconds,
+      games: row.games,
+      percent: row.percent,
+    };
+    void this.viewSelectedActivities(this.yearFilter);
+  }
+
   isSelected(bar: TimeStoryYearBar, group: TimeStoryGroupId): boolean {
     return this.selection?.year === bar.year && this.selection?.group === group;
   }
 
-  async viewSelectedActivities(): Promise<void> {
+  async viewSelectedActivities(yearOverride?: TimeStoryYearFilter): Promise<void> {
     if (!this.selection) return;
-    // Parent clears leftover Activities-tab filters; results stay in Hours.
+    // Parent clears leftover Activities-tab filters; results stay in this tab.
     this.openGroup.emit({ group: this.selection.group, year: this.selection.year });
     const gen = ++this.resultsLoadGen;
     this.resultsLoading = true;
     this.cdr.markForCheck();
     try {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const year = yearOverride ?? this.yearFilter ?? this.selection.year;
+      const table = timeStoryGroupTable(this.result, year);
+      const chartGames = table.rows.find(row => row.group === this.selection!.group)?.games ?? this.selection.games;
       const results = await this.timeStory.getYearGroupResults(
         this.scopes,
         this.identityByMembership,
-        this.selection.year,
+        year,
         this.selection.group,
         timeZone,
-        this.selection.games
+        chartGames
       );
       if (gen !== this.resultsLoadGen) return;
       this.results = results;
@@ -262,7 +338,13 @@ export class TimeStoryTabComponent implements OnChanges {
 
   resultsScopeCaption(): string {
     if (this.accounts.length) {
-      return this.accounts.map(acct => `${acct.platform} · ${acct.game}`).join(', ');
+      return this.accounts
+        .map(acct => {
+          const name = (acct.displayName || '').trim();
+          const bits = [name, acct.platform, acct.game].filter(Boolean);
+          return bits.join(' · ');
+        })
+        .join(', ');
     }
     return this.gameCaption;
   }
@@ -280,6 +362,7 @@ export class TimeStoryTabComponent implements OnChanges {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
       this.selection = null;
+      this.yearFilter = 'all';
       this.clearResultsView();
       this.loading = false;
       this.reloadInFlight = false;
@@ -293,8 +376,10 @@ export class TimeStoryTabComponent implements OnChanges {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const result = await this.timeStory.getYearBars(this.scopes, this.identityByMembership, timeZone);
       if (gen !== this.loadGen) return;
+      const firstLoad = !this.result?.years.length;
       this.result = result;
       this.syncSelectionToResult(result);
+      if (firstLoad && this.selection) this.yearFilter = this.selection.year;
     } catch (err) {
       if (gen !== this.loadGen) return;
       console.error('Time story year bars failed', err);

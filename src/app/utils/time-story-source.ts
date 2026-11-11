@@ -35,9 +35,14 @@ export function leanFromArchiveLight(light: {
 }): TimeStorySourceRow | null {
   const instanceId = light?.instanceId != null ? String(light.instanceId) : '';
   if (!instanceId) return null;
-  // Prefer a real player-time field if the archive ever adds one; do not
-  // treat durationSeconds as timePlayedSeconds.
-  const playerTime = ownPlayerTimePlayedSeconds(light);
+  // Archive lights officially carry durationSeconds. Converters also copy
+  // that duration into values.timePlayedSeconds for other site totals —
+  // do not treat that alias as personal time. Only a distinct top-level
+  // player-time field is trusted here.
+  const playerTime = ownPlayerTimePlayedSeconds({
+    timePlayedSeconds: light.timePlayedSeconds,
+    secondsPlayed: light.secondsPlayed,
+  });
   return {
     instanceId,
     period: light.period,

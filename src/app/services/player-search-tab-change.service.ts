@@ -35,6 +35,9 @@ export class PlayerSearchTabChangeService {
     host: PlayerSearchTabChangeHost,
     tab: PlayerSearchTab
   ): Promise<void> {
+    if (tab === 'timeStory') {
+      tab = 'breakdown';
+    }
     host.setActiveTab(tab);
     host.detectChanges();
     // MOBILE_SPEC bug 3: keep tab bar in view; don't jump to bottom of heatmap.
@@ -52,8 +55,6 @@ export class PlayerSearchTabChangeService {
       );
     } else if (tab === 'playedWith') {
       this.siteAnalytics.trackFeatureView('played_with');
-    } else if (tab === 'timeStory') {
-      this.siteAnalytics.trackFeatureView('time_story');
     }
     if (tab === 'heatmap') {
       host.markForCheck();

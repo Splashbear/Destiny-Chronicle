@@ -170,10 +170,26 @@
 
 .time-story__year {
   margin-top: 0.35rem;
+  padding: 0.15rem 0.2rem;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
   color: #ede6da;
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.time-story__year--selected,
+.time-story__col--selected .time-story__year {
+  box-shadow: inset 0 0 0 2px var(--destiny-gold-bright, #e8c36a);
+  color: var(--destiny-gold-bright, #e8c36a);
+}
+
+.time-story__year:focus-visible {
+  outline: 2px solid #ede6da;
+  outline-offset: 1px;
 }
 
 .time-story__detail {
@@ -377,5 +393,149 @@
 
   .time-story__game {
     grid-template-columns: 1fr;
+  }
+}
+
+.time-story__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.time-story__year-picker {
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  color: #b8a890;
+  font-size: 0.9rem;
+}
+
+.time-story__year-picker select {
+  min-height: 2.75rem;
+  min-width: 8rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid rgba(255, 220, 160, 0.35);
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ede6da;
+}
+
+.time-story__reset {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid rgba(255, 220, 160, 0.35);
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ede6da;
+  cursor: pointer;
+}
+
+.time-story__reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.time-story__year-status {
+  color: #b8a890;
+  font-size: 0.9rem;
+}
+
+.time-story__chart--phone,
+.time-story__phone-all {
+  display: none;
+}
+
+.time-story__table-wrap {
+  margin-top: 1.1rem;
+}
+
+.time-story__table-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  color: var(--destiny-gold-bright, #e8c36a);
+}
+
+.time-story__table-total {
+  margin: 0 0 0.5rem;
+  color: #b8a890;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-story__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.time-story__table th,
+.time-story__table td {
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.12);
+}
+
+.time-story__table th:not(:first-child),
+.time-story__table td:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-story__table-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ede6da;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+  min-height: 2.25rem;
+}
+
+.time-story__table-link:focus-visible {
+  outline: 2px solid #ede6da;
+  outline-offset: 2px;
+}
+
+.time-story__table-row--selected td {
+  background: rgba(232, 195, 106, 0.08);
+}
+
+@media (max-width: 640px) {
+  .time-story__year-picker {
+    display: flex;
+    width: 100%;
+  }
+
+  .time-story__year-picker select {
+    flex: 1;
+  }
+
+  .time-story__chart--desktop {
+    display: none;
+  }
+
+  .time-story__chart--phone {
+    display: flex;
+    justify-content: center;
+    min-height: 12rem;
+  }
+
+  .time-story__chart--phone .time-story__col {
+    width: 4.5rem;
+  }
+
+  .time-story__phone-all {
+    display: block;
+    margin: 0 0 0.75rem;
+    color: #b8a890;
+    font-size: 0.9rem;
+  }
+
+  .time-story__reset {
+    min-height: 2.75rem;
   }
 }
