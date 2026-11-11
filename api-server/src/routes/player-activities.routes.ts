@@ -12,8 +12,8 @@ import { logger } from '../utils/logger';
 import { resolveCoverageLevel, shouldStripPartialActivities } from '../utils/coverage-level';
 import { filterSocialHubs } from '../utils/social-hubs';
 import { dedupeActivitiesByInstance } from '../utils/dedupe-activities';
-import { isD1StatsUnavailable } from '../utils/d1-stats-unavailable';
 import { d1CoverageCaveat } from '../utils/d1-roots';
+import { toLightActivityRow } from '../utils/light-activity-row';
 
 /** W6: exclude social hubs unless explicitly requested or EXCLUDE_SOCIAL_HUBS=false. */
 function shouldIncludeSocialHubs(req: Request): boolean {
@@ -79,49 +79,6 @@ function getStringParam(value: unknown): string {
     return value[0];
   }
   return '';
-}
-
-/**
- * Convert LeanActivity to LightActivityRow for API response.
- * D1 rows with no usable stats return null (not 0) for kills/time/completed.
- */
-function toLightActivityRow(activity: LeanActivity): LightActivityRow {
-  const unavailable = isD1StatsUnavailable(activity) || !!activity.stats_missing;
-  if (unavailable) {
-    return {
-      instanceId: activity.instance_id,
-      period: activity.period,
-      activityHash: activity.activity_hash,
-      mode: activity.mode,
-      membershipId: activity.membership_id,
-      membershipType: activity.membership_type,
-      characterId: activity.character_id,
-      completed: null,
-      deaths: null,
-      kills: null,
-      assists: null,
-      durationSeconds: null,
-      game: activity.game,
-      displayName: activity.display_name || undefined,
-      statsUnavailable: true,
-    };
-  }
-  return {
-    instanceId: activity.instance_id,
-    period: activity.period,
-    activityHash: activity.activity_hash,
-    mode: activity.mode,
-    membershipId: activity.membership_id,
-    membershipType: activity.membership_type,
-    characterId: activity.character_id,
-    completed: activity.completed,
-    deaths: activity.deaths,
-    kills: activity.kills,
-    assists: activity.assists,
-    durationSeconds: activity.duration_seconds,
-    game: activity.game,
-    displayName: activity.display_name || undefined,
-  };
 }
 
 /**

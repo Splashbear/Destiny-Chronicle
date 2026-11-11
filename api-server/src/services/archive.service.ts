@@ -3,6 +3,7 @@ import { Database } from 'duckdb-async';
 import { LeanActivity } from '../types/lean-activity.types';
 import { logger } from '../utils/logger';
 import { activityDedupeKey, d1CoverageCaveat, filterExistingRoots, parseRootList } from '../utils/d1-roots';
+import { sourceCompleted } from '../utils/light-activity-row';
 
 /**
  * Tier information for multi-tier archive lookups.
@@ -427,8 +428,8 @@ export class ArchiveService {
       membership_type: Number(row.membership_type ?? 0),
       display_name: String(row.display_name ?? ''),
       character_id: String(row.character_id ?? ''),
-      // Keep 0 for internal lean type when stats are missing; API layer emits null.
-      completed: statsMissing ? false : Boolean(row.completed),
+      // Preserve source completed (including null). Do not invent false when stats are missing.
+      completed: sourceCompleted(row.completed),
       deaths: statsMissing ? 0 : Number(row.deaths ?? 0),
       kills: statsMissing ? 0 : Number(row.kills ?? 0),
       assists: statsMissing ? 0 : Number(row.assists ?? 0),
