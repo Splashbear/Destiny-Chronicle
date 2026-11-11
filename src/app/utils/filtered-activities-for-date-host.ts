@@ -19,14 +19,24 @@ export function buildFilteredActivitiesForDateHost(c: any) {
       membershipId: string,
       characterIds: string[],
       month: number,
-      day: number
-    ) => c.activitiesForCharacters(membershipId, characterIds, month, day),
+      day: number,
+      year?: number
+    ) => c.activitiesForCharacters(membershipId, characterIds, month, day, year),
     getManifest: () => c.manifest,
     setFilteredActivitiesForDate: (list: any) => {
       c.filteredActivitiesForDate = list;
     },
     computeAccountStats: () => c.computeAccountStatsWithService(),
     getTimeStoryGroupFilter: () => c.timeStoryGroupFilter || null,
+    getTimeStoryYearFilter: () => c.timeStoryYearFilter ?? null,
+    getTimeStoryTimeZone: () =>
+      typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined,
+    getTimeStoryAllowedGames: () => {
+      if (c.timeStoryYearFilter == null && !c.timeStoryGroupFilter) return undefined;
+      const scopes = typeof c.timeStoryScopes !== 'undefined' ? c.timeStoryScopes : [];
+      const games = [...new Set(scopes.map((scope: { game: 'D1' | 'D2' }) => scope.game))];
+      return games.length ? games : undefined;
+    },
     activityMatchesTimeStoryGroup: (activity: any, group: string) =>
       c.activityBreakdownService.timeStoryGroupForActivity(activity) === group,
   };

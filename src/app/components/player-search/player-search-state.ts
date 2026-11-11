@@ -181,6 +181,10 @@ export abstract class PlayerSearchState {
   activeTab: 'activities' | 'firsts' | 'titles' | 'accomplishments' | 'breakdown' | 'heatmap' | 'playedWith' | 'timeStory' = 'activities';
   /** When set, Activities tab is filtered to this time-story group. */
   timeStoryGroupFilter: string | null = null;
+  /** When set, Activities tab is limited to this local calendar year (Time Story drilldown). */
+  timeStoryYearFilter: number | null = null;
+  /** Date to restore when clearing a Time Story year+group drilldown. */
+  timeStoryDateBeforeFilter: string | null = null;
   readonly enablePlayedWith = environment.enablePlayedWith;
   
   // Anniversary celebration banner state

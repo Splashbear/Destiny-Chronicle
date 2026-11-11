@@ -275,7 +275,7 @@
             </div>
             </div>
           </div>
-          <dc-empty-state *ngIf="ps.activityFilterPreset !== 'all' && ps.getDisplayedAccountGroupsForGame('D2').length === 0 && ps.getDisplayedAccountGroupsForGame('D1').length === 0"
+          <dc-empty-state *ngIf="(ps.activityFilterPreset !== 'all' || ps.timeStoryGroupFilter || ps.timeStoryYearFilter) && ps.getDisplayedAccountGroupsForGame('D2').length === 0 && ps.getDisplayedAccountGroupsForGame('D1').length === 0"
                kind="none"
                class="p-4 text-sm">
             No activities match the selected filter for this date.

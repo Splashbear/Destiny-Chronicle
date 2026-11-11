@@ -458,8 +458,8 @@
         </div>
 
         <div *ngIf="activeTab === 'activities'" class="dc-flow-activities-host">
-          <div *ngIf="timeStoryGroupFilter" class="destiny-surface-panel p-3 mb-3 flex flex-wrap items-center gap-2 text-sm">
-            <span>Activities filtered to <strong>{{ timeStoryFilterLabel }}</strong> (Time in activities).</span>
+          <div *ngIf="timeStoryGroupFilter || timeStoryYearFilter" class="destiny-surface-panel p-3 mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <span>Activities filtered to <strong>{{ timeStoryFilterLabel }}</strong> (Time in activities). Only dates in this selection are included.</span>
             <button type="button" class="chronicle-toolbar-btn text-xs" (click)="clearTimeStoryGroupFilter()">Show all activities</button>
           </div>
           <app-activities-tab></app-activities-tab>

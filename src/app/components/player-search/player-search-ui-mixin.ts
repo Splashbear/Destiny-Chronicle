@@ -27,12 +27,18 @@ import {
   decryptingYearHint,
 } from '../../utils/decrypting-caption';
 import { mergeArchiveCoverage } from '../../utils/archive-coverage';
-import { getCharacterMinutesPlayed } from '../../utils/character-profile';
+import { getCharacterId, getCharacterMinutesPlayed } from '../../utils/character-profile';
 import { applyArchiveWatermark } from '../../utils/archive-watermark';
 import { buildAccountLookupPayload } from '../../utils/lookup-analytics-send';
 import { formatStatusDisplay as formatStatusDisplayUtil } from '../../utils/format-status-display';
 import { effectiveGame, type EffectiveGame } from '../../utils/effective-game';
 import { TIME_STORY_GROUP_LABELS, type TimeStoryGroupId } from '../../utils/time-story-groups';
+import {
+  clearTimeStoryDrilldownOnHost,
+  localYearWindow,
+  openTimeStoryGroupOnHost,
+  type TimeStoryOpenGroupHost,
+} from '../../utils/time-story-drilldown';
 import type { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
 import { addSearchChip, removeSearchChip } from '../../utils/search-chips';
 import { searchModeErrorMessage } from '../../utils/search-mode-warning';
@@ -1305,23 +1311,76 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
 
   get timeStoryFilterLabel(): string {
     const group = this.timeStoryGroupFilter;
-    return group && TIME_STORY_GROUP_LABELS[group] ? TIME_STORY_GROUP_LABELS[group] : '';
+    const groupLabel = group && TIME_STORY_GROUP_LABELS[group] ? TIME_STORY_GROUP_LABELS[group] : '';
+    if (this.timeStoryYearFilter && groupLabel) {
+      return `${this.timeStoryYearFilter} · ${groupLabel}`;
+    }
+    if (this.timeStoryYearFilter) return String(this.timeStoryYearFilter);
+    return groupLabel;
   }
 
   async openTimeStoryGroup(event: { group: TimeStoryGroupId; year: number }): Promise<void> {
-    this.timeStoryGroupFilter = event.group;
-    this.filteredActivitiesCache.clear();
-    await this.onTabChange('activities');
-    await this.getAllFilteredActivitiesForDate(true);
-    this.cdr.detectChanges();
+    await openTimeStoryGroupOnHost(this.asTimeStoryOpenGroupHost(), event);
+    this.updateUrlForPermalink();
   }
 
   async clearTimeStoryGroupFilter(): Promise<void> {
-    if (!this.timeStoryGroupFilter) return;
-    this.timeStoryGroupFilter = null;
-    this.filteredActivitiesCache.clear();
-    await this.getAllFilteredActivitiesForDate(true);
-    this.cdr.detectChanges();
+    await clearTimeStoryDrilldownOnHost(this.asTimeStoryOpenGroupHost());
+    this.updateUrlForPermalink();
+  }
+
+  private asTimeStoryOpenGroupHost(): TimeStoryOpenGroupHost {
+    const c = this;
+    return {
+      getSelectedDate: () => c.selectedDate,
+      setSelectedDate: date => c.validateAndSetDate(date),
+      getTimeStoryDateBeforeFilter: () => c.timeStoryDateBeforeFilter,
+      setTimeStoryDateBeforeFilter: date => {
+        c.timeStoryDateBeforeFilter = date;
+      },
+      getTimeStoryGroupFilter: () => c.timeStoryGroupFilter,
+      getTimeStoryYearFilter: () => c.timeStoryYearFilter,
+      setTimeStoryGroupFilter: group => {
+        c.timeStoryGroupFilter = group;
+      },
+      setTimeStoryYearFilter: year => {
+        c.timeStoryYearFilter = year;
+      },
+      clearFilteredActivitiesCache: () => c.filteredActivitiesCache.clear(),
+      changeToActivitiesTab: () => c.onTabChange('activities'),
+      loadActivities: force => c.loadAllFilteredActivities(force),
+      fetchYearActivities: async (year, timeZone) => {
+        const { start, end } = localYearWindow(year, timeZone);
+        const startDate = new Date(start);
+        const endInclusive = new Date(Date.parse(end) - 1);
+        const rows = [];
+        for (const scope of c.timeStoryScopes || []) {
+          const fetched = await c.activityDb.getActivitiesInDateRange(
+            scope.membershipId,
+            startDate,
+            endInclusive
+          );
+          const player = (c.timeStorySelectedPlayers || []).find(
+            p => p.membershipId === scope.membershipId && (p.game === 'D1' ? 'D1' : 'D2') === scope.game
+          );
+          const charIds = player
+            ? (c.characters[c.getPlayerKey(player)] || []).map(getCharacterId).filter(Boolean)
+            : [];
+          const wanted = new Set(charIds);
+          for (const row of fetched) {
+            const game = row.game === 'D1' ? 'D1' : 'D2';
+            if (game !== scope.game) continue;
+            if (wanted.size && row.characterId && !wanted.has(row.characterId)) continue;
+            rows.push(row);
+          }
+        }
+        return rows;
+      },
+      classify: activity => c.activityBreakdownService.timeStoryGroupForActivity(activity),
+      allowedGames: () => [...new Set((c.timeStoryScopes || []).map(scope => scope.game))],
+      timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+      detectChanges: () => c.cdr.detectChanges(),
+    };
   }
 
   async onTabChange(
