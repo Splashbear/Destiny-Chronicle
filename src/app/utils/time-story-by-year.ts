@@ -32,15 +32,29 @@ export interface TimeStoryByYearResult {
 
 const ONE_MINUTE = 60;
 
+const yearFormatByZone = new Map<string, Intl.DateTimeFormat>();
+
+function yearFormat(timeZone: string): Intl.DateTimeFormat {
+  let fmt = yearFormatByZone.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric' });
+    yearFormatByZone.set(timeZone, fmt);
+  }
+  return fmt;
+}
+
+/** Test helper: drop cached Intl.DateTimeFormat instances. */
+export function resetYearOfPeriodFormatters(): void {
+  yearFormatByZone.clear();
+}
+
 /** Calendar year of an activity period in the given IANA time zone (or local if omitted). */
 export function yearOfPeriod(period: string | undefined | null, timeZone?: string): number | null {
   if (!period) return null;
   const date = new Date(period);
   if (Number.isNaN(date.getTime())) return null;
   if (!timeZone) return date.getFullYear();
-  const year = Number(
-    new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric' }).format(date)
-  );
+  const year = Number(yearFormat(timeZone).format(date));
   return Number.isFinite(year) ? year : null;
 }
 

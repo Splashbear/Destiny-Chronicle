@@ -12,7 +12,9 @@ import {
   eraNameForPeriod,
   formatTimeStoryEraHours,
   formatTimeStoryEraLabel,
+  resetYmdInTimeZoneFormatters,
   TIME_STORY_UNKNOWN_ACTIVITY,
+  ymdInTimeZone,
 } from './time-story-eras';
 
 describe('SeasonService calendar (unchanged shared table)', () => {
@@ -195,5 +197,30 @@ describe('buildTimeStoryEras', () => {
     expect(first[0].seconds).toBe(150);
     expect(again).toEqual(first);
     expect(rows[0].activityHash).toBe('16631');
+  });
+});
+
+describe('ymdInTimeZone formatter reuse', () => {
+  it('constructs one DateTimeFormat per time zone instead of one per period', () => {
+    resetYmdInTimeZoneFormatters();
+    const Orig = Intl.DateTimeFormat;
+    let constructed = 0;
+    const Wrapped = function (this: unknown, locales?: any, options?: any) {
+      constructed += 1;
+      return new Orig(locales, options);
+    } as unknown as typeof Intl.DateTimeFormat;
+    Wrapped.supportedLocalesOf = Orig.supportedLocalesOf.bind(Orig);
+    (Intl as unknown as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Wrapped;
+    try {
+      for (let i = 0; i < 400; i++) {
+        ymdInTimeZone('2020-06-01T12:00:00Z', 'America/New_York');
+        ymdInTimeZone('2021-01-01T03:00:00Z', 'UTC');
+      }
+      expect(ymdInTimeZone('2023-01-01T03:00:00Z', 'America/New_York')).toEqual({ year: 2022, month: 12, day: 31 });
+      expect(ymdInTimeZone('2023-01-01T03:00:00Z', 'UTC')).toEqual({ year: 2023, month: 1, day: 1 });
+      expect(constructed).toBe(2);
+    } finally {
+      (Intl as unknown as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Orig;
+    }
   });
 });

@@ -23,6 +23,27 @@ export interface TimeStoryEraItem {
 
 export const TIME_STORY_UNKNOWN_ACTIVITY = 'Unknown activity';
 
+const ymdFormatByZone = new Map<string, Intl.DateTimeFormat>();
+
+function ymdFormat(timeZone: string): Intl.DateTimeFormat {
+  let fmt = ymdFormatByZone.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    });
+    ymdFormatByZone.set(timeZone, fmt);
+  }
+  return fmt;
+}
+
+/** Test helper: drop cached Intl.DateTimeFormat instances. */
+export function resetYmdInTimeZoneFormatters(): void {
+  ymdFormatByZone.clear();
+}
+
 export function ymdInTimeZone(
   period: string | undefined | null,
   timeZone?: string
@@ -33,12 +54,7 @@ export function ymdInTimeZone(
   if (!timeZone) {
     return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate() };
   }
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-  }).formatToParts(date);
+  const parts = ymdFormat(timeZone).formatToParts(date);
   const num = (type: string) => Number(parts.find(p => p.type === type)?.value);
   const year = num('year');
   const month = num('month');

@@ -78,6 +78,7 @@ export class TimeStoryTabComponent implements OnChanges {
   readonly chartAriaLabel = TIME_STORY_CHART_ARIA_LABEL;
 
   private loadGen = 0;
+  private reloadInFlight = false;
   private lastScopeKey = '';
   private lastIdentityKey = '';
   private lastGame: 'D1' | 'D2' | 'Both' | '' = '';
@@ -127,6 +128,10 @@ export class TimeStoryTabComponent implements OnChanges {
       this.lastScopeKey = scopeKey;
       this.lastIdentityKey = identityKey;
       this.lastGame = this.effectiveGame;
+      // Same keys: do not stack another full year-bar pass while one is already running.
+      if (this.reloadInFlight && !scopesChanged && !identityChanged && !gameChanged) {
+        return;
+      }
       await this.reload();
     }
   }
@@ -173,9 +178,11 @@ export class TimeStoryTabComponent implements OnChanges {
 
   private async reload(): Promise<void> {
     const gen = ++this.loadGen;
+    this.reloadInFlight = true;
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
       this.loading = false;
+      this.reloadInFlight = false;
       this.cdr.markForCheck();
       return;
     }
@@ -194,6 +201,7 @@ export class TimeStoryTabComponent implements OnChanges {
     } finally {
       if (gen === this.loadGen) {
         this.loading = false;
+        this.reloadInFlight = false;
         this.cdr.markForCheck();
       }
     }

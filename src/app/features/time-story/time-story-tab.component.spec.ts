@@ -60,4 +60,29 @@ describe('TimeStoryTabComponent sync and manifest-independent render', () => {
     expect(comp.result?.years.map(y => y.year)).toEqual([2023]);
     expect(comp.result?.totalSeconds).toBe(4187);
   });
+
+  it('does not start a second getYearBars for the same keys while one is already in flight', async () => {
+    let release: (value: TimeStoryByYearResult) => void = () => {};
+    getYearBars.and.returnValue(new Promise<TimeStoryByYearResult>(resolve => {
+      release = resolve;
+    }));
+    comp.syncInProgress = false;
+    const first = comp.ngOnChanges({
+      syncInProgress: new SimpleChange(true, false, false),
+    });
+    await Promise.resolve();
+    expect(getYearBars.calls.count()).toBe(1);
+
+    const second = comp.ngOnChanges({
+      syncInProgress: new SimpleChange(true, false, false),
+    });
+    await Promise.resolve();
+    expect(getYearBars.calls.count()).toBe(1);
+
+    release(bars);
+    await first;
+    await second;
+    expect(comp.result?.totalSeconds).toBe(4187);
+    expect(getYearBars.calls.count()).toBe(1);
+  });
 });

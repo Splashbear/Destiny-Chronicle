@@ -1,4 +1,4 @@
-import { buildTimeStoryByYear, timeStoryGroupsReconcile, yearOfPeriod } from './time-story-by-year';
+import { buildTimeStoryByYear, resetYearOfPeriodFormatters, timeStoryGroupsReconcile, yearOfPeriod } from './time-story-by-year';
 import type { TimeStoryGroupId } from './time-story-groups';
 
 describe('yearOfPeriod', () => {
@@ -10,6 +10,29 @@ describe('yearOfPeriod', () => {
   it('skips missing or invalid periods', () => {
     expect(yearOfPeriod(undefined)).toBeNull();
     expect(yearOfPeriod('not-a-date')).toBeNull();
+  });
+
+  it('constructs one DateTimeFormat per time zone instead of one per period', () => {
+    resetYearOfPeriodFormatters();
+    const Orig = Intl.DateTimeFormat;
+    let constructed = 0;
+    const Wrapped = function (this: unknown, locales?: any, options?: any) {
+      constructed += 1;
+      return new Orig(locales, options);
+    } as unknown as typeof Intl.DateTimeFormat;
+    Wrapped.supportedLocalesOf = Orig.supportedLocalesOf.bind(Orig);
+    (Intl as unknown as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Wrapped;
+    try {
+      for (let i = 0; i < 400; i++) {
+        yearOfPeriod('2020-06-01T12:00:00Z', 'America/New_York');
+        yearOfPeriod('2021-01-01T03:00:00Z', 'UTC');
+      }
+      expect(yearOfPeriod('2023-01-01T03:00:00Z', 'America/New_York')).toBe(2022);
+      expect(yearOfPeriod('2023-01-01T03:00:00Z', 'UTC')).toBe(2023);
+      expect(constructed).toBe(2);
+    } finally {
+      (Intl as unknown as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Orig;
+    }
   });
 });
 
