@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import { logger } from './logger';
 
+/** Max D1 instance id served from archive when billions 1–3 are configured. */
+export const D1_MAX_INSTANCE_ID_B3 = 3_000_000_000;
 /** Max D1 instance id served from archive when billions 1–2 are configured. */
 export const D1_MAX_INSTANCE_ID_B2 = 2_000_000_000;
 /** Legacy single-root cap (billion 1). */
@@ -43,6 +45,9 @@ export function filterExistingRoots(roots: string[], label: string): string[] {
  * not how many currently exist on disk.
  */
 export function d1CoverageCaveat(configuredRootCount: number): string {
+  if (configuredRootCount >= 3) {
+    return 'D1 coverage: billions 1-3 (IDs 1-3B, Aug 30 2014 to ~Jul 2015). Later D1 history falls back to Bungie live.';
+  }
   if (configuredRootCount >= 2) {
     return 'D1 coverage: billions 1-2 (IDs 1-2B, Aug 30 2014 to ~Mar 2015). Later D1 history falls back to Bungie live.';
   }
@@ -50,7 +55,9 @@ export function d1CoverageCaveat(configuredRootCount: number): string {
 }
 
 export function d1MaxInstanceId(configuredRootCount: number): number {
-  return configuredRootCount >= 2 ? D1_MAX_INSTANCE_ID_B2 : D1_MAX_INSTANCE_ID_B1;
+  if (configuredRootCount >= 3) return D1_MAX_INSTANCE_ID_B3;
+  if (configuredRootCount >= 2) return D1_MAX_INSTANCE_ID_B2;
+  return D1_MAX_INSTANCE_ID_B1;
 }
 
 export function activityDedupeKey(a: {

@@ -3,6 +3,7 @@ import { Database } from 'duckdb-async';
 import { LeanActivity } from '../types/lean-activity.types';
 import { logger } from '../utils/logger';
 import { activityDedupeKey, d1CoverageCaveat, filterExistingRoots, parseRootList } from '../utils/d1-roots';
+import { createAsyncQueue, withDuckDbRetry } from '../utils/duckdb-retry';
 import { sourceCompleted } from '../utils/light-activity-row';
 
 /**
@@ -59,6 +60,8 @@ export class ArchiveService {
   private parquetSchemaCache = new Map<string, Set<string>>();
   /** W11: cache hash(mid)%256. */
   private bucketCache = new Map<string, number>();
+  /** Serialize DuckDB queries so concurrent requests cannot interleave on one connection. */
+  private enqueueDb = createAsyncQueue();
 
   constructor(
     leanActivitiesPath: string,
@@ -99,6 +102,30 @@ export class ArchiveService {
     return this.enableGapLean;
   }
 
+  /**
+   * Serialized, retried DuckDB query. Transient `Invalid`/`IO` errors (typical
+   * just after a process restart while a large parquet handle is released) are
+   * retried; binder/catalog errors are not.
+   */
+  private async dbAll(sql: string, ...params: unknown[]): Promise<any[]> {
+    return this.enqueueDb(() =>
+      withDuckDbRetry(
+        async () => {
+          if (!this.db) {
+            throw new Error('DuckDB is not initialized');
+          }
+          return this.db.all(sql, ...params);
+        },
+        {
+          onRetry: (error, attempt) => {
+            logger.warn('Retrying DuckDB query after transient error', { attempt, error });
+          },
+        }
+      )
+    );
+  }
+
+
   getGapIndexRoot(): string {
     return this.gapIndexRoot;
   }
@@ -119,8 +146,8 @@ export class ArchiveService {
       // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2� (profiled).
       const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
       const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
-      await this.db.all(`SET threads=${threads}`);
-      await this.db.all(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
+      await this.dbAll(`SET threads=${threads}`);
+      await this.dbAll(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
       logger.info('DuckDB initialized for archive reading', { threads, memLimit });
       
       // Determine bucket hash type using test vector
@@ -162,7 +189,7 @@ export class ArchiveService {
 
     try {
       // Try BIGINT first
-      const bigintResult = await this.db.all(
+      const bigintResult = await this.dbAll(
         'SELECT (hash(CAST(? AS BIGINT)) % 256) AS bucket',
         testMid
       );
@@ -175,7 +202,7 @@ export class ArchiveService {
       }
 
       // Try VARCHAR
-      const varcharResult = await this.db.all(
+      const varcharResult = await this.dbAll(
         'SELECT (hash(CAST(? AS VARCHAR)) % 256) AS bucket',
         testMid
       );
@@ -210,7 +237,7 @@ export class ArchiveService {
 
     try {
       const castType = this.bucketHashType === 'BIGINT' ? 'BIGINT' : 'VARCHAR';
-      const result = await this.db.all(
+      const result = await this.dbAll(
         `SELECT (hash(CAST(? AS ${castType})) % 256) AS bucket`,
         membershipId
       );
@@ -270,7 +297,7 @@ export class ArchiveService {
         ORDER BY period DESC
       `;
 
-      const rows = await this.db.all(sql, this.leanActivitiesPath, membershipId);
+      const rows = await this.dbAll(sql, this.leanActivitiesPath, membershipId);
       const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
       logger.debug('Found activities in archive', {
@@ -330,7 +357,7 @@ export class ArchiveService {
       `;
 
       const gameParam = game ?? null;
-      const rows = await this.db.all(sql, this.leanActivitiesPath, instanceId, gameParam, gameParam);
+      const rows = await this.dbAll(sql, this.leanActivitiesPath, instanceId, gameParam, gameParam);
       const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
       logger.debug('Found activity entries in archive', {
@@ -1187,7 +1214,7 @@ export class ArchiveService {
       `;
 
       const limit = options?.limit || 10000;
-      const rows = await this.db.all(sql, instancesPath, membershipId, limit);
+      const rows = await this.dbAll(sql, instancesPath, membershipId, limit);
 
       const notes: string[] = [];
       if (hasFilters) {
@@ -1371,7 +1398,7 @@ export class ArchiveService {
       // W11: cache schema � DESCRIBE was a full parquet open per request.
       let availableColumns = this.parquetSchemaCache.get(parquetPath);
       if (!availableColumns) {
-        const schemaResult = await this.db.all(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);
+        const schemaResult = await this.dbAll(`DESCRIBE SELECT * FROM read_parquet(?)`, parquetPath);
         availableColumns = new Set(schemaResult.map((col: any) => col.column_name as string));
         this.parquetSchemaCache.set(parquetPath, availableColumns);
       }
@@ -1444,7 +1471,7 @@ export class ArchiveService {
 
       params.push(limit);
 
-      const rows = await this.db.all(sql, ...params);
+      const rows = await this.dbAll(sql, ...params);
       const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
       if (activities.length > 0) {
@@ -1457,7 +1484,7 @@ export class ArchiveService {
 
       // Empty filtered result: cheap EXISTS to distinguish unknown mid vs no rows in window.
       if (hasFilters) {
-        const exists = await this.db.all(
+        const exists = await this.dbAll(
           `SELECT 1 AS ok FROM read_parquet(?) WHERE membership_id = ? LIMIT 1`,
           parquetPath,
           membershipId
@@ -1552,7 +1579,7 @@ export class ArchiveService {
 
       params.push(limit);
 
-      const rows = await this.db.all(sql, ...params);
+      const rows = await this.dbAll(sql, ...params);
       const activities = rows.map((row: any) => this.mapRowToActivity(row));
 
       logger.debug('Found player activities in lite archive', {
