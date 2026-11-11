@@ -89,16 +89,21 @@ Configure one or more D1 roots:
 
 - **One root** (legacy): **billion 1 only** (instance IDs `1`–`1,000,000,000`), **Aug 30–Dec 9 2014**.
 - **Two roots** (`D1_INDEX_ROOTS` / `D1_PLAYED_WITH_ROOTS`): **billions 1–2** (IDs `1`–`2,000,000,000`), **Aug 30 2014–~Mar 2015**.
+- **Three roots**: **billions 1–3** (IDs `1`–`3,000,000,000`), **Aug 30 2014–~Jul 2015**.
 
 Later D1 history is **incomplete** from this source and **must fall back to Bungie live**.
 
 **D1 is still an active game**. Recent D1 activities exist and are real — they just aren't in this archive.
 
-Billion-2 played-with bands are `1000`–`2000`. Band `1000` exists in **both** roots (billion 1 holds only iid `1_000_000_000`; billion 2 holds `1_000_000_001`–`1_000_999_999`) — the API unions and dedupes that band.
+Billion-2 played-with bands are `1000`–`2000`. Band `1000` exists in **both** roots (billion 1 holds only iid `1_000_000_000`; billion 2 holds `1_000_000_001`–`1_000_999_999`) — the API unions and dedupes that band. Billion-3 bands are `2000`–`3000`.
 
 ### API Response Notes
 
 All D1 tier responses include a note in `tier.notes` based on how many roots are configured, for example:
+```
+"D1 coverage: billions 1-3 (IDs 1-3B, Aug 30 2014 to ~Jul 2015). Later D1 history falls back to Bungie live."
+```
+or two roots:
 ```
 "D1 coverage: billions 1-2 (IDs 1-2B, Aug 30 2014 to ~Mar 2015). Later D1 history falls back to Bungie live."
 ```
@@ -140,10 +145,10 @@ Add these to your `.env`:
 D1_INDEX_ROOT=D:\DestinyChronicleDB\d1_final
 D1_PLAYED_WITH_ROOT=D:\DestinyChronicleDB\d1_final
 
-# Or multi-root (billions 1-2). ;-separated. Falls back to the single-root vars when unset.
+# Or multi-root (billions 1-3). ;-separated. Falls back to the single-root vars when unset.
 # Missing paths are skipped with a warning (API keeps running).
-D1_INDEX_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2
-D1_PLAYED_WITH_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2
+D1_INDEX_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2;D:\DestinyChronicleDB\d1_b3_hs
+D1_PLAYED_WITH_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2;D:\DestinyChronicleDB\d1_b3_hs
 ```
 
 Each root is a parent folder containing:

@@ -43,7 +43,7 @@ export interface PlayedWithConfig {
   nameTable?: string;
   /** D1 played-with root: pw/iid_band=N/pw.parquet (first of d1Roots; back-compat). */
   d1Root?: string;
-  /** D1 played-with roots (billion 1 + billion 2). Band 1000 is read from every root that has it. */
+  /** D1 played-with roots (billions 1–3). Shared boundary bands are read from every root that has them. */
   d1Roots?: string[];
 }
 

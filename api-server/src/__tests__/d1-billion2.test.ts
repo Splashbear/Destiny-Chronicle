@@ -65,8 +65,11 @@ describe('W64 D1 billion 2 multi-root', () => {
   test('coverage caveat depends on configured root count', () => {
     expect(d1CoverageCaveat(1)).toContain('billion 1 only');
     expect(d1CoverageCaveat(2)).toContain('billions 1-2');
+    expect(d1CoverageCaveat(3)).toContain('billions 1-3');
+    expect(d1CoverageCaveat(4)).toContain('billions 1-3');
     expect(d1MaxInstanceId(1)).toBe(1_000_000_000);
     expect(d1MaxInstanceId(2)).toBe(2_000_000_000);
+    expect(d1MaxInstanceId(3)).toBe(3_000_000_000);
   });
 
   test('single-root back-compat: PW caps at 1e9', () => {
@@ -111,7 +114,7 @@ describe('W64 D1 billion 2 multi-root', () => {
       return;
     }
 
-    const svc = new ArchiveService('', '', '', '', '', '', false, '', false, [rootA, rootB, missingRoot]);
+    const svc = new ArchiveService('', '', '', '', '', '', false, '', false, [rootA, rootB]);
     svc['db'] = db;
     svc['archiveAvailable'] = true;
     svc['bucketHashType'] = 'VARCHAR';
