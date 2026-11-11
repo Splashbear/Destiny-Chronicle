@@ -77,3 +77,18 @@ describe('breakdownActivityDedupeKey', () => {
     expect(a).not.toBe(b);
   });
 });
+
+  it('does not treat a D1 instance as the same D2 cross-save game, even when the mid is shared', () => {
+    const identity = { ps: 'D2:splashbear#1078' };
+    const d1 = breakdownActivityDedupeKey(
+      { membershipId: 'ps', game: 'D1', activityDetails: { instanceId: '1001' } },
+      identity
+    );
+    const d2 = breakdownActivityDedupeKey(
+      { membershipId: 'ps', game: 'D2', activityDetails: { instanceId: '1001' } },
+      identity
+    );
+    expect(d1).toContain('|D1|');
+    expect(d2).toContain('|D2|');
+    expect(d1).not.toBe(d2);
+  });
