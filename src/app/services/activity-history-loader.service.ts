@@ -104,6 +104,7 @@ export class ActivityHistoryLoaderService {
         period: row.period || prev.period,
         mode: row.mode ?? prev.mode,
         activityHash: row.activityHash ?? prev.activityHash,
+        completed: row.completed ?? prev.completed,
       });
     }
   }

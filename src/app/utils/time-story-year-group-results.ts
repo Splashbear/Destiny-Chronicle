@@ -1,7 +1,6 @@
 import { activityDurationSeconds } from './activity-duration-seconds';
 import { calendarDateInTimeZone } from './time-story-drilldown';
 import { yearOfPeriod, type TimeStoryYearFilter } from './time-story-by-year';
-import type { TimeStoryGroupId } from './time-story-groups';
 
 /** Visible cards per page for the year+group results view. */
 export const TIME_STORY_RESULTS_PAGE_SIZE = 40;
@@ -17,12 +16,12 @@ export interface TimeStoryYearGroupResultRow {
   activityHash?: string | number;
   mode?: number;
   seconds: number;
-  group: TimeStoryGroupId;
+  group: string;
 }
 
 export interface TimeStoryYearGroupResults {
   year: TimeStoryYearFilter;
-  group: TimeStoryGroupId;
+  group: string;
   timeZone?: string;
   allowedGames: Array<'D1' | 'D2'>;
   rows: TimeStoryYearGroupResultRow[];
@@ -57,16 +56,16 @@ export function buildTimeStoryYearGroupResults<
     instanceId?: string;
     activityHash?: string | number;
     mode?: number;
-    group?: TimeStoryGroupId | null;
+    group?: string | null;
   },
 >(
   activities: T[],
   opts: {
     year: TimeStoryYearFilter;
-    group: TimeStoryGroupId;
+    group: string;
     timeZone?: string;
     allowedGames?: Array<'D1' | 'D2'>;
-    classify: (activity: T) => TimeStoryGroupId | null;
+    classify: (activity: T) => string | null;
     chartGames?: number | null;
   }
 ): TimeStoryYearGroupResults {

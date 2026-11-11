@@ -83,3 +83,18 @@ describe('time story source rows', () => {
     expect(timeStorySourceSeconds(lean)).toBe(4187);
   });
 });
+
+  it('preserves archive completed without inventing it', () => {
+    const withFlag = leanFromArchiveLight({ instanceId: '1', durationSeconds: 10, completed: 1 });
+    expect(withFlag?.completed).toBe(1);
+    const missing = leanFromArchiveLight({ instanceId: '2', durationSeconds: 10 });
+    expect(missing?.completed).toBeNull();
+  });
+
+  it('reads Bungie history completed from values without using duration as player time', () => {
+    const row = leanFromBungieHistory({
+      activityDetails: { instanceId: '9', referenceId: 'r', mode: 4 },
+      values: { completed: { basic: { value: 1 } }, timePlayedSeconds: { basic: { value: 50 } } },
+    });
+    expect(row?.completed).toBe(1);
+  });

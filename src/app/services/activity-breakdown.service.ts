@@ -11,6 +11,8 @@ import {
 } from '../utils/trials-breakdown';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
 import { timeStoryGroupFromSection, type TimeStoryGroupId } from '../utils/time-story-groups';
+import type { UnifiedBreakdownSource } from '../utils/unified-breakdown-year';
+import { timeStorySourceSeconds, type TimeStorySourceRow } from '../utils/time-story-source';
 
 /** One membership + game scope for Breakdown (avoids D1/D2 bleed on shared mids). */
 export interface BreakdownMembershipScope {
@@ -535,6 +537,75 @@ export class ActivityBreakdownService {
     return this.timeStoryGroupForRow(row);
   }
 
+  /** Visible Breakdown section label (no game suffix). */
+  labelForSectionKey(sectionKey: string, game?: 'D1' | 'D2'): string {
+    if (sectionKey in SECTION_OVERRIDE_LABELS) return SECTION_OVERRIDE_LABELS[sectionKey as SectionOverrideKey];
+    const mode = sectionKey.startsWith('mode-') ? parseInt(sectionKey.slice(5), 10) : NaN;
+    if (Number.isFinite(mode)) return this.modeToLabel(mode, game);
+    return sectionKey;
+  }
+
+  sectionOrder(sectionKey: string): number {
+    const mode = sectionKey.startsWith('mode-') ? parseInt(sectionKey.slice(5), 10) : undefined;
+    return this.getSectionOrder(sectionKey, Number.isFinite(mode as number) ? (mode as number) : undefined);
+  }
+
+  /**
+   * Classify a lean history row with the same section rules and names as the
+   * detailed Activity Breakdown table.
+   */
+  describeLeanRow(row: TimeStorySourceRow): UnifiedBreakdownSource | null {
+    const hash = row.activityHash;
+    const stub = this.countRowStubForActivity({
+      membershipId: row.membershipId,
+      game: row.game,
+      period: row.period,
+      activityDetails: {
+        instanceId: row.instanceId,
+        referenceId: hash != null && String(hash) !== '' ? String(hash) : undefined,
+        mode: row.mode,
+      },
+    } as StoredActivity);
+    if (!stub) return null;
+    const sectionKey = this.sectionKeyForRow(stub);
+    const seconds = timeStorySourceSeconds(row);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+    return {
+      instanceId: row.instanceId,
+      period: row.period,
+      membershipId: row.membershipId,
+      game: stub.game,
+      sectionKey,
+      sectionLabel: this.labelForSectionKey(sectionKey, stub.game),
+      referenceId: stub.referenceId,
+      baseName: stub.baseName,
+      variantName: stub.variantName,
+      mode: stub.mode,
+      seconds,
+      completed: row.completed === 1,
+    };
+  }
+
+  private namesForReference(referenceId: string, game: 'D1' | 'D2'): { baseName: string; variantName: string } {
+    const isD1 = game === 'D1';
+    const name = this.manifest.getActivityName(referenceId, isD1);
+    if (isD1) {
+      const d1Family = ActivityDbService.getD1FamilyName(referenceId);
+      if (d1Family) {
+        const full = name || d1Family;
+        const variantName = full === d1Family ? '' : full.replace(d1Family, '').replace(/^[:\s-]+/, '').trim();
+        return { baseName: d1Family, variantName };
+      }
+      return { baseName: name || `Unknown (${referenceId})`, variantName: '' };
+    }
+    const baseName = this.manifest.getActivityFamilyName(referenceId) || name || `Unknown (${referenceId})`;
+    const fullName = name || baseName;
+    if (fullName === baseName) return { baseName, variantName: '' };
+    let v = fullName.replace(baseName, '').trim();
+    if (v.startsWith(':')) v = v.slice(1).trim();
+    return { baseName, variantName: v || '' };
+  }
+
   /** Build the fields getSectionOverride needs from a stored activity. */
   private countRowStubForActivity(a: StoredActivity): ActivityCountRow | null {
     const refId = a.activityDetails?.referenceId;
@@ -564,21 +635,14 @@ export class ActivityBreakdownService {
 
     const isD1 = game === 'D1';
     const referenceId = String(refId);
-    const name = this.manifest.getActivityName(referenceId, isD1);
-    let baseName: string;
-    if (isD1) {
-      const d1Family = ActivityDbService.getD1FamilyName(referenceId);
-      baseName = d1Family || name || `Unknown (${referenceId})`;
-    } else {
-      baseName = this.manifest.getActivityFamilyName(referenceId) || name || `Unknown (${referenceId})`;
-    }
+    const { baseName, variantName } = this.namesForReference(referenceId, game);
     if (EXCLUDE_FROM_BREAKDOWN.has(baseName.toLowerCase().trim())) return null;
 
     return {
       referenceId,
       game,
       baseName,
-      variantName: '',
+      variantName,
       mode: effectiveMode,
       runs: 1,
       clears: 0,

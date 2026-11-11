@@ -36,10 +36,10 @@
       <span>Loading activities…</span>
     </div>
 
-    <section *ngIf="results && !resultsLoading" class="time-story__results" [attr.aria-label]="(labels[results.group] || results.group) + ' in ' + results.year">
+    <section *ngIf="results && !resultsLoading" class="time-story__results" [attr.aria-label]="(groupLabel(results.group) || results.group) + ' in ' + results.year">
       <header class="time-story__results-header">
         <button type="button" class="time-story__back" (click)="clearResultsView()">{{ backToHoursLabel }}</button>
-        <h3 class="time-story__results-title">{{ results.year === 'all' ? allYearsLabel : results.year }} · {{ labels[results.group] }}</h3>
+        <h3 class="time-story__results-title">{{ results.year === 'all' ? allYearsLabel : results.year }} · {{ groupLabel(results.group) }}</h3>
         <p class="time-story__results-meta">
           <strong>{{ results.totalGames | number }} {{ results.totalGames === 1 ? 'game' : 'games' }}</strong>
           <span> · {{ resultsScopeCaption() }}</span>
@@ -109,7 +109,7 @@
               class="time-story__seg"
               [class.time-story__seg--selected]="isSelected(bar, part.group)"
               [style.flex-grow]="part.seconds"
-              [style.background]="colors[part.group]"
+              [style.background]="groupColor(part.group)"
               [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
               [attr.aria-pressed]="isSelected(bar, part.group)"
               (click)="selectSegment(bar, part.group, part.seconds, part.games)">
@@ -135,7 +135,7 @@
               class="time-story__seg"
               [class.time-story__seg--selected]="isSelected(bar, part.group)"
               [style.flex-grow]="part.seconds"
-              [style.background]="colors[part.group]"
+              [style.background]="groupColor(part.group)"
               [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
               [attr.aria-pressed]="isSelected(bar, part.group)"
               (click)="selectSegment(bar, part.group, part.seconds, part.games)">
@@ -148,7 +148,7 @@
 
       <div class="time-story__detail" role="status">
         <ng-container *ngIf="selection; else detailPromptTpl">
-          <div class="time-story__detail-year">{{ yearFilterLabel() }} · {{ labels[selection.group] }}</div>
+          <div class="time-story__detail-year">{{ yearFilterLabel() }} · {{ groupLabel(selection.group) }}</div>
           <div class="time-story__detail-stat">{{ formatTime(selection.seconds) }}</div>
           <div class="time-story__detail-meta">{{ selection.percent | number:'1.0-1' }}% · {{ selection.games | number }} {{ selection.games === 1 ? 'game' : 'games' }}</div>
           <button
@@ -163,40 +163,12 @@
         </ng-template>
       </div>
 
-      <div class="time-story__table-wrap" *ngIf="groupTable as table">
-        <h3 class="time-story__table-title">Time in activities · {{ yearFilterLabel() }}</h3>
-        <p class="time-story__table-total">
-          {{ table.games | number }} {{ table.games === 1 ? 'game' : 'games' }}
-          · {{ formatTime(table.seconds) }}
-        </p>
-        <table class="time-story__table">
-          <thead>
-            <tr>
-              <th>Activity</th>
-              <th>Games</th>
-              <th>Time in activities</th>
-              <th>%</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let row of table.rows" [class.time-story__table-row--selected]="selection?.group === row.group">
-              <td>
-                <button type="button" class="time-story__table-link" (click)="openTableGroup(row)">{{ labels[row.group] }}</button>
-              </td>
-              <td>{{ row.games | number }}</td>
-              <td>{{ formatTime(row.seconds) }}</td>
-              <td>{{ row.percent | number:'1.0-1' }}%</td>
-            </tr>
-          </tbody>
-        </table>
-        <p *ngIf="table.rows.length === 0" class="time-story__empty">No activities match this year for the selected accounts.</p>
-      </div>
     </div>
 
     <ul *ngIf="!results && !resultsLoading && result && result.years.length > 0" class="time-story__legend">
-      <li *ngFor="let id of groupIds">
-        <span class="time-story__swatch" [style.background]="colors[id]"></span>
-        {{ labels[id] }}
+      <li *ngFor="let id of legendGroups()">
+        <span class="time-story__swatch" [style.background]="groupColor(id)"></span>
+        {{ groupLabel(id) }}
       </li>
     </ul>
   </section>

@@ -11,10 +11,11 @@ import {
 } from '@angular/core';
 import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-loader.component';
 import { EmptyStateComponent } from '../../shared/ui/empty-state.component';
-import { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
+import { BreakdownMembershipScope, type ActivityCountRow } from '../../services/activity-breakdown.service';
 import { TimeStoryService } from '../../services/time-story.service';
 import { formatSecondsToHoursMinutes } from '../../utils/format-duration';
 import { groupSharePercent, timeStoryGroupTable, type TimeStoryByYearResult, type TimeStoryGroupTableRow, type TimeStoryYearBar, type TimeStoryYearFilter } from '../../utils/time-story-by-year';
+import { aggregateUnifiedCountRows, breakdownSectionColor, filterUnifiedByYear, type UnifiedBreakdownSource } from '../../utils/unified-breakdown-year';
 import {
   TIME_STORY_RESULTS_PAGE_SIZE,
   formatTimeStoryResultDate,
@@ -47,9 +48,18 @@ export interface TimeStoryAccountChip {
   game: 'D1' | 'D2';
 }
 
+export interface UnifiedYearViewEvent {
+  year: TimeStoryYearFilter;
+  rows: ActivityCountRow[];
+  seconds: number;
+  games: number;
+  allYearsSeconds: number;
+  allYearsGames: number;
+}
+
 interface TimeStorySelection {
   year: number;
-  group: TimeStoryGroupId;
+  group: string;
   seconds: number;
   games: number;
   percent: number;
@@ -74,7 +84,8 @@ export class TimeStoryTabComponent implements OnChanges {
   @Input() hasSelectedPlayers = false;
   /** When true, history is still writing; wait and compute once after it finishes. */
   @Input() syncInProgress = false;
-  @Output() openGroup = new EventEmitter<{ group: TimeStoryGroupId; year: number }>();
+  @Output() openGroup = new EventEmitter<{ group: string; year: number }>();
+  @Output() yearView = new EventEmitter<UnifiedYearViewEvent>();
 
   loading = false;
   result: TimeStoryByYearResult | null = null;
@@ -103,6 +114,8 @@ export class TimeStoryTabComponent implements OnChanges {
   /** Table / results year: a calendar year or all years. */
   yearFilter: TimeStoryYearFilter = 'all';
   readonly allYearsLabel = 'All years';
+  records: UnifiedBreakdownSource[] = [];
+  private chartTimeZone?: string;
   private resultsLoadGen = 0;
 
   private loadGen = 0;
@@ -119,8 +132,10 @@ export class TimeStoryTabComponent implements OnChanges {
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
+      this.records = [];
       this.selection = null;
       this.yearFilter = 'all';
+      this.emitYearView();
       this.clearResultsView();
       this.loading = false;
       this.lastScopeKey = '';
@@ -132,7 +147,6 @@ export class TimeStoryTabComponent implements OnChanges {
 
     const scopeKey = this.scopes
       .map(s => `${s.game}:${s.membershipId}`)
-      .sort()
       .join(',');
     const identityKey = Object.entries(this.identityByMembership || {})
       .map(([id, ident]) => `${id}=${ident}`)
@@ -185,14 +199,14 @@ export class TimeStoryTabComponent implements OnChanges {
     return (bar.seconds / this.maxYearSeconds) * 100;
   }
 
-  segmentLabel(bar: TimeStoryYearBar, group: TimeStoryGroupId, seconds: number, games: number): string {
+  segmentLabel(bar: TimeStoryYearBar, group: string, seconds: number, games: number): string {
     const hours = formatSecondsToHoursMinutes(seconds);
     const pct = groupSharePercent(seconds, bar.seconds).toFixed(1);
-    return `${bar.year} ${TIME_STORY_GROUP_LABELS[group]}: ${hours}, ${pct}%, ${games} ${games === 1 ? 'game' : 'games'}`;
+    return `${bar.year} ${this.groupLabel(group)}: ${hours}, ${pct}%, ${games} ${games === 1 ? 'game' : 'games'}`;
   }
 
   /** Click/tap or native button activation (Enter/Space). Hover and focus alone do not select. */
-  selectSegment(bar: TimeStoryYearBar, group: TimeStoryGroupId, seconds: number, games: number): void {
+  selectSegment(bar: TimeStoryYearBar, group: string, seconds: number, games: number): void {
     this.yearFilter = bar.year;
     this.selection = {
       year: bar.year,
@@ -201,6 +215,7 @@ export class TimeStoryTabComponent implements OnChanges {
       games,
       percent: groupSharePercent(seconds, bar.seconds),
     };
+    this.emitYearView();
     this.cdr.markForCheck();
   }
 
@@ -228,11 +243,13 @@ export class TimeStoryTabComponent implements OnChanges {
         percent: groupSharePercent(part.seconds, bar.seconds),
       };
     }
+    this.emitYearView();
     this.cdr.markForCheck();
   }
 
   resetYearFilter(): void {
     this.yearFilter = 'all';
+    this.emitYearView();
     this.cdr.markForCheck();
   }
 
@@ -259,6 +276,42 @@ export class TimeStoryTabComponent implements OnChanges {
     return this.yearFilter === 'all' ? this.allYearsLabel : String(this.yearFilter);
   }
 
+  groupLabel(group: string): string {
+    return (this.labels as Record<string, string>)[group] || this.timeStory.labelForGroup(group);
+  }
+
+  groupColor(group: string): string {
+    return (this.colors as Record<string, string>)[group] || breakdownSectionColor(group);
+  }
+
+  legendGroups(): string[] {
+    if (this.yearFilter !== 'all') {
+      return (this.phoneBar?.groups || []).map(part => part.group);
+    }
+    const seen: string[] = [];
+    const have = new Set<string>();
+    for (const bar of this.result?.years || []) {
+      for (const part of bar.groups) {
+        if (have.has(part.group)) continue;
+        have.add(part.group);
+        seen.push(part.group);
+      }
+    }
+    return seen;
+  }
+
+  emitYearView(): void {
+    const filtered = filterUnifiedByYear(this.records, this.yearFilter, this.chartTimeZone);
+    this.yearView.emit({
+      year: this.yearFilter,
+      rows: aggregateUnifiedCountRows(filtered),
+      seconds: filtered.reduce((sum, row) => sum + row.seconds, 0),
+      games: filtered.length,
+      allYearsSeconds: this.result?.totalSeconds ?? 0,
+      allYearsGames: this.result?.totalGames ?? 0,
+    });
+  }
+
   openTableGroup(row: TimeStoryGroupTableRow): void {
     const year = this.yearFilter === 'all' ? (this.selection?.year ?? this.result?.years[0]?.year ?? 0) : this.yearFilter;
     this.selection = {
@@ -271,7 +324,7 @@ export class TimeStoryTabComponent implements OnChanges {
     void this.viewSelectedActivities(this.yearFilter);
   }
 
-  isSelected(bar: TimeStoryYearBar, group: TimeStoryGroupId): boolean {
+  isSelected(bar: TimeStoryYearBar, group: string): boolean {
     return this.selection?.year === bar.year && this.selection?.group === group;
   }
 
@@ -361,8 +414,10 @@ export class TimeStoryTabComponent implements OnChanges {
     this.reloadInFlight = true;
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
+      this.records = [];
       this.selection = null;
       this.yearFilter = 'all';
+      this.emitYearView();
       this.clearResultsView();
       this.loading = false;
       this.reloadInFlight = false;
@@ -374,17 +429,23 @@ export class TimeStoryTabComponent implements OnChanges {
     this.cdr.markForCheck();
     try {
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const result = await this.timeStory.getYearBars(this.scopes, this.identityByMembership, timeZone);
+      this.chartTimeZone = timeZone;
+      this.timeStory.clearUnifiedCache();
+      const view = await this.timeStory.getUnifiedView(this.scopes, this.identityByMembership, timeZone);
       if (gen !== this.loadGen) return;
       const firstLoad = !this.result?.years.length;
-      this.result = result;
-      this.syncSelectionToResult(result);
+      this.records = view.records;
+      this.result = view.bars;
+      this.syncSelectionToResult(view.bars);
       if (firstLoad && this.selection) this.yearFilter = this.selection.year;
+      this.emitYearView();
     } catch (err) {
       if (gen !== this.loadGen) return;
       console.error('Time story year bars failed', err);
       this.result = { years: [], totalSeconds: 0, totalGames: 0 };
+      this.records = [];
       this.selection = null;
+      this.emitYearView();
     } finally {
       if (gen === this.loadGen) {
         this.loading = false;

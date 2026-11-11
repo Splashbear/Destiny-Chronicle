@@ -1253,10 +1253,14 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   async loadActivityBreakdown(options?: { preserveView?: boolean }): Promise<void> {
-    await this.activityBreakdownLoad.loadActivityBreakdown(
-      this.asActivityBreakdownLoadHost(),
-      options
-    );
+    if ((this.selectedPlayers || []).length === 0) return;
+    const preserve = !!options?.preserveView && (this.activityBreakdownGroups?.length || 0) > 0;
+    if (!preserve) {
+      this.loadingActivityBreakdown = true;
+      this.cdr.markForCheck();
+    }
+    // Combined tab: the yearly Time in activities source fills groups via onUnifiedYearView.
+    // Do not start a second full IDB activity-count scan.
   }
 
 
@@ -1319,7 +1323,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     return groupLabel;
   }
 
-  async openTimeStoryGroup(_event: { group: TimeStoryGroupId; year: number }): Promise<void> {
+  async openTimeStoryGroup(_event: { group: string; year: number }): Promise<void> {
     // Year+group results now open inside Hours. If an older single-day Activities
     // drilldown left filters behind, clear them so daily Activities stays unfiltered.
     if (this.timeStoryGroupFilter || this.timeStoryYearFilter != null) {

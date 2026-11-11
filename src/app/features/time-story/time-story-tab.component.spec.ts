@@ -3,6 +3,21 @@ import { SimpleChange } from '@angular/core';
 import { TimeStoryTabComponent } from './time-story-tab.component';
 import type { TimeStoryByYearResult } from '../../utils/time-story-by-year';
 
+
+function stubTimeStoryService(getYearBars: jasmine.Spy, getYearGroupResults?: jasmine.Spy) {
+  return {
+    getYearBars,
+    getYearGroupResults: getYearGroupResults || jasmine.createSpy('getYearGroupResults'),
+    activityNameForSource: () => 'Raid',
+    clearUnifiedCache: jasmine.createSpy('clearUnifiedCache'),
+    labelForGroup: (id: string) => id,
+    getUnifiedView: jasmine.createSpy('getUnifiedView').and.callFake(async (...args: unknown[]) => {
+      const bars = await getYearBars(...args);
+      return { records: [], bars, timeZone: 'UTC' };
+    }),
+  };
+}
+
 const bars: TimeStoryByYearResult = {
   years: [
     {
@@ -24,7 +39,7 @@ describe('TimeStoryTabComponent sync and manifest-independent render', () => {
     getYearBars = jasmine.createSpy('getYearBars').and.resolveTo(bars);
     const cdr = { markForCheck: jasmine.createSpy('markForCheck') };
     comp = new TimeStoryTabComponent(
-      { getYearBars, getYearGroupResults: jasmine.createSpy('getYearGroupResults'), activityNameForSource: () => 'Raid' } as any,
+      stubTimeStoryService(getYearBars) as any,
       cdr as any
     );
     comp.hasSelectedPlayers = true;
@@ -142,7 +157,7 @@ describe('TimeStoryTabComponent details panel selection', () => {
     });
     const cdr = { markForCheck: jasmine.createSpy('markForCheck') };
     comp = new TimeStoryTabComponent(
-      { getYearBars, getYearGroupResults, activityNameForSource: () => 'Raid' } as any,
+      stubTimeStoryService(getYearBars, getYearGroupResults) as any,
       cdr as any
     );
     comp.hasSelectedPlayers = true;

@@ -2,6 +2,53 @@ import '@angular/compiler';
 import { TimeStoryService } from './time-story.service';
 import { leanFromArchiveLight } from '../utils/time-story-source';
 
+
+function withLeanDescribe(breakdown: { timeStoryGroupForActivity: (...args: any[]) => string | null }) {
+  return {
+    ...breakdown,
+    sectionOrder: () => 0,
+    labelForSectionKey: (key: string) => key,
+    describeLeanRow: (row: {
+      instanceId?: string;
+      period?: string;
+      membershipId?: string;
+      game?: 'D1' | 'D2';
+      mode?: number;
+      activityHash?: string | number;
+      timePlayedSeconds?: number | null;
+      durationSeconds?: number | null;
+      completed?: number | null;
+    }) => {
+      const stub = {
+        membershipId: row.membershipId,
+        game: row.game,
+        period: row.period,
+        activityDetails: { instanceId: row.instanceId, referenceId: row.activityHash, mode: row.mode },
+      };
+      const group = breakdown.timeStoryGroupForActivity(stub as any);
+      if (!group) return null;
+      const seconds = typeof row.timePlayedSeconds === 'number' && row.timePlayedSeconds > 0
+        ? row.timePlayedSeconds
+        : (row.durationSeconds ?? 0);
+      if (!Number.isFinite(seconds) || seconds < 0) return null;
+      return {
+        instanceId: row.instanceId,
+        period: row.period,
+        membershipId: row.membershipId,
+        game: row.game || 'D2',
+        sectionKey: group,
+        sectionLabel: group,
+        referenceId: row.activityHash != null ? String(row.activityHash) : 'ref',
+        baseName: group,
+        variantName: '',
+        mode: row.mode ?? 0,
+        seconds,
+        completed: row.completed === 1,
+      };
+    },
+  };
+}
+
 describe('TimeStoryService.getYearBars', () => {
   const lean = leanFromArchiveLight({
     instanceId: '1',
@@ -26,7 +73,7 @@ describe('TimeStoryService.getYearBars', () => {
       getActivityName: () => 'Loading...',
       getActivityFamilyName: () => 'Loading...',
     };
-    const breakdown = { timeStoryGroupForActivity: () => 'raids' as const };
+    const breakdown = withLeanDescribe({ timeStoryGroupForActivity: () => 'raids' as const });
     const svc = new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any);
 
     const result = await svc.getYearBars([{ membershipId: 'mid', game: 'D2' }], {}, 'UTC');
@@ -79,10 +126,10 @@ describe('TimeStoryService.getYearGroupResults', () => {
       getActivityName: () => 'Patrol',
       getActivityFamilyName: () => 'Patrol',
     };
-    const breakdown = {
+    const breakdown = withLeanDescribe({
       timeStoryGroupForActivity: (activity: { activityDetails?: { mode?: number } }) =>
         activity.activityDetails?.mode === 39 ? 'trials' : 'story-patrol-seasonal',
-    };
+    });
     const svc = new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any);
     const result = await svc.getYearGroupResults(
       [{ membershipId: 'mid', game: 'D2' }],
@@ -140,7 +187,7 @@ describe('TimeStoryService multi-account scope and dedupe', () => {
       getActivityName: () => 'Last Wish',
       getActivityFamilyName: () => 'Last Wish',
     };
-    const breakdown = { timeStoryGroupForActivity: () => 'raids' as const };
+    const breakdown = withLeanDescribe({ timeStoryGroupForActivity: () => 'raids' as const });
     return new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any);
   }
 

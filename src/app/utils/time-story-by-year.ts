@@ -11,7 +11,7 @@ export interface TimeStoryActivityLike {
 }
 
 export interface TimeStoryGroupStat {
-  group: TimeStoryGroupId;
+  group: string;
   seconds: number;
   games: number;
 }
@@ -62,6 +62,19 @@ export function emptyGroupStats(): TimeStoryGroupStat[] {
   return TIME_STORY_GROUP_IDS.map(group => ({ group, seconds: 0, games: 0 }));
 }
 
+function orderedGroupIds(seen: Iterable<string>, groupOrder?: readonly string[]): string[] {
+  const remaining = new Set(seen);
+  const ids: string[] = [];
+  for (const id of groupOrder ?? TIME_STORY_GROUP_IDS) {
+    if (remaining.has(id)) {
+      ids.push(id);
+      remaining.delete(id);
+    }
+  }
+  ids.push(...[...remaining].sort());
+  return ids;
+}
+
 /**
  * Build stacked year bars from classified activities.
  * Years with no games are omitted. Newest year first.
@@ -73,10 +86,11 @@ export function buildTimeStoryByYear(
     timeSeconds?: number;
     activity?: object;
   }>,
-  classify: (activity: any) => TimeStoryGroupId | null,
-  timeZone?: string
+  classify: (activity: any) => string | null,
+  timeZone?: string,
+  groupOrder?: readonly string[]
 ): TimeStoryByYearResult {
-  const byYear = new Map<number, { seconds: number; games: number; groups: Map<TimeStoryGroupId, TimeStoryGroupStat> }>();
+  const byYear = new Map<number, { seconds: number; games: number; groups: Map<string, TimeStoryGroupStat> }>();
 
   for (const row of activities) {
     const activity = (row.activity ?? row) as TimeStoryActivityLike & Record<string, unknown>;
@@ -108,7 +122,7 @@ export function buildTimeStoryByYear(
       year,
       seconds: bucket.seconds,
       games: bucket.games,
-      groups: TIME_STORY_GROUP_IDS.map(
+      groups: orderedGroupIds(bucket.groups.keys(), groupOrder).map(
         group => bucket.groups.get(group) || { group, seconds: 0, games: 0 }
       ).filter(stat => stat.games > 0 || stat.seconds > 0),
     }));
@@ -137,7 +151,7 @@ export function groupSharePercent(seconds: number, yearSeconds: number): number 
 export type TimeStoryYearFilter = number | 'all';
 
 export interface TimeStoryGroupTableRow {
-  group: TimeStoryGroupId;
+  group: string;
   seconds: number;
   games: number;
   percent: number;
@@ -159,7 +173,7 @@ export function timeStoryGroupTable(
   if (!result?.years.length) return empty;
   const bars = year === 'all' ? result.years : result.years.filter(bar => bar.year === year);
   if (!bars.length) return empty;
-  const byGroup = new Map<TimeStoryGroupId, { seconds: number; games: number }>();
+  const byGroup = new Map<string, { seconds: number; games: number }>();
   let seconds = 0;
   let games = 0;
   for (const bar of bars) {
@@ -172,7 +186,7 @@ export function timeStoryGroupTable(
       byGroup.set(part.group, cur);
     }
   }
-  const rows = TIME_STORY_GROUP_IDS.map(group => {
+  const rows = orderedGroupIds(byGroup.keys()).map(group => {
     const cur = byGroup.get(group) || { seconds: 0, games: 0 };
     return {
       group,

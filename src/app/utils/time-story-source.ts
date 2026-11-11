@@ -19,6 +19,8 @@ export interface TimeStorySourceRow {
   /** Set only when the source actually has a player-time field. */
   timePlayedSeconds?: number | null;
   durationSeconds?: number | null;
+  /** 1 or 0 when the source has a completed flag; omitted when unknown. */
+  completed?: number | null;
 }
 
 export function leanFromArchiveLight(light: {
@@ -32,6 +34,7 @@ export function leanFromArchiveLight(light: {
   durationSeconds?: number;
   timePlayedSeconds?: number;
   secondsPlayed?: number;
+  completed?: number;
 }): TimeStorySourceRow | null {
   const instanceId = light?.instanceId != null ? String(light.instanceId) : '';
   if (!instanceId) return null;
@@ -56,6 +59,7 @@ export function leanFromArchiveLight(light: {
       typeof light.durationSeconds === 'number' && Number.isFinite(light.durationSeconds)
         ? light.durationSeconds
         : null,
+    completed: completedFlag(light.completed),
   };
 }
 
@@ -68,9 +72,17 @@ export function leanFromBungieHistory(activity: {
   values?: unknown;
   timePlayedSeconds?: number;
   secondsPlayed?: number;
+  completed?: number;
 }): TimeStorySourceRow | null {
   const instanceId = activity?.activityDetails?.instanceId;
   if (instanceId == null || String(instanceId) === '') return null;
+  const values = activity.values as { completed?: { basic?: { value?: number } } | number } | undefined;
+  const rawCompleted =
+    typeof activity.completed === 'number'
+      ? activity.completed
+      : typeof values?.completed === 'number'
+        ? values.completed
+        : values?.completed?.basic?.value;
   return {
     instanceId: String(instanceId),
     period: activity.period,
@@ -80,6 +92,7 @@ export function leanFromBungieHistory(activity: {
     mode: activity.activityDetails?.mode,
     activityHash: activity.activityDetails?.referenceId,
     timePlayedSeconds: ownPlayerTimePlayedSeconds(activity),
+    completed: completedFlag(rawCompleted),
   };
 }
 
@@ -114,9 +127,15 @@ export function mergeTimeStorySourceRows(
       period: row.period || prev.period,
       mode: row.mode ?? prev.mode,
       activityHash: row.activityHash ?? prev.activityHash,
+      completed: row.completed ?? prev.completed,
     });
   };
   for (const row of base) remember(row);
   for (const row of incoming) remember(row);
   return Array.from(map.values());
+}
+
+function completedFlag(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return value === 1 ? 1 : 0;
 }

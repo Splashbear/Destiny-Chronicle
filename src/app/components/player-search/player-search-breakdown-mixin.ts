@@ -5,6 +5,7 @@
 import { type ChartData } from 'chart.js';
 import { environment } from '../../../environments/environment';
 import { ActivityCountRow } from '../../services/activity-breakdown.service';
+import type { UnifiedYearViewEvent } from '../../features/time-story/time-story-tab.component';
 import {
   buildBreakdownCategoryOptions,
   chartCategoryForSelectedTiles,
@@ -30,6 +31,17 @@ import { showBreakdownGameDropdown as showBreakdownGameDropdownUtil } from '../.
 import { PlayerSearchFirstsMixin } from './player-search-firsts-mixin';
 
 export abstract class PlayerSearchBreakdownMixin extends PlayerSearchFirstsMixin {
+
+  /** Apply the year-filtered lean rows that also drive the yearly bars. */
+  onUnifiedYearView(view: UnifiedYearViewEvent): void {
+    this.activityBreakdownRows = view.rows;
+    this.activityBreakdownGroups = this.activityBreakdownService.groupRowsByType(view.rows || []);
+    this.breakdownActiveTimeSeconds = view.allYearsSeconds || 0;
+    this.loadingActivityBreakdown = false;
+    this.recomputeBreakdownChartData();
+    this.cdr.markForCheck();
+  }
+
 
   /** True when user has selected one or more account cards on the Breakdown tab. */
   get hasBreakdownAccountFilter(): boolean {

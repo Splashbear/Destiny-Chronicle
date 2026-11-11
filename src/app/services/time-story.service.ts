@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import {
   ActivityBreakdownService,
   BreakdownMembershipScope,
+  type ActivityCountRow,
 } from './activity-breakdown.service';
 import { ActivityHistoryLoaderService } from './activity-history-loader.service';
 import { PgcrApiService } from '../core/data/archive-api.service';
@@ -15,7 +16,6 @@ import {
   type TimeStorySourceRow,
 } from '../utils/time-story-source';
 import {
-  buildTimeStoryByYear,
   type TimeStoryByYearResult,
   type TimeStoryYearFilter,
 } from '../utils/time-story-by-year';
@@ -23,23 +23,35 @@ import {
   buildTimeStoryYearGroupResults,
   type TimeStoryYearGroupResults,
 } from '../utils/time-story-year-group-results';
-import type { TimeStoryGroupId } from '../utils/time-story-groups';
 import {
   buildTimeStoryEras,
   TIME_STORY_UNKNOWN_ACTIVITY,
   type TimeStoryEraItem,
 } from '../utils/time-story-eras';
+import {
+  aggregateUnifiedCountRows,
+  buildUnifiedYearBars,
+  filterUnifiedByYear,
+  type UnifiedBreakdownSource,
+} from '../utils/unified-breakdown-year';
 
-/** Lean fields the year chart needs; full activity objects are not kept. */
 export interface TimeStoryLeanRow {
   instanceId?: string;
   period?: string;
-  group: TimeStoryGroupId | null;
+  group: string | null;
   timeSeconds: number;
+}
+
+export interface UnifiedBreakdownView {
+  records: UnifiedBreakdownSource[];
+  bars: TimeStoryByYearResult;
+  timeZone?: string;
 }
 
 @Injectable({ providedIn: 'root' })
 export class TimeStoryService {
+  private unifiedCache: { key: string; view: UnifiedBreakdownView } | null = null;
+
   constructor(
     private breakdown: ActivityBreakdownService,
     private loader: ActivityHistoryLoaderService,
@@ -47,22 +59,69 @@ export class TimeStoryService {
     private manifest: DestinyManifestService
   ) {}
 
+  clearUnifiedCache(): void {
+    this.unifiedCache = null;
+  }
+
   async getYearBars(
     scopes: BreakdownMembershipScope[],
     identityByMembership?: Record<string, string>,
     timeZone?: string
   ): Promise<TimeStoryByYearResult> {
+    return (await this.getUnifiedView(scopes, identityByMembership, timeZone)).bars;
+  }
+
+  async getUnifiedView(
+    scopes: BreakdownMembershipScope[],
+    identityByMembership?: Record<string, string>,
+    timeZone?: string
+  ): Promise<UnifiedBreakdownView> {
     if (!scopes.length) {
-      return { years: [], totalSeconds: 0, totalGames: 0 };
+      return { records: [], bars: { years: [], totalSeconds: 0, totalGames: 0 }, timeZone };
     }
+    const key = this.unifiedCacheKey(scopes, identityByMembership, timeZone);
+    if (this.unifiedCache?.key === key) return this.unifiedCache.view;
     const sources = await this.dedupedSourceRows(scopes, identityByMembership);
-    const lean: TimeStoryLeanRow[] = sources.map(row => ({
-      instanceId: row.instanceId,
-      period: row.period,
-      timeSeconds: timeStorySourceSeconds(row),
-      group: this.breakdown.timeStoryGroupForActivity(this.stubForDedupeAndGroup(row) as StoredActivity),
-    }));
-    return buildTimeStoryByYear(lean, r => r.group, timeZone);
+    const records = sources
+      .map(row => this.breakdown.describeLeanRow(row))
+      .filter((row): row is UnifiedBreakdownSource => row != null);
+    const keys = [...new Set(records.map(row => row.sectionKey))];
+    keys.sort((a, b) => {
+      const order = this.breakdown.sectionOrder(a) - this.breakdown.sectionOrder(b);
+      return order !== 0 ? order : a.localeCompare(b);
+    });
+    const view: UnifiedBreakdownView = {
+      records,
+      bars: buildUnifiedYearBars(records, timeZone, keys),
+      timeZone,
+    };
+    this.unifiedCache = { key, view };
+    return view;
+  }
+
+  countRowsForYear(
+    records: UnifiedBreakdownSource[],
+    year: TimeStoryYearFilter,
+    timeZone?: string
+  ): ActivityCountRow[] {
+    return aggregateUnifiedCountRows(filterUnifiedByYear(records, year, timeZone));
+  }
+
+  labelForGroup(sectionKey: string, game?: 'D1' | 'D2'): string {
+    return this.breakdown.labelForSectionKey(sectionKey, game);
+  }
+
+  private unifiedCacheKey(
+    scopes: BreakdownMembershipScope[],
+    identityByMembership: Record<string, string> | undefined,
+    timeZone?: string
+  ): string {
+    const scopeKey = scopes.map(s => `${s.game}:${s.membershipId}`).join(',');
+    const identityKey = Object.entries(identityByMembership || {})
+      .map(([id, ident]) => `${id}=${ident}`)
+      .sort()
+      .join(',');
+    return `${scopeKey}|${identityKey}|${timeZone || ''}`;
   }
 
   /**
@@ -73,7 +132,7 @@ export class TimeStoryService {
     scopes: BreakdownMembershipScope[],
     identityByMembership: Record<string, string> | undefined,
     year: TimeStoryYearFilter,
-    group: TimeStoryGroupId,
+    group: string,
     timeZone?: string,
     chartGames?: number | null
   ): Promise<TimeStoryYearGroupResults> {
@@ -88,11 +147,11 @@ export class TimeStoryService {
         chartGames,
       });
     }
-    const sources = await this.dedupedSourceRows(scopes, identityByMembership);
-    const classified = sources.map(row => ({
+    const view = await this.getUnifiedView(scopes, identityByMembership, timeZone);
+    const classified = view.records.map(row => ({
       ...row,
-      timeSeconds: timeStorySourceSeconds(row),
-      group: this.breakdown.timeStoryGroupForActivity(this.stubForDedupeAndGroup(row) as StoredActivity),
+      timeSeconds: row.seconds,
+      group: row.sectionKey,
     }));
     return buildTimeStoryYearGroupResults(classified, {
       year,
@@ -104,7 +163,7 @@ export class TimeStoryService {
     });
   }
 
-  activityNameForSource(game: 'D1' | 'D2' | undefined, hash: string | number | undefined): string {
+    activityNameForSource(game: 'D1' | 'D2' | undefined, hash: string | number | undefined): string {
     if (hash == null || String(hash) === '') return TIME_STORY_UNKNOWN_ACTIVITY;
     return this.activityNameForEra(game === 'D1' ? 'D1' : 'D2', String(hash));
   }
