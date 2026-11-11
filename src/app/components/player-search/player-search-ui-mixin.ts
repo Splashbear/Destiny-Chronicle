@@ -36,7 +36,6 @@ import { TIME_STORY_GROUP_LABELS, type TimeStoryGroupId } from '../../utils/time
 import {
   clearTimeStoryDrilldownOnHost,
   localYearWindow,
-  openTimeStoryGroupOnHost,
   type TimeStoryOpenGroupHost,
 } from '../../utils/time-story-drilldown';
 import type { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
@@ -1319,9 +1318,13 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     return groupLabel;
   }
 
-  async openTimeStoryGroup(event: { group: TimeStoryGroupId; year: number }): Promise<void> {
-    await openTimeStoryGroupOnHost(this.asTimeStoryOpenGroupHost(), event);
-    this.updateUrlForPermalink();
+  async openTimeStoryGroup(_event: { group: TimeStoryGroupId; year: number }): Promise<void> {
+    // Year+group results now open inside Hours. If an older single-day Activities
+    // drilldown left filters behind, clear them so daily Activities stays unfiltered.
+    if (this.timeStoryGroupFilter || this.timeStoryYearFilter != null) {
+      await clearTimeStoryDrilldownOnHost(this.asTimeStoryOpenGroupHost());
+      this.updateUrlForPermalink();
+    }
   }
 
   async clearTimeStoryGroupFilter(): Promise<void> {

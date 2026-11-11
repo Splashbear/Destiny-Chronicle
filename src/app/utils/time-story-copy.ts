@@ -18,3 +18,8 @@ export const TIME_STORY_CHART_ARIA_LABEL =
 export const TIME_STORY_DETAIL_PROMPT = 'Hover or tap a segment to see its time.';
 
 export const TIME_STORY_VIEW_ACTIVITIES = 'View activities';
+
+export const TIME_STORY_BACK_TO_HOURS = 'Back to hours';
+
+export const TIME_STORY_RESULTS_EMPTY =
+  'No activities match this year and group for the selected accounts.';

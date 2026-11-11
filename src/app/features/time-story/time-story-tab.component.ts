@@ -16,6 +16,14 @@ import { TimeStoryService } from '../../services/time-story.service';
 import { formatSecondsToHoursMinutes } from '../../utils/format-duration';
 import { groupSharePercent, type TimeStoryByYearResult, type TimeStoryYearBar } from '../../utils/time-story-by-year';
 import {
+  TIME_STORY_RESULTS_PAGE_SIZE,
+  formatTimeStoryResultDate,
+  formatTimeStoryResultTime,
+  pageTimeStoryYearGroupResults,
+  type TimeStoryYearGroupPage,
+  type TimeStoryYearGroupResults,
+} from '../../utils/time-story-year-group-results';
+import {
   TIME_STORY_GROUP_COLORS,
   TIME_STORY_GROUP_IDS,
   TIME_STORY_GROUP_LABELS,
@@ -29,6 +37,8 @@ import {
   TIME_STORY_MEASUREMENT_NOTE,
   TIME_STORY_TITLE,
   TIME_STORY_VIEW_ACTIVITIES,
+  TIME_STORY_BACK_TO_HOURS,
+  TIME_STORY_RESULTS_EMPTY,
 } from '../../utils/time-story-copy';
 
 export interface TimeStoryAccountChip {
@@ -80,6 +90,16 @@ export class TimeStoryTabComponent implements OnChanges {
   readonly chartAriaLabel = TIME_STORY_CHART_ARIA_LABEL;
   readonly detailPrompt = TIME_STORY_DETAIL_PROMPT;
   readonly viewActivitiesLabel = TIME_STORY_VIEW_ACTIVITIES;
+  readonly backToHoursLabel = TIME_STORY_BACK_TO_HOURS;
+  readonly resultsEmptyText = TIME_STORY_RESULTS_EMPTY;
+  readonly formatTimeStoryResultDate = formatTimeStoryResultDate;
+  readonly formatTimeStoryResultTime = formatTimeStoryResultTime;
+  readonly resultsPageSize = TIME_STORY_RESULTS_PAGE_SIZE;
+
+  results: TimeStoryYearGroupResults | null = null;
+  resultsPage: TimeStoryYearGroupPage | null = null;
+  resultsLoading = false;
+  private resultsLoadGen = 0;
 
   private loadGen = 0;
   private reloadInFlight = false;
@@ -96,6 +116,7 @@ export class TimeStoryTabComponent implements OnChanges {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
       this.selection = null;
+      this.clearResultsView();
       this.loading = false;
       this.lastScopeKey = '';
       this.lastIdentityKey = '';
@@ -127,6 +148,10 @@ export class TimeStoryTabComponent implements OnChanges {
         this.cdr.markForCheck();
       }
       return;
+    }
+
+    if (scopesChanged || identityChanged || gameChanged) {
+      this.clearResultsView();
     }
 
     if (syncJustFinished || scopesChanged || identityChanged || gameChanged || !this.result) {
@@ -181,9 +206,76 @@ export class TimeStoryTabComponent implements OnChanges {
     return this.selection?.year === bar.year && this.selection?.group === group;
   }
 
-  viewSelectedActivities(): void {
+  async viewSelectedActivities(): Promise<void> {
     if (!this.selection) return;
+    // Parent clears leftover Activities-tab filters; results stay in Hours.
     this.openGroup.emit({ group: this.selection.group, year: this.selection.year });
+    const gen = ++this.resultsLoadGen;
+    this.resultsLoading = true;
+    this.cdr.markForCheck();
+    try {
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const results = await this.timeStory.getYearGroupResults(
+        this.scopes,
+        this.identityByMembership,
+        this.selection.year,
+        this.selection.group,
+        timeZone,
+        this.selection.games
+      );
+      if (gen !== this.resultsLoadGen) return;
+      this.results = results;
+      this.setResultsPage(1);
+    } catch (err) {
+      if (gen !== this.resultsLoadGen) return;
+      console.error('Time story year-group results failed', err);
+      this.results = null;
+      this.resultsPage = null;
+    } finally {
+      if (gen === this.resultsLoadGen) {
+        this.resultsLoading = false;
+        this.cdr.markForCheck();
+      }
+    }
+  }
+
+  clearResultsView(): void {
+    this.resultsLoadGen += 1;
+    this.results = null;
+    this.resultsPage = null;
+    this.resultsLoading = false;
+    this.cdr.markForCheck();
+  }
+
+  setResultsPage(page: number): void {
+    if (!this.results) {
+      this.resultsPage = null;
+      return;
+    }
+    this.resultsPage = pageTimeStoryYearGroupResults(
+      this.results.rows,
+      page,
+      this.resultsPageSize
+    );
+    this.cdr.markForCheck();
+  }
+
+  activityNameForRow(row: { game?: 'D1' | 'D2'; activityHash?: string | number }): string {
+    return this.timeStory.activityNameForSource(row.game, row.activityHash);
+  }
+
+  resultsScopeCaption(): string {
+    if (this.accounts.length) {
+      return this.accounts.map(acct => `${acct.platform} · ${acct.game}`).join(', ');
+    }
+    return this.gameCaption;
+  }
+
+  resultsCountNote(): string | null {
+    if (!this.results || this.results.countMatchesChart) return null;
+    const list = this.results.totalGames;
+    const chart = this.results.chartGames;
+    return `This list has ${list.toLocaleString()} ${list === 1 ? 'game' : 'games'}. The chart showed ${chart?.toLocaleString()} for this selection.`;
   }
 
   private async reload(): Promise<void> {
@@ -192,6 +284,7 @@ export class TimeStoryTabComponent implements OnChanges {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
       this.selection = null;
+      this.clearResultsView();
       this.loading = false;
       this.reloadInFlight = false;
       this.cdr.markForCheck();

@@ -235,3 +235,128 @@
     min-width: 4.25rem;
   }
 }
+
+
+.time-story__results {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.time-story__results-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.time-story__back,
+.time-story__page-btn {
+  min-height: 2.75rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid rgba(255, 220, 160, 0.35);
+  border-radius: 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: #ede6da;
+  font-size: 0.95rem;
+  align-self: flex-start;
+  cursor: pointer;
+}
+
+.time-story__back:hover,
+.time-story__page-btn:hover:not(:disabled) {
+  border-color: var(--destiny-gold-bright, #e8c36a);
+}
+
+.time-story__page-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.time-story__results-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--destiny-gold-bright, #e8c36a);
+}
+
+.time-story__results-meta,
+.time-story__results-note,
+.time-story__page-status {
+  margin: 0;
+  color: #b8a890;
+  font-size: 0.9rem;
+}
+
+.time-story__results-note {
+  color: #e8c36a;
+}
+
+.time-story__pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.time-story__day-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  color: #ede6da;
+}
+
+.time-story__day-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.time-story__game {
+  display: grid;
+  grid-template-columns: minmax(9rem, auto) 1fr auto;
+  gap: 0.5rem 0.75rem;
+  align-items: baseline;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(201, 162, 39, 0.15);
+  border-radius: 0.35rem;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 0.9rem;
+}
+
+.time-story__game-date {
+  color: #b8a890;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+}
+
+.time-story__game-name {
+  color: #ede6da;
+  min-width: 0;
+}
+
+.time-story__game-meta {
+  display: flex;
+  gap: 0.6rem;
+  color: #b8a890;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .time-story__pager {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .time-story__page-btn,
+  .time-story__back {
+    width: 100%;
+    text-align: center;
+  }
+
+  .time-story__game {
+    grid-template-columns: 1fr;
+  }
+}

@@ -18,6 +18,10 @@ import {
   buildTimeStoryByYear,
   type TimeStoryByYearResult,
 } from '../utils/time-story-by-year';
+import {
+  buildTimeStoryYearGroupResults,
+  type TimeStoryYearGroupResults,
+} from '../utils/time-story-year-group-results';
 import type { TimeStoryGroupId } from '../utils/time-story-groups';
 import {
   buildTimeStoryEras,
@@ -58,6 +62,50 @@ export class TimeStoryService {
       group: this.breakdown.timeStoryGroupForActivity(this.stubForDedupeAndGroup(row) as StoredActivity),
     }));
     return buildTimeStoryByYear(lean, r => r.group, timeZone);
+  }
+
+  /**
+   * All games behind a year+group, same classify/dedupe/year bounds as the bars.
+   * Lean local sources only; does not fetch PGCRs.
+   */
+  async getYearGroupResults(
+    scopes: BreakdownMembershipScope[],
+    identityByMembership: Record<string, string> | undefined,
+    year: number,
+    group: TimeStoryGroupId,
+    timeZone?: string,
+    chartGames?: number | null
+  ): Promise<TimeStoryYearGroupResults> {
+    const allowedGames = [...new Set(scopes.map(scope => scope.game))];
+    if (!scopes.length) {
+      return buildTimeStoryYearGroupResults([], {
+        year,
+        group,
+        timeZone,
+        allowedGames,
+        classify: () => group,
+        chartGames,
+      });
+    }
+    const sources = await this.dedupedSourceRows(scopes, identityByMembership);
+    const classified = sources.map(row => ({
+      ...row,
+      timeSeconds: timeStorySourceSeconds(row),
+      group: this.breakdown.timeStoryGroupForActivity(this.stubForDedupeAndGroup(row) as StoredActivity),
+    }));
+    return buildTimeStoryYearGroupResults(classified, {
+      year,
+      group,
+      timeZone,
+      allowedGames,
+      classify: row => row.group,
+      chartGames,
+    });
+  }
+
+  activityNameForSource(game: 'D1' | 'D2' | undefined, hash: string | number | undefined): string {
+    if (hash == null || String(hash) === '') return TIME_STORY_UNKNOWN_ACTIVITY;
+    return this.activityNameForEra(game === 'D1' ? 'D1' : 'D2', String(hash));
   }
 
   async getEras(

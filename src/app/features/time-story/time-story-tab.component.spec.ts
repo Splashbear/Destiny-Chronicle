@@ -23,7 +23,10 @@ describe('TimeStoryTabComponent sync and manifest-independent render', () => {
   beforeEach(() => {
     getYearBars = jasmine.createSpy('getYearBars').and.resolveTo(bars);
     const cdr = { markForCheck: jasmine.createSpy('markForCheck') };
-    comp = new TimeStoryTabComponent({ getYearBars } as any, cdr as any);
+    comp = new TimeStoryTabComponent(
+      { getYearBars, getYearGroupResults: jasmine.createSpy('getYearGroupResults'), activityNameForSource: () => 'Raid' } as any,
+      cdr as any
+    );
     comp.hasSelectedPlayers = true;
     comp.scopes = [{ membershipId: 'mid', game: 'D2' }];
     comp.identityByMembership = {};
@@ -111,6 +114,7 @@ const mixedBars: TimeStoryByYearResult = {
 
 describe('TimeStoryTabComponent details panel selection', () => {
   let getYearBars: jasmine.Spy;
+  let getYearGroupResults: jasmine.Spy;
   let comp: TimeStoryTabComponent;
   let opened: Array<{ group: string; year: number }>;
 
@@ -124,8 +128,23 @@ describe('TimeStoryTabComponent details panel selection', () => {
 
   beforeEach(() => {
     getYearBars = jasmine.createSpy('getYearBars').and.resolveTo(mixedBars);
+    getYearGroupResults = jasmine.createSpy('getYearGroupResults').and.resolveTo({
+      year: 2023,
+      group: 'raids',
+      rows: [
+        { instanceId: 'r1', period: '2023-06-01T12:00:00Z', date: '2023-06-01', game: 'D2', seconds: 4187, group: 'raids' },
+      ],
+      totalGames: 1,
+      chartGames: 1,
+      countMatchesChart: true,
+      allowedGames: ['D2'],
+      timeZone: 'UTC',
+    });
     const cdr = { markForCheck: jasmine.createSpy('markForCheck') };
-    comp = new TimeStoryTabComponent({ getYearBars } as any, cdr as any);
+    comp = new TimeStoryTabComponent(
+      { getYearBars, getYearGroupResults, activityNameForSource: () => 'Raid' } as any,
+      cdr as any
+    );
     comp.hasSelectedPlayers = true;
     comp.scopes = [{ membershipId: 'mid', game: 'D2' }];
     comp.identityByMembership = {};
@@ -175,17 +194,77 @@ describe('TimeStoryTabComponent details panel selection', () => {
     expect(opened).toEqual([]);
   });
 
-  it('emits the selected year and group only from View activities', async () => {
+  it('opens an in-tab year+group results view from View activities without leaving Hours', async () => {
     await load();
     const year2023 = mixedBars.years[1];
     comp.selectSegment(year2023, 'raids', 4187, 1);
-    comp.viewSelectedActivities();
+    await comp.viewSelectedActivities();
     expect(opened).toEqual([{ group: 'raids', year: 2023 }]);
+    expect(getYearGroupResults).toHaveBeenCalled();
+    expect(comp.results?.totalGames).toBe(1);
+    expect(comp.resultsPage?.rows.map(r => r.instanceId)).toEqual(['r1']);
+    expect(comp.resultsLoading).toBe(false);
   });
 
   it('does not emit View activities when there is no selection', () => {
     comp.viewSelectedActivities();
     expect(opened).toEqual([]);
+    expect(comp.results).toBeNull();
+  });
+
+  it('pages results, reports an empty match honestly, and Back to hours restores the chart', async () => {
+    const many = Array.from({ length: 55 }, (_, i) => ({
+      instanceId: `g-${54 - i}`,
+      period: `2019-06-01T${String(12 + (i % 8)).padStart(2, '0')}:00:00Z`,
+      date: i < 40 ? '2019-12-15' : '2019-06-01',
+      game: 'D2' as const,
+      seconds: 100,
+      group: 'story-patrol-seasonal' as const,
+    }));
+    getYearGroupResults.and.resolveTo({
+      year: 2019,
+      group: 'story-patrol-seasonal',
+      rows: many,
+      totalGames: 55,
+      chartGames: 55,
+      countMatchesChart: true,
+      allowedGames: ['D2'],
+      timeZone: 'UTC',
+    });
+    await load();
+    comp.selectSegment(mixedBars.years[1], 'raids', 4187, 1);
+    // Override selection to the 2019 story case after load.
+    comp.selection = { year: 2019, group: 'story-patrol-seasonal', seconds: 1, games: 55, percent: 10 };
+    await comp.viewSelectedActivities();
+    expect(comp.resultsPage?.page).toBe(1);
+    expect(comp.resultsPage?.rows.length).toBe(40);
+    expect(comp.resultsPage?.pageCount).toBe(2);
+    comp.setResultsPage(2);
+    expect(comp.resultsPage?.rows.length).toBe(15);
+    expect(comp.resultsPage?.endIndex).toBe(55);
+    expect(comp.result?.years.length).toBeGreaterThan(0);
+
+    getYearGroupResults.and.resolveTo({
+      year: 2019,
+      group: 'unknown',
+      rows: [],
+      totalGames: 0,
+      chartGames: 0,
+      countMatchesChart: true,
+      allowedGames: ['D2'],
+      timeZone: 'UTC',
+    });
+    comp.selection = { year: 2019, group: 'unknown', seconds: 0, games: 0, percent: 0 };
+    await comp.viewSelectedActivities();
+    expect(comp.results?.totalGames).toBe(0);
+    expect(comp.resultsPage?.rows).toEqual([]);
+
+    comp.clearResultsView();
+    expect(comp.results).toBeNull();
+    expect(comp.resultsPage).toBeNull();
+    expect(comp.resultsLoading).toBe(false);
+    expect(comp.result?.years.length).toBeGreaterThan(0);
+    expect(comp.selection?.year).toBe(2019);
   });
 
   it('clears selection when there are no years', async () => {
