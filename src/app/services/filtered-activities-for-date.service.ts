@@ -11,6 +11,7 @@ import {
   filterStoredActivitiesByType,
   stampActivitiesForPlayer,
 } from '../utils/filtered-activities-for-date';
+import { yearOfPeriod } from '../utils/time-story-by-year';
 
 export interface FilteredActivitiesCacheEntry {
   list: ActivityWithMembership[];
@@ -33,11 +34,17 @@ export interface FilteredActivitiesForDateHost {
     membershipId: string,
     characterIds: string[],
     month: number,
-    day: number
+    day: number,
+    year?: number
   ): Promise<StoredActivity[]>;
   getManifest(): ActivityTypeManifest;
   setFilteredActivitiesForDate(list: ActivityWithMembership[]): void;
   computeAccountStats(): void;
+  getTimeStoryGroupFilter?(): string | null;
+  getTimeStoryYearFilter?(): number | null;
+  getTimeStoryTimeZone?(): string | undefined;
+  getTimeStoryAllowedGames?(): Array<'D1' | 'D2'>;
+  activityMatchesTimeStoryGroup?(activity: StoredActivity, group: string): boolean;
 }
 
 /**
@@ -56,10 +63,16 @@ export class FilteredActivitiesForDateService {
 
     const selectedPlayers = host.getSelectedPlayers();
     const selectedActivityType = host.getSelectedActivityType();
+    const groupFilter = host.getTimeStoryGroupFilter?.() || '';
+    const yearFilter = host.getTimeStoryYearFilter?.();
+    const timeZone = host.getTimeStoryTimeZone?.();
+    const allowedGames = host.getTimeStoryAllowedGames?.();
     const cacheKey = filteredActivitiesCacheKey(
       selectedDate,
       selectedPlayers,
-      selectedActivityType.label
+      selectedActivityType.label +
+        (groupFilter ? `|ts:${groupFilter}` : '') +
+        (yearFilter != null ? `|tsy:${yearFilter}` : '')
     );
     const cachedEntry = host.getCacheEntry(cacheKey);
     if (cachedEntry && !forceRefresh && !cachedEntry.dirty && host.isFirstFullSyncDone()) {
@@ -75,11 +88,17 @@ export class FilteredActivitiesForDateService {
     }
     const [, month, day] = dateParts.map(Number);
     const manifest = host.getManifest();
+    const fetchYear = yearFilter ?? undefined;
 
-    const playerActivitiesPromises = selectedPlayers.map(async (player) => {
+    const scopedPlayers =
+      allowedGames?.length
+        ? selectedPlayers.filter(player => allowedGames.includes(player.game === 'D1' ? 'D1' : 'D2'))
+        : selectedPlayers;
+
+    const playerActivitiesPromises = scopedPlayers.map(async (player) => {
       const charIds = host.getCharacterIdsForPlayer(player);
       let playerActivities = charIds.length
-        ? await host.fetchActivitiesForCharacters(player.membershipId, charIds, month, day)
+        ? await host.fetchActivitiesForCharacters(player.membershipId, charIds, month, day, fetchYear)
         : [];
       playerActivities = filterStoredActivitiesByType(
         playerActivities,
@@ -87,6 +106,16 @@ export class FilteredActivitiesForDateService {
         selectedActivityType,
         manifest
       );
+      if (yearFilter != null) {
+        playerActivities = playerActivities.filter(
+          activity => yearOfPeriod(activity.period, timeZone) === yearFilter
+        );
+      }
+      if (groupFilter && host.activityMatchesTimeStoryGroup) {
+        playerActivities = playerActivities.filter((activity) =>
+          host.activityMatchesTimeStoryGroup!(activity, groupFilter)
+        );
+      }
       return stampActivitiesForPlayer(playerActivities, player, manifest);
     });
 

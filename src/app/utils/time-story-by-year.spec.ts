@@ -1,0 +1,131 @@
+import { buildTimeStoryByYear, resetYearOfPeriodFormatters, timeStoryGroupTable, timeStoryGroupsReconcile, yearOfPeriod } from './time-story-by-year';
+import type { TimeStoryGroupId } from './time-story-groups';
+
+describe('yearOfPeriod', () => {
+  it('uses the IANA zone so a late UTC period can fall on the previous local year', () => {
+    expect(yearOfPeriod('2023-01-01T03:00:00Z', 'America/New_York')).toBe(2022);
+    expect(yearOfPeriod('2023-01-01T03:00:00Z', 'UTC')).toBe(2023);
+  });
+
+  it('skips missing or invalid periods', () => {
+    expect(yearOfPeriod(undefined)).toBeNull();
+    expect(yearOfPeriod('not-a-date')).toBeNull();
+  });
+
+  it('constructs one DateTimeFormat per time zone instead of one per period', () => {
+    resetYearOfPeriodFormatters();
+    const Orig = Intl.DateTimeFormat;
+    let constructed = 0;
+    const Wrapped = function (this: unknown, locales?: any, options?: any) {
+      constructed += 1;
+      return new Orig(locales, options);
+    } as unknown as typeof Intl.DateTimeFormat;
+    Wrapped.supportedLocalesOf = Orig.supportedLocalesOf.bind(Orig);
+    (Intl as unknown as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Wrapped;
+    try {
+      for (let i = 0; i < 400; i++) {
+        yearOfPeriod('2020-06-01T12:00:00Z', 'America/New_York');
+        yearOfPeriod('2021-01-01T03:00:00Z', 'UTC');
+      }
+      expect(yearOfPeriod('2023-01-01T03:00:00Z', 'America/New_York')).toBe(2022);
+      expect(yearOfPeriod('2023-01-01T03:00:00Z', 'UTC')).toBe(2023);
+      expect(constructed).toBe(2);
+    } finally {
+      (Intl as unknown as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Orig;
+    }
+  });
+});
+
+describe('buildTimeStoryByYear', () => {
+  const classify = (a: { group?: TimeStoryGroupId }) => a.group ?? 'other';
+
+  it('skips empty years, sorts newest first, and reconciles group totals within a minute', () => {
+    const result = buildTimeStoryByYear(
+      [
+        { period: '2022-06-01T12:00:00Z', timeSeconds: 3600, activity: { period: '2022-06-01T12:00:00Z', group: 'raids' } },
+        { period: '2024-02-01T12:00:00Z', timeSeconds: 1800, activity: { period: '2024-02-01T12:00:00Z', group: 'trials' } },
+        { period: '2024-08-01T12:00:00Z', timeSeconds: 7200, activity: { period: '2024-08-01T12:00:00Z', group: 'raids' } },
+      ],
+      classify as any,
+      'UTC'
+    );
+    expect(result.years.map(y => y.year)).toEqual([2024, 2022]);
+    expect(result.years.find(y => y.year === 2023)).toBeUndefined();
+    expect(result.totalSeconds).toBe(12600);
+    expect(result.totalGames).toBe(3);
+    const y2024 = result.years[0];
+    expect(y2024.seconds).toBe(9000);
+    expect(y2024.games).toBe(2);
+    expect(y2024.groups.map(g => g.group).sort()).toEqual(['raids', 'trials']);
+    expect(timeStoryGroupsReconcile(result)).toBeTrue();
+  });
+
+  it('omits null classifications (excluded encounter nodes) and zero-game groups', () => {
+    const result = buildTimeStoryByYear(
+      [
+        { period: '2021-05-01T00:00:00Z', timeSeconds: 100, activity: { period: '2021-05-01T00:00:00Z', group: 'raids' } },
+        { period: '2021-05-02T00:00:00Z', timeSeconds: 50, activity: { period: '2021-05-02T00:00:00Z', skip: true } },
+      ],
+      (a: any) => (a.skip ? null : 'raids'),
+      'UTC'
+    );
+    expect(result.totalSeconds).toBe(100);
+    expect(result.totalGames).toBe(1);
+    expect(result.years[0].groups.every(g => g.group === 'raids')).toBeTrue();
+  });
+
+  it('buckets lean rows that already have a group and timeSeconds, without a full activity object', () => {
+    const result = buildTimeStoryByYear(
+      [
+        { period: '2023-06-01T12:00:00Z', timeSeconds: 3600, group: 'raids' },
+        { period: '2023-07-01T12:00:00Z', timeSeconds: 1800, group: 'unknown' },
+        { period: '2024-03-01T12:00:00Z', timeSeconds: 7200, group: 'trials' },
+      ] as any,
+      (row: { group?: TimeStoryGroupId }) => row.group ?? null,
+      'UTC'
+    );
+    expect(result.years.map(y => y.year)).toEqual([2024, 2023]);
+    expect(result.years.find(y => y.year === 2023)?.seconds).toBe(5400);
+    expect(result.years.find(y => y.year === 2023)?.groups.map(g => g.group).sort()).toEqual(['raids', 'unknown']);
+    expect(result.totalSeconds).toBe(12600);
+    expect(timeStoryGroupsReconcile(result)).toBeTrue();
+  });
+});
+
+describe('timeStoryGroupTable', () => {
+  const result = buildTimeStoryByYear(
+    [
+      { period: '2024-03-01T12:00:00Z', timeSeconds: 7200, group: 'trials' },
+      { period: '2024-04-01T12:00:00Z', timeSeconds: 1800, group: 'crucible' },
+      { period: '2023-06-01T12:00:00Z', timeSeconds: 3600, group: 'raids' },
+      { period: '2023-07-01T12:00:00Z', timeSeconds: 1800, group: 'unknown' },
+    ] as any,
+    (row: { group?: TimeStoryGroupId }) => row.group ?? null,
+    'UTC'
+  );
+
+  it('reconciles a selected year with that year bar', () => {
+    const table = timeStoryGroupTable(result, 2024);
+    expect(table.year).toBe(2024);
+    expect(table.seconds).toBe(result.years.find(y => y.year === 2024)?.seconds);
+    expect(table.games).toBe(result.years.find(y => y.year === 2024)?.games);
+    expect(table.rows.reduce((sum, row) => sum + row.seconds, 0)).toBe(table.seconds);
+    expect(table.rows.reduce((sum, row) => sum + row.games, 0)).toBe(table.games);
+    expect(table.rows.map(row => row.group).sort()).toEqual(['crucible', 'trials']);
+    const pct = table.rows.reduce((sum, row) => sum + row.percent, 0);
+    expect(pct).toBeCloseTo(100, 5);
+  });
+
+  it('All years aggregates every bar and still matches chart totals', () => {
+    const table = timeStoryGroupTable(result, 'all');
+    expect(table.seconds).toBe(result.totalSeconds);
+    expect(table.games).toBe(result.totalGames);
+    expect(table.rows.reduce((sum, row) => sum + row.seconds, 0)).toBe(result.totalSeconds);
+    expect(table.rows.reduce((sum, row) => sum + row.games, 0)).toBe(result.totalGames);
+  });
+
+  it('reset/All years after a year filter returns the full aggregation', () => {
+    expect(timeStoryGroupTable(result, 2023).seconds).toBe(5400);
+    expect(timeStoryGroupTable(result, 'all').seconds).toBe(14400);
+  });
+});

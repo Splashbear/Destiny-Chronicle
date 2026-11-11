@@ -40,75 +40,15 @@
   <h3 class="text-xl font-bold text-white">Activity Breakdown ({{ ps.selectedAccountKeysForBreakdown.size }} selected)</h3>
 </div>
 <div *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.activityBreakdownGroups.length > 0" class="space-y-8">
-  <div *ngIf="ps.activityBreakdownSummaryCards.length > 0" class="destiny-surface-panel p-4 mb-6">
-    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
-      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
-        <h3 class="text-lg font-semibold text-white">Activity Distribution</h3>
-        <div class="destiny-stat-value text-xl"
-             title="Unique activity instances only — excludes orbit, Tower, and social spaces.">
-          {{ ps.accountStatsPending ? '—' : ps.formatSecondsToHoursMinutes(ps.activityBreakdownTotalTimeSeconds) }}
-        </div>
-        <span class="text-slate-400 text-sm">
-          <ng-container *ngIf="ps.selectedBreakdownCardLabels.size > 0">active time (filtered)</ng-container>
-          <ng-container *ngIf="ps.selectedBreakdownCardLabels.size === 0">active time</ng-container>
-        </span>
-        <button (click)="ps.breakdownChartCollapsed = !ps.breakdownChartCollapsed"
-                class="flex items-center gap-1 px-2 py-1 text-sm text-slate-300 hover:text-white destiny-btn-secondary text-sm"
-                [attr.aria-expanded]="!ps.breakdownChartCollapsed">
-          <span>{{ ps.breakdownChartCollapsed ? 'Show' : 'Hide' }} Chart</span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
-               [class.rotate-180]="!ps.breakdownChartCollapsed">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      </div>
-      <button (click)="ps.exportBreakdownToExcel()"
-              [disabled]="!ps.activityBreakdownGroups.length"
-              class="px-3 py-1.5 text-sm destiny-btn-primary disabled:opacity-50 transition-colors flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-        Export to Excel
-      </button>
-    </div>
-    <div *ngIf="!ps.breakdownChartCollapsed" class="space-y-4">
-      <div class="flex flex-wrap items-center gap-3">
-        <label class="text-slate-400 text-sm">Chart by:</label>
-        <select [(ngModel)]="ps.breakdownChartCategory" 
-                (ngModelChange)="ps.setBreakdownChartCategory($event)"
-                class="destiny-input text-sm py-1.5 max-w-none w-auto">
-          <option *ngFor="let opt of ps.breakdownChartCategoryOptions; trackBy: ps.trackBreakdownCard" [value]="opt.value">{{ opt.label }}</option>
-        </select>
-        <select *ngIf="ps.showBreakdownGameDropdown"
-                [(ngModel)]="ps.breakdownChartGame" 
-                (ngModelChange)="ps.setBreakdownChartGame($event)"
-                class="destiny-input text-sm py-1.5 max-w-none w-auto">
-          <option *ngFor="let g of ps.breakdownChartGameOptions" [value]="g.value">{{ g.label }}</option>
-        </select>
-        <div class="flex gap-2">
-          <button (click)="ps.setBreakdownChartType('pie')" 
-                  class="px-3 py-1.5 text-sm rounded-lg transition-colors"
-                  [ngClass]="ps.breakdownChartType === 'pie' ? 'destiny-btn-primary text-sm py-1.5' : 'destiny-btn-secondary text-sm py-1.5'">
-            Pie
-          </button>
-          <button (click)="ps.setBreakdownChartType('bar')" 
-                  class="px-3 py-1.5 text-sm rounded-lg transition-colors"
-                  [ngClass]="ps.breakdownChartType === 'bar' ? 'destiny-btn-primary text-sm py-1.5' : 'destiny-btn-secondary text-sm py-1.5'">
-            Bar
-          </button>
-        </div>
-      </div>
-      <div class="h-64 sm:h-80 min-h-[320px]">
-        @defer (on immediate) {
-          <app-breakdown-chart
-            [data]="ps.breakdownChartData"
-            [options]="ps.breakdownChartType === 'pie' ? ps.breakdownChartOptions : ps.breakdownBarChartOptions"
-            [type]="ps.breakdownChartType"></app-breakdown-chart>
-        } @placeholder {
-          <div class="h-full w-full"></div>
-        }
-      </div>
-    </div>
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <p class="text-slate-400 text-sm">Same year, accounts, and categories as the chart above.</p>
+    <button (click)="ps.exportBreakdownToExcel()"
+            [disabled]="!ps.activityBreakdownGroups.length"
+            class="px-3 py-1.5 text-sm destiny-btn-primary disabled:opacity-50 transition-colors flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4-4m4 4V4" /></svg>
+      Export to Excel
+    </button>
   </div>
-
   <!-- Summary cards: click to filter; selected cards show only their activity in the table below -->
   <div class="mb-4">
     <div class="flex items-center justify-between mb-2">
@@ -217,8 +157,8 @@
   </div>
 </div>
 <dc-empty-state *ngIf="ps.selectedPlayers.length > 0 && !ps.loadingActivityBreakdown && ps.activityBreakdownRows !== null && ps.activityBreakdownRows.length === 0">
-  <ng-container *ngIf="!ps.hasBreakdownAccountFilter">No activities in database for selected profiles. Load activities for a date first so data is synced.</ng-container>
-  <ng-container *ngIf="ps.hasBreakdownAccountFilter">No activities in database for selected account(s). Load activities for a date first so data is synced.</ng-container>
+  <ng-container *ngIf="!ps.hasBreakdownAccountFilter">No activities for this year and selected profiles.</ng-container>
+  <ng-container *ngIf="ps.hasBreakdownAccountFilter">No activities for this year and selected account(s).</ng-container>
 </dc-empty-state>
 </div>
 </ng-template>

@@ -27,10 +27,18 @@ import {
   decryptingYearHint,
 } from '../../utils/decrypting-caption';
 import { mergeArchiveCoverage } from '../../utils/archive-coverage';
-import { getCharacterMinutesPlayed } from '../../utils/character-profile';
+import { getCharacterId, getCharacterMinutesPlayed } from '../../utils/character-profile';
 import { applyArchiveWatermark } from '../../utils/archive-watermark';
 import { buildAccountLookupPayload } from '../../utils/lookup-analytics-send';
 import { formatStatusDisplay as formatStatusDisplayUtil } from '../../utils/format-status-display';
+import { effectiveGame, type EffectiveGame } from '../../utils/effective-game';
+import { TIME_STORY_GROUP_LABELS, type TimeStoryGroupId } from '../../utils/time-story-groups';
+import {
+  clearTimeStoryDrilldownOnHost,
+  localYearWindow,
+  type TimeStoryOpenGroupHost,
+} from '../../utils/time-story-drilldown';
+import type { BreakdownMembershipScope } from '../../services/activity-breakdown.service';
 import { addSearchChip, removeSearchChip } from '../../utils/search-chips';
 import { searchModeErrorMessage } from '../../utils/search-mode-warning';
 import {
@@ -1245,10 +1253,156 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   async loadActivityBreakdown(options?: { preserveView?: boolean }): Promise<void> {
-    await this.activityBreakdownLoad.loadActivityBreakdown(
-      this.asActivityBreakdownLoadHost(),
-      options
-    );
+    if ((this.selectedPlayers || []).length === 0) return;
+    const preserve = !!options?.preserveView && (this.activityBreakdownGroups?.length || 0) > 0;
+    if (!preserve) {
+      this.loadingActivityBreakdown = true;
+    }
+    // All-years dossier Active time comes from the same lean unified source as
+    // the year chart, even when the Breakdown tab is not open. Do not scan IDB
+    // again, and do not apply a selected-year slice to the dossier total.
+    try {
+      if (this.timeStoryService && this.timeStoryScopes?.length) {
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const view = await this.timeStoryService.getUnifiedView(
+          this.timeStoryScopes,
+          this.getBreakdownIdentityByMembership(),
+          timeZone
+        );
+        this.breakdownActiveTimeSeconds = view.bars.totalSeconds;
+      }
+    } catch (err) {
+      console.error('[ActivityBreakdown] Failed to refresh Active time', err);
+    }
+    this.cdr.markForCheck();
+  }
+
+
+  /** True while account history is still being written (deep link, select, or favorites). */
+  get timeStorySyncInProgress(): boolean {
+    if (this.profileLoadInProgress) return true;
+    if (!(this.selectedPlayers || []).length) return false;
+    const statuses = this.accountLoadingStatuses || [];
+    if (!statuses.length) return true;
+    return statuses.some(s => s.status !== 'complete' && s.status !== 'error');
+  }
+
+  get timeStoryEffectiveGame(): EffectiveGame {
+    return effectiveGame(this.timeStorySelectedPlayers, 'Both');
+  }
+
+
+  get timeStorySelectedPlayers(): any[] {
+    const keys = this.siteAccountFilterKeys;
+    let players = this.selectedPlayers || [];
+    if (keys.length) {
+      const set = new Set(keys);
+      players = players.filter((p) => set.has(this.getPlayerKey(p)));
+    }
+    return players;
+  }
+
+  get timeStoryScopes(): BreakdownMembershipScope[] {
+    const game = this.timeStoryEffectiveGame;
+    const seen = new Set();
+    const scopes = [];
+    for (const player of this.timeStorySelectedPlayers) {
+      const playerGame = player.game === 'D1' ? 'D1' : 'D2';
+      if (game !== 'Both' && playerGame !== game) continue;
+      const key = playerGame + ':' + player.membershipId;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      scopes.push({ membershipId: player.membershipId, game: playerGame });
+    }
+    return scopes;
+  }
+
+  get timeStoryAccountChips(): Array<{ displayName?: string; platform: string; game: 'D1' | 'D2' }> {
+    return this.timeStoryScopes.map((scope) => {
+      const player = this.timeStorySelectedPlayers.find(
+        (p) => p.membershipId === scope.membershipId && (p.game === 'D1' ? 'D1' : 'D2') === scope.game
+      );
+      const displayName = (player?.displayName || player?.bungieGlobalDisplayName || '').trim() || undefined;
+      return { displayName, platform: player?.platform || 'Unknown', game: scope.game };
+    });
+  }
+
+  get timeStoryFilterLabel(): string {
+    const group = this.timeStoryGroupFilter;
+    const groupLabel = group && TIME_STORY_GROUP_LABELS[group] ? TIME_STORY_GROUP_LABELS[group] : '';
+    if (this.timeStoryYearFilter && groupLabel) {
+      return `${this.timeStoryYearFilter} · ${groupLabel}`;
+    }
+    if (this.timeStoryYearFilter) return String(this.timeStoryYearFilter);
+    return groupLabel;
+  }
+
+  async openTimeStoryGroup(_event: { group: string; year: number }): Promise<void> {
+    // Year+group results now open inside Hours. If an older single-day Activities
+    // drilldown left filters behind, clear them so daily Activities stays unfiltered.
+    if (this.timeStoryGroupFilter || this.timeStoryYearFilter != null) {
+      await clearTimeStoryDrilldownOnHost(this.asTimeStoryOpenGroupHost());
+      this.updateUrlForPermalink();
+    }
+  }
+
+  async clearTimeStoryGroupFilter(): Promise<void> {
+    await clearTimeStoryDrilldownOnHost(this.asTimeStoryOpenGroupHost());
+    this.updateUrlForPermalink();
+  }
+
+  private asTimeStoryOpenGroupHost(): TimeStoryOpenGroupHost {
+    const c = this;
+    return {
+      getSelectedDate: () => c.selectedDate,
+      setSelectedDate: date => c.validateAndSetDate(date),
+      getTimeStoryDateBeforeFilter: () => c.timeStoryDateBeforeFilter,
+      setTimeStoryDateBeforeFilter: date => {
+        c.timeStoryDateBeforeFilter = date;
+      },
+      getTimeStoryGroupFilter: () => c.timeStoryGroupFilter,
+      getTimeStoryYearFilter: () => c.timeStoryYearFilter,
+      setTimeStoryGroupFilter: group => {
+        c.timeStoryGroupFilter = group;
+      },
+      setTimeStoryYearFilter: year => {
+        c.timeStoryYearFilter = year;
+      },
+      clearFilteredActivitiesCache: () => c.filteredActivitiesCache.clear(),
+      changeToActivitiesTab: () => c.onTabChange('activities'),
+      loadActivities: force => c.loadAllFilteredActivities(force),
+      fetchYearActivities: async (year, timeZone) => {
+        const { start, end } = localYearWindow(year, timeZone);
+        const startDate = new Date(start);
+        const endInclusive = new Date(Date.parse(end) - 1);
+        const rows = [];
+        for (const scope of c.timeStoryScopes || []) {
+          const fetched = await c.activityDb.getActivitiesInDateRange(
+            scope.membershipId,
+            startDate,
+            endInclusive
+          );
+          const player = (c.timeStorySelectedPlayers || []).find(
+            p => p.membershipId === scope.membershipId && (p.game === 'D1' ? 'D1' : 'D2') === scope.game
+          );
+          const charIds = player
+            ? (c.characters[c.getPlayerKey(player)] || []).map(getCharacterId).filter(Boolean)
+            : [];
+          const wanted = new Set(charIds);
+          for (const row of fetched) {
+            const game = row.game === 'D1' ? 'D1' : 'D2';
+            if (game !== scope.game) continue;
+            if (wanted.size && row.characterId && !wanted.has(row.characterId)) continue;
+            rows.push(row);
+          }
+        }
+        return rows;
+      },
+      classify: activity => c.activityBreakdownService.timeStoryGroupForActivity(activity),
+      allowedGames: () => [...new Set((c.timeStoryScopes || []).map(scope => scope.game))],
+      timeZone: () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+      detectChanges: () => c.cdr.detectChanges(),
+    };
   }
 
   async onTabChange(
@@ -1260,6 +1414,7 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
       | 'breakdown'
       | 'heatmap'
       | 'playedWith'
+      | 'timeStory'
   ) {
     await this.playerSearchTabChange.onTabChange(
       build_asPlayerSearchTabChangeHost(this),

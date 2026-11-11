@@ -1,0 +1,120 @@
+.time-story-eras {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem 1rem;
+}
+
+.time-story-eras__header {
+  margin-bottom: 0.65rem;
+}
+
+.time-story-eras__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--destiny-gold-bright, #f5d76e);
+  font-family: var(--font-d2-headline, inherit);
+}
+
+.time-story-eras__note {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #d4d4d8;
+  cursor: help;
+}
+
+.time-story-eras__coverage {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #a1a1aa;
+}
+
+.time-story-eras__loading,
+.time-story-eras__empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #d4d4d8;
+  font-size: 0.85rem;
+}
+
+.time-story-eras__strip {
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0 0.25rem;
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.time-story-eras__strip::-webkit-scrollbar {
+  height: 8px;
+}
+
+.time-story-eras__strip::-webkit-scrollbar-thumb {
+  background: rgba(245, 215, 110, 0.35);
+  border-radius: 8px;
+}
+
+.time-story-eras__item {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  width: min(22rem, 100%);
+  min-width: 14rem;
+  max-width: 22rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(245, 215, 110, 0.28);
+  border-radius: 0.4rem;
+  background: rgba(15, 15, 18, 0.45);
+}
+
+.time-story-eras__game {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: #f5d76e;
+  font-weight: 600;
+  padding-top: 0.15rem;
+}
+
+.time-story-eras__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 0.65rem;
+  row-gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: start;
+}
+
+.time-story-eras__names {
+  min-width: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #f4f4f5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.time-story-eras__hours {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #f5d76e;
+}
+
+@media (max-width: 640px) {
+  .time-story-eras__item {
+    width: calc(100% - 2.25rem);
+    min-width: calc(100% - 2.25rem);
+    max-width: calc(100% - 2.25rem);
+  }
+}

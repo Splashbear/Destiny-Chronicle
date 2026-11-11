@@ -445,11 +445,24 @@
         </div>
 
         <div *ngIf="activeTab === 'activities'" class="dc-flow-activities-host">
+          <div *ngIf="timeStoryGroupFilter || timeStoryYearFilter" class="destiny-surface-panel p-3 mb-3 flex flex-wrap items-center gap-2 text-sm">
+            <span>Activities filtered to <strong>{{ timeStoryFilterLabel }}</strong> (Time in activities). Only dates in this selection are included.</span>
+            <button type="button" class="chronicle-toolbar-btn text-xs" (click)="clearTimeStoryGroupFilter()">Show all activities</button>
+          </div>
           <app-activities-tab></app-activities-tab>
         </div>
 
         <div *ngIf="activeTab === 'breakdown'">
           @defer (on immediate) {
+            <app-time-story-tab
+              [scopes]="timeStoryScopes"
+              [identityByMembership]="getBreakdownIdentityByMembership()"
+              [accounts]="timeStoryAccountChips"
+              [effectiveGame]="timeStoryEffectiveGame"
+              [hasSelectedPlayers]="selectedPlayers.length > 0"
+              [syncInProgress]="timeStorySyncInProgress"
+              (openGroup)="openTimeStoryGroup($event)"
+              (yearView)="onUnifiedYearView($event)"></app-time-story-tab>
             <app-breakdown-tab></app-breakdown-tab>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
@@ -479,6 +492,12 @@
               [accountKeys]="siteAccountFilterKeys"
               [characterMeta]="heatmapCharacterMeta"
               (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
+            <app-time-story-eras
+              [scopes]="timeStoryScopes"
+              [identityByMembership]="getBreakdownIdentityByMembership()"
+              [effectiveGame]="timeStoryEffectiveGame"
+              [hasSelectedPlayers]="selectedPlayers.length > 0"
+              [syncInProgress]="timeStorySyncInProgress"></app-time-story-eras>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 

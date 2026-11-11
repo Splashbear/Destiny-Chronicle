@@ -12,6 +12,11 @@ import { excludeExistingInstances } from '../utils/activity-dedupe';
 import { partitionAgainstStored } from '../utils/archive-stub-merge';
 import { partitionD1AgainstStored, d1BungiePageCaughtUp, d1RowsToIngest } from '../utils/d1-archive-merge';
 import { d1ArchiveRowsForCharacter } from '../utils/d1-archive-character-rows';
+import {
+  leanFromArchiveLight,
+  leanFromBungieHistory,
+  type TimeStorySourceRow,
+} from '../utils/time-story-source';
 
 /** Character identity for activity-history load (CODE_CLEANUP_SPEC). */
 export type ActivityHistoryCharacter = Character & {
@@ -71,6 +76,57 @@ export class ActivityHistoryLoaderService {
   private readonly maxRetries = 3;
   private readonly retryDelayMs = 1000;
   private readonly d1ArchiveTimeoutMs = 20000;
+
+  /** Lean archive + Bungie rows for Time Story; never holds full IDB objects. */
+  private readonly timeStorySources = new Map<string, Map<string, TimeStorySourceRow>>();
+
+  private rememberTimeStorySources(rows: Array<TimeStorySourceRow | null | undefined>): void {
+    for (const row of rows) {
+      if (!row?.instanceId || !row.membershipId) continue;
+      const game = row.game ?? 'D2';
+      const scopeKey = `${row.membershipId}|${game}`;
+      let byInstance = this.timeStorySources.get(scopeKey);
+      if (!byInstance) {
+        byInstance = new Map();
+        this.timeStorySources.set(scopeKey, byInstance);
+      }
+      const prev = byInstance.get(row.instanceId);
+      if (!prev) {
+        byInstance.set(row.instanceId, { ...row, game });
+        continue;
+      }
+      byInstance.set(row.instanceId, {
+        ...prev,
+        ...row,
+        game,
+        timePlayedSeconds: row.timePlayedSeconds ?? prev.timePlayedSeconds,
+        durationSeconds: row.durationSeconds ?? prev.durationSeconds,
+        period: row.period || prev.period,
+        mode: row.mode ?? prev.mode,
+        activityHash: row.activityHash ?? prev.activityHash,
+        completed: row.completed ?? prev.completed,
+      });
+    }
+  }
+
+  getTimeStorySources(membershipId: string, game: 'D1' | 'D2'): TimeStorySourceRow[] {
+    const byInstance = this.timeStorySources.get(`${membershipId}|${game}`);
+    return byInstance ? Array.from(byInstance.values()) : [];
+  }
+
+  private rememberArchiveLights(
+    membershipId: string,
+    game: 'D1' | 'D2',
+    lights: Array<Parameters<typeof leanFromArchiveLight>[0]> | undefined
+  ): void {
+    if (!lights?.length) return;
+    this.rememberTimeStorySources(
+      lights.map(light => {
+        const row = leanFromArchiveLight({ ...light, membershipId: light.membershipId || membershipId, game: light.game || game });
+        return row ? { ...row, membershipId: row.membershipId || membershipId, game: row.game || game } : null;
+      })
+    );
+  }
 
   private async fetchActivitiesWithRetry(
     host: ActivityHistoryLoadHost,
@@ -270,6 +326,7 @@ export class ActivityHistoryLoaderService {
       if (character.game === 'D1' && environment.enableD1Archive && this.archiveApi.enabled) {
         try {
           const archiveData = await this.fetchD1ArchiveActivities(character.membershipId);
+          this.rememberArchiveLights(character.membershipId, 'D1', archiveData?.activities);
           const storedFromArchive = d1ArchiveRowsForCharacter(archiveData, character);
           if (storedFromArchive.length > 0) {
             const { fresh, replacements } = partitionD1AgainstStored(storedFromArchive, dbActivities);
@@ -336,6 +393,7 @@ export class ActivityHistoryLoaderService {
             character.membershipId,
             { game: character.game, limit: 100000 }
           );
+          this.rememberArchiveLights(character.membershipId, character.game || 'D2', archiveData?.activities);
 
           // Use archive rows when 'full', or when 'partial' still has lean rows (merged/gap/lite/extract).
           // compact_ids-only partials have empty activities[] — fall through to Bungie.
@@ -564,6 +622,18 @@ export class ActivityHistoryLoaderService {
         a => !isSocialActivity(a.activityDetails?.mode, character.game === 'D2'
           ? this.manifest.getActivityDefinitionRaw(a.activityDetails?.referenceId)
           : null)
+      );
+      this.rememberTimeStorySources(
+        allActivities.map(activity => {
+          const row = leanFromBungieHistory(activity);
+          return row
+            ? {
+                ...row,
+                membershipId: row.membershipId || character.membershipId,
+                game: row.game || character.game,
+              }
+            : null;
+        })
       );
 
       // Filter for unique new activities; a timed Bungie row also replaces a

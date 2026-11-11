@@ -8,27 +8,35 @@ export interface BreakdownIdentityPlayer {
 }
 
 /**
- * Linked D2 platforms of the same Bungie name share an identity so one PGCR
- * stored under PlayStation, Steam, and Xbox is counted once. D1 has no
- * cross-save, so each membership stays distinct.
+ * Official Bungie unique name (`Name#code`). A bare display name with no
+ * numeric code is not identity evidence and must not link memberships.
+ */
+export function officialBungieNameKey(player: BreakdownIdentityPlayer): string | null {
+  const bungieName = (player.bungieGlobalDisplayName || '').trim();
+  const code = player.bungieGlobalDisplayNameCode;
+  if (bungieName && code != null && String(code).trim() !== '') {
+    return `${bungieName.toLowerCase()}#${code}`;
+  }
+  const display = (player.displayName || '').trim();
+  const match = display.match(/^(.*)#(\d+)$/);
+  if (match && match[1].trim()) {
+    return `${match[1].trim().toLowerCase()}#${match[2]}`;
+  }
+  return null;
+}
+
+/**
+ * Linked D2 platforms of the same official Bungie name#code share an identity
+ * so one PGCR stored under PlayStation, Steam, and Xbox is counted once.
+ * D1 has no cross-save, so each membership stays distinct. Bare names do not link.
  */
 export function breakdownAccountIdentity(player: BreakdownIdentityPlayer): string {
   const membershipId = player.membershipId || '';
   if (player.game === 'D1') {
     return `D1:${membershipId}`;
   }
-  const bungieName = (player.bungieGlobalDisplayName || '').trim();
-  if (bungieName) {
-    return `D2:${bungieName.toLowerCase()}#${player.bungieGlobalDisplayNameCode ?? ''}`;
-  }
-  const display = (player.displayName || '').trim();
-  const hash = display.lastIndexOf('#');
-  if (hash > 0) {
-    return `D2:${display.slice(0, hash).toLowerCase()}#${display.slice(hash + 1)}`;
-  }
-  if (display) {
-    return `D2:${display.toLowerCase()}#`;
-  }
+  const official = officialBungieNameKey(player);
+  if (official) return `D2:${official}`;
   return `D2:${membershipId}`;
 }
 

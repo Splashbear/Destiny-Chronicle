@@ -1,0 +1,175 @@
+<div class="time-story">
+  <dc-empty-state *ngIf="!hasSelectedPlayers">
+    Search for and select at least one profile to see time in activities by year.
+  </dc-empty-state>
+
+  <section *ngIf="hasSelectedPlayers" class="time-story__panel destiny-surface-panel" aria-labelledby="time-story-title">
+    <header class="time-story__header">
+      <div class="time-story__heading">
+        <h2 id="time-story-title" class="time-story__title">{{ titleText }}</h2>
+        <p class="time-story__lede">
+          <span class="time-story__label" [attr.title]="labelTooltip">{{ labelText }}</span>
+          <strong class="time-story__total">{{ formatTime(result?.totalSeconds || 0) }}</strong>
+          <span class="time-story__meta"> · {{ gameCaption }} · {{ result?.totalGames || 0 | number }} games</span>
+        </p>
+        <p class="time-story__note" [attr.title]="labelTooltip">
+          {{ measurementNote }}
+        </p>
+      </div>
+      <p *ngIf="accounts.length" class="time-story__accounts">
+        <span *ngIf="accounts.length > 1">Combining {{ accounts.length }} accounts</span>
+        <span *ngFor="let acct of accounts" class="time-story__chip">{{ acct.displayName ? acct.displayName + ' · ' : '' }}{{ acct.platform }} · {{ acct.game }}</span>
+      </p>
+    </header>
+
+    <div *ngIf="loading && !results && !resultsLoading" class="time-story__loading">
+      <app-destiny-loader size="sm"></app-destiny-loader>
+      <span>Loading time in activities…</span>
+    </div>
+
+    <p *ngIf="!loading && !results && !resultsLoading && result && result.years.length === 0" class="time-story__empty">
+      No activities found for this selection.
+    </p>
+
+    <div *ngIf="resultsLoading" class="time-story__loading">
+      <app-destiny-loader size="sm"></app-destiny-loader>
+      <span>Loading activities…</span>
+    </div>
+
+    <section *ngIf="results && !resultsLoading" class="time-story__results" [attr.aria-label]="(groupLabel(results.group) || results.group) + ' in ' + results.year">
+      <header class="time-story__results-header">
+        <button type="button" class="time-story__back" (click)="clearResultsView()">{{ backToHoursLabel }}</button>
+        <h3 class="time-story__results-title">{{ results.year === 'all' ? allYearsLabel : results.year }} · {{ groupLabel(results.group) }}</h3>
+        <p class="time-story__results-meta">
+          <strong>{{ results.totalGames | number }} {{ results.totalGames === 1 ? 'game' : 'games' }}</strong>
+          <span> · {{ resultsScopeCaption() }}</span>
+        </p>
+        <p *ngIf="resultsCountNote() as note" class="time-story__results-note">{{ note }}</p>
+      </header>
+
+      <p *ngIf="results.totalGames === 0" class="time-story__empty">{{ resultsEmptyText }}</p>
+
+      <ng-container *ngIf="results.totalGames > 0 && resultsPage">
+        <div class="time-story__pager">
+          <button type="button" class="time-story__page-btn" (click)="setResultsPage(resultsPage.page - 1)" [disabled]="resultsPage.page <= 1">Previous</button>
+          <span class="time-story__page-status">
+            Showing {{ resultsPage.startIndex + 1 | number }}–{{ resultsPage.endIndex | number }} of {{ results.totalGames | number }}
+            · Page {{ resultsPage.page }} of {{ resultsPage.pageCount }}
+          </span>
+          <button type="button" class="time-story__page-btn" (click)="setResultsPage(resultsPage.page + 1)" [disabled]="resultsPage.page >= resultsPage.pageCount">Next</button>
+        </div>
+
+        <div class="time-story__days">
+          <section *ngFor="let day of resultsPage.days" class="time-story__day" [attr.aria-label]="formatTimeStoryResultDate(day.date, results.timeZone)">
+            <h4 class="time-story__day-title">{{ formatTimeStoryResultDate(day.date, results.timeZone) }}</h4>
+            <ul class="time-story__day-list">
+              <li *ngFor="let row of day.rows" class="time-story__game">
+                <span class="time-story__game-date">{{ row.date }} · {{ formatTimeStoryResultTime(row.period, results.timeZone) }}</span>
+                <span class="time-story__game-name">{{ activityNameForRow(row) }}</span>
+                <span class="time-story__game-meta">
+                  <span *ngIf="row.game">{{ row.game }}</span>
+                  <span>{{ formatTime(row.seconds) }}</span>
+                </span>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <div class="time-story__pager time-story__pager--bottom" *ngIf="resultsPage.pageCount > 1">
+          <button type="button" class="time-story__page-btn" (click)="setResultsPage(resultsPage.page - 1)" [disabled]="resultsPage.page <= 1">Previous</button>
+          <span class="time-story__page-status">Page {{ resultsPage.page }} of {{ resultsPage.pageCount }}</span>
+          <button type="button" class="time-story__page-btn" (click)="setResultsPage(resultsPage.page + 1)" [disabled]="resultsPage.page >= resultsPage.pageCount">Next</button>
+        </div>
+      </ng-container>
+    </section>
+
+    <div *ngIf="!results && !resultsLoading && result && result.years.length > 0" class="time-story__chart-wrap">
+      <div class="time-story__toolbar">
+        <label class="time-story__year-picker">
+          <span>Year</span>
+          <select
+            [value]="yearFilter === 'all' ? 'all' : '' + yearFilter"
+            (change)="onYearPickerChange($event)"
+            [attr.aria-label]="'Select year. Currently ' + yearFilterLabel()">
+            <option value="all">{{ allYearsLabel }}</option>
+            <option *ngFor="let bar of result.years" [value]="bar.year">{{ bar.year }}</option>
+          </select>
+        </label>
+        <button type="button" class="time-story__reset" (click)="resetYearFilter()" [disabled]="yearFilter === 'all'">{{ allYearsLabel }}</button>
+        <span class="time-story__year-status">Showing {{ yearFilterLabel() }}</span>
+      </div>
+
+      <div class="time-story__chart time-story__chart--desktop" role="list" [attr.aria-label]="chartAriaLabel">
+        <div class="time-story__col" *ngFor="let bar of result.years" role="listitem" [class.time-story__col--selected]="isYearSelected(bar)">
+          <div class="time-story__col-total" [attr.title]="formatTime(bar.seconds)">{{ formatTime(bar.seconds) }}</div>
+          <div class="time-story__stack" [style.height.%]="barHeightPercent(bar)">
+            <button
+              *ngFor="let part of bar.groups"
+              type="button"
+              class="time-story__seg"
+              [class.time-story__seg--selected]="isSelected(bar, part.group)"
+              [style.flex-grow]="part.seconds"
+              [style.background]="groupColor(part.group)"
+              [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
+              [attr.aria-pressed]="isSelected(bar, part.group)"
+              (click)="selectSegment(bar, part.group, part.seconds, part.games)">
+            </button>
+          </div>
+          <button
+            type="button"
+            class="time-story__year"
+            [class.time-story__year--selected]="isYearSelected(bar)"
+            [attr.aria-pressed]="isYearSelected(bar)"
+            [attr.aria-label]="'Show ' + bar.year"
+            (click)="selectYear(bar.year)">{{ bar.year }}</button>
+        </div>
+      </div>
+
+      <div *ngIf="phoneBar as bar" class="time-story__chart time-story__chart--phone" role="list" [attr.aria-label]="bar.year + ' time in activities'">
+        <div class="time-story__col time-story__col--selected" role="listitem">
+          <div class="time-story__col-total" [attr.title]="formatTime(bar.seconds)">{{ formatTime(bar.seconds) }}</div>
+          <div class="time-story__stack" [style.height.%]="100">
+            <button
+              *ngFor="let part of bar.groups"
+              type="button"
+              class="time-story__seg"
+              [class.time-story__seg--selected]="isSelected(bar, part.group)"
+              [style.flex-grow]="part.seconds"
+              [style.background]="groupColor(part.group)"
+              [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
+              [attr.aria-pressed]="isSelected(bar, part.group)"
+              (click)="selectSegment(bar, part.group, part.seconds, part.games)">
+            </button>
+          </div>
+          <div class="time-story__year time-story__year--selected">{{ bar.year }}</div>
+        </div>
+      </div>
+      <p *ngIf="yearFilter === 'all'" class="time-story__phone-all">Pick a year to see its bar. The table below shows all years.</p>
+
+      <div class="time-story__detail" role="status">
+        <ng-container *ngIf="selection; else detailPromptTpl">
+          <div class="time-story__detail-year">{{ yearFilterLabel() }} · {{ groupLabel(selection.group) }}</div>
+          <div class="time-story__detail-stat">{{ formatTime(selection.seconds) }}</div>
+          <div class="time-story__detail-meta">{{ selection.percent | number:'1.0-1' }}% · {{ selection.games | number }} {{ selection.games === 1 ? 'game' : 'games' }}</div>
+          <button
+            type="button"
+            class="time-story__detail-action"
+            (click)="viewSelectedActivities()">
+            {{ viewActivitiesLabel }}
+          </button>
+        </ng-container>
+        <ng-template #detailPromptTpl>
+          <div class="time-story__detail-prompt">{{ detailPrompt }}</div>
+        </ng-template>
+      </div>
+
+    </div>
+
+    <ul *ngIf="!results && !resultsLoading && result && result.years.length > 0" class="time-story__legend">
+      <li *ngFor="let id of legendGroups()">
+        <span class="time-story__swatch" [style.background]="groupColor(id)"></span>
+        {{ groupLabel(id) }}
+      </li>
+    </ul>
+  </section>
+</div>

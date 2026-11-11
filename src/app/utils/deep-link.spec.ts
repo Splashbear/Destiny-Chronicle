@@ -48,6 +48,13 @@ describe('parseDeepLink', () => {
   it('accepts array-valued params (Angular repeated keys)', () => {
     expect(parseDeepLink({ a: ['3-1', '3-2'] })?.accounts.length).toBe(1);
   });
+
+  it('maps hours / timestory tab aliases to the combined Breakdown tab', () => {
+    expect(parseDeepLink({ a: '2-4611686018465122437-d2', tab: 'hours' })?.tab).toBe('breakdown');
+    expect(parseDeepLink({ a: '2-4611686018465122437-d2', tab: 'time-story' })?.tab).toBe('breakdown');
+    expect(parseDeepLink({ a: '2-4611686018465122437-d2', tab: 'timeStory' })?.tab).toBe('breakdown');
+    expect(parseDeepLinkTab('timestory')).toBe('breakdown');
+  });
 });
 
 describe('parseDeepLinkTab', () => {

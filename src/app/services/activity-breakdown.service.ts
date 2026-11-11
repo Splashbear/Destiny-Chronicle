@@ -10,6 +10,9 @@ import {
   type TrialsTeammateRow,
 } from '../utils/trials-breakdown';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
+import { timeStoryGroupFromSection, type TimeStoryGroupId } from '../utils/time-story-groups';
+import type { UnifiedBreakdownSource } from '../utils/unified-breakdown-year';
+import { timeStorySourceSeconds, type TimeStorySourceRow } from '../utils/time-story-source';
 
 /** One membership + game scope for Breakdown (avoids D1/D2 bleed on shared mids). */
 export interface BreakdownMembershipScope {
@@ -61,7 +64,7 @@ const D1_MODE_DISPLAY_OVERRIDES: Record<number, string> = {
 };
 
 const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
-  0: 'None',
+  0: 'Unknown activity',
   2: 'Story',
   3: 'Strike',
   4: 'Raid',
@@ -162,7 +165,7 @@ const MODE_ORDER: Record<number, number> = {
   87: 5,  // LostSector
   92: 6, 85: 6, 83: 6, 77: 6, 78: 6, 86: 6,  // Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive
   63: 7, 75: 7, 76: 7, 67: 7, 33: 7,  // D2 Gambit family (override also catches D2 mode 0 Emerald Coast)
-  0: 11,  // None — D1 mode-0 rows must not share Gambit order; D2 mode 0 uses gambit override
+  0: 11,  // Unknown activity — D1 mode-0 rows must not share Gambit order; D2 mode 0 uses gambit override
   93: 71,   // Renegade Activities (own category, between Gambit and PvP)
   5: 8, 10: 8, 12: 8, 14: 7.5, 15: 8, 19: 8, 84: 7.5, 37: 8, 38: 8, 39: 7.5, 41: 7.5, 42: 7.5, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP; Trials modes ordered with Trials tile
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
@@ -481,6 +484,15 @@ export class ActivityBreakdownService {
       return cached;
     }
 
+    const allActivities = await this.loadScopedActivities(scopes);
+    return this.aggregateActivityCounts(allActivities, cacheKey, identityByMembership);
+  }
+
+  /**
+   * Raw activity rows for explicit membership+game scopes (D1/D2 never bleed).
+   * Shared by Activity Breakdown and "Your Destiny, by the hours".
+   */
+  async loadScopedActivities(scopes: BreakdownMembershipScope[]): Promise<StoredActivity[]> {
     const allActivities: StoredActivity[] = [];
     for (const scope of scopes) {
       let list = await this.activityDb.getActivitiesForMembershipAndGame(scope.membershipId, scope.game);
@@ -503,8 +515,140 @@ export class ActivityBreakdownService {
         allActivities.push({ ...a, game: scope.game });
       }
     }
+    return allActivities;
+  }
 
-    return this.aggregateActivityCounts(allActivities, cacheKey, identityByMembership);
+  /** Breakdown section key (override or mode-N) for a count row. */
+  sectionKeyForRow(row: ActivityCountRow): string {
+    return this.getSectionOverride(row) ?? `mode-${row.mode ?? 0}`;
+  }
+
+  timeStoryGroupForRow(row: ActivityCountRow): TimeStoryGroupId {
+    return timeStoryGroupFromSection(this.sectionKeyForRow(row), row.mode ?? 0);
+  }
+
+  /**
+   * Classify one stored/history activity with the same rules as Activity Breakdown.
+   * Returns null for excluded encounter nodes so both views skip them.
+   */
+  timeStoryGroupForActivity(activity: StoredActivity): TimeStoryGroupId | null {
+    const row = this.countRowStubForActivity(activity);
+    if (!row) return null;
+    return this.timeStoryGroupForRow(row);
+  }
+
+  /** Visible Breakdown section label (no game suffix). */
+  labelForSectionKey(sectionKey: string, game?: 'D1' | 'D2'): string {
+    if (sectionKey in SECTION_OVERRIDE_LABELS) return SECTION_OVERRIDE_LABELS[sectionKey as SectionOverrideKey];
+    const mode = sectionKey.startsWith('mode-') ? parseInt(sectionKey.slice(5), 10) : NaN;
+    if (Number.isFinite(mode)) return this.modeToLabel(mode, game);
+    return sectionKey;
+  }
+
+  sectionOrder(sectionKey: string): number {
+    const mode = sectionKey.startsWith('mode-') ? parseInt(sectionKey.slice(5), 10) : undefined;
+    return this.getSectionOrder(sectionKey, Number.isFinite(mode as number) ? (mode as number) : undefined);
+  }
+
+  /**
+   * Classify a lean history row with the same section rules and names as the
+   * detailed Activity Breakdown table.
+   */
+  describeLeanRow(row: TimeStorySourceRow): UnifiedBreakdownSource | null {
+    const hash = row.activityHash;
+    const stub = this.countRowStubForActivity({
+      membershipId: row.membershipId,
+      game: row.game,
+      period: row.period,
+      activityDetails: {
+        instanceId: row.instanceId,
+        referenceId: hash != null && String(hash) !== '' ? String(hash) : undefined,
+        mode: row.mode,
+      },
+    } as StoredActivity);
+    if (!stub) return null;
+    const sectionKey = this.sectionKeyForRow(stub);
+    const seconds = timeStorySourceSeconds(row);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+    return {
+      instanceId: row.instanceId,
+      period: row.period,
+      membershipId: row.membershipId,
+      game: stub.game,
+      sectionKey,
+      sectionLabel: this.labelForSectionKey(sectionKey, stub.game),
+      referenceId: stub.referenceId,
+      baseName: stub.baseName,
+      variantName: stub.variantName,
+      mode: stub.mode,
+      seconds,
+      completed: row.completed === 1,
+    };
+  }
+
+  private namesForReference(referenceId: string, game: 'D1' | 'D2'): { baseName: string; variantName: string } {
+    const isD1 = game === 'D1';
+    const name = this.manifest.getActivityName(referenceId, isD1);
+    if (isD1) {
+      const d1Family = ActivityDbService.getD1FamilyName(referenceId);
+      if (d1Family) {
+        const full = name || d1Family;
+        const variantName = full === d1Family ? '' : full.replace(d1Family, '').replace(/^[:\s-]+/, '').trim();
+        return { baseName: d1Family, variantName };
+      }
+      return { baseName: name || `Unknown (${referenceId})`, variantName: '' };
+    }
+    const baseName = this.manifest.getActivityFamilyName(referenceId) || name || `Unknown (${referenceId})`;
+    const fullName = name || baseName;
+    if (fullName === baseName) return { baseName, variantName: '' };
+    let v = fullName.replace(baseName, '').trim();
+    if (v.startsWith(':')) v = v.slice(1).trim();
+    return { baseName, variantName: v || '' };
+  }
+
+  /** Build the fields getSectionOverride needs from a stored activity. */
+  private countRowStubForActivity(a: StoredActivity): ActivityCountRow | null {
+    const refId = a.activityDetails?.referenceId;
+    if (refId == null || refId === '') return null;
+    const game: 'D1' | 'D2' = a.game || 'D2';
+    const details = a.activityDetails as {
+      mode?: number;
+      modes?: number[];
+      directorActivityHash?: string | number;
+      referenceId?: string | number;
+      activityTypeHash?: string | number;
+    };
+    const rawMode = srlGroupingMode(a, game) ?? details?.mode ?? 0;
+    const classified = classifyPvp({
+      game,
+      modes: details?.modes ?? (a as { modes?: number[] }).modes,
+      mode: rawMode,
+      directorActivityHash: details?.directorActivityHash,
+      referenceId: refId,
+      activityTypeHash: details?.activityTypeHash,
+    });
+    let effectiveMode = rawMode;
+    if (classified.bucket === 'trials-nine') effectiveMode = 39;
+    else if (classified.bucket === 'trials-d1') effectiveMode = 14;
+    else if (classified.bucket === 'trials-too' || classified.bucket === 'trials-freelance') effectiveMode = 84;
+    else if (rawMode === 94 || rawMode === 29) effectiveMode = rawMode;
+
+    const isD1 = game === 'D1';
+    const referenceId = String(refId);
+    const { baseName, variantName } = this.namesForReference(referenceId, game);
+    if (EXCLUDE_FROM_BREAKDOWN.has(baseName.toLowerCase().trim())) return null;
+
+    return {
+      referenceId,
+      game,
+      baseName,
+      variantName,
+      mode: effectiveMode,
+      runs: 1,
+      clears: 0,
+      fails: 0,
+      timeSeconds: 0,
+    };
   }
 
   /**
@@ -991,6 +1135,7 @@ export class ActivityBreakdownService {
   }
 
   private modeToLabel(mode: number, game?: 'D1' | 'D2'): string {
+    if (mode === 0) return 'Unknown activity';
     if (game === 'D1' && mode === 82) return 'Unknown'; // Dungeons do not exist in D1
     if (game === 'D1' && D1_MODE_DISPLAY_OVERRIDES[mode]) return D1_MODE_DISPLAY_OVERRIDES[mode];
     const name = DESTINY_ACTIVITY_MODE_NAMES[mode];

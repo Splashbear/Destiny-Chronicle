@@ -564,6 +564,9 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
   }
 
   onActivityTypeChange(event: Event): void {
+    this.timeStoryGroupFilter = null;
+    this.timeStoryYearFilter = null;
+    this.timeStoryDateBeforeFilter = null;
     this.cdr.detectChanges();
   }
 
@@ -606,9 +609,10 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
     membershipId: string,
     characterIds: string[],
     month: number,
-    day: number
+    day: number,
+    year?: number
   ): Promise<StoredActivity[]> {
-    const rows = await this.activityDb.getActivitiesByDateForMembership(membershipId, month, day);
+    const rows = await this.activityDb.getActivitiesByDateForMembership(membershipId, month, day, year);
     const wanted = new Set(characterIds);
     return rows.filter(row => wanted.has(row.characterId));
   }

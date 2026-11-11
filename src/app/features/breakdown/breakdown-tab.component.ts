@@ -1,6 +1,4 @@
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { BreakdownChartComponent } from './breakdown-chart.component';
 import { ChangeDetectionStrategy, Component, Directive, inject, Input, OnInit } from '@angular/core';
 import { DestinyLoaderComponent } from '../../components/destiny-loader/destiny-loader.component';
 import { environment } from '../../../environments/environment';
@@ -34,7 +32,7 @@ export class BreakdownCreateProbe implements OnInit {
 @Component({
   selector: 'app-breakdown-tab',
   standalone: true,
-  imports: [CommonModule, FormsModule, BreakdownChartComponent, DestinyLoaderComponent, BreakdownCreateProbe, EmptyStateComponent],
+  imports: [CommonModule, DestinyLoaderComponent, BreakdownCreateProbe, EmptyStateComponent],
   templateUrl: './breakdown-tab.component.html',
   styleUrls: ['../../components/player-search/player-search-tab-shared.scss'],
   changeDetection: ChangeDetectionStrategy.Default,

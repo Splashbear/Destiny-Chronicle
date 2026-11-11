@@ -8,7 +8,8 @@ export type PlayerSearchTab =
   | 'accomplishments'
   | 'breakdown'
   | 'heatmap'
-  | 'playedWith';
+  | 'playedWith'
+  | 'timeStory';
 
 /** Host for tab-change side effects (CODE_CLEANUP_SPEC). */
 export interface PlayerSearchTabChangeHost {
@@ -34,6 +35,9 @@ export class PlayerSearchTabChangeService {
     host: PlayerSearchTabChangeHost,
     tab: PlayerSearchTab
   ): Promise<void> {
+    if (tab === 'timeStory') {
+      tab = 'breakdown';
+    }
     host.setActiveTab(tab);
     host.detectChanges();
     // MOBILE_SPEC bug 3: keep tab bar in view; don't jump to bottom of heatmap.
