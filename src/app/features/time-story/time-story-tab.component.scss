@@ -142,7 +142,8 @@
 }
 
 .time-story__seg:hover,
-.time-story__seg:focus-visible {
+.time-story__seg:focus-visible,
+.time-story__seg--selected {
   outline: 2px solid #ede6da;
   outline-offset: -2px;
   filter: brightness(1.12);
@@ -156,7 +157,12 @@
   font-weight: 600;
 }
 
-.time-story__tip {
+.time-story__detail {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 7.5rem;
   margin-top: 0.75rem;
   padding: 0.65rem 0.8rem;
   border: 1px solid rgba(255, 220, 160, 0.16);
@@ -165,23 +171,42 @@
   max-width: 22rem;
 }
 
-.time-story__tip-year {
+.time-story__detail-year {
   color: var(--destiny-gold-bright, #e8c36a);
   font-weight: 600;
 }
 
-.time-story__tip-stat {
+.time-story__detail-stat {
   color: #ede6da;
   font-variant-numeric: tabular-nums;
   font-size: 1.05rem;
   font-weight: 700;
 }
 
-.time-story__tip-meta,
-.time-story__tip-hint {
+.time-story__detail-meta,
+.time-story__detail-prompt {
   color: #b8a890;
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+.time-story__detail-action {
+  align-self: flex-start;
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid rgba(232, 195, 106, 0.45);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--destiny-gold-bright, #e8c36a);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.time-story__detail-action:hover,
+.time-story__detail-action:focus-visible {
+  background: rgba(232, 195, 106, 0.12);
+  outline: 2px solid #ede6da;
+  outline-offset: 1px;
 }
 
 .time-story__legend {

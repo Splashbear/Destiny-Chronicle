@@ -23,10 +23,12 @@ import {
 } from '../../utils/time-story-groups';
 import {
   TIME_STORY_CHART_ARIA_LABEL,
+  TIME_STORY_DETAIL_PROMPT,
   TIME_STORY_LABEL,
   TIME_STORY_LABEL_TOOLTIP,
   TIME_STORY_MEASUREMENT_NOTE,
   TIME_STORY_TITLE,
+  TIME_STORY_VIEW_ACTIVITIES,
 } from '../../utils/time-story-copy';
 
 export interface TimeStoryAccountChip {
@@ -34,7 +36,7 @@ export interface TimeStoryAccountChip {
   game: 'D1' | 'D2';
 }
 
-interface TimeStoryTooltip {
+interface TimeStorySelection {
   year: number;
   group: TimeStoryGroupId;
   seconds: number;
@@ -65,7 +67,7 @@ export class TimeStoryTabComponent implements OnChanges {
 
   loading = false;
   result: TimeStoryByYearResult | null = null;
-  tooltip: TimeStoryTooltip | null = null;
+  selection: TimeStorySelection | null = null;
   readonly groupIds = TIME_STORY_GROUP_IDS;
   readonly labels = TIME_STORY_GROUP_LABELS;
   readonly colors = TIME_STORY_GROUP_COLORS;
@@ -76,6 +78,8 @@ export class TimeStoryTabComponent implements OnChanges {
   readonly labelTooltip = TIME_STORY_LABEL_TOOLTIP;
   readonly measurementNote = TIME_STORY_MEASUREMENT_NOTE;
   readonly chartAriaLabel = TIME_STORY_CHART_ARIA_LABEL;
+  readonly detailPrompt = TIME_STORY_DETAIL_PROMPT;
+  readonly viewActivitiesLabel = TIME_STORY_VIEW_ACTIVITIES;
 
   private loadGen = 0;
   private reloadInFlight = false;
@@ -91,6 +95,7 @@ export class TimeStoryTabComponent implements OnChanges {
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
+      this.selection = null;
       this.loading = false;
       this.lastScopeKey = '';
       this.lastIdentityKey = '';
@@ -156,8 +161,8 @@ export class TimeStoryTabComponent implements OnChanges {
     return `${bar.year} ${TIME_STORY_GROUP_LABELS[group]}: ${hours}, ${pct}%, ${games} ${games === 1 ? 'game' : 'games'}`;
   }
 
-  showTip(bar: TimeStoryYearBar, group: TimeStoryGroupId, seconds: number, games: number): void {
-    this.tooltip = {
+  selectSegment(bar: TimeStoryYearBar, group: TimeStoryGroupId, seconds: number, games: number): void {
+    this.selection = {
       year: bar.year,
       group,
       seconds,
@@ -167,13 +172,18 @@ export class TimeStoryTabComponent implements OnChanges {
     this.cdr.markForCheck();
   }
 
-  hideTip(): void {
-    this.tooltip = null;
-    this.cdr.markForCheck();
+  /** Hover/focus leave must not collapse the details panel or clear the selection. */
+  onSegmentLeave(): void {
+    // Intentionally keep selection so the reserved card does not shift layout.
   }
 
-  onSegmentActivate(bar: TimeStoryYearBar, group: TimeStoryGroupId): void {
-    this.openGroup.emit({ group, year: bar.year });
+  isSelected(bar: TimeStoryYearBar, group: TimeStoryGroupId): boolean {
+    return this.selection?.year === bar.year && this.selection?.group === group;
+  }
+
+  viewSelectedActivities(): void {
+    if (!this.selection) return;
+    this.openGroup.emit({ group: this.selection.group, year: this.selection.year });
   }
 
   private async reload(): Promise<void> {
@@ -181,6 +191,7 @@ export class TimeStoryTabComponent implements OnChanges {
     this.reloadInFlight = true;
     if (!this.hasSelectedPlayers || this.scopes.length === 0) {
       this.result = null;
+      this.selection = null;
       this.loading = false;
       this.reloadInFlight = false;
       this.cdr.markForCheck();
@@ -194,10 +205,12 @@ export class TimeStoryTabComponent implements OnChanges {
       const result = await this.timeStory.getYearBars(this.scopes, this.identityByMembership, timeZone);
       if (gen !== this.loadGen) return;
       this.result = result;
+      this.syncSelectionToResult(result);
     } catch (err) {
       if (gen !== this.loadGen) return;
       console.error('Time story year bars failed', err);
       this.result = { years: [], totalSeconds: 0, totalGames: 0 };
+      this.selection = null;
     } finally {
       if (gen === this.loadGen) {
         this.loading = false;
@@ -205,5 +218,40 @@ export class TimeStoryTabComponent implements OnChanges {
         this.cdr.markForCheck();
       }
     }
+  }
+
+  private syncSelectionToResult(result: TimeStoryByYearResult): void {
+    if (!result.years.length) {
+      this.selection = null;
+      return;
+    }
+    if (this.selection) {
+      const year = result.years.find(bar => bar.year === this.selection!.year);
+      const part = year?.groups.find(group => group.group === this.selection!.group);
+      if (year && part) {
+        this.selection = {
+          year: year.year,
+          group: part.group,
+          seconds: part.seconds,
+          games: part.games,
+          percent: groupSharePercent(part.seconds, year.seconds),
+        };
+        return;
+      }
+    }
+    this.selection = this.defaultSelection(result);
+  }
+
+  private defaultSelection(result: TimeStoryByYearResult): TimeStorySelection | null {
+    const year = result.years[0];
+    if (!year?.groups.length) return null;
+    const part = year.groups.reduce((best, group) => (group.seconds > best.seconds ? group : best), year.groups[0]);
+    return {
+      year: year.year,
+      group: part.group,
+      seconds: part.seconds,
+      games: part.games,
+      percent: groupSharePercent(part.seconds, year.seconds),
+    };
   }
 }

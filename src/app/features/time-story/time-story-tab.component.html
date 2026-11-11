@@ -40,25 +40,36 @@
               *ngFor="let part of bar.groups"
               type="button"
               class="time-story__seg"
+              [class.time-story__seg--selected]="isSelected(bar, part.group)"
               [style.flex-grow]="part.seconds"
               [style.background]="colors[part.group]"
               [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
-              (mouseenter)="showTip(bar, part.group, part.seconds, part.games)"
-              (mouseleave)="hideTip()"
-              (focus)="showTip(bar, part.group, part.seconds, part.games)"
-              (blur)="hideTip()"
-              (click)="onSegmentActivate(bar, part.group)">
+              [attr.aria-pressed]="isSelected(bar, part.group)"
+              (mouseenter)="selectSegment(bar, part.group, part.seconds, part.games)"
+              (mouseleave)="onSegmentLeave()"
+              (focus)="selectSegment(bar, part.group, part.seconds, part.games)"
+              (click)="selectSegment(bar, part.group, part.seconds, part.games)">
             </button>
           </div>
           <div class="time-story__year">{{ bar.year }}</div>
         </div>
       </div>
 
-      <div *ngIf="tooltip" class="time-story__tip" role="status">
-        <div class="time-story__tip-year">{{ tooltip.year }} · {{ labels[tooltip.group] }}</div>
-        <div class="time-story__tip-stat">{{ formatTime(tooltip.seconds) }}</div>
-        <div class="time-story__tip-meta">{{ tooltip.percent | number:'1.0-1' }}% · {{ tooltip.games | number }} {{ tooltip.games === 1 ? 'game' : 'games' }}</div>
-        <div class="time-story__tip-hint">Opens Activities filtered to this group</div>
+      <div class="time-story__detail" role="status">
+        <ng-container *ngIf="selection; else detailPromptTpl">
+          <div class="time-story__detail-year">{{ selection.year }} · {{ labels[selection.group] }}</div>
+          <div class="time-story__detail-stat">{{ formatTime(selection.seconds) }}</div>
+          <div class="time-story__detail-meta">{{ selection.percent | number:'1.0-1' }}% · {{ selection.games | number }} {{ selection.games === 1 ? 'game' : 'games' }}</div>
+          <button
+            type="button"
+            class="time-story__detail-action"
+            (click)="viewSelectedActivities()">
+            {{ viewActivitiesLabel }}
+          </button>
+        </ng-container>
+        <ng-template #detailPromptTpl>
+          <div class="time-story__detail-prompt">{{ detailPrompt }}</div>
+        </ng-template>
       </div>
     </div>
 
