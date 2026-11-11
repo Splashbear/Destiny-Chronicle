@@ -12,7 +12,8 @@ export interface LeanActivity {
   membership_type: number;
   display_name: string;
   character_id: string;
-  completed: boolean;
+  /** null when the source did not supply a completion flag. Never invent false. */
+  completed: boolean | null;
   deaths: number;
   kills: number;
   assists: number;
@@ -75,7 +76,7 @@ export interface LightActivityRow {
   membershipId: string;
   membershipType: number;
   characterId: string;
-  /** null when D1 stats are unavailable (never zero-fill). */
+  /** Completion from the source. null only when the source had no flag; not cleared just because combat stats are missing. */
   completed: boolean | null;
   deaths: number | null;
   kills?: number | null;
