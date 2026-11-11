@@ -64,7 +64,7 @@ const D1_MODE_DISPLAY_OVERRIDES: Record<number, string> = {
 };
 
 const DESTINY_ACTIVITY_MODE_NAMES: Record<number, string> = {
-  0: 'None',
+  0: 'Unknown activity',
   2: 'Story',
   3: 'Strike',
   4: 'Raid',
@@ -165,7 +165,7 @@ const MODE_ORDER: Record<number, number> = {
   87: 5,  // LostSector
   92: 6, 85: 6, 83: 6, 77: 6, 78: 6, 86: 6,  // Relic, Dares, Sundial, Menagerie, VexOffensive, Offensive
   63: 7, 75: 7, 76: 7, 67: 7, 33: 7,  // D2 Gambit family (override also catches D2 mode 0 Emerald Coast)
-  0: 11,  // None — D1 mode-0 rows must not share Gambit order; D2 mode 0 uses gambit override
+  0: 11,  // Unknown activity — D1 mode-0 rows must not share Gambit order; D2 mode 0 uses gambit override
   93: 71,   // Renegade Activities (own category, between Gambit and PvP)
   5: 8, 10: 8, 12: 8, 14: 7.5, 15: 8, 19: 8, 84: 7.5, 37: 8, 38: 8, 39: 7.5, 41: 7.5, 42: 7.5, 48: 8, 50: 8, 31: 8, 59: 8, 60: 8, 65: 8, 88: 8, 89: 8,  // PvP; Trials modes ordered with Trials tile
   43: 8, 44: 8, 45: 8, 68: 8, 90: 8, 91: 8,  // Iron Banner PvP
@@ -1135,6 +1135,7 @@ export class ActivityBreakdownService {
   }
 
   private modeToLabel(mode: number, game?: 'D1' | 'D2'): string {
+    if (mode === 0) return 'Unknown activity';
     if (game === 'D1' && mode === 82) return 'Unknown'; // Dungeons do not exist in D1
     if (game === 'D1' && D1_MODE_DISPLAY_OVERRIDES[mode]) return D1_MODE_DISPLAY_OVERRIDES[mode];
     const name = DESTINY_ACTIVITY_MODE_NAMES[mode];

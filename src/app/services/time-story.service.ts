@@ -8,7 +8,10 @@ import { ActivityHistoryLoaderService } from './activity-history-loader.service'
 import { PgcrApiService } from '../core/data/archive-api.service';
 import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
-import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
+import { PGCRCacheService } from './pgcr-cache.service';
+import { d1PgcrCacheKey } from '../utils/pgcr-prune';
+import { backfillD1DurationsFromCache } from '../utils/time-story-d1-duration';
+import { dedupeLinkedSourceRows } from '../utils/time-story-linked-dedupe';
 import {
   leanFromArchiveLight,
   mergeTimeStorySourceRows,
@@ -56,7 +59,8 @@ export class TimeStoryService {
     private breakdown: ActivityBreakdownService,
     private loader: ActivityHistoryLoaderService,
     private archiveApi: PgcrApiService,
-    private manifest: DestinyManifestService
+    private manifest: DestinyManifestService,
+    private pgcrCache: PGCRCacheService
   ) {}
 
   clearUnifiedCache(): void {
@@ -116,7 +120,7 @@ export class TimeStoryService {
     identityByMembership: Record<string, string> | undefined,
     timeZone?: string
   ): string {
-    const scopeKey = scopes.map(s => `${s.game}:${s.membershipId}`).join(',');
+    const scopeKey = scopes.map(s => `${s.game}:${s.membershipId}`).slice().sort().join(',');
     const identityKey = Object.entries(identityByMembership || {})
       .map(([id, ident]) => `${id}=${ident}`)
       .sort()
@@ -193,25 +197,44 @@ export class TimeStoryService {
 
   /**
    * Lean archive list already held by the loader (plus Bungie fill rows),
-   * falling back to the in-memory archive activities cache. Never reads IDB.
+   * falling back to the in-memory archive activities cache. Activity history IDB
+   * is not scanned; missing D1 durations may be filled from the local PGCR cache.
    */
   private async dedupedSourceRows(
     scopes: BreakdownMembershipScope[],
     identityByMembership?: Record<string, string>
   ): Promise<TimeStorySourceRow[]> {
     const sources = await this.collectSourceRows(scopes);
-    const seen = new Set<string>();
-    const rows: TimeStorySourceRow[] = [];
-    for (const row of sources) {
-      const stub = this.stubForDedupeAndGroup(row);
-      const key = breakdownActivityDedupeKey(stub, identityByMembership);
-      if (key) {
-        if (seen.has(key)) continue;
-        seen.add(key);
+    const withDurations = await backfillD1DurationsFromCache(sources, (instanceId, period) =>
+      this.lookupCachedD1Duration(instanceId, period)
+    );
+    return dedupeLinkedSourceRows(withDurations, identityByMembership);
+  }
+
+
+  /** Cache-only D1 duration lookup (no network). Mirrors pre-unified PGCR cache backfill. */
+  private async lookupCachedD1Duration(instanceId: string, period?: string): Promise<number | null> {
+    if (period) {
+      try {
+        const keyed = await this.pgcrCache.getD1PGCR(instanceId, period);
+        if (typeof keyed?.duration === 'number' && Number.isFinite(keyed.duration) && keyed.duration > 0) {
+          return keyed.duration;
+        }
+      } catch {
+        /* cache miss */
       }
-      rows.push(row);
     }
-    return rows;
+    try {
+      const legacy = await this.pgcrCache.getBatch([instanceId, period ? d1PgcrCacheKey(instanceId, period) : instanceId]);
+      for (const value of legacy.values()) {
+        if (typeof value?.duration === 'number' && Number.isFinite(value.duration) && value.duration > 0) {
+          return value.duration;
+        }
+      }
+    } catch {
+      /* cache miss */
+    }
+    return null;
   }
 
   private activityNameForEra(game: 'D1' | 'D2', hash: string): string {

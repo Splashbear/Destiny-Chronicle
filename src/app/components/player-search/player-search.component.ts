@@ -81,6 +81,7 @@ import { StatsService } from '../../services/stats.service';
 import { TitleService } from '../../services/title.service';
 import { SelectedAccountsService } from '../../services/selected-accounts.service';
 import { ExportOptionsDialogComponent } from '../export-options-dialog.component';
+import { TimeStoryService } from '../../services/time-story.service';
 import { ActivityBreakdownService } from '../../services/activity-breakdown.service';
 import { SeasonService } from '../../services/season.service';
 import { PGCRModalService } from '../../services/pgcr-modal.service';
@@ -199,6 +200,7 @@ export class PlayerSearchComponent extends PlayerSearchUiMixin implements OnInit
     private selectedAccounts: SelectedAccountsService,
     private firstActivityService: FirstActivityService,
     private activityBreakdownService: ActivityBreakdownService,
+    private timeStoryService: TimeStoryService,
     private seasonService: SeasonService,
     private pgcrModalService: PGCRModalService,
     public uiI18n: UiI18nService,

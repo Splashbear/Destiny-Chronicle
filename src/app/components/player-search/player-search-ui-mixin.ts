@@ -1257,10 +1257,24 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     const preserve = !!options?.preserveView && (this.activityBreakdownGroups?.length || 0) > 0;
     if (!preserve) {
       this.loadingActivityBreakdown = true;
-      this.cdr.markForCheck();
     }
-    // Combined tab: the yearly Time in activities source fills groups via onUnifiedYearView.
-    // Do not start a second full IDB activity-count scan.
+    // All-years dossier Active time comes from the same lean unified source as
+    // the year chart, even when the Breakdown tab is not open. Do not scan IDB
+    // again, and do not apply a selected-year slice to the dossier total.
+    try {
+      if (this.timeStoryService && this.timeStoryScopes?.length) {
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const view = await this.timeStoryService.getUnifiedView(
+          this.timeStoryScopes,
+          this.getBreakdownIdentityByMembership(),
+          timeZone
+        );
+        this.breakdownActiveTimeSeconds = view.bars.totalSeconds;
+      }
+    } catch (err) {
+      console.error('[ActivityBreakdown] Failed to refresh Active time', err);
+    }
+    this.cdr.markForCheck();
   }
 
 

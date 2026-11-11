@@ -1,7 +1,25 @@
 import '@angular/compiler';
 import { TimeStoryService } from './time-story.service';
 import { leanFromArchiveLight } from '../utils/time-story-source';
+import { filterUnifiedByYear, aggregateUnifiedCountRows, buildUnifiedYearBars } from '../utils/unified-breakdown-year';
 
+
+
+function silentPgcrCache(durations: Record<string, number> = {}) {
+  return {
+    getD1PGCR: async (id: string, period?: string) => {
+      const hit = durations[`${id}|${period || ''}`] ?? durations[id];
+      return hit != null ? { duration: hit } : undefined;
+    },
+    getBatch: async (ids: string[]) => {
+      const map = new Map();
+      for (const id of ids) {
+        if (durations[id] != null) map.set(id, { duration: durations[id] });
+      }
+      return map;
+    },
+  };
+}
 
 function withLeanDescribe(breakdown: { timeStoryGroupForActivity: (...args: any[]) => string | null }) {
   return {
@@ -74,7 +92,7 @@ describe('TimeStoryService.getYearBars', () => {
       getActivityFamilyName: () => 'Loading...',
     };
     const breakdown = withLeanDescribe({ timeStoryGroupForActivity: () => 'raids' as const });
-    const svc = new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any);
+    const svc = new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any, silentPgcrCache() as any);
 
     const result = await svc.getYearBars([{ membershipId: 'mid', game: 'D2' }], {}, 'UTC');
     expect(result.years.map(y => y.year)).toEqual([2023]);
@@ -130,7 +148,7 @@ describe('TimeStoryService.getYearGroupResults', () => {
       timeStoryGroupForActivity: (activity: { activityDetails?: { mode?: number } }) =>
         activity.activityDetails?.mode === 39 ? 'trials' : 'story-patrol-seasonal',
     });
-    const svc = new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any);
+    const svc = new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any, silentPgcrCache() as any);
     const result = await svc.getYearGroupResults(
       [{ membershipId: 'mid', game: 'D2' }],
       {},
@@ -188,7 +206,7 @@ describe('TimeStoryService multi-account scope and dedupe', () => {
       getActivityFamilyName: () => 'Last Wish',
     };
     const breakdown = withLeanDescribe({ timeStoryGroupForActivity: () => 'raids' as const });
-    return new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any);
+    return new TimeStoryService(breakdown as any, loader as any, archiveApi as any, manifest as any, silentPgcrCache() as any);
   }
 
   const identity = { splash: 'D2:splashbear#1078', puddle: 'D2:puddlecubbs#1', splashPs: 'D2:splashbear#1078' };
@@ -214,7 +232,7 @@ describe('TimeStoryService multi-account scope and dedupe', () => {
     expect(wish?.seconds).toBe(4200);
   });
 
-  it('counts a cross-save guardian once and keeps the first selected platform\'s personal time, not the longer one', async () => {
+  it('counts a cross-save guardian once with order-independent totals, preferring the longer verified player time', async () => {
     const xbox = leanRow({ instanceId: 'raid-1', membershipId: 'splash', game: 'D2', timePlayedSeconds: 1800 });
     const steam = leanRow({ instanceId: 'raid-1', membershipId: 'splashPs', game: 'D2', timePlayedSeconds: 2400 });
     const svc = service({ 'splash|D2': [xbox], 'splashPs|D2': [steam] });
@@ -236,10 +254,10 @@ describe('TimeStoryService multi-account scope and dedupe', () => {
     );
     expect(xboxFirst.totalGames).toBe(1);
     expect(steamFirst.totalGames).toBe(1);
-    expect(xboxFirst.totalSeconds).toBe(1800);
+    expect(xboxFirst.totalSeconds).toBe(2400);
     expect(steamFirst.totalSeconds).toBe(2400);
-    expect(xboxFirst.totalSeconds).not.toBe(steamFirst.totalSeconds);
-    expect(xboxFirst.totalSeconds + steamFirst.totalSeconds).not.toBe(1800); // not a sum of both
+    expect(xboxFirst.totalSeconds).toBe(steamFirst.totalSeconds);
+    expect(xboxFirst.totalSeconds + steamFirst.totalSeconds).not.toBe(1800 + 2400); // not a sum of both
   });
 
   it('keeps a D1 account distinct from D2 on the same membership id', async () => {
@@ -265,5 +283,96 @@ describe('TimeStoryService multi-account scope and dedupe', () => {
     expect(bars.totalGames).toBe(2);
     expect(bars.totalSeconds).toBe(1500);
     expect(bars.years.map(y => y.year).sort()).toEqual([2016, 2023]);
+  });
+});
+
+describe('TimeStoryService D1 cache backfill and dossier all-years time', () => {
+  function makeSvc(
+    sources: Record<string, ReturnType<typeof leanFromArchiveLight>[]>,
+    durations: Record<string, number> = {}
+  ) {
+    const loader = {
+      getTimeStorySources: (membershipId: string, game: 'D1' | 'D2') =>
+        sources[`${membershipId}|${game}`] || [],
+    };
+    const archiveApi = { fetchPlayerActivities: async () => { throw new Error('no archive'); } };
+    const manifest = { getActivityName: () => 'Vault', getActivityFamilyName: () => 'Vault' };
+    const breakdown = withLeanDescribe({ timeStoryGroupForActivity: () => 'raids' as const });
+    return new TimeStoryService(
+      breakdown as any,
+      loader as any,
+      archiveApi as any,
+      manifest as any,
+      silentPgcrCache(durations) as any
+    );
+  }
+
+  const missingD1 = leanFromArchiveLight({
+    instanceId: 'd1-1',
+    period: '2016-06-01T12:00:00Z',
+    membershipId: 'ps',
+    characterId: 'c1',
+    game: 'D1',
+    mode: 4,
+    activityHash: 99,
+  })!;
+
+  it('restores a cached D1 duration across bars, table, results, and all-years totals', async () => {
+    const svc = makeSvc({ 'ps|D1': [missingD1] }, { 'd1-1|2016-06-01T12:00:00Z': 4187 });
+    const view = await svc.getUnifiedView([{ membershipId: 'ps', game: 'D1' }], {}, 'UTC');
+    expect(view.bars.totalSeconds).toBe(4187);
+    expect(view.bars.totalGames).toBe(1);
+    expect(view.records[0].seconds).toBe(4187);
+    const rows = svc.countRowsForYear(view.records, 2016, 'UTC');
+    expect(rows[0].timeSeconds).toBe(4187);
+    const results = await svc.getYearGroupResults(
+      [{ membershipId: 'ps', game: 'D1' }],
+      {},
+      2016,
+      'raids',
+      'UTC',
+      view.bars.totalGames
+    );
+    expect(results.totalGames).toBe(1);
+    expect(results.rows[0].seconds).toBe(4187);
+    expect(results.countMatchesChart).toBe(true);
+    const allYears = svc.countRowsForYear(view.records, 'all', 'UTC');
+    expect(allYears.reduce((s, r) => s + r.timeSeconds, 0)).toBe(view.bars.totalSeconds);
+  });
+
+  it('leaves missing D1 duration unknown when the cache has no value', async () => {
+    const svc = makeSvc({ 'ps|D1': [missingD1] });
+    const view = await svc.getUnifiedView([{ membershipId: 'ps', game: 'D1' }], {}, 'UTC');
+    expect(view.bars.totalGames).toBe(1);
+    expect(view.bars.totalSeconds).toBe(0);
+    expect(view.records[0].seconds).toBe(0);
+  });
+
+  it('keeps dossier all-years seconds stable when a year filter is applied, and does not touch headline total time', async () => {
+    const recent = leanFromArchiveLight({
+      instanceId: 'd2-1',
+      period: '2024-02-01T12:00:00Z',
+      membershipId: 'ps',
+      game: 'D2',
+      mode: 4,
+      activityHash: 1,
+      durationSeconds: 1000,
+    })!;
+    const svc = makeSvc({ 'ps|D1': [missingD1], 'ps|D2': [recent] }, { 'd1-1|2016-06-01T12:00:00Z': 4187 });
+    const view = await svc.getUnifiedView(
+      [
+        { membershipId: 'ps', game: 'D1' },
+        { membershipId: 'ps', game: 'D2' },
+      ],
+      {},
+      'UTC'
+    );
+    const dossierActive = view.bars.totalSeconds;
+    const headlineTotalTime = 99999; // accountStats.totalTime stays independent
+    expect(dossierActive).toBe(4187 + 1000);
+    const year2024 = svc.countRowsForYear(view.records, 2024, 'UTC');
+    expect(year2024.reduce((s, r) => s + r.timeSeconds, 0)).toBe(1000);
+    expect(view.bars.totalSeconds).toBe(dossierActive);
+    expect(headlineTotalTime).toBe(99999);
   });
 });
