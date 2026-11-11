@@ -166,23 +166,35 @@ describe('TimeStoryTabComponent details panel selection', () => {
     expect(comp.isSelected(mixedBars.years[0], 'raids')).toBe(false);
   });
 
-  it('updates selection on hover or keyboard focus and keeps it on leave', async () => {
+  it('keeps the default card when another segment is hovered or focused, and only click switches it', async () => {
     await load();
-    const raids2024 = mixedBars.years[0];
-    comp.selectSegment(raids2024, 'raids', 2000, 1);
-    expect(comp.selection?.group).toBe('raids');
-    expect(comp.selection?.percent).toBe(40);
-    expect(comp.selection?.games).toBe(1);
-    comp.onSegmentLeave();
     expect(comp.selection?.year).toBe(2024);
-    expect(comp.selection?.group).toBe('raids');
-    expect(comp.selection?.seconds).toBe(2000);
-    expect(opened).toEqual([]);
-  });
-
-  it('lets a tap or click select a segment without opening the activities filter', async () => {
-    await load();
+    expect(comp.selection?.group).toBe('strikes');
+    const raids2024 = mixedBars.years[0];
     const year2023 = mixedBars.years[1];
+    // Hover or focus alone must not change the pinned details card.
+    expect(comp.selection).toEqual({
+      year: 2024,
+      group: 'strikes',
+      seconds: 3000,
+      games: 3,
+      percent: 60,
+    });
+    expect(comp.isSelected(raids2024, 'raids')).toBe(false);
+    // Click/tap (and native button Enter/Space, which dispatch click) switch the card.
+    comp.selectSegment(raids2024, 'raids', 2000, 1);
+    expect(comp.selection).toEqual({
+      year: 2024,
+      group: 'raids',
+      seconds: 2000,
+      games: 1,
+      percent: 40,
+    });
+    expect(comp.isSelected(raids2024, 'raids')).toBe(true);
+    expect(comp.isSelected(mixedBars.years[0], 'strikes')).toBe(false);
+    // Selection stays pinned while the pointer travels toward View activities.
+    expect(comp.selection?.group).toBe('raids');
+    expect(opened).toEqual([]);
     comp.selectSegment(year2023, 'raids', 4187, 1);
     expect(comp.selection).toEqual({
       year: 2023,
@@ -192,6 +204,28 @@ describe('TimeStoryTabComponent details panel selection', () => {
       percent: 100,
     });
     expect(opened).toEqual([]);
+  });
+
+  it('binds segment selection to click only on native buttons, not hover or focus', () => {
+    const { readFileSync } = require('fs') as { readFileSync: (path: string, enc: string) => string };
+    const { resolve } = require('path') as { resolve: (...parts: string[]) => string };
+    const html = readFileSync(resolve('src/app/features/time-story/time-story-tab.component.html'), 'utf8');
+    const scss = readFileSync(resolve('src/app/features/time-story/time-story-tab.component.scss'), 'utf8');
+    const start = html.indexOf('time-story__chart-wrap');
+    const end = html.indexOf('time-story__detail', start);
+    const chart = html.slice(start, end);
+    expect(chart).toContain('type="button"');
+    expect(chart).toContain('class="time-story__seg"');
+    expect(chart).toContain('(click)="selectSegment(');
+    expect(chart).not.toContain('(mouseenter)');
+    expect(chart).not.toContain('(mouseleave)');
+    expect(chart).not.toContain('(focus)');
+    expect(chart).not.toContain('(pointerenter)');
+    expect(scss).toContain('.time-story__seg:focus-visible');
+    expect(scss).toContain('.time-story__seg--selected');
+    expect(scss).toContain('box-shadow: inset 0 0 0 2px var(--destiny-gold-bright, #e8c36a)');
+    expect(scss).not.toMatch(/:focus-visible[^{]*\.time-story__seg--selected/);
+    expect(scss).not.toMatch(/--selected[^{]*\.time-story__seg:focus-visible/);
   });
 
   it('opens an in-tab year+group results view from View activities without leaving Hours', async () => {

@@ -15,7 +15,7 @@ export const TIME_STORY_MEASUREMENT_NOTE =
 export const TIME_STORY_CHART_ARIA_LABEL =
   'Time in activities by year, using recorded game duration or the player\'s time when Bungie provides it';
 
-export const TIME_STORY_DETAIL_PROMPT = 'Hover or tap a segment to see its time.';
+export const TIME_STORY_DETAIL_PROMPT = 'Select a segment to see its time.';
 
 export const TIME_STORY_VIEW_ACTIVITIES = 'View activities';
 

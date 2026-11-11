@@ -97,9 +97,6 @@
               [style.background]="colors[part.group]"
               [attr.aria-label]="segmentLabel(bar, part.group, part.seconds, part.games)"
               [attr.aria-pressed]="isSelected(bar, part.group)"
-              (mouseenter)="selectSegment(bar, part.group, part.seconds, part.games)"
-              (mouseleave)="onSegmentLeave()"
-              (focus)="selectSegment(bar, part.group, part.seconds, part.games)"
               (click)="selectSegment(bar, part.group, part.seconds, part.games)">
             </button>
           </div>

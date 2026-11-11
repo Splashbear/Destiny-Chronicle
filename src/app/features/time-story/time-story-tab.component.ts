@@ -186,6 +186,7 @@ export class TimeStoryTabComponent implements OnChanges {
     return `${bar.year} ${TIME_STORY_GROUP_LABELS[group]}: ${hours}, ${pct}%, ${games} ${games === 1 ? 'game' : 'games'}`;
   }
 
+  /** Click/tap or native button activation (Enter/Space). Hover and focus alone do not select. */
   selectSegment(bar: TimeStoryYearBar, group: TimeStoryGroupId, seconds: number, games: number): void {
     this.selection = {
       year: bar.year,
@@ -195,11 +196,6 @@ export class TimeStoryTabComponent implements OnChanges {
       percent: groupSharePercent(seconds, bar.seconds),
     };
     this.cdr.markForCheck();
-  }
-
-  /** Hover/focus leave must not collapse the details panel or clear the selection. */
-  onSegmentLeave(): void {
-    // Intentionally keep selection so the reserved card does not shift layout.
   }
 
   isSelected(bar: TimeStoryYearBar, group: TimeStoryGroupId): boolean {
