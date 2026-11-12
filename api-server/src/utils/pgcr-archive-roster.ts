@@ -19,14 +19,11 @@ export interface RosterLeanRow {
 
 /**
  * True when archive rows look like a single-player peel of a multiplayer activity.
- * Full fireteam indexes (gap / D1 act globs) should not hit this after a complete glob.
+ * Applies to lean peels and fireteam-index hits alike — a one-mid raid/dungeon from an
+ * incomplete glob must not be served as a full report (site archive-only would never fall back).
  */
-export function isPartialArchiveRoster(
-  rows: RosterLeanRow[],
-  opts?: { fromFireteamIndex?: boolean }
-): boolean {
+export function isPartialArchiveRoster(rows: RosterLeanRow[]): boolean {
   if (!rows.length) return true;
-  if (opts?.fromFireteamIndex) return false;
   const mids = new Set(
     rows.map(r => String(r.membership_id || '')).filter(id => id && id !== '0')
   );

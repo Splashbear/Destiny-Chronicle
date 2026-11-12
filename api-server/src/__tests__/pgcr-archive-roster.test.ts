@@ -21,10 +21,8 @@ describe('isPartialArchiveRoster', () => {
     ).toBe(false);
   });
 
-  it('trusts fireteam-index rows even with one mid', () => {
-    expect(
-      isPartialArchiveRoster([{ membership_id: '1', mode: 4 }], { fromFireteamIndex: true })
-    ).toBe(false);
+  it('treats one-mid fireteam-index hits as partial too', () => {
+    expect(isPartialArchiveRoster([{ membership_id: '1', mode: 4 }])).toBe(true);
   });
 });
 

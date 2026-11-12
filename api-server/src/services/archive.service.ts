@@ -338,10 +338,13 @@ export class ArchiveService {
 
   /**
    * Get ALL player rows for one game + instance ID.
-   * Searches the lean peel file plus the same fireteam indexes history uses
-   * (D1_INDEX_ROOTS act/mid_bucket=* and GAP_INDEX_* mid_bucket=* when enabled).
-   * Player-only peels of multiplayer activities are treated as a miss (empty array)
-   * so callers fall through to Bungie for a full fireteam.
+   * Prefers the lean peel file (one parquet — cheap on the serialized DuckDB queue),
+   * then the same fireteam indexes history uses (D1_INDEX_ROOTS act/mid_bucket=* and
+   * GAP_INDEX_* mid_bucket=* when enabled). mid_bucket is membership-hashed, so an
+   * instance-only lookup cannot narrow to one bucket without a membership hint.
+   * Player-only peels / incomplete index hits for multiplayer modes are a miss
+   * (empty array) so callers fall through to Bungie. Any failed index root read is
+   * also a miss — never a partial success.
    */
   async getActivitiesByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<LeanActivity[]> {
     if (!this.isAvailable() || !this.db) {
@@ -351,32 +354,43 @@ export class ArchiveService {
     try {
       logger.debug('Reading all activities for instance from archive', { instanceId, game });
 
+      // Lean first: single file, avoids mid_bucket=* hive globs when the peel is complete.
+      const fromLean = await this.queryInstanceFromLeanFile(instanceId, game);
+      if (fromLean.length > 0 && !isPartialArchiveRoster(fromLean)) {
+        logger.debug('Found full fireteam in lean archive', {
+          instanceId,
+          game,
+          entryCount: fromLean.length,
+        });
+        return fromLean;
+      }
+      if (fromLean.length > 0) {
+        logger.info('Archive lean hit is player-only for multiplayer mode; trying fireteam indexes', {
+          instanceId,
+          game,
+          mode: fromLean[0]?.mode,
+          entryCount: fromLean.length,
+        });
+      }
+
       const fromIndex = await this.queryInstanceAcrossFireteamIndexes(instanceId, game);
+      if (fromIndex.length > 0 && isPartialArchiveRoster(fromIndex)) {
+        logger.info('Archive fireteam-index hit is player-only for multiplayer mode; treating as miss', {
+          instanceId,
+          game,
+          mode: fromIndex[0]?.mode,
+          entryCount: fromIndex.length,
+        });
+        return [];
+      }
       if (fromIndex.length > 0) {
         logger.debug('Found instance rows in fireteam index roots', {
           instanceId,
           game,
           entryCount: fromIndex.length,
         });
-        return fromIndex;
       }
-
-      const fromLean = await this.queryInstanceFromLeanFile(instanceId, game);
-      if (fromLean.length > 0 && isPartialArchiveRoster(fromLean)) {
-        logger.info('Archive lean hit is player-only for multiplayer mode; treating as miss', {
-          instanceId,
-          game,
-          mode: fromLean[0]?.mode,
-          entryCount: fromLean.length,
-        });
-        return [];
-      }
-
-      logger.debug('Found activity entries in lean archive', {
-        instanceId,
-        entryCount: fromLean.length,
-      });
-      return fromLean;
+      return fromIndex;
     } catch (error) {
       logger.error('Failed to read activities from archive', { error, instanceId, game });
       throw error;
@@ -394,7 +408,7 @@ export class ArchiveService {
         membership_id, membership_type, display_name, character_id,
         completed, deaths, kills, assists, duration_seconds, standing,
         starting_phase_index, fireteam_id, is_private, dump_id, game
-      FROM read_parquet(?)
+      FROM read_parquet(?, union_by_name = true)
       WHERE CAST(instance_id AS VARCHAR) = ?
         AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
     `;
@@ -404,18 +418,45 @@ export class ArchiveService {
   }
 
   /**
+   * True when a root has at least one mid_bucket=N/instances.parquet (skip empty roots;
+   * empty is not a read failure).
+   */
+  private async rootHasInstanceParquet(root: string, actSubdir: boolean): Promise<boolean> {
+    const pathMod = await import('path');
+    const base = actSubdir ? pathMod.join(root, 'act') : root;
+    try {
+      const ents = await fs.readdir(base, { withFileTypes: true });
+      for (const ent of ents) {
+        if (!ent.isDirectory() || !ent.name.startsWith('mid_bucket=')) continue;
+        try {
+          await fs.access(pathMod.join(base, ent.name, 'instances.parquet'));
+          return true;
+        } catch {
+          /* try next bucket */
+        }
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
+
+  /**
    * Instance-keyed glob across mid_bucket partitions (full fireteam, not one membership).
+   * Any failed root read returns [] (miss) — never a partial multi-root success.
    */
   private async queryInstanceAcrossFireteamIndexes(
     instanceId: string,
     game?: 'D1' | 'D2'
   ): Promise<LeanActivity[]> {
     const pathMod = await import('path');
-    const globs: Array<{ glob: string; forceD2?: boolean; forceD1?: boolean }> = [];
+    const globs: Array<{ glob: string; root: string; forceD2?: boolean; forceD1?: boolean }> = [];
 
     if (game !== 'D2' && this.hasD1Index()) {
       for (const root of filterExistingRoots(this.d1IndexRoots, 'D1 index root')) {
+        if (!(await this.rootHasInstanceParquet(root, true))) continue;
         globs.push({
+          root,
           glob: pathMod.join(root, 'act', 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/'),
           forceD1: true,
         });
@@ -429,7 +470,9 @@ export class ArchiveService {
         ...this.gapExtraRoots,
       ].filter(Boolean);
       for (const root of filterExistingRoots(gapRoots, 'Gap index root')) {
+        if (!(await this.rootHasInstanceParquet(root, false))) continue;
         globs.push({
+          root,
           glob: pathMod.join(root, 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/'),
           forceD2: true,
         });
@@ -461,12 +504,14 @@ export class ArchiveService {
           }
         }
       } catch (err) {
-        logger.warn('Instance fireteam-index glob failed; continuing', {
+        logger.warn('Instance fireteam-index glob failed; treating lookup as miss', {
           instanceId,
           game,
+          root: g.root,
           glob: g.glob,
           error: err instanceof Error ? err.message : err,
         });
+        return [];
       }
     }
     return Array.from(byKey.values());
