@@ -22,8 +22,11 @@ import {
   formatTimeStoryResultTime,
   pageTimeStoryYearGroupResults,
   type TimeStoryYearGroupPage,
+  type TimeStoryYearGroupResultRow,
   type TimeStoryYearGroupResults,
 } from '../../utils/time-story-year-group-results';
+import { TIME_STORY_UNKNOWN_ACTIVITY } from '../../utils/time-story-eras';
+import { PGCRModalService } from '../../services/pgcr-modal.service';
 import {
   TIME_STORY_GROUP_COLORS,
   TIME_STORY_GROUP_IDS,
@@ -126,6 +129,7 @@ export class TimeStoryTabComponent implements OnChanges {
 
   constructor(
     private timeStory: TimeStoryService,
+    private pgcrModal: PGCRModalService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -385,8 +389,31 @@ export class TimeStoryTabComponent implements OnChanges {
     this.cdr.markForCheck();
   }
 
-  activityNameForRow(row: { game?: 'D1' | 'D2'; activityHash?: string | number }): string {
+  activityNameForRow(row: TimeStoryYearGroupResultRow): string {
+    const fromUnify = this.displayNameFromUnify(row);
+    if (fromUnify) return fromUnify;
     return this.timeStory.activityNameForSource(row.game, row.activityHash);
+  }
+
+  openResultPgcr(row: TimeStoryYearGroupResultRow): void {
+    const instanceId = row.instanceId != null ? String(row.instanceId).trim() : '';
+    if (!instanceId) return;
+    this.pgcrModal.openPgcrLite({
+      instanceId,
+      isD1: row.game === 'D1',
+      membershipId: row.membershipId ? String(row.membershipId) : undefined,
+      period: row.period || undefined,
+      activityLabel: this.activityNameForRow(row),
+    });
+  }
+
+  private displayNameFromUnify(row: TimeStoryYearGroupResultRow): string | null {
+    const base = (row.baseName || '').trim();
+    if (!base || base === TIME_STORY_UNKNOWN_ACTIVITY || /^Unknown\b/i.test(base)) {
+      return null;
+    }
+    const variant = (row.variantName || '').trim();
+    return variant ? `${base}: ${variant}` : base;
   }
 
   resultsScopeCaption(): string {

@@ -249,6 +249,60 @@ describe('buildTimeStoryYearGroupResults', () => {
     expect(result.rows.map(r => r.instanceId)).toEqual(['ok']);
     expect(result.countMatchesChart).toBe(true);
   });
+
+  it('maps unified referenceId/baseName when activityHash is absent (Hours drilldown)', () => {
+    const unified = [
+      {
+        period: '2024-12-28T04:18:00Z',
+        group: 'raids' as TimeStoryGroupId,
+        game: 'D2' as const,
+        membershipId: 'mid',
+        instanceId: '15990000001',
+        timeSeconds: 4200,
+        referenceId: '2122313384',
+        baseName: "King's Fall",
+        variantName: 'Normal',
+        mode: 4,
+      },
+    ];
+    const result = buildTimeStoryYearGroupResults(unified, {
+      year: 2024,
+      group: 'raids',
+      timeZone: TZ,
+      classify: a => a.group ?? null,
+      chartGames: 1,
+    });
+    expect(result.totalGames).toBe(1);
+    expect(result.rows[0].activityHash).toBe('2122313384');
+    expect(result.rows[0].baseName).toBe("King's Fall");
+    expect(result.rows[0].variantName).toBe('Normal');
+    expect(result.rows[0].instanceId).toBe('15990000001');
+  });
+
+  it('prefers activityHash over referenceId when both are present', () => {
+    const unified = [
+      {
+        period: '2024-12-28T04:18:00Z',
+        group: 'raids' as TimeStoryGroupId,
+        game: 'D2' as const,
+        membershipId: 'mid',
+        instanceId: 'x',
+        timeSeconds: 600,
+        activityHash: 111,
+        referenceId: 222,
+        baseName: 'Last Wish',
+        mode: 4,
+      },
+    ];
+    const result = buildTimeStoryYearGroupResults(unified, {
+      year: 2024,
+      group: 'raids',
+      timeZone: TZ,
+      classify: a => a.group ?? null,
+    });
+    expect(result.rows[0].activityHash).toBe(111);
+    expect(result.rows[0].baseName).toBe('Last Wish');
+  });
 });
 
 describe('pageTimeStoryYearGroupResults', () => {

@@ -369,6 +369,27 @@
 .time-story__game-name {
   color: #ede6da;
   min-width: 0;
+  text-align: left;
+}
+
+.time-story__game-name--link {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--destiny-gold-bright, #e8c36a);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+  text-align: left;
+}
+
+.time-story__game-name--link:hover,
+.time-story__game-name--link:focus-visible {
+  color: #f5d78a;
+  outline: none;
 }
 
 .time-story__game-meta {
