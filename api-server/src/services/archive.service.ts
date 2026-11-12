@@ -397,17 +397,74 @@ export class ArchiveService {
     }
   }
 
+  /**
+   * DESCRIBE parquet columns (cached). Paths may be a single file or a hive glob.
+   */
+  private async describeParquetColumns(
+    parquetPath: string,
+    opts?: { hive?: boolean }
+  ): Promise<Set<string>> {
+    const cacheKey = `${opts?.hive ? 'hive:' : ''}${parquetPath}`;
+    let availableColumns = this.parquetSchemaCache.get(cacheKey);
+    if (!availableColumns) {
+      const from = opts?.hive
+        ? 'read_parquet(?, hive_partitioning = true, union_by_name = true)'
+        : 'read_parquet(?, union_by_name = true)';
+      const schemaResult = await this.dbAll(`DESCRIBE SELECT * FROM ${from}`, parquetPath);
+      availableColumns = new Set(
+        schemaResult.map((col: any) => String(col.column_name || '').toLowerCase())
+      );
+      this.parquetSchemaCache.set(cacheKey, availableColumns);
+    }
+    return availableColumns;
+  }
+
+  /**
+   * Build a SELECT list matching LeanActivity, defaulting optional columns the file lacks.
+   * Real D1 act roots (d1_final / d1_b2 / d1_b3_hs) have no director_activity_hash.
+   */
+  private buildLeanActivitySelect(availableColumns: Set<string>): string {
+    const has = (col: string) => availableColumns.has(col.toLowerCase());
+    const requiredCols = [
+      'instance_id',
+      'period',
+      'activity_hash',
+      'mode',
+      'membership_id',
+      'character_id',
+      'completed',
+      'deaths',
+      'duration_seconds',
+      'game',
+    ];
+    const optionalCols: Record<string, string> = {
+      director_activity_hash: '0',
+      membership_type: '0',
+      display_name: "''",
+      kills: '0',
+      assists: '0',
+      standing: '0',
+      starting_phase_index: '0',
+      fireteam_id: "''",
+      is_private: 'false',
+      dump_id: "''",
+    };
+    const selectCols = requiredCols.map(col => (has(col) ? col : `NULL AS ${col}`));
+    for (const [col, defaultVal] of Object.entries(optionalCols)) {
+      selectCols.push(has(col) ? col : `${defaultVal} AS ${col}`);
+    }
+    return selectCols.join(', ');
+  }
+
   private async queryInstanceFromLeanFile(
     instanceId: string,
     game?: 'D1' | 'D2'
   ): Promise<LeanActivity[]> {
     if (!this.leanActivitiesPath) return [];
+    const cols = await this.describeParquetColumns(this.leanActivitiesPath);
+    const selectCols = this.buildLeanActivitySelect(cols);
     const sql = `
-      SELECT
-        instance_id, period, activity_hash, director_activity_hash, mode,
-        membership_id, membership_type, display_name, character_id,
-        completed, deaths, kills, assists, duration_seconds, standing,
-        starting_phase_index, fireteam_id, is_private, dump_id, game
+      SELECT ${selectCols}
       FROM read_parquet(?, union_by_name = true)
       WHERE CAST(instance_id AS VARCHAR) = ?
         AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
@@ -418,45 +475,57 @@ export class ArchiveService {
   }
 
   /**
-   * True when a root has at least one mid_bucket=N/instances.parquet (skip empty roots;
-   * empty is not a read failure).
+   * First mid_bucket=N/instances.parquet under a root (skip empty roots; empty is not a failure).
    */
-  private async rootHasInstanceParquet(root: string, actSubdir: boolean): Promise<boolean> {
+  private async findFirstInstanceParquet(
+    root: string,
+    actSubdir: boolean
+  ): Promise<string | null> {
     const pathMod = await import('path');
     const base = actSubdir ? pathMod.join(root, 'act') : root;
     try {
       const ents = await fs.readdir(base, { withFileTypes: true });
       for (const ent of ents) {
         if (!ent.isDirectory() || !ent.name.startsWith('mid_bucket=')) continue;
+        const parquet = pathMod.join(base, ent.name, 'instances.parquet');
         try {
-          await fs.access(pathMod.join(base, ent.name, 'instances.parquet'));
-          return true;
+          await fs.access(parquet);
+          return parquet;
         } catch {
           /* try next bucket */
         }
       }
     } catch {
-      return false;
+      return null;
     }
-    return false;
+    return null;
   }
 
   /**
    * Instance-keyed glob across mid_bucket partitions (full fireteam, not one membership).
-   * Any failed root read returns [] (miss) — never a partial multi-root success.
+   * SELECT list is built from each root's real schema (DESCRIBE). Any failed root read
+   * returns [] (miss) — never a partial multi-root success — and logs a clear root-read error.
    */
   private async queryInstanceAcrossFireteamIndexes(
     instanceId: string,
     game?: 'D1' | 'D2'
   ): Promise<LeanActivity[]> {
     const pathMod = await import('path');
-    const globs: Array<{ glob: string; root: string; forceD2?: boolean; forceD1?: boolean }> = [];
+    const globs: Array<{
+      glob: string;
+      root: string;
+      sampleParquet: string;
+      forceD2?: boolean;
+      forceD1?: boolean;
+    }> = [];
 
     if (game !== 'D2' && this.hasD1Index()) {
       for (const root of filterExistingRoots(this.d1IndexRoots, 'D1 index root')) {
-        if (!(await this.rootHasInstanceParquet(root, true))) continue;
+        const sample = await this.findFirstInstanceParquet(root, true);
+        if (!sample) continue;
         globs.push({
           root,
+          sampleParquet: sample,
           glob: pathMod.join(root, 'act', 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/'),
           forceD1: true,
         });
@@ -470,9 +539,11 @@ export class ArchiveService {
         ...this.gapExtraRoots,
       ].filter(Boolean);
       for (const root of filterExistingRoots(gapRoots, 'Gap index root')) {
-        if (!(await this.rootHasInstanceParquet(root, false))) continue;
+        const sample = await this.findFirstInstanceParquet(root, false);
+        if (!sample) continue;
         globs.push({
           root,
+          sampleParquet: sample,
           glob: pathMod.join(root, 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/'),
           forceD2: true,
         });
@@ -482,12 +553,11 @@ export class ArchiveService {
     const byKey = new Map<string, LeanActivity>();
     for (const g of globs) {
       try {
+        // DESCRIBE a real file in the root (not the glob) so hive partition cols don't confuse cache.
+        const cols = await this.describeParquetColumns(g.sampleParquet);
+        const selectCols = this.buildLeanActivitySelect(cols);
         const sql = `
-          SELECT
-            instance_id, period, activity_hash, director_activity_hash, mode,
-            membership_id, membership_type, display_name, character_id,
-            completed, deaths, kills, assists, duration_seconds, standing,
-            starting_phase_index, fireteam_id, is_private, dump_id, game
+          SELECT ${selectCols}
           FROM read_parquet(?, hive_partitioning = true, union_by_name = true)
           WHERE CAST(instance_id AS VARCHAR) = ?
         `;
@@ -504,12 +574,16 @@ export class ArchiveService {
           }
         }
       } catch (err) {
-        logger.warn('Instance fireteam-index glob failed; treating lookup as miss', {
+        const message = err instanceof Error ? err.message : String(err);
+        const isBinder = /binder error/i.test(message);
+        logger.error('Instance fireteam-index root read error; treating lookup as miss', {
           instanceId,
           game,
           root: g.root,
+          sampleParquet: g.sampleParquet,
           glob: g.glob,
-          error: err instanceof Error ? err.message : err,
+          binderError: isBinder,
+          error: message,
         });
         return [];
       }
