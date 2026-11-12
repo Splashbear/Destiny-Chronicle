@@ -10,6 +10,8 @@ import {
   type TrialsTeammateRow,
 } from '../utils/trials-breakdown';
 import { breakdownActivityDedupeKey } from '../utils/breakdown-account-identity';
+import { preferBreakdownActivityRow } from '../utils/breakdown-prefer-row';
+import { isActivityCompleted, normalizeCompletedFlag } from '../utils/activity-completed';
 import { timeStoryGroupFromSection, type TimeStoryGroupId } from '../utils/time-story-groups';
 import type { UnifiedBreakdownSource } from '../utils/unified-breakdown-year';
 import { timeStorySourceSeconds, type TimeStorySourceRow } from '../utils/time-story-source';
@@ -582,7 +584,7 @@ export class ActivityBreakdownService {
       variantName: stub.variantName,
       mode: stub.mode,
       seconds,
-      completed: row.completed === 1,
+      completed: normalizeCompletedFlag(row.completed) === 1,
     };
   }
 
@@ -675,16 +677,35 @@ export class ActivityBreakdownService {
     // Aggregate per (referenceId, game, effectiveMode). Never merge Trials into Control on the same map.
     const aggByKey = new Map<string, { runs: number; clears: number; timeSeconds: number; mode: number; lastPlayed?: string; lastPlayedInstanceId?: string }>();
     const instanceIdsByKey = new Map<string, string[]>();
-    const seenInstances = new Set<string>();
+    /** First-pass winner per PGCR instance; prefer clear / longer duration over ghost copies. */
+    const chosenByInstance = new Map<string, StoredActivity>();
+    const ordered: StoredActivity[] = [];
 
     for (const a of allActivities) {
       const refId = a.activityDetails?.referenceId;
       if (refId == null || refId === '') continue;
       const dedupeKey = breakdownActivityDedupeKey(a, identityByMembership);
       if (dedupeKey) {
-        if (seenInstances.has(dedupeKey)) continue;
-        seenInstances.add(dedupeKey);
+        const prior = chosenByInstance.get(dedupeKey);
+        if (!prior) {
+          chosenByInstance.set(dedupeKey, a);
+          ordered.push(a);
+        } else {
+          const preferred = preferBreakdownActivityRow(prior, a);
+          if (preferred !== prior) {
+            chosenByInstance.set(dedupeKey, preferred);
+            const at = ordered.indexOf(prior);
+            if (at >= 0) ordered[at] = preferred;
+          }
+        }
+        continue;
       }
+      ordered.push(a);
+    }
+
+    for (const a of ordered) {
+      const refId = a.activityDetails?.referenceId;
+      if (refId == null || refId === '') continue;
       const game: 'D1' | 'D2' = a.game || 'D2';
       const details = a.activityDetails as {
         mode?: number;
@@ -712,8 +733,7 @@ export class ActivityBreakdownService {
       const key = `${refId}|${game}|${effectiveMode}`;
       const existing = aggByKey.get(key) || { runs: 0, clears: 0, timeSeconds: 0, mode: effectiveMode };
       existing.runs += 1;
-      const completed = a.values?.completed?.basic?.value === 1;
-      if (completed) {
+      if (isActivityCompleted(a)) {
         existing.clears += 1;
       }
       const seconds = this.getActivityDurationSeconds(a);

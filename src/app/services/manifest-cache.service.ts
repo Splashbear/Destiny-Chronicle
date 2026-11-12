@@ -55,8 +55,8 @@ export class ManifestCacheService {
         void this.db.entries.delete(hash).catch(() => undefined);
         return null;
       }
+      // Memory hit only — avoid an IndexedDB put on every read (main-thread long tasks).
       mem.timestamp = Date.now();
-      void this.db.entries.put(mem).catch(err => this.onQuotaError('touch', err));
       return mem.data;
     }
 

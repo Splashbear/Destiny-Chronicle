@@ -1,5 +1,5 @@
 /** Default rows per IndexedDB transaction for activity bulk writes. */
-export const ACTIVITY_WRITE_CHUNK_SIZE = 2500;
+export const ACTIVITY_WRITE_CHUNK_SIZE = 4000;
 
 export type BulkPutTable<T> = {
   bulkPut: (items: T[]) => Promise<unknown>;
