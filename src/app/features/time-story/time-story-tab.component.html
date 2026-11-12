@@ -65,7 +65,13 @@
             <ul class="time-story__day-list">
               <li *ngFor="let row of day.rows" class="time-story__game">
                 <span class="time-story__game-date">{{ row.date }} · {{ formatTimeStoryResultTime(row.period, results.timeZone) }}</span>
-                <span class="time-story__game-name">{{ activityNameForRow(row) }}</span>
+                <button
+                  *ngIf="row.instanceId"
+                  type="button"
+                  class="time-story__game-name time-story__game-name--link"
+                  (click)="openResultPgcr(row)"
+                >{{ activityNameForRow(row) }}</button>
+                <span *ngIf="!row.instanceId" class="time-story__game-name">{{ activityNameForRow(row) }}</span>
                 <span class="time-story__game-meta">
                   <span *ngIf="row.game">{{ row.game }}</span>
                   <span>{{ formatTime(row.seconds) }}</span>

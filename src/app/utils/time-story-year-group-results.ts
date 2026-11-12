@@ -13,7 +13,11 @@ export interface TimeStoryYearGroupResultRow {
   game?: 'D1' | 'D2';
   membershipId?: string;
   characterId?: string;
+  /** Activity definition hash (lean `activityHash` or unified `referenceId`). */
   activityHash?: string | number;
+  /** Already-resolved family name from Breakdown unify (prefer for display). */
+  baseName?: string;
+  variantName?: string;
   mode?: number;
   seconds: number;
   group: string;
@@ -55,6 +59,10 @@ export function buildTimeStoryYearGroupResults<
     characterId?: string;
     instanceId?: string;
     activityHash?: string | number;
+    /** Unified Breakdown path uses referenceId instead of activityHash. */
+    referenceId?: string | number;
+    baseName?: string;
+    variantName?: string;
     mode?: number;
     group?: string | null;
   },
@@ -87,6 +95,20 @@ export function buildTimeStoryYearGroupResults<
     if (!Number.isFinite(seconds) || seconds < 0) continue;
     const date = calendarDateInTimeZone(activity.period, opts.timeZone);
     if (!date || !activity.period) continue;
+    const hash =
+      activity.activityHash != null && String(activity.activityHash) !== ''
+        ? activity.activityHash
+        : activity.referenceId != null && String(activity.referenceId) !== ''
+          ? activity.referenceId
+          : undefined;
+    const baseName =
+      typeof activity.baseName === 'string' && activity.baseName.trim()
+        ? activity.baseName.trim()
+        : undefined;
+    const variantName =
+      typeof activity.variantName === 'string' && activity.variantName.trim()
+        ? activity.variantName.trim()
+        : undefined;
     rows.push({
       instanceId: activity.instanceId,
       period: activity.period,
@@ -94,7 +116,9 @@ export function buildTimeStoryYearGroupResults<
       game: activity.game === 'D1' ? 'D1' : activity.game === 'D2' ? 'D2' : undefined,
       membershipId: activity.membershipId,
       characterId: activity.characterId,
-      activityHash: activity.activityHash,
+      activityHash: hash,
+      baseName,
+      variantName,
       mode: activity.mode,
       seconds,
       group,
