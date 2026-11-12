@@ -269,7 +269,7 @@ export function build_asActivityHistoryLoadHost(c: any) {
     noteDcApiFallback: () => c.noteDcApiFallback(),
     clearDcApiFallbackNotice: () => c.clearDcApiFallbackNotice(),
     hasDcApiFallbackNotice: () => c.hasDcApiFallbackNotice(),
-    processAndGroupActivities: () => { void c.processAndGroupActivities(); },
+    scheduleProcessAndGroupWhenIdle: () => c.scheduleProcessAndGroupWhenIdle(),
     noteBungieApiIssue: (g, e) => c.noteBungieApiIssue(g, e),
     refreshFilteredViewIfNeeded: (a) => c.refreshFilteredViewIfNeeded(a),
     tryShowInitialDisplay: (a) => c.tryShowInitialDisplay(a),

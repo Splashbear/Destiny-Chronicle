@@ -84,6 +84,8 @@ export abstract class PlayerSearchState {
   showPlatformPicker: boolean = false;
   crossSavePlayer: PlayerSearchDisplay | null = null;
   loadingActivities: { [key: string]: boolean } = {};
+  /** Coalesces processAndGroup until all per-character history loads finish. */
+  protected _processGroupIdleTimer: ReturnType<typeof setTimeout> | null = null;
   groupedActivitiesByAccount: any[] = [];
   protected displayedAccountGroups = new Map<'D1' | 'D2', { source: any[]; preset: string; accounts: string; groups: any[] }>();
   protected processedActivities: any[] = [];

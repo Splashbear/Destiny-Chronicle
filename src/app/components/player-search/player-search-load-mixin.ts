@@ -28,6 +28,7 @@ import { classNameFromType } from '../../utils/character-class-for-first';
 import { getPlatformName as platformNameFromType } from '../../utils/platform-name';
 import { clearPlayerSpecificCaches as clearPlayerSpecificCachesUtil } from '../../utils/clear-player-caches';
 import { getActivityDurationSeconds as activityDurationSeconds } from '../../utils/activity-duration';
+import { anyCharacterActivityLoading } from '../../utils/schedule-process-and-group';
 import { buildPgcrEnrichHost } from '../../utils/pgcr-enrich-host';
 import { getFilteredActivitiesCached } from '../../utils/get-filtered-activities';
 import {
@@ -305,6 +306,21 @@ export abstract class PlayerSearchLoadMixin extends PlayerSearchActivitiesMixin 
       this.asDateActivityGroupingHost(),
       progressMessage
     );
+  }
+
+  /**
+   * Coalesce date grouping: only run once every per-character history load is idle.
+   * Character keys are `${membershipId}-${characterId}`; date keys are YYYY-MM-DD.
+   */
+  scheduleProcessAndGroupWhenIdle(): void {
+    if (this._processGroupIdleTimer != null) {
+      clearTimeout(this._processGroupIdleTimer);
+    }
+    this._processGroupIdleTimer = setTimeout(() => {
+      this._processGroupIdleTimer = null;
+      if (anyCharacterActivityLoading(this.loadingActivities)) return;
+      void this.processAndGroupActivities();
+    }, 0);
   }
   getActivityDurationSeconds(activity: ActivityHistory): number {
     return activityDurationSeconds(activity);

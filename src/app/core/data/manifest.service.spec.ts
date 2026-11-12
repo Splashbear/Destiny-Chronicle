@@ -10,7 +10,11 @@ function delay(ms: number): Promise<string> {
 function makeService(http: { get: jasmine.Spy }) {
   const d1 = { injectDefinitionsFromApi: () => undefined, getActivityName: () => 'Unknown Activity', getActivityIcon: () => '', findActivityHashesByExactName: () => [] };
   const locale = { culture: 'en', setAvailableCultures: () => undefined };
-  const cache = { manifestComponentKey: () => 'k', getManifestData: () => null, cacheManifestData: () => undefined };
+  const cache = {
+    manifestComponentKey: () => 'k',
+    getManifestData: async () => null,
+    cacheManifestData: async () => undefined,
+  };
   const assetUrl = { resolve: (p: string) => p };
   const archiveRuntime = { isOfflineMode: false, allowLiveApi: true };
   return new DestinyManifestService(http as any, d1 as any, locale as any, cache as any, assetUrl as any, archiveRuntime as any);

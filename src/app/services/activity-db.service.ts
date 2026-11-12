@@ -32,6 +32,7 @@ import { canonicalAccountKey } from '../utils/account-key';
 import { flawlessFromPgcr, soloFromPgcr } from '../utils/solo-from-pgcr';
 import { countClearsByBaseName } from '../utils/family-clear-counts';
 import { baseActivityNameFromVersioned } from '../utils/date-activity-grouping';
+import { chunkedBulkAddAssignIds, chunkedBulkPut } from '../utils/chunked-table-write';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -565,15 +566,15 @@ export class ActivityDbService extends Dexie {
       if (uniqueActivities.length === 0) {
         return;
       }
-      await this.transaction('rw', this.activities, async () => {
-        for (const row of uniqueActivities) {
-          if (row.id != null) {
-            await this.activities.put(row);
-          } else {
-            row.id = await this.activities.add(row) as number;
-          }
-        }
-      });
+      // Chunked bulk writes (own transactions per chunk) keep large syncs responsive.
+      const withIds = uniqueActivities.filter(row => row.id != null);
+      const withoutIds = uniqueActivities.filter(row => row.id == null);
+      if (withIds.length) {
+        await chunkedBulkPut(this.activities, withIds);
+      }
+      if (withoutIds.length) {
+        await chunkedBulkAddAssignIds(this.activities, withoutIds);
+      }
       this.accountWriteIndex.commit(uniqueActivities);
       this.rememberAccountRows(uniqueActivities);
       this.localDayCache.clear();
