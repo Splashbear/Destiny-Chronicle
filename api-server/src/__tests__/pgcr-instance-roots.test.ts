@@ -152,8 +152,7 @@ describe('pgcr instance lookup fixtures', () => {
       (svc as any).archiveAvailable = true;
       (svc as any).bucketHashType = 'VARCHAR';
       (svc as any).instanceLookupTimeoutMs = 10_000;
-      jest.spyOn(svc as any, 'calculateBucket').mockResolvedValue(BUCKET);
-      jest.spyOn(svc as any, 'calculateBucketOnInstanceDb').mockResolvedValue(BUCKET);
+      // Use real hash(mid)%256 — fixtures write act rows into those buckets.
     } catch (error) {
       console.warn('DuckDB not available, skipping instance lookup fixtures', error);
     }
@@ -248,6 +247,28 @@ describe('pgcr instance lookup fixtures', () => {
     expect(rows).toEqual([]);
   });
 
+  test('large D1 roster from played-with misses immediately (no act assemble)', async () => {
+    if (!svc) {
+      console.warn('Skipping test: DuckDB not available');
+      return;
+    }
+    (svc as any).d1InstanceMaxRoster = 2;
+    const spy = jest.spyOn(svc as any, 'instanceDbAll');
+    try {
+      // D1_ONLY_B3 has 3 distinct mids in pw → over max roster of 2
+      const rows = await svc.getActivitiesByInstanceId(D1_ONLY_B3, 'D1');
+      expect(rows).toEqual([]);
+      const actReads = spy.mock.calls.filter(c => {
+        const sql = String(c[0] || '');
+        return sql.includes('read_parquet([') || (sql.includes('/act/') && sql.includes('SELECT'));
+      });
+      expect(actReads.length).toBe(0);
+    } finally {
+      (svc as any).d1InstanceMaxRoster = 48;
+      spy.mockRestore();
+    }
+  });
+
   test('failed root read during instance lookup is a miss (not partial success)', async () => {
     if (!svc) {
       console.warn('Skipping test: DuckDB not available');
@@ -282,11 +303,12 @@ describe('pgcr instance lookup fixtures', () => {
       if (sql.includes('DESCRIBE')) {
         return original(...args);
       }
+      // Batched act read embeds paths in SQL; instanceId is the bound param.
       if (
         sql.includes('SELECT') &&
         !sql.includes('DESCRIBE') &&
-        p.includes('d1_b3') &&
-        (p.includes('/act/') || p.includes('\\act\\'))
+        sql.includes('read_parquet([') &&
+        sql.includes('d1_b3')
       ) {
         throw new Error(
           'Binder Error: Referenced column "director_activity_hash" not found in FROM clause!'
@@ -420,11 +442,26 @@ async function seedAll(
     actRows: string[],
     pwRows: string[]
   ) => {
-    const dir = path.join(root, 'act', `mid_bucket=${BUCKET}`);
-    await fs.mkdir(dir, { recursive: true });
     await db.all(`CREATE OR REPLACE TEMP TABLE d1_act (${d1Cols})`);
     await db.all(`INSERT INTO d1_act VALUES ${actRows.join(',')}`);
-    await db.all(`COPY d1_act TO '${q(path.join(dir, 'instances.parquet'))}' (FORMAT PARQUET)`);
+    // Place each membership's rows in the real hash bucket (matches instance PW→bucket SQL).
+    const midBuckets = await db.all(`
+      SELECT DISTINCT CAST(membership_id AS VARCHAR) AS mid,
+             CAST((hash(CAST(membership_id AS VARCHAR)) % 256) AS INTEGER) AS bucket
+      FROM d1_act
+    `);
+    for (const row of midBuckets) {
+      const mid = String(row.mid);
+      const bucket = Number(row.bucket);
+      const dir = path.join(root, 'act', `mid_bucket=${bucket}`);
+      await fs.mkdir(dir, { recursive: true });
+      const out = path.join(dir, 'instances.parquet');
+      await db.all(
+        `COPY (SELECT * FROM d1_act WHERE CAST(membership_id AS VARCHAR) = ?)
+         TO '${q(out)}' (FORMAT PARQUET)`,
+        mid
+      );
+    }
     await db.all('DROP TABLE d1_act');
 
     // Group PW rows by band

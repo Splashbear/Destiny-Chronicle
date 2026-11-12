@@ -81,10 +81,18 @@ export class ArchiveService {
   /** When false, D1 instance archive lookup always misses (Bungie fallback). */
   private enableD1InstanceArchive =
     (process.env[ENV_KEYS.ENABLE_D1_INSTANCE_ARCHIVE] || 'true').toLowerCase() !== 'false';
+  /** Must stay below the site archive-only timeout (2.5s). */
   private instanceLookupTimeoutMs = Math.max(
     500,
-    parseInt(process.env[ENV_KEYS.PGCR_INSTANCE_LOOKUP_TIMEOUT_MS] || '4000', 10) || 4000
+    parseInt(process.env[ENV_KEYS.PGCR_INSTANCE_LOOKUP_TIMEOUT_MS] || '1800', 10) || 1800
   );
+  /** Large social/patrol rosters are cheaper as a Bungie miss than assembling hundreds of act buckets. */
+  private d1InstanceMaxRoster = Math.max(
+    6,
+    parseInt(process.env[ENV_KEYS.PGCR_D1_INSTANCE_MAX_ROSTER] || '48', 10) || 48
+  );
+  private instanceLookupGeneration = 0;
+  private instanceDbReset: Promise<void> | null = null;
 
   constructor(
     leanActivitiesPath: string,
@@ -167,16 +175,31 @@ export class ArchiveService {
     );
   }
 
-  private async withInstanceLookupTimeout<T>(work: Promise<T>, fallback: T): Promise<T> {
+  private async withInstanceLookupTimeout<T>(work: () => Promise<T>, fallback: T): Promise<T> {
+    const gen = ++this.instanceLookupGeneration;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    const run = (async () => {
+      try {
+        const result = await work();
+        if (timedOut || gen !== this.instanceLookupGeneration) return fallback;
+        return result;
+      } catch (err) {
+        if (timedOut || gen !== this.instanceLookupGeneration) return fallback;
+        throw err;
+      }
+    })();
     try {
       return await Promise.race([
-        work,
+        run,
         new Promise<T>((resolve) => {
           timer = setTimeout(() => {
-            logger.warn('Archive instance lookup timed out; treating as miss', {
+            timedOut = true;
+            this.instanceLookupGeneration++;
+            logger.warn('Archive instance lookup timed out; interrupting and treating as miss', {
               timeoutMs: this.instanceLookupTimeoutMs,
             });
+            void this.resetInstanceDuckDb('timeout');
             resolve(fallback);
           }, this.instanceLookupTimeoutMs);
         }),
@@ -184,6 +207,50 @@ export class ArchiveService {
     } finally {
       if (timer) clearTimeout(timer);
     }
+  }
+
+  /**
+   * Interrupt + recreate the instance DuckDB so a timed-out query cannot keep
+   * holding parquet handles or the instance queue for later lookups.
+   */
+  private async resetInstanceDuckDb(reason: string): Promise<void> {
+    if (this.instanceDbReset) {
+      await this.instanceDbReset;
+      return;
+    }
+    this.instanceDbReset = (async () => {
+      logger.warn('Resetting instance DuckDB after lookup cancel', { reason });
+      try {
+        this.instanceDb?.get_ddb_internal()?.interrupt();
+      } catch {
+        /* interrupt best-effort */
+      }
+      const oldDb = this.instanceDb;
+      this.instanceDb = null;
+      this.enqueueInstanceDb = createAsyncQueue();
+      for (const key of [...this.parquetSchemaCache.keys()]) {
+        if (key.startsWith('instance:')) this.parquetSchemaCache.delete(key);
+      }
+      try {
+        await oldDb?.close();
+      } catch {
+        /* */
+      }
+      try {
+        const { Database } = await import('duckdb-async');
+        this.instanceDb = await Database.create(':memory:');
+        const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
+        const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
+        await this.instanceDbAll(`SET threads=${threads}`);
+        await this.instanceDbAll(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
+      } catch (error) {
+        logger.error('Failed to recreate instance DuckDB after interrupt', { error, reason });
+        this.instanceDb = null;
+      }
+    })().finally(() => {
+      this.instanceDbReset = null;
+    });
+    await this.instanceDbReset;
   }
 
 
@@ -427,7 +494,7 @@ export class ArchiveService {
     }
 
     return this.withInstanceLookupTimeout(
-      this.loadActivitiesByInstanceId(instanceId, game),
+      () => this.loadActivitiesByInstanceId(instanceId, game),
       []
     );
   }
@@ -638,10 +705,9 @@ export class ArchiveService {
 
   /**
    * Fast D1 instance path: only roots whose billion range contains the id, then
-   * one pw/iid_band parquet for memberships, then only those act/mid_bucket files.
-   * No mid_bucket=* hive scan. Rebuild: when a new D1 billion root is appended to
-   * D1_INDEX_ROOTS (with matching pw/), range routing picks it up automatically —
-   * no separate instance index to rebuild.
+   * one pw/iid_band parquet for memberships (+ buckets in one SQL), then a single
+   * batched act read of those mid_bucket files. Large rosters miss immediately.
+   * No mid_bucket=* hive scan. New D1 billions: append root to D1_INDEX_ROOTS — no rebuild.
    */
   private async queryD1InstanceViaPlayedWith(instanceId: string): Promise<LeanActivity[]> {
     const pathMod = await import('path');
@@ -651,6 +717,7 @@ export class ArchiveService {
     const existing = new Set(filterExistingRoots(this.d1IndexRoots, 'D1 index root'));
     const band = d1PlayedWithBand(instanceId);
     const byKey = new Map<string, LeanActivity>();
+    const hashType = this.bucketHashType || 'VARCHAR';
 
     for (const idx of rootIndexes) {
       const root = this.d1IndexRoots[idx];
@@ -669,18 +736,27 @@ export class ArchiveService {
         continue;
       }
 
-      let membershipIds: string[] = [];
+      let midBucketRows: Array<{ membership_id: string; bucket: number }> = [];
       try {
+        // One scan: distinct mids + membership bucket (avoids N hash round-trips).
         const midRows = await this.instanceDbAll(
-          `SELECT DISTINCT CAST(membership_id AS VARCHAR) AS membership_id
+          `SELECT DISTINCT
+             CAST(membership_id AS VARCHAR) AS membership_id,
+             CAST((hash(CAST(membership_id AS ${hashType})) % 256) AS INTEGER) AS bucket
            FROM read_parquet(?)
-           WHERE CAST(instance_id AS VARCHAR) = ?`,
+           WHERE CAST(instance_id AS BIGINT) = CAST(? AS BIGINT)`,
           pwPath.replace(/\\/g, '/'),
           instanceId
         );
-        membershipIds = midRows
-          .map((r: any) => String(r.membership_id || '').trim())
-          .filter((id: string) => id && id !== '0');
+        midBucketRows = midRows
+          .map((r: any) => ({
+            membership_id: String(r.membership_id || '').trim(),
+            bucket: Number(r.bucket),
+          }))
+          .filter(
+            (r: { membership_id: string; bucket: number }) =>
+              r.membership_id && r.membership_id !== '0' && Number.isFinite(r.bucket)
+          );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('Instance fireteam-index root read error; treating lookup as miss', {
@@ -694,22 +770,30 @@ export class ArchiveService {
         return [];
       }
 
-      if (!membershipIds.length) continue;
+      if (!midBucketRows.length) continue;
 
-      const buckets = new Set<number>();
-      for (const mid of membershipIds) {
-        const bucket = await this.calculateBucketOnInstanceDb(mid);
-        if (bucket !== null) buckets.add(bucket);
+      if (midBucketRows.length > this.d1InstanceMaxRoster) {
+        logger.info('D1 instance roster too large for archive assemble; miss to Bungie', {
+          instanceId,
+          root,
+          rosterSize: midBucketRows.length,
+          maxRoster: this.d1InstanceMaxRoster,
+        });
+        return [];
       }
-      if (!buckets.size) continue;
 
+      for (const row of midBucketRows) {
+        this.bucketCache.set(row.membership_id, row.bucket);
+      }
+
+      const buckets = [...new Set(midBucketRows.map(r => r.bucket))];
       let sampleParquet: string | null = null;
       const actPaths: string[] = [];
       for (const bucket of buckets) {
         const actPath = pathMod.join(root, 'act', `mid_bucket=${bucket}`, 'instances.parquet');
         try {
           await fs.access(actPath);
-          actPaths.push(actPath);
+          actPaths.push(actPath.replace(/\\/g, '/'));
           if (!sampleParquet) sampleParquet = actPath;
         } catch {
           /* membership bucket may be sparse */
@@ -720,20 +804,20 @@ export class ArchiveService {
       try {
         const cols = await this.describeParquetColumns(sampleParquet, { via: 'instance' });
         const selectCols = this.buildLeanActivitySelect(cols);
-        for (const actPath of actPaths) {
-          const sql = `
-            SELECT ${selectCols}
-            FROM read_parquet(?, union_by_name = true)
-            WHERE CAST(instance_id AS VARCHAR) = ?
-          `;
-          const rows = await this.instanceDbAll(sql, actPath.replace(/\\/g, '/'), instanceId);
-          for (const row of rows) {
-            const activity = { ...this.mapRowToActivity(row), game: 'D1' as const };
-            const key = this.activityDedupeKey(activity);
-            const prior = byKey.get(key);
-            if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
-              byKey.set(key, activity);
-            }
+        // Single batched read across all needed mid_bucket files (b2 speed).
+        const listSql = actPaths.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+        const sql = `
+          SELECT ${selectCols}
+          FROM read_parquet([${listSql}], union_by_name = true)
+          WHERE CAST(instance_id AS BIGINT) = CAST(? AS BIGINT)
+        `;
+        const rows = await this.instanceDbAll(sql, instanceId);
+        for (const row of rows) {
+          const activity = { ...this.mapRowToActivity(row), game: 'D1' as const };
+          const key = this.activityDedupeKey(activity);
+          const prior = byKey.get(key);
+          if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
+            byKey.set(key, activity);
           }
         }
       } catch (err) {
