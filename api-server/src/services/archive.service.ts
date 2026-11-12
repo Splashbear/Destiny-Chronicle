@@ -2,9 +2,22 @@ import * as fs from 'fs/promises';
 import { Database } from 'duckdb-async';
 import { LeanActivity } from '../types/lean-activity.types';
 import { logger } from '../utils/logger';
-import { activityDedupeKey, d1CoverageCaveat, filterExistingRoots, parseRootList } from '../utils/d1-roots';
+import {
+  activityDedupeKey,
+  d1CoverageCaveat,
+  d1PlayedWithBand,
+  d1RootIndexesForInstanceId,
+  filterExistingRoots,
+  parseRootList,
+} from '../utils/d1-roots';
 import { createAsyncQueue, withDuckDbRetry } from '../utils/duckdb-retry';
 import { sourceCompleted } from '../utils/light-activity-row';
+import {
+  describeConfiguredGameDataRoots,
+  isPartialArchiveRoster,
+  type GameDataRootDescriptor,
+} from '../utils/pgcr-archive-roster';
+import { ENV_KEYS } from '../types/config.types';
 
 /**
  * Tier information for multi-tier archive lookups.
@@ -55,6 +68,8 @@ export class ArchiveService {
   private d1CoverageNote: string;
   private archiveAvailable = false;
   private db: Database | null = null;
+  /** Separate DuckDB for single-game PGCR so long instance scans cannot stall history. */
+  private instanceDb: Database | null = null;
   private bucketHashType: 'BIGINT' | 'VARCHAR' | null = null;
   /** W11: cache DESCRIBE results so each request does not reopen parquet metadata. */
   private parquetSchemaCache = new Map<string, Set<string>>();
@@ -62,6 +77,22 @@ export class ArchiveService {
   private bucketCache = new Map<string, number>();
   /** Serialize DuckDB queries so concurrent requests cannot interleave on one connection. */
   private enqueueDb = createAsyncQueue();
+  private enqueueInstanceDb = createAsyncQueue();
+  /** When false, D1 instance archive lookup always misses (Bungie fallback). */
+  private enableD1InstanceArchive =
+    (process.env[ENV_KEYS.ENABLE_D1_INSTANCE_ARCHIVE] || 'true').toLowerCase() !== 'false';
+  /** Must stay below the site archive-only timeout (2.5s). */
+  private instanceLookupTimeoutMs = Math.max(
+    500,
+    parseInt(process.env[ENV_KEYS.PGCR_INSTANCE_LOOKUP_TIMEOUT_MS] || '1800', 10) || 1800
+  );
+  /** Large social/patrol rosters are cheaper as a Bungie miss than assembling hundreds of act buckets. */
+  private d1InstanceMaxRoster = Math.max(
+    6,
+    parseInt(process.env[ENV_KEYS.PGCR_D1_INSTANCE_MAX_ROSTER] || '48', 10) || 48
+  );
+  private instanceLookupGeneration = 0;
+  private instanceDbReset: Promise<void> | null = null;
 
   constructor(
     leanActivitiesPath: string,
@@ -125,6 +156,103 @@ export class ArchiveService {
     );
   }
 
+  /** Instance-PGCR DuckDB (own queue) — must not share enqueueDb with history. */
+  private async instanceDbAll(sql: string, ...params: unknown[]): Promise<any[]> {
+    return this.enqueueInstanceDb(() =>
+      withDuckDbRetry(
+        async () => {
+          if (!this.instanceDb) {
+            throw new Error('Instance DuckDB is not initialized');
+          }
+          return this.instanceDb.all(sql, ...params);
+        },
+        {
+          onRetry: (error, attempt) => {
+            logger.warn('Retrying instance DuckDB query after transient error', { attempt, error });
+          },
+        }
+      )
+    );
+  }
+
+  private async withInstanceLookupTimeout<T>(work: () => Promise<T>, fallback: T): Promise<T> {
+    const gen = ++this.instanceLookupGeneration;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    const run = (async () => {
+      try {
+        const result = await work();
+        if (timedOut || gen !== this.instanceLookupGeneration) return fallback;
+        return result;
+      } catch (err) {
+        if (timedOut || gen !== this.instanceLookupGeneration) return fallback;
+        throw err;
+      }
+    })();
+    try {
+      return await Promise.race([
+        run,
+        new Promise<T>((resolve) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            this.instanceLookupGeneration++;
+            logger.warn('Archive instance lookup timed out; interrupting and treating as miss', {
+              timeoutMs: this.instanceLookupTimeoutMs,
+            });
+            void this.resetInstanceDuckDb('timeout');
+            resolve(fallback);
+          }, this.instanceLookupTimeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Interrupt + recreate the instance DuckDB so a timed-out query cannot keep
+   * holding parquet handles or the instance queue for later lookups.
+   */
+  private async resetInstanceDuckDb(reason: string): Promise<void> {
+    if (this.instanceDbReset) {
+      await this.instanceDbReset;
+      return;
+    }
+    this.instanceDbReset = (async () => {
+      logger.warn('Resetting instance DuckDB after lookup cancel', { reason });
+      try {
+        this.instanceDb?.get_ddb_internal()?.interrupt();
+      } catch {
+        /* interrupt best-effort */
+      }
+      const oldDb = this.instanceDb;
+      this.instanceDb = null;
+      this.enqueueInstanceDb = createAsyncQueue();
+      for (const key of [...this.parquetSchemaCache.keys()]) {
+        if (key.startsWith('instance:')) this.parquetSchemaCache.delete(key);
+      }
+      try {
+        await oldDb?.close();
+      } catch {
+        /* */
+      }
+      try {
+        const { Database } = await import('duckdb-async');
+        this.instanceDb = await Database.create(':memory:');
+        const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
+        const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
+        await this.instanceDbAll(`SET threads=${threads}`);
+        await this.instanceDbAll(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
+      } catch (error) {
+        logger.error('Failed to recreate instance DuckDB after interrupt', { error, reason });
+        this.instanceDb = null;
+      }
+    })().finally(() => {
+      this.instanceDbReset = null;
+    });
+    await this.instanceDbReset;
+  }
+
 
   getGapIndexRoot(): string {
     return this.gapIndexRoot;
@@ -143,12 +271,21 @@ export class ArchiveService {
       await fs.access(this.leanActivitiesPath);
       
       this.db = await Database.create(':memory:');
-      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2� (profiled).
+      this.instanceDb = await Database.create(':memory:');
+      // W11: gap buckets are ~2.8GB; higher threads cut full-mid scans ~2x (profiled).
       const threads = Math.max(1, parseInt(process.env.PGCR_DUCKDB_THREADS || '8', 10) || 8);
       const memLimit = process.env.PGCR_DUCKDB_MEMORY || '8GB';
       await this.dbAll(`SET threads=${threads}`);
       await this.dbAll(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
-      logger.info('DuckDB initialized for archive reading', { threads, memLimit });
+      await this.instanceDbAll(`SET threads=${threads}`);
+      await this.instanceDbAll(`SET memory_limit='${memLimit.replace(/'/g, '')}'`);
+      logger.info('DuckDB initialized for archive reading', {
+        threads,
+        memLimit,
+        instanceDb: true,
+        enableD1InstanceArchive: this.enableD1InstanceArchive,
+        instanceLookupTimeoutMs: this.instanceLookupTimeoutMs,
+      });
       
       // Determine bucket hash type using test vector
       await this.initializeBucketHashType();
@@ -165,6 +302,7 @@ export class ArchiveService {
         enableGapLean: this.enableGapLean,
         bucketHashType: this.bucketHashType,
         d1IndexRoots: this.d1IndexRoots.length ? this.d1IndexRoots : ['(none)'],
+        enableD1InstanceArchive: this.enableD1InstanceArchive,
       });
     } catch (error) {
       logger.warn('Archive files not accessible or DuckDB init failed', {
@@ -229,7 +367,19 @@ export class ArchiveService {
    * Calculate the bucket number for a membership ID.
    */
   private async calculateBucket(membershipId: string): Promise<number | null> {
-    if (!this.db || !this.bucketHashType) {
+    return this.calculateBucketWith(this.dbAll.bind(this), membershipId);
+  }
+
+  /** Same hash as calculateBucket, on the instance DuckDB (does not touch history queue). */
+  private async calculateBucketOnInstanceDb(membershipId: string): Promise<number | null> {
+    return this.calculateBucketWith(this.instanceDbAll.bind(this), membershipId);
+  }
+
+  private async calculateBucketWith(
+    run: (sql: string, ...params: unknown[]) => Promise<any[]>,
+    membershipId: string
+  ): Promise<number | null> {
+    if (!this.bucketHashType) {
       return null;
     }
     const cached = this.bucketCache.get(membershipId);
@@ -237,7 +387,7 @@ export class ArchiveService {
 
     try {
       const castType = this.bucketHashType === 'BIGINT' ? 'BIGINT' : 'VARCHAR';
-      const result = await this.dbAll(
+      const result = await run(
         `SELECT (hash(CAST(? AS ${castType})) % 256) AS bucket`,
         membershipId
       );
@@ -316,60 +466,423 @@ export class ArchiveService {
   }
 
   /**
-   * Get ALL activities for an instance ID from the lean activities archive.
-   * Returns all player entries (multiple rows per instance).
-   * When `game` is given, only rows for that game are returned: D1 and D2 instance IDs
-   * overlap numerically, so an unfiltered lookup could return the other game's activity.
+   * Roots history + instance PGCR both consult (for reachability audits).
+   * Instance lookup must include every D1 act root and gap/extra root history uses.
+   */
+  listConfiguredGameDataRoots(): GameDataRootDescriptor[] {
+    return describeConfiguredGameDataRoots({
+      leanActivitiesPath: this.leanActivitiesPath,
+      playerActivitiesLitePath: this.playerActivitiesLitePath,
+      gapIndexRoot: this.gapIndexRoot,
+      gapIndexSortedRoot: this.gapIndexSortedRoot,
+      gapIndexExtraRoots: this.gapExtraRoots,
+      enableGapLean: this.enableGapLean,
+      d1IndexRoots: this.d1IndexRoots,
+    });
+  }
+
+  /**
+   * Get ALL player rows for one game + instance ID.
+   * Uses a dedicated DuckDB connection (not the history queue). D1 routes by billion
+   * root range then pw/iid_band → membership → act/mid_bucket (never hive-scans all
+   * mid_buckets). Player-only peels / incomplete index hits / timeouts / read errors
+   * are a miss so callers fall through to Bungie.
    */
   async getActivitiesByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<LeanActivity[]> {
-    if (!this.isAvailable() || !this.db) {
+    if (!this.isAvailable() || !this.db || !this.instanceDb) {
       throw new Error('Archive not available');
     }
 
+    return this.withInstanceLookupTimeout(
+      () => this.loadActivitiesByInstanceId(instanceId, game),
+      []
+    );
+  }
+
+  private async loadActivitiesByInstanceId(
+    instanceId: string,
+    game?: 'D1' | 'D2'
+  ): Promise<LeanActivity[]> {
     try {
-      logger.debug('Reading all activities for instance from archive', { instanceId });
+      logger.debug('Reading all activities for instance from archive', { instanceId, game });
 
-      const sql = `
-        SELECT 
-          instance_id,
-          period,
-          activity_hash,
-          director_activity_hash,
-          mode,
-          membership_id,
-          membership_type,
-          display_name,
-          character_id,
-          completed,
-          deaths,
-          kills,
-          assists,
-          duration_seconds,
-          standing,
-          starting_phase_index,
-          fireteam_id,
-          is_private,
-          dump_id,
-          game
-        FROM read_parquet(?)
-        WHERE instance_id = ?
-          AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
-      `;
+      const fromLean = await this.queryInstanceFromLeanFile(instanceId, game);
+      if (fromLean.length > 0 && !isPartialArchiveRoster(fromLean)) {
+        logger.debug('Found full fireteam in lean archive', {
+          instanceId,
+          game,
+          entryCount: fromLean.length,
+        });
+        return fromLean;
+      }
+      if (fromLean.length > 0) {
+        logger.info('Archive lean hit is player-only for multiplayer mode; trying fireteam indexes', {
+          instanceId,
+          game,
+          mode: fromLean[0]?.mode,
+          entryCount: fromLean.length,
+        });
+      }
 
-      const gameParam = game ?? null;
-      const rows = await this.dbAll(sql, this.leanActivitiesPath, instanceId, gameParam, gameParam);
-      const activities = rows.map((row: any) => this.mapRowToActivity(row));
-
-      logger.debug('Found activity entries in archive', {
-        instanceId,
-        entryCount: activities.length,
-      });
-
-      return activities;
+      const fromIndex = await this.queryInstanceAcrossFireteamIndexes(instanceId, game);
+      if (fromIndex.length > 0 && isPartialArchiveRoster(fromIndex)) {
+        logger.info('Archive fireteam-index hit is player-only for multiplayer mode; treating as miss', {
+          instanceId,
+          game,
+          mode: fromIndex[0]?.mode,
+          entryCount: fromIndex.length,
+        });
+        return [];
+      }
+      if (fromIndex.length > 0) {
+        logger.debug('Found instance rows in fireteam index roots', {
+          instanceId,
+          game,
+          entryCount: fromIndex.length,
+        });
+      }
+      return fromIndex;
     } catch (error) {
-      logger.error('Failed to read activities from archive', { error, instanceId });
+      logger.error('Failed to read activities from archive', { error, instanceId, game });
       throw error;
     }
+  }
+
+  /**
+   * DESCRIBE parquet columns (cached). Paths may be a single file or a hive glob.
+   * Instance PGCR must use via:'instance' so DESCRIBE does not block history.
+   */
+  private async describeParquetColumns(
+    parquetPath: string,
+    opts?: { hive?: boolean; via?: 'main' | 'instance' }
+  ): Promise<Set<string>> {
+    const via = opts?.via || 'main';
+    const cacheKey = `${via}:${opts?.hive ? 'hive:' : ''}${parquetPath}`;
+    let availableColumns = this.parquetSchemaCache.get(cacheKey);
+    if (!availableColumns) {
+      const from = opts?.hive
+        ? 'read_parquet(?, hive_partitioning = true, union_by_name = true)'
+        : 'read_parquet(?, union_by_name = true)';
+      const run = via === 'instance' ? this.instanceDbAll.bind(this) : this.dbAll.bind(this);
+      const schemaResult = await run(`DESCRIBE SELECT * FROM ${from}`, parquetPath);
+      availableColumns = new Set(
+        schemaResult.map((col: any) => String(col.column_name || '').toLowerCase())
+      );
+      this.parquetSchemaCache.set(cacheKey, availableColumns);
+    }
+    return availableColumns;
+  }
+
+  /**
+   * Build a SELECT list matching LeanActivity, defaulting optional columns the file lacks.
+   * Real D1 act roots (d1_final / d1_b2 / d1_b3_hs) have no director_activity_hash.
+   */
+  private buildLeanActivitySelect(availableColumns: Set<string>): string {
+    const has = (col: string) => availableColumns.has(col.toLowerCase());
+    const requiredCols = [
+      'instance_id',
+      'period',
+      'activity_hash',
+      'mode',
+      'membership_id',
+      'character_id',
+      'completed',
+      'deaths',
+      'duration_seconds',
+      'game',
+    ];
+    const optionalCols: Record<string, string> = {
+      director_activity_hash: '0',
+      membership_type: '0',
+      display_name: "''",
+      kills: '0',
+      assists: '0',
+      standing: '0',
+      starting_phase_index: '0',
+      fireteam_id: "''",
+      is_private: 'false',
+      dump_id: "''",
+    };
+    const selectCols = requiredCols.map(col => (has(col) ? col : `NULL AS ${col}`));
+    for (const [col, defaultVal] of Object.entries(optionalCols)) {
+      selectCols.push(has(col) ? col : `${defaultVal} AS ${col}`);
+    }
+    return selectCols.join(', ');
+  }
+
+  private async queryInstanceFromLeanFile(
+    instanceId: string,
+    game?: 'D1' | 'D2'
+  ): Promise<LeanActivity[]> {
+    if (!this.leanActivitiesPath) return [];
+    const cols = await this.describeParquetColumns(this.leanActivitiesPath, { via: 'instance' });
+    const selectCols = this.buildLeanActivitySelect(cols);
+    const sql = `
+      SELECT ${selectCols}
+      FROM read_parquet(?, union_by_name = true)
+      WHERE CAST(instance_id AS VARCHAR) = ?
+        AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
+    `;
+    const gameParam = game ?? null;
+    const rows = await this.instanceDbAll(
+      sql,
+      this.leanActivitiesPath,
+      instanceId,
+      gameParam,
+      gameParam
+    );
+    return rows.map((row: any) => this.mapRowToActivity(row));
+  }
+
+  /**
+   * First mid_bucket=N/instances.parquet under a root (skip empty roots; empty is not a failure).
+   */
+  private async findFirstInstanceParquet(
+    root: string,
+    actSubdir: boolean
+  ): Promise<string | null> {
+    const pathMod = await import('path');
+    const base = actSubdir ? pathMod.join(root, 'act') : root;
+    try {
+      const ents = await fs.readdir(base, { withFileTypes: true });
+      for (const ent of ents) {
+        if (!ent.isDirectory() || !ent.name.startsWith('mid_bucket=')) continue;
+        const parquet = pathMod.join(base, ent.name, 'instances.parquet');
+        try {
+          await fs.access(parquet);
+          return parquet;
+        } catch {
+          /* try next bucket */
+        }
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  /**
+   * Fireteam rows for one instance. D1: billion-root filter + pw/iid_band → act buckets.
+   * D2 gap: hive glob on instance connection (already fast on prod). Never full-scans
+   * every D1 mid_bucket. Any failed root read → [] (miss).
+   */
+  private async queryInstanceAcrossFireteamIndexes(
+    instanceId: string,
+    game?: 'D1' | 'D2'
+  ): Promise<LeanActivity[]> {
+    const byKey = new Map<string, LeanActivity>();
+
+    if (game !== 'D2' && this.hasD1Index()) {
+      if (!this.enableD1InstanceArchive) {
+        logger.info('D1 instance archive disabled; miss', { instanceId });
+      } else {
+        const d1Rows = await this.queryD1InstanceViaPlayedWith(instanceId);
+        for (const activity of d1Rows) {
+          if (game && activity.game !== game) continue;
+          const key = this.activityDedupeKey(activity);
+          const prior = byKey.get(key);
+          if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
+            byKey.set(key, activity);
+          }
+        }
+      }
+    }
+
+    if (game !== 'D1' && this.enableGapLean) {
+      const gapRows = await this.queryD2InstanceAcrossGapRoots(instanceId);
+      for (const activity of gapRows) {
+        if (game && activity.game !== game) continue;
+        const key = this.activityDedupeKey(activity);
+        const prior = byKey.get(key);
+        if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
+          byKey.set(key, activity);
+        }
+      }
+    }
+
+    return Array.from(byKey.values());
+  }
+
+  /**
+   * Fast D1 instance path: only roots whose billion range contains the id, then
+   * one pw/iid_band parquet for memberships (+ buckets in one SQL), then a single
+   * batched act read of those mid_bucket files. Large rosters miss immediately.
+   * No mid_bucket=* hive scan. New D1 billions: append root to D1_INDEX_ROOTS — no rebuild.
+   */
+  private async queryD1InstanceViaPlayedWith(instanceId: string): Promise<LeanActivity[]> {
+    const pathMod = await import('path');
+    const rootIndexes = d1RootIndexesForInstanceId(instanceId, this.d1IndexRoots.length);
+    if (!rootIndexes.length) return [];
+
+    const existing = new Set(filterExistingRoots(this.d1IndexRoots, 'D1 index root'));
+    const band = d1PlayedWithBand(instanceId);
+    const byKey = new Map<string, LeanActivity>();
+    const hashType = this.bucketHashType || 'VARCHAR';
+
+    for (const idx of rootIndexes) {
+      const root = this.d1IndexRoots[idx];
+      if (!root || !existing.has(root)) continue;
+
+      const pwPath = pathMod.join(root, 'pw', `iid_band=${band}`, 'pw.parquet');
+      try {
+        await fs.access(pwPath);
+      } catch {
+        logger.warn('D1 played-with band missing for instance; skipping root (no full mid_bucket scan)', {
+          instanceId,
+          root,
+          band,
+          pwPath,
+        });
+        continue;
+      }
+
+      let midBucketRows: Array<{ membership_id: string; bucket: number }> = [];
+      try {
+        // One scan: distinct mids + membership bucket (avoids N hash round-trips).
+        const midRows = await this.instanceDbAll(
+          `SELECT DISTINCT
+             CAST(membership_id AS VARCHAR) AS membership_id,
+             CAST((hash(CAST(membership_id AS ${hashType})) % 256) AS INTEGER) AS bucket
+           FROM read_parquet(?)
+           WHERE CAST(instance_id AS BIGINT) = CAST(? AS BIGINT)`,
+          pwPath.replace(/\\/g, '/'),
+          instanceId
+        );
+        midBucketRows = midRows
+          .map((r: any) => ({
+            membership_id: String(r.membership_id || '').trim(),
+            bucket: Number(r.bucket),
+          }))
+          .filter(
+            (r: { membership_id: string; bucket: number }) =>
+              r.membership_id && r.membership_id !== '0' && Number.isFinite(r.bucket)
+          );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('Instance fireteam-index root read error; treating lookup as miss', {
+          instanceId,
+          game: 'D1',
+          root,
+          pwPath,
+          binderError: /binder error/i.test(message),
+          error: message,
+        });
+        return [];
+      }
+
+      if (!midBucketRows.length) continue;
+
+      if (midBucketRows.length > this.d1InstanceMaxRoster) {
+        logger.info('D1 instance roster too large for archive assemble; miss to Bungie', {
+          instanceId,
+          root,
+          rosterSize: midBucketRows.length,
+          maxRoster: this.d1InstanceMaxRoster,
+        });
+        return [];
+      }
+
+      for (const row of midBucketRows) {
+        this.bucketCache.set(row.membership_id, row.bucket);
+      }
+
+      const buckets = [...new Set(midBucketRows.map(r => r.bucket))];
+      let sampleParquet: string | null = null;
+      const actPaths: string[] = [];
+      for (const bucket of buckets) {
+        const actPath = pathMod.join(root, 'act', `mid_bucket=${bucket}`, 'instances.parquet');
+        try {
+          await fs.access(actPath);
+          actPaths.push(actPath.replace(/\\/g, '/'));
+          if (!sampleParquet) sampleParquet = actPath;
+        } catch {
+          /* membership bucket may be sparse */
+        }
+      }
+      if (!actPaths.length || !sampleParquet) continue;
+
+      try {
+        const cols = await this.describeParquetColumns(sampleParquet, { via: 'instance' });
+        const selectCols = this.buildLeanActivitySelect(cols);
+        // Single batched read across all needed mid_bucket files (b2 speed).
+        const listSql = actPaths.map(p => `'${p.replace(/'/g, "''")}'`).join(', ');
+        const sql = `
+          SELECT ${selectCols}
+          FROM read_parquet([${listSql}], union_by_name = true)
+          WHERE CAST(instance_id AS BIGINT) = CAST(? AS BIGINT)
+        `;
+        const rows = await this.instanceDbAll(sql, instanceId);
+        for (const row of rows) {
+          const activity = { ...this.mapRowToActivity(row), game: 'D1' as const };
+          const key = this.activityDedupeKey(activity);
+          const prior = byKey.get(key);
+          if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
+            byKey.set(key, activity);
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('Instance fireteam-index root read error; treating lookup as miss', {
+          instanceId,
+          game: 'D1',
+          root,
+          sampleParquet,
+          binderError: /binder error/i.test(message),
+          error: message,
+        });
+        return [];
+      }
+    }
+
+    return Array.from(byKey.values());
+  }
+
+  /** D2 gap / 10–16B instance hive glob on the instance DuckDB connection. */
+  private async queryD2InstanceAcrossGapRoots(instanceId: string): Promise<LeanActivity[]> {
+    const pathMod = await import('path');
+    const gapRoots = [
+      this.gapIndexSortedRoot,
+      this.gapIndexRoot,
+      ...this.gapExtraRoots,
+    ].filter(Boolean);
+    const byKey = new Map<string, LeanActivity>();
+
+    for (const root of filterExistingRoots(gapRoots, 'Gap index root')) {
+      const sample = await this.findFirstInstanceParquet(root, false);
+      if (!sample) continue;
+      const glob = pathMod.join(root, 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/');
+      try {
+        const cols = await this.describeParquetColumns(sample, { via: 'instance' });
+        const selectCols = this.buildLeanActivitySelect(cols);
+        const sql = `
+          SELECT ${selectCols}
+          FROM read_parquet(?, hive_partitioning = true, union_by_name = true)
+          WHERE CAST(instance_id AS VARCHAR) = ?
+        `;
+        const rows = await this.instanceDbAll(sql, glob, instanceId);
+        for (const row of rows) {
+          const activity = forceGapLeanGame(this.mapRowToActivity(row));
+          const key = this.activityDedupeKey(activity);
+          const prior = byKey.get(key);
+          if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
+            byKey.set(key, activity);
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('Instance fireteam-index root read error; treating lookup as miss', {
+          instanceId,
+          game: 'D2',
+          root,
+          sampleParquet: sample,
+          glob,
+          binderError: /binder error/i.test(message),
+          error: message,
+        });
+        return [];
+      }
+    }
+    return Array.from(byKey.values());
   }
 
   /**
@@ -1601,6 +2114,14 @@ export class ArchiveService {
    * Close the DuckDB connection.
    */
   async close(): Promise<void> {
+    if (this.instanceDb) {
+      try {
+        await this.instanceDb.close();
+      } catch {
+        /* */
+      }
+      this.instanceDb = null;
+    }
     if (this.db) {
       await this.db.close();
       this.db = null;

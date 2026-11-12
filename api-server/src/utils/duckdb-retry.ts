@@ -4,10 +4,14 @@
  * process is still releasing a large file handle (seen at API cutover).
  */
 export function isRetryableDuckDbError(error: unknown): boolean {
-  const err = error as { errorType?: string; message?: string };
+  const err = error as { errorType?: string; message?: string; name?: string };
   const typ = String(err?.errorType || '');
   const msg = String(err?.message || error || '');
+  // Intentional cancel on instance-lookup timeout — never retry.
+  if (typ === 'INTERRUPT' || /interrupt/i.test(msg)) return false;
   if (typ === 'Invalid' || typ === 'IO') return true;
+  // Transient Windows parquet handoff sometimes yields a bare / empty Invalid Error.
+  if (/^Invalid Error\s*$/i.test(msg.trim()) || msg === 'Invalid Error') return true;
   return /Invalid Error|IO Error/i.test(msg);
 }
 

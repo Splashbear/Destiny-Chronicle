@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, TimeoutError, timeout } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface ExternalPgcrPartner {
@@ -194,17 +194,42 @@ export class PgcrApiService {
     }
   }
 
-  async fetchPgcr(instanceId: string, game: 'D1' | 'D2'): Promise<unknown | null> {
+  /**
+   * Fetch one PGCR from the archive API.
+   * @param opts.archiveOnly skip server-side Bungie (fast 404 on miss)
+   * @param opts.timeoutMs abort the request after this many ms (null on timeout)
+   */
+  async fetchPgcr(
+    instanceId: string,
+    game: 'D1' | 'D2',
+    opts?: { archiveOnly?: boolean; timeoutMs?: number }
+  ): Promise<unknown | null> {
     if (!this.enabled) {
       return null;
     }
+    const params: Record<string, string> = { game, format: 'lite' };
+    if (opts?.archiveOnly) {
+      params['source'] = 'archive';
+    }
+    const timeoutMs = opts?.timeoutMs ?? 0;
     try {
-      return await firstValueFrom(
-        this.http.get(this.url(`/pgcr/${instanceId}`), {
-          headers: this.headers(),
-          params: { game, format: 'lite' }
-        })
-      );
+      const req$ = this.http.get(this.url(`/pgcr/${instanceId}`), {
+        headers: this.headers(),
+        params,
+      });
+      if (timeoutMs > 0) {
+        try {
+          return await firstValueFrom(req$.pipe(timeout({ first: timeoutMs })));
+        } catch (err: unknown) {
+          if (err instanceof TimeoutError || (err as { name?: string })?.name === 'TimeoutError') {
+            return null;
+          }
+          const status = (err as { status?: number })?.status;
+          if (status === 404) return null;
+          throw err;
+        }
+      }
+      return await firstValueFrom(req$);
     } catch (err: unknown) {
       const status = (err as { status?: number })?.status;
       if (status === 404) {

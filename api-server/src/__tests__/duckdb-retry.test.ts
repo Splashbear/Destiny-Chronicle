@@ -1,12 +1,14 @@
 import { createAsyncQueue, isRetryableDuckDbError, withDuckDbRetry } from '../utils/duckdb-retry';
 
 describe('duckdb-retry', () => {
-  test('isRetryableDuckDbError matches Invalid and IO, not binder errors', () => {
+  test('isRetryableDuckDbError matches Invalid and IO, not binder or interrupt', () => {
     expect(isRetryableDuckDbError({ errorType: 'Invalid', message: 'Invalid Error' })).toBe(true);
     expect(isRetryableDuckDbError({ errorType: 'IO', message: 'IO Error' })).toBe(true);
     expect(isRetryableDuckDbError({ message: 'Invalid Error: \u0001' })).toBe(true);
+    expect(isRetryableDuckDbError({ message: 'Invalid Error' })).toBe(true);
     expect(isRetryableDuckDbError({ errorType: 'Catalog', message: 'Table does not exist' })).toBe(false);
     expect(isRetryableDuckDbError({ message: 'Binder Error: Referenced column "foo" not found' })).toBe(false);
+    expect(isRetryableDuckDbError({ errorType: 'INTERRUPT', message: 'INTERRUPT Error' })).toBe(false);
   });
 
   test('withDuckDbRetry retries Invalid once then succeeds', async () => {

@@ -9,6 +9,7 @@ import { unwrapD1PgcrBody } from '../../utils/pgcr-prune';
 import { isD1Player } from '../../utils/is-d1-player';
 import { bungieRequestUrl } from '../../utils/bungie-request-url';
 import { PgcrApiService } from './archive-api.service';
+import { pgcrLiteToBungieShape } from '../../utils/pgcr-lite-to-bungie-shape';
 
 export interface PlayerSearchResult {
   displayName: string;
@@ -564,17 +565,51 @@ export class BungieApiService {
     );
   }
 
+  /**
+   * D2 PGCR: archive API first (short timeout, archive-only), then Bungie.
+   * Always keyed with game=D2 at the API; never invents period.
+   */
   getPGCR(activityId: string, isD1: boolean = false): Observable<any> {
     if (isD1) {
       return this.getD1PGCR(activityId);
     }
+    return from(this.getPgcrPreferArchive(activityId, 'D2')).pipe(
+      switchMap(fromArchive => {
+        if (fromArchive) {
+          return of(fromArchive);
+        }
+        return this.fetchD2PgcrFromBungie(activityId);
+      })
+    );
+  }
+
+  private async getPgcrPreferArchive(
+    activityId: string,
+    game: 'D1' | 'D2'
+  ): Promise<Record<string, unknown> | null> {
+    if (!this.pgcrApi.enabled) {
+      return null;
+    }
+    try {
+      const lite = await this.pgcrApi.fetchPgcr(activityId, game, {
+        archiveOnly: true,
+        timeoutMs: 2500,
+      });
+      return pgcrLiteToBungieShape(lite as any);
+    } catch (err) {
+      console.warn(`[PGCR] archive miss/error for ${game} ${activityId}; falling back to Bungie`, err);
+      return null;
+    }
+  }
+
+  private fetchD2PgcrFromBungie(activityId: string): Observable<any> {
     const url = `https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${activityId}/`;
     const finalUrl = this.buildUrl(url);
     const headers = this.getHeaders();
 
     return this.http.get<BungieResponse<any>>(finalUrl, {
       headers,
-      observe: 'response' // Get full response including headers
+      observe: 'response'
     }).pipe(
       map(response => {
         const body = response.body;
@@ -589,15 +624,13 @@ export class BungieApiService {
       retry({
         count: 3,
         delay: (error, retryCount) => {
-          // Retry on 500 errors, network errors (0), or rate limits (429)
           const shouldRetry = error.status === 500 || error.status === 0 || error.status === 429;
           if (!shouldRetry) {
             return throwError(() => error);
           }
-          // For rate limits, use longer backoff; for other errors, exponential backoff
           const baseDelay = error.status === 429 ? 2000 : 1000;
-          const delay = Math.pow(2, retryCount - 1) * baseDelay;
-          return timer(delay);
+          const delayMs = Math.pow(2, retryCount - 1) * baseDelay;
+          return timer(delayMs);
         }
       }),
       catchError(error => {
@@ -685,11 +718,21 @@ export class BungieApiService {
   }
 
   /**
-   * Fetches a D1 PGCR (Post Game Carnage Report) from the Bungie API.
-   * @param activityId The ID of the activity to fetch.
-   * @returns An Observable of the PGCR data.
+   * D1 PGCR: archive API first (short timeout, archive-only), then Bungie.
+   * Always keyed with game=D1 (D1/D2 instance IDs collide).
    */
   getD1PGCR(activityId: string): Observable<any> {
+    return from(this.getPgcrPreferArchive(activityId, 'D1')).pipe(
+      switchMap(fromArchive => {
+        if (fromArchive) {
+          return of(fromArchive);
+        }
+        return this.fetchD1PgcrFromBungie(activityId);
+      })
+    );
+  }
+
+  private fetchD1PgcrFromBungie(activityId: string): Observable<any> {
     const url = `${this.D1_BASE_URL}/Destiny/Stats/PostGameCarnageReport/${activityId}/`;
     const finalUrl = this.buildUrl(url);
     return this.http.get<BungieResponse<any>>(finalUrl, { headers: this.getHeaders() }).pipe(

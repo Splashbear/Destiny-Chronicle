@@ -7,6 +7,10 @@ export const D1_MAX_INSTANCE_ID_B3 = 3_000_000_000;
 export const D1_MAX_INSTANCE_ID_B2 = 2_000_000_000;
 /** Legacy single-root cap (billion 1). */
 export const D1_MAX_INSTANCE_ID_B1 = 1_000_000_000;
+/** One D1 "billion" root covers this many instance ids (root i → ((i)*B, (i+1)*B]). */
+export const D1_BILLION = 1_000_000_000;
+/** D1 played-with band size: pw/iid_band=N with N = floor(instance_id / BAND). */
+export const D1_PW_BAND_SIZE = 1_000_000;
 
 /**
  * Parse `;`-separated multi-root env, falling back to a single-root var.
@@ -58,6 +62,36 @@ export function d1MaxInstanceId(configuredRootCount: number): number {
   if (configuredRootCount >= 3) return D1_MAX_INSTANCE_ID_B3;
   if (configuredRootCount >= 2) return D1_MAX_INSTANCE_ID_B2;
   return D1_MAX_INSTANCE_ID_B1;
+}
+
+/**
+ * Which configured D1 root indexes (0-based, same order as D1_INDEX_ROOTS) can
+ * contain this instance id. Derived from root count × D1_BILLION — not a hardcoded
+ * path list. Exact billion boundaries may exist in adjacent roots (shared bands).
+ */
+export function d1RootIndexesForInstanceId(
+  instanceId: string | number,
+  configuredRootCount: number
+): number[] {
+  const id = typeof instanceId === 'number' ? instanceId : Number(instanceId);
+  if (!Number.isFinite(id) || id < 1 || configuredRootCount < 1) return [];
+  const maxId = d1MaxInstanceId(configuredRootCount);
+  if (id > maxId) return [];
+
+  const primary = Math.min(configuredRootCount - 1, Math.floor((id - 1) / D1_BILLION));
+  const out = new Set<number>([primary]);
+  // Shared boundary bands (e.g. iid 1e9 in billion-1 and band 1000 in billion-2).
+  if (id % D1_BILLION === 0 && primary + 1 < configuredRootCount) {
+    out.add(primary + 1);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/** Played-with iid_band for a D1 instance id. */
+export function d1PlayedWithBand(instanceId: string | number): number {
+  const id = typeof instanceId === 'number' ? instanceId : Number(instanceId);
+  if (!Number.isFinite(id) || id < 0) return 0;
+  return Math.floor(id / D1_PW_BAND_SIZE);
 }
 
 export function activityDedupeKey(a: {

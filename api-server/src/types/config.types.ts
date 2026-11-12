@@ -82,6 +82,12 @@ export const ENV_KEYS = {
   D1_INDEX_ROOTS: 'D1_INDEX_ROOTS',
   D1_PLAYED_WITH_ROOT: 'D1_PLAYED_WITH_ROOT',
   D1_PLAYED_WITH_ROOTS: 'D1_PLAYED_WITH_ROOTS',
+  /** When 'false', D1 single-game archive lookup misses (site/API fall back to Bungie). Default on. */
+  ENABLE_D1_INSTANCE_ARCHIVE: 'ENABLE_D1_INSTANCE_ARCHIVE',
+  /** Hard timeout (ms) for archive instance PGCR lookup; miss on timeout. Default 1800 (below site 2.5s). */
+  PGCR_INSTANCE_LOOKUP_TIMEOUT_MS: 'PGCR_INSTANCE_LOOKUP_TIMEOUT_MS',
+  /** Distinct memberships above this → immediate D1 archive miss (large social/patrol). Default 48. */
+  PGCR_D1_INSTANCE_MAX_ROSTER: 'PGCR_D1_INSTANCE_MAX_ROSTER',
   BUNGIE_API_KEY: 'BUNGIE_API_KEY',
   BUNGIE_API_ROOT: 'BUNGIE_API_ROOT',
   FLAG_LOOKUP_ROOT: 'FLAG_LOOKUP_ROOT',
