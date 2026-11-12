@@ -2,7 +2,8 @@
  * Instance PGCR must consult the same D1 / gap roots as player history,
  * key by game+instanceId, and treat player-only peels as a miss.
  *
- * D1 fixtures use the real act schema from docs/D1_SUPPORT.md (no director_activity_hash).
+ * D1 fixtures use the real act schema from docs/D1_SUPPORT.md (no director_activity_hash)
+ * plus pw/iid_band for the fast instance path.
  */
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -11,18 +12,24 @@ import type { Database } from 'duckdb-async';
 import { ArchiveService } from '../services/archive.service';
 import { logger } from '../utils/logger';
 import {
+  d1PlayedWithBand,
+  d1RootIndexesForInstanceId,
+} from '../utils/d1-roots';
+import {
   describeConfiguredGameDataRoots,
   isPartialArchiveRoster,
 } from '../utils/pgcr-archive-roster';
 
 const BUCKET = 115;
-const COLLIDE_ID = '6895137186';
+/** In D1 billion-1 range (fixture root d1_b1) and also present in gap as D2. */
+const COLLIDE_ID = '500000123';
 const D1_ONLY_B1 = '100001';
 const D1_ONLY_B2 = '1000100001';
 const D1_ONLY_B3 = '2899343525';
 const D2_GAP = '12000000001';
 const D2_EXTRA = '15000000001';
-const PARTIAL_RAID = '9990000001';
+/** In billion-1 range; single-mid raid peel → miss. */
+const PARTIAL_RAID = '999000001';
 /** Numeric mids matching real D1 BIGINT membership_id column. */
 const MID = {
   a1: '1001',
@@ -42,6 +49,21 @@ const MID = {
   e1: '8001',
   e2: '8002',
 } as const;
+
+describe('d1RootIndexesForInstanceId', () => {
+  it('routes by billion range derived from root count', () => {
+    expect(d1RootIndexesForInstanceId(D1_ONLY_B1, 3)).toEqual([0]);
+    expect(d1RootIndexesForInstanceId(D1_ONLY_B2, 3)).toEqual([1]);
+    expect(d1RootIndexesForInstanceId(D1_ONLY_B3, 3)).toEqual([2]);
+    expect(d1RootIndexesForInstanceId(1_000_000_000, 3)).toEqual([0, 1]);
+    expect(d1RootIndexesForInstanceId(4_000_000_000, 3)).toEqual([]);
+  });
+
+  it('maps played-with band from instance id', () => {
+    expect(d1PlayedWithBand(D1_ONLY_B3)).toBe(2899);
+    expect(d1PlayedWithBand(D1_ONLY_B2)).toBe(1000);
+  });
+});
 
 describe('pgcr instance roots parity', () => {
   it('every D1 and gap root used by history is also listed for instance', () => {
@@ -86,6 +108,7 @@ describe('pgcr instance lookup fixtures', () => {
   let gapRoot: string;
   let gapExtra: string;
   let db: Database | null = null;
+  let instanceDb: Database | null = null;
   let svc: ArchiveService | null = null;
   const latencies: Record<string, number> = {};
 
@@ -110,6 +133,7 @@ describe('pgcr instance lookup fixtures', () => {
       });
       await seedDb.close();
       db = await DuckDB.create(':memory:');
+      instanceDb = await DuckDB.create(':memory:');
       svc = new ArchiveService(
         leanPath,
         '',
@@ -124,31 +148,35 @@ describe('pgcr instance lookup fixtures', () => {
         [gapExtra]
       );
       (svc as any).db = db;
+      (svc as any).instanceDb = instanceDb;
       (svc as any).archiveAvailable = true;
       (svc as any).bucketHashType = 'VARCHAR';
+      (svc as any).instanceLookupTimeoutMs = 10_000;
       jest.spyOn(svc as any, 'calculateBucket').mockResolvedValue(BUCKET);
+      jest.spyOn(svc as any, 'calculateBucketOnInstanceDb').mockResolvedValue(BUCKET);
     } catch (error) {
       console.warn('DuckDB not available, skipping instance lookup fixtures', error);
     }
   });
 
   afterAll(async () => {
-    if (db) {
-      try {
-        await db.close();
-      } catch {
-        /* */
+    for (const d of [db, instanceDb]) {
+      if (d) {
+        try {
+          await d.close();
+        } catch {
+          /* */
+        }
       }
     }
     await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
     if (Object.keys(latencies).length) {
-      // Surfaced in Jest output for PR127_FIX_RESULTS.md
       // eslint-disable-next-line no-console
       console.log('[pgcr-instance-latency]', JSON.stringify(latencies));
     }
   });
 
-  test('queryInstanceAcrossFireteamIndexes reads each configured D1 and gap root', async () => {
+  test('reads each configured D1 and gap root via fast paths', async () => {
     if (!svc) {
       console.warn('Skipping test: DuckDB not available');
       return;
@@ -169,6 +197,22 @@ describe('pgcr instance lookup fixtures', () => {
       expect(rows.every(r => r.instance_id === c.id)).toBe(true);
       expect(isPartialArchiveRoster(rows)).toBe(false);
     }
+  });
+
+  test('D1 instance path never hive-scans mid_bucket=*', async () => {
+    if (!svc) {
+      console.warn('Skipping test: DuckDB not available');
+      return;
+    }
+    const spy = jest.spyOn(svc as any, 'instanceDbAll');
+    await svc.getActivitiesByInstanceId(D1_ONLY_B3, 'D1');
+    const sqls = spy.mock.calls.map(c => String(c[0] || ''));
+    const paths = spy.mock.calls.map(c => String(c[1] || ''));
+    expect(sqls.some(s => s.includes('mid_bucket=*'))).toBe(false);
+    expect(paths.some(p => p.includes('iid_band=') || p.includes(`${path.sep}pw${path.sep}`) || p.includes('/pw/'))).toBe(
+      true
+    );
+    spy.mockRestore();
   });
 
   test('same instance id returns the correct game for D1 and D2', async () => {
@@ -209,8 +253,8 @@ describe('pgcr instance lookup fixtures', () => {
       console.warn('Skipping test: DuckDB not available');
       return;
     }
-    const original = (svc as any).dbAll.bind(svc);
-    jest.spyOn(svc as any, 'dbAll').mockImplementation(async (...args: unknown[]) => {
+    const original = (svc as any).instanceDbAll.bind(svc);
+    jest.spyOn(svc as any, 'instanceDbAll').mockImplementation(async (...args: unknown[]) => {
       const glob = String(args[1] || '');
       if (glob.includes('gap_extra')) {
         throw new Error('simulated bucket IO failure');
@@ -218,11 +262,10 @@ describe('pgcr instance lookup fixtures', () => {
       return original(...args);
     });
     try {
-      // D2_EXTRA lives only in gap_extra; failure must not invent a hit from other roots.
       const rows = await svc!.getActivitiesByInstanceId(D2_EXTRA, 'D2');
       expect(rows).toEqual([]);
     } finally {
-      (svc as any).dbAll.mockRestore();
+      (svc as any).instanceDbAll.mockRestore();
     }
   });
 
@@ -231,14 +274,20 @@ describe('pgcr instance lookup fixtures', () => {
       console.warn('Skipping test: DuckDB not available');
       return;
     }
-    const original = (svc as any).dbAll.bind(svc);
+    const original = (svc as any).instanceDbAll.bind(svc);
     const errorSpy = jest.spyOn(logger, 'error');
-    jest.spyOn(svc as any, 'dbAll').mockImplementation(async (...args: unknown[]) => {
+    jest.spyOn(svc as any, 'instanceDbAll').mockImplementation(async (...args: unknown[]) => {
       const sql = String(args[0] || '');
+      const p = String(args[1] || '');
       if (sql.includes('DESCRIBE')) {
         return original(...args);
       }
-      if (sql.includes('SELECT') && String(args[1] || '').includes('d1_b3')) {
+      if (
+        sql.includes('SELECT') &&
+        !sql.includes('DESCRIBE') &&
+        p.includes('d1_b3') &&
+        (p.includes('/act/') || p.includes('\\act\\'))
+      ) {
         throw new Error(
           'Binder Error: Referenced column "director_activity_hash" not found in FROM clause!'
         );
@@ -256,8 +305,38 @@ describe('pgcr instance lookup fixtures', () => {
         })
       );
     } finally {
-      (svc as any).dbAll.mockRestore();
+      (svc as any).instanceDbAll.mockRestore();
       errorSpy.mockRestore();
+    }
+  });
+
+  test('history stays fast while a D1 instance lookup runs (separate DuckDB queue)', async () => {
+    if (!svc) {
+      console.warn('Skipping test: DuckDB not available');
+      return;
+    }
+    let instanceHeld = false;
+    const original = (svc as any).instanceDbAll.bind(svc);
+    jest.spyOn(svc as any, 'instanceDbAll').mockImplementation(async (...args: unknown[]) => {
+      instanceHeld = true;
+      await new Promise(r => setTimeout(r, 80));
+      return original(...args);
+    });
+    try {
+      const histPromise = (async () => {
+        while (!instanceHeld) {
+          await new Promise(r => setTimeout(r, 1));
+        }
+        const t0 = Date.now();
+        const hist = await svc!.getPlayerActivitiesMultiTier(MID.hist, { game: 'D1', limit: 50 });
+        const ms = Date.now() - t0;
+        latencies.history_during_d1_instance_ms = ms;
+        expect(hist.activities.length).toBeGreaterThan(0);
+        expect(ms).toBeLessThan(200);
+      })();
+      await Promise.all([svc.getActivitiesByInstanceId(D1_ONLY_B3, 'D1'), histPromise]);
+    } finally {
+      (svc as any).instanceDbAll.mockRestore();
     }
   });
 
@@ -298,6 +377,10 @@ async function seedAll(
     deaths INTEGER, kills INTEGER, assists INTEGER, duration_seconds INTEGER,
     game VARCHAR, display_name VARCHAR, mid_bucket BIGINT
   `;
+  const pwCols = `
+    instance_id BIGINT, membership_id BIGINT, membership_type TINYINT, period TIMESTAMP,
+    activity_hash UINTEGER, mode SMALLINT, iid_band BIGINT
+  `;
   const gapCols = `
     instance_id BIGINT, period TIMESTAMP, activity_hash UINTEGER, director_activity_hash UINTEGER,
     mode SMALLINT, membership_id BIGINT, membership_type TINYINT, display_name VARCHAR,
@@ -315,6 +398,9 @@ async function seedAll(
   ) =>
     `(${iid}, '${period}', 2659248071, ${mode}, ${mid}, 2, ${2305843009400000000n + BigInt(charSuffix)}, true, 0, 0, 0, 100, 'D1', '${name}', ${BUCKET})`;
 
+  const pwRow = (iid: string, mid: string, mode: number, period: string) =>
+    `(${iid}, ${mid}, 2, '${period}', 2659248071, ${mode}, ${d1PlayedWithBand(iid)})`;
+
   const gapRow = (
     iid: string,
     mid: string,
@@ -326,17 +412,39 @@ async function seedAll(
     `(${iid}, '${period}', 1, 1, ${mode}, ${mid}, 2, '${name}', ${2305843009400000000n + BigInt(charSuffix)}, true, 0, 0, 0, 100, 0, 0, '', false, '', 'D2', ${BUCKET})`;
 
   await db.all(`CREATE OR REPLACE TEMP TABLE lean (${gapCols})`);
-  // Lean has nothing for index-only fixtures (forces fireteam-index path).
   await db.all(`COPY lean TO '${q(paths.leanPath)}' (FORMAT PARQUET)`);
   await db.all('DROP TABLE lean');
 
-  const writeD1 = async (root: string, rows: string[]) => {
+  const writeD1 = async (
+    root: string,
+    actRows: string[],
+    pwRows: string[]
+  ) => {
     const dir = path.join(root, 'act', `mid_bucket=${BUCKET}`);
     await fs.mkdir(dir, { recursive: true });
     await db.all(`CREATE OR REPLACE TEMP TABLE d1_act (${d1Cols})`);
-    await db.all(`INSERT INTO d1_act VALUES ${rows.join(',')}`);
+    await db.all(`INSERT INTO d1_act VALUES ${actRows.join(',')}`);
     await db.all(`COPY d1_act TO '${q(path.join(dir, 'instances.parquet'))}' (FORMAT PARQUET)`);
     await db.all('DROP TABLE d1_act');
+
+    // Group PW rows by band
+    const byBand = new Map<number, string[]>();
+    for (const row of pwRows) {
+      const iid = row.match(/^\((\d+)/)?.[1];
+      if (!iid) continue;
+      const band = d1PlayedWithBand(iid);
+      const list = byBand.get(band) || [];
+      list.push(row);
+      byBand.set(band, list);
+    }
+    for (const [band, rows] of byBand) {
+      const pwDir = path.join(root, 'pw', `iid_band=${band}`);
+      await fs.mkdir(pwDir, { recursive: true });
+      await db.all(`CREATE OR REPLACE TEMP TABLE d1_pw (${pwCols})`);
+      await db.all(`INSERT INTO d1_pw VALUES ${rows.join(',')}`);
+      await db.all(`COPY d1_pw TO '${q(path.join(pwDir, 'pw.parquet'))}' (FORMAT PARQUET)`);
+      await db.all('DROP TABLE d1_pw');
+    }
   };
 
   const writeGap = async (root: string, rows: string[]) => {
@@ -349,23 +457,49 @@ async function seedAll(
     await db.all('DROP TABLE gap_act');
   };
 
-  await writeD1(paths.d1b1, [
-    d1Row(D1_ONLY_B1, MID.a1, 4, '2014-09-06 17:45:00', 1, 'a1'),
-    d1Row(D1_ONLY_B1, MID.a2, 4, '2014-09-06 17:45:00', 2, 'a2'),
-    d1Row(COLLIDE_ID, MID.d1a, 4, '2020-12-13 15:03:59', 3, 'd1a'),
-    d1Row(COLLIDE_ID, MID.d1b, 4, '2020-12-13 15:03:59', 4, 'd1b'),
-    d1Row(PARTIAL_RAID, MID.solo, 4, '2015-01-01 00:00:00', 5, 'solo'),
-  ]);
-  await writeD1(paths.d1b2, [
-    d1Row(D1_ONLY_B2, MID.b1, 4, '2015-01-15 12:00:00', 6, 'b1'),
-    d1Row(D1_ONLY_B2, MID.b2, 4, '2015-01-15 12:00:00', 7, 'b2'),
-  ]);
-  await writeD1(paths.d1b3, [
-    d1Row(D1_ONLY_B3, MID.c1, 4, '2015-06-29 09:03:41', 8, 'c1'),
-    d1Row(D1_ONLY_B3, MID.c2, 4, '2015-06-29 09:03:41', 9, 'c2'),
-    d1Row(D1_ONLY_B3, MID.hist, 4, '2015-06-29 09:03:41', 10, 'hist'),
-    d1Row('2905700647', MID.hist, 4, '2015-06-30 02:49:11', 11, 'hist'),
-  ]);
+  await writeD1(
+    paths.d1b1,
+    [
+      d1Row(D1_ONLY_B1, MID.a1, 4, '2014-09-06 17:45:00', 1, 'a1'),
+      d1Row(D1_ONLY_B1, MID.a2, 4, '2014-09-06 17:45:00', 2, 'a2'),
+      d1Row(COLLIDE_ID, MID.d1a, 4, '2020-12-13 15:03:59', 3, 'd1a'),
+      d1Row(COLLIDE_ID, MID.d1b, 4, '2020-12-13 15:03:59', 4, 'd1b'),
+      d1Row(PARTIAL_RAID, MID.solo, 4, '2015-01-01 00:00:00', 5, 'solo'),
+    ],
+    [
+      pwRow(D1_ONLY_B1, MID.a1, 4, '2014-09-06 17:45:00'),
+      pwRow(D1_ONLY_B1, MID.a2, 4, '2014-09-06 17:45:00'),
+      pwRow(COLLIDE_ID, MID.d1a, 4, '2020-12-13 15:03:59'),
+      pwRow(COLLIDE_ID, MID.d1b, 4, '2020-12-13 15:03:59'),
+      pwRow(PARTIAL_RAID, MID.solo, 4, '2015-01-01 00:00:00'),
+    ]
+  );
+  await writeD1(
+    paths.d1b2,
+    [
+      d1Row(D1_ONLY_B2, MID.b1, 4, '2015-01-15 12:00:00', 6, 'b1'),
+      d1Row(D1_ONLY_B2, MID.b2, 4, '2015-01-15 12:00:00', 7, 'b2'),
+    ],
+    [
+      pwRow(D1_ONLY_B2, MID.b1, 4, '2015-01-15 12:00:00'),
+      pwRow(D1_ONLY_B2, MID.b2, 4, '2015-01-15 12:00:00'),
+    ]
+  );
+  await writeD1(
+    paths.d1b3,
+    [
+      d1Row(D1_ONLY_B3, MID.c1, 4, '2015-06-29 09:03:41', 8, 'c1'),
+      d1Row(D1_ONLY_B3, MID.c2, 4, '2015-06-29 09:03:41', 9, 'c2'),
+      d1Row(D1_ONLY_B3, MID.hist, 4, '2015-06-29 09:03:41', 10, 'hist'),
+      d1Row('2905700647', MID.hist, 4, '2015-06-30 02:49:11', 11, 'hist'),
+    ],
+    [
+      pwRow(D1_ONLY_B3, MID.c1, 4, '2015-06-29 09:03:41'),
+      pwRow(D1_ONLY_B3, MID.c2, 4, '2015-06-29 09:03:41'),
+      pwRow(D1_ONLY_B3, MID.hist, 4, '2015-06-29 09:03:41'),
+      pwRow('2905700647', MID.hist, 4, '2015-06-30 02:49:11'),
+    ]
+  );
   await writeGap(paths.gapRoot, [
     gapRow(D2_GAP, MID.g1, 4, '2024-01-01 00:00:00', 12, 'g1'),
     gapRow(D2_GAP, MID.g2, 4, '2024-01-01 00:00:00', 13, 'g2'),
