@@ -85,23 +85,29 @@ export function pruneBungiePgcr(bungiePgcr: any, game: Game, requestedInstanceId
   }
 }
 
+export type ResolvePgcrOptions = {
+  /** When true, skip Bungie and return null on archive miss (fast 404 for site-side fallback). */
+  archiveOnly?: boolean;
+};
+
 /**
  * Resolve one PGCR for a specific game: override (if flagged) → archive → Bungie live.
  * The coverage watermark is a D2 instance-ID watermark, so it only gates D2 archive lookups.
- * 
+ *
  * Fix-on-view logic (when enabled and PGCR is flagged):
  * 1. Check override store first -> serve if exists
- * 2. Try archive (dump copy)
+ * 2. Try archive (dump copy / fireteam indexes)
  * 3. If archive found, trigger async Bungie fetch to fix -> serve dump copy
- * 4. If archive not found, fetch from Bungie immediately
+ * 4. If archive not found, fetch from Bungie immediately (unless archiveOnly)
  */
-async function resolvePgcr(
+export async function resolvePgcr(
   instanceId: string,
   game: Game,
   archiveService: ArchiveService,
   bungieApiService: BungieApiService,
   watermarkService: WatermarkService,
-  fixOnViewService?: FixOnViewService
+  fixOnViewService?: FixOnViewService,
+  options?: ResolvePgcrOptions
 ): Promise<PgcrLite | null> {
   // Step 1: Check override store if fix-on-view is enabled
   if (fixOnViewService?.isAvailable()) {
@@ -122,6 +128,10 @@ async function resolvePgcr(
     } catch (archiveError) {
       logger.warn('Archive read failed, will try live fallback', { instanceId, game, error: archiveError });
     }
+  }
+
+  if (options?.archiveOnly) {
+    return null;
   }
 
   // Step 3: Fetch from Bungie live
@@ -168,9 +178,21 @@ export function createDcPgcrRouter(
         return res.status(400).json({ error: 'Invalid game (expected D1 or D2)' });
       }
 
-      logger.info('GET /pgcr/:instanceId', { instanceId, game, format });
+      const archiveOnly =
+        getStringParam(req.query.source) === 'archive' ||
+        getStringParam(req.query.archiveOnly) === '1' ||
+        getStringParam(req.query.archiveOnly) === 'true';
+      logger.info('GET /pgcr/:instanceId', { instanceId, game, format, archiveOnly });
 
-      const pgcrLite = await resolvePgcr(instanceId, game, archiveService, bungieApiService, watermarkService, fixOnViewService);
+      const pgcrLite = await resolvePgcr(
+        instanceId,
+        game,
+        archiveService,
+        bungieApiService,
+        watermarkService,
+        fixOnViewService,
+        { archiveOnly }
+      );
 
       if (!pgcrLite) {
         return res.status(404).json({

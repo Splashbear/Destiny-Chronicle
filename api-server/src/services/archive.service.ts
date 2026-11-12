@@ -5,6 +5,11 @@ import { logger } from '../utils/logger';
 import { activityDedupeKey, d1CoverageCaveat, filterExistingRoots, parseRootList } from '../utils/d1-roots';
 import { createAsyncQueue, withDuckDbRetry } from '../utils/duckdb-retry';
 import { sourceCompleted } from '../utils/light-activity-row';
+import {
+  describeConfiguredGameDataRoots,
+  isPartialArchiveRoster,
+  type GameDataRootDescriptor,
+} from '../utils/pgcr-archive-roster';
 
 /**
  * Tier information for multi-tier archive lookups.
@@ -316,10 +321,27 @@ export class ArchiveService {
   }
 
   /**
-   * Get ALL activities for an instance ID from the lean activities archive.
-   * Returns all player entries (multiple rows per instance).
-   * When `game` is given, only rows for that game are returned: D1 and D2 instance IDs
-   * overlap numerically, so an unfiltered lookup could return the other game's activity.
+   * Roots history + instance PGCR both consult (for reachability audits).
+   * Instance lookup must include every D1 act root and gap/extra root history uses.
+   */
+  listConfiguredGameDataRoots(): GameDataRootDescriptor[] {
+    return describeConfiguredGameDataRoots({
+      leanActivitiesPath: this.leanActivitiesPath,
+      playerActivitiesLitePath: this.playerActivitiesLitePath,
+      gapIndexRoot: this.gapIndexRoot,
+      gapIndexSortedRoot: this.gapIndexSortedRoot,
+      gapIndexExtraRoots: this.gapExtraRoots,
+      enableGapLean: this.enableGapLean,
+      d1IndexRoots: this.d1IndexRoots,
+    });
+  }
+
+  /**
+   * Get ALL player rows for one game + instance ID.
+   * Searches the lean peel file plus the same fireteam indexes history uses
+   * (D1_INDEX_ROOTS act/mid_bucket=* and GAP_INDEX_* mid_bucket=* when enabled).
+   * Player-only peels of multiplayer activities are treated as a miss (empty array)
+   * so callers fall through to Bungie for a full fireteam.
    */
   async getActivitiesByInstanceId(instanceId: string, game?: 'D1' | 'D2'): Promise<LeanActivity[]> {
     if (!this.isAvailable() || !this.db) {
@@ -327,49 +349,127 @@ export class ArchiveService {
     }
 
     try {
-      logger.debug('Reading all activities for instance from archive', { instanceId });
+      logger.debug('Reading all activities for instance from archive', { instanceId, game });
 
-      const sql = `
-        SELECT 
-          instance_id,
-          period,
-          activity_hash,
-          director_activity_hash,
-          mode,
-          membership_id,
-          membership_type,
-          display_name,
-          character_id,
-          completed,
-          deaths,
-          kills,
-          assists,
-          duration_seconds,
-          standing,
-          starting_phase_index,
-          fireteam_id,
-          is_private,
-          dump_id,
-          game
-        FROM read_parquet(?)
-        WHERE instance_id = ?
-          AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
-      `;
+      const fromIndex = await this.queryInstanceAcrossFireteamIndexes(instanceId, game);
+      if (fromIndex.length > 0) {
+        logger.debug('Found instance rows in fireteam index roots', {
+          instanceId,
+          game,
+          entryCount: fromIndex.length,
+        });
+        return fromIndex;
+      }
 
-      const gameParam = game ?? null;
-      const rows = await this.dbAll(sql, this.leanActivitiesPath, instanceId, gameParam, gameParam);
-      const activities = rows.map((row: any) => this.mapRowToActivity(row));
+      const fromLean = await this.queryInstanceFromLeanFile(instanceId, game);
+      if (fromLean.length > 0 && isPartialArchiveRoster(fromLean)) {
+        logger.info('Archive lean hit is player-only for multiplayer mode; treating as miss', {
+          instanceId,
+          game,
+          mode: fromLean[0]?.mode,
+          entryCount: fromLean.length,
+        });
+        return [];
+      }
 
-      logger.debug('Found activity entries in archive', {
+      logger.debug('Found activity entries in lean archive', {
         instanceId,
-        entryCount: activities.length,
+        entryCount: fromLean.length,
       });
-
-      return activities;
+      return fromLean;
     } catch (error) {
-      logger.error('Failed to read activities from archive', { error, instanceId });
+      logger.error('Failed to read activities from archive', { error, instanceId, game });
       throw error;
     }
+  }
+
+  private async queryInstanceFromLeanFile(
+    instanceId: string,
+    game?: 'D1' | 'D2'
+  ): Promise<LeanActivity[]> {
+    if (!this.leanActivitiesPath) return [];
+    const sql = `
+      SELECT
+        instance_id, period, activity_hash, director_activity_hash, mode,
+        membership_id, membership_type, display_name, character_id,
+        completed, deaths, kills, assists, duration_seconds, standing,
+        starting_phase_index, fireteam_id, is_private, dump_id, game
+      FROM read_parquet(?)
+      WHERE CAST(instance_id AS VARCHAR) = ?
+        AND (CAST(? AS VARCHAR) IS NULL OR lower(CAST(game AS VARCHAR)) = lower(CAST(? AS VARCHAR)))
+    `;
+    const gameParam = game ?? null;
+    const rows = await this.dbAll(sql, this.leanActivitiesPath, instanceId, gameParam, gameParam);
+    return rows.map((row: any) => this.mapRowToActivity(row));
+  }
+
+  /**
+   * Instance-keyed glob across mid_bucket partitions (full fireteam, not one membership).
+   */
+  private async queryInstanceAcrossFireteamIndexes(
+    instanceId: string,
+    game?: 'D1' | 'D2'
+  ): Promise<LeanActivity[]> {
+    const pathMod = await import('path');
+    const globs: Array<{ glob: string; forceD2?: boolean; forceD1?: boolean }> = [];
+
+    if (game !== 'D2' && this.hasD1Index()) {
+      for (const root of filterExistingRoots(this.d1IndexRoots, 'D1 index root')) {
+        globs.push({
+          glob: pathMod.join(root, 'act', 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/'),
+          forceD1: true,
+        });
+      }
+    }
+
+    if (game !== 'D1' && this.enableGapLean) {
+      const gapRoots = [
+        this.gapIndexSortedRoot,
+        this.gapIndexRoot,
+        ...this.gapExtraRoots,
+      ].filter(Boolean);
+      for (const root of filterExistingRoots(gapRoots, 'Gap index root')) {
+        globs.push({
+          glob: pathMod.join(root, 'mid_bucket=*', 'instances.parquet').replace(/\\/g, '/'),
+          forceD2: true,
+        });
+      }
+    }
+
+    const byKey = new Map<string, LeanActivity>();
+    for (const g of globs) {
+      try {
+        const sql = `
+          SELECT
+            instance_id, period, activity_hash, director_activity_hash, mode,
+            membership_id, membership_type, display_name, character_id,
+            completed, deaths, kills, assists, duration_seconds, standing,
+            starting_phase_index, fireteam_id, is_private, dump_id, game
+          FROM read_parquet(?, hive_partitioning = true, union_by_name = true)
+          WHERE CAST(instance_id AS VARCHAR) = ?
+        `;
+        const rows = await this.dbAll(sql, g.glob, instanceId);
+        for (const row of rows) {
+          let activity = this.mapRowToActivity(row);
+          if (g.forceD2) activity = forceGapLeanGame(activity);
+          if (g.forceD1) activity = { ...activity, game: 'D1' };
+          if (game && activity.game !== game) continue;
+          const key = this.activityDedupeKey(activity);
+          const prior = byKey.get(key);
+          if (!prior || this.leanRichness(activity) > this.leanRichness(prior)) {
+            byKey.set(key, activity);
+          }
+        }
+      } catch (err) {
+        logger.warn('Instance fireteam-index glob failed; continuing', {
+          instanceId,
+          game,
+          glob: g.glob,
+          error: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+    return Array.from(byKey.values());
   }
 
   /**

@@ -163,6 +163,45 @@ describe('GET /pgcr/:id game routing', () => {
     expect(getBungiePgcr).toHaveBeenCalledWith(ID, 'D1');
     expect(res.body[ID].activityDetails.period).toBe('2020-12-13T15:03:59Z');
   });
+
+  it('source=archive skips Bungie and 404s on miss', async () => {
+    const getBungiePgcr = jest.fn(async () => d2Envelope);
+    const { app } = makeApp({ getBungiePgcr } as any);
+    const res = await request(app).get(`/pgcr/${ID}?game=D2&source=archive`);
+    expect(res.status).toBe(404);
+    expect(getBungiePgcr).not.toHaveBeenCalled();
+  });
+
+  it('source=archive returns archive hit without calling Bungie', async () => {
+    const getBungiePgcr = jest.fn(async () => d2Envelope);
+    const d2Row = {
+      instance_id: ID,
+      period: '2020-09-12 03:12:16',
+      activity_hash: 1,
+      director_activity_hash: 1,
+      mode: 6,
+      membership_id: STRANGER,
+      membership_type: 3,
+      display_name: 'x',
+      character_id: '1',
+      completed: true,
+      deaths: 0,
+      kills: 0,
+      assists: 0,
+      duration_seconds: 1,
+      standing: 0,
+      starting_phase_index: 0,
+      fireteam_id: '',
+      is_private: false,
+      dump_id: 'a',
+      game: 'D2',
+    };
+    const { app } = makeApp({ getBungiePgcr } as any, [d2Row]);
+    const res = await request(app).get(`/pgcr/${ID}?game=D2&source=archive`);
+    expect(res.status).toBe(200);
+    expect(res.body._source).toBe('archive');
+    expect(getBungiePgcr).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/pgcr/:id game routing', () => {
