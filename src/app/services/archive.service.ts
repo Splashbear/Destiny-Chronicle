@@ -33,6 +33,7 @@ import {
 } from '../utils/archive-hash';
 import { PrunedPgcr } from '../utils/pgcr-prune';
 import { canonicalAccountKey } from '../utils/account-key';
+import { chunkedBulkPut } from '../utils/chunked-table-write';
 
 type MediaCategory = 'pgcr' | 'seals' | 'avatars' | 'icons';
 
@@ -413,7 +414,7 @@ export class ArchiveService {
     const activities = JSON.parse(await zip.file('data/activities.json')!.async('string')) as StoredActivity[];
     await this.activityDb.activities.clear();
     if (activities.length) {
-      await this.activityDb.activities.bulkPut(activities);
+      await chunkedBulkPut(this.activityDb.activities, activities);
     }
 
     const favoritesRaw = zip.file('data/favorites.json');
@@ -421,7 +422,7 @@ export class ArchiveService {
       const favorites = JSON.parse(await favoritesRaw.async('string')) as FavoriteAccount[];
       await this.activityDb.favorites.clear();
       if (favorites.length) {
-        await this.activityDb.favorites.bulkPut(favorites);
+        await chunkedBulkPut(this.activityDb.favorites, favorites);
       }
     }
 

@@ -17,6 +17,7 @@ import {
   leanFromBungieHistory,
   type TimeStorySourceRow,
 } from '../utils/time-story-source';
+import { archiveBungieHistoryAction } from '../utils/archive-bungie-history-gate';
 
 /** Character identity for activity-history load (CODE_CLEANUP_SPEC). */
 export type ActivityHistoryCharacter = Character & {
@@ -56,7 +57,11 @@ export interface ActivityHistoryLoadHost {
   noteDcApiFallback(): void;
   clearDcApiFallbackNotice(): void;
   hasDcApiFallbackNotice(): boolean;
-  processAndGroupActivities(): void;
+  /**
+   * Coalesce date grouping until every per-character history load is idle.
+   * Mid-load regroups were a main-thread cost; call only from finally / idle.
+   */
+  scheduleProcessAndGroupWhenIdle(): void;
   noteBungieApiIssue(game: 'D1' | 'D2' | 'both', error: unknown): void;
   refreshFilteredViewIfNeeded(newActivities: StoredActivity[]): void;
   tryShowInitialDisplay(activities: StoredActivity[]): void;
@@ -361,7 +366,6 @@ export class ActivityHistoryLoaderService {
             }
             d1ArchiveFilled = true;
             host.noteLookupDataSource('archive');
-            host.processAndGroupActivities();
             console.log(
               '[Archive] D1 partial fill for membership',
               character.membershipId,
@@ -469,40 +473,56 @@ export class ActivityHistoryLoaderService {
                 console.log(`[Archive] Character ${character.characterId} already in IDB (${storedActivities.length} archive rows, 0 new)`);
               }
 
-              // W31: D2 + flag ON stops at complete-below (10B). D1 full-crawls so a
-              // partial D1 dump cannot hide games. Flag OFF: full skips Bungie;
-              // lean-partial full-crawls.
-              if (environment.archiveBungieDeltaFill && character.game === 'D2' && bungieStopAtIid != null) {
+              // W31: D2 + fill ON → delta to complete-below. Fill OFF + archive
+              // coverage (full or leanPartial) → skip Bungie. D1 never reaches here.
+              // This block is D2-only (D1 skips the archive list above).
+              const bungieAction = archiveBungieHistoryAction({
+                archiveBungieDeltaFill: environment.archiveBungieDeltaFill,
+                game: 'D2',
+                effectiveLevel,
+                leanPartial,
+                bungieStopAtIid,
+              });
+              if (bungieAction === 'delta') {
                 bungieDeltaOnly = true;
                 console.log(
                   `[Archive] W31 D2 catch-up (${effectiveLevel}) for ${character.membershipId}: ` +
                     `Bungie newest-first until iid <= ${bungieStopAtIid}`
                 );
-                host.processAndGroupActivities();
                 // fall through to Bungie pagination (delta only)
-              } else if (effectiveLevel === 'full') {
-                host.processAndGroupActivities();
-                host.setCharacterActivityLoading(loadingKey, false);
+              } else if (bungieAction === 'skip') {
+                console.log(
+                  `[Archive] Skipping Bungie history for ${character.membershipId} ` +
+                    `(${effectiveLevel}, delta fill OFF)`
+                );
                 return;
               } else {
-                console.log(`[Archive] Partial lean coverage for ${character.membershipId}; continuing to Bungie for holes (delta fill OFF)`);
-                host.processAndGroupActivities();
+                console.log(
+                  `[Archive] Partial lean coverage for ${character.membershipId}; continuing to Bungie`
+                );
                 // fall through to Bungie pagination (full crawl)
               }
             } else if (effectiveLevel === 'full' || leanPartial) {
               // Membership hit but 0 rows for this character.
-              if (environment.archiveBungieDeltaFill && character.game === 'D2' && bungieStopAtIid != null) {
+              const bungieAction = archiveBungieHistoryAction({
+                archiveBungieDeltaFill: environment.archiveBungieDeltaFill,
+                game: 'D2',
+                effectiveLevel,
+                leanPartial,
+                bungieStopAtIid,
+              });
+              if (bungieAction === 'delta') {
                 bungieDeltaOnly = true;
                 console.log(
                   `[Archive] W31 D2 catch-up (0 archive rows for char ${character.characterId}); stop at iid ${bungieStopAtIid}`
                 );
                 // fall through
-              } else if (effectiveLevel === 'full') {
-                console.log(`[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`);
-                host.setCharacterActivityLoading(loadingKey, false);
+              } else if (bungieAction === 'skip') {
+                console.log(
+                  `[Archive] Membership hit but 0 rows for character ${character.characterId}; skipping Bungie history`
+                );
                 return;
               }
-              // leanPartial + flag OFF: fall through to full Bungie
             }
           }
 
@@ -677,14 +697,14 @@ export class ActivityHistoryLoaderService {
           // Phase-A fast path: as soon as we have at least one activity for the selected date
           // (month/day match) we trigger a lightweight refresh so the user sees results instantly.
           host.tryShowInitialDisplay(allActivities);
-
-      host.processAndGroupActivities();
     } catch (error) {
       console.error('Error loading activity history for character:', error);
       host.noteBungieApiIssue(character.game === 'D1' ? 'D1' : 'D2', error);
       host.setCharacterActivityError(loadingKey, 'Failed to load activity history');
     } finally {
+      // Clear this character first so idle check sees the true remaining set.
       host.setCharacterActivityLoading(loadingKey, false);
+      host.scheduleProcessAndGroupWhenIdle();
     }
   }
 

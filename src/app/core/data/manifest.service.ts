@@ -69,12 +69,12 @@ export class DestinyManifestService {
     path: string
   ): Promise<any> {
     const cacheKey = this.manifestCache.manifestComponentKey(version, culture, component);
-    const cached = this.manifestCache.getManifestData(cacheKey);
+    const cached = await this.manifestCache.getManifestData(cacheKey);
     if (cached) {
       return cached;
     }
     const raw = await firstValueFrom(this.http.get(this.buildUrl('https://www.bungie.net' + path)));
-    this.manifestCache.cacheManifestData(cacheKey, raw);
+    await this.manifestCache.cacheManifestData(cacheKey, raw);
     return raw;
   }
 
