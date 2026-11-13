@@ -485,19 +485,20 @@
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 
-        <div *ngIf="activeTab === 'heatmap'">
+        <div *ngIf="activeTab === 'heatmap'" class="heatmap-tab">
           @defer (on immediate) {
-            <app-activity-heatmap
-              [membershipIds]="heatmapMembershipIds"
-              [accountKeys]="siteAccountFilterKeys"
-              [characterMeta]="heatmapCharacterMeta"
-              (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
             <app-time-story-eras
+              class="heatmap-tab__eras"
               [scopes]="timeStoryScopes"
               [identityByMembership]="getBreakdownIdentityByMembership()"
               [effectiveGame]="timeStoryEffectiveGame"
               [hasSelectedPlayers]="selectedPlayers.length > 0"
               [syncInProgress]="timeStorySyncInProgress"></app-time-story-eras>
+            <app-activity-heatmap
+              [membershipIds]="heatmapMembershipIds"
+              [accountKeys]="siteAccountFilterKeys"
+              [characterMeta]="heatmapCharacterMeta"
+              (navigateToDate)="onHeatmapDateNavigate($event)"></app-activity-heatmap>
           } @loading (after 150ms) { <div class="flex justify-center py-6"><app-destiny-loader size="sm"></app-destiny-loader></div> }
         </div>
 

@@ -41,6 +41,15 @@ interface TextFirstRow {
   first: ActivityFirstCompletion | null;
   activity?: any;
   isD1?: boolean;
+  /** Archive solo clear (same payload as full-site Solo link). */
+  soloStored?: any;
+  /** Archive solo-flawless clear (same payload as full-site Solo Flawless link). */
+  soloFlawlessStored?: any;
+  /** Fallback when flags are on the first clear itself and archive rows are missing. */
+  soloFirstFallback?: ActivityFirstCompletion | null;
+  soloFlawlessFirstFallback?: ActivityFirstCompletion | null;
+  /** Fireteam / banner flawless PGCR (same as full-site Flawless badge). */
+  flawlessPgcr?: any;
 }
 
 @Component({
@@ -219,7 +228,11 @@ export class FirstsTabComponent {
   }
 
   private rowsFromVariants(
-    items: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean }> }>,
+    items: Array<{
+      baseName: string;
+      cardTitle?: string;
+      variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean }>;
+    }>,
     solo = false
   ): TextFirstRow[] {
     const shaped = items.map(item => ({
@@ -231,15 +244,59 @@ export class FirstsTabComponent {
         tags: this.tagsFor(variant.first, solo),
       })),
     }));
+    const seenFlawlessBases = new Set<string>();
     return completedClearRows(shaped).map(row => {
       const first = this.findFirst(items, row.name);
+      const item = this.findVariantItem(items, row.name);
+      const extras = this.soloFlawlessExtras(first, solo);
+      let flawlessPgcr: any = null;
+      // One Flawless link per family (matches one banner per full-site card).
+      if (item && !seenFlawlessBases.has(item.baseName)) {
+        flawlessPgcr = this.ps.getFlawlessBannerPgcrTarget(item, solo) || null;
+        if (flawlessPgcr) seenFlawlessBases.add(item.baseName);
+      }
       return {
         ...row,
         years: yearsAgoLabel(row.when),
         first,
         who: first ? this.whoFor(first.membershipId, first.game) : '',
+        ...extras,
+        flawlessPgcr,
       };
     });
+  }
+
+  private findVariantItem(
+    items: Array<{ baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean }> }>,
+    name: string
+  ): { baseName: string; variants: Array<{ version: string; first?: ActivityFirstCompletion; hasClear: boolean }> } | null {
+    for (const item of items) {
+      for (const variant of item.variants) {
+        if (!variant.hasClear || !variant.first) continue;
+        const version = variant.version && variant.version !== 'Normal' ? `: ${variant.version}` : '';
+        if (`${item.baseName}${version}` === name) return item;
+      }
+    }
+    return null;
+  }
+
+  private soloFlawlessExtras(
+    first: ActivityFirstCompletion | null | undefined,
+    solo: boolean
+  ): Pick<
+    TextFirstRow,
+    'soloStored' | 'soloFlawlessStored' | 'soloFirstFallback' | 'soloFlawlessFirstFallback'
+  > {
+    if (!solo || !first) {
+      return {};
+    }
+    const sf = this.ps.getSoloFirstForFirst(first);
+    return {
+      soloStored: sf?.firstSolo || undefined,
+      soloFlawlessStored: sf?.firstFlawless || undefined,
+      soloFirstFallback: !sf?.firstSolo && first.isSolo ? first : null,
+      soloFlawlessFirstFallback: !sf?.firstFlawless && first.isSoloFlawless ? first : null,
+    };
   }
 
   private findFirst(
@@ -263,8 +320,17 @@ export class FirstsTabComponent {
   private rowsFromVersions(groups: Array<{ baseName: string; versions: ActivityFirstCompletion[]; cardTitle?: string }>): TextFirstRow[] {
     const rows: TextFirstRow[] = [];
     for (const group of groups || []) {
+      const flawlessPgcr = this.ps.getFlawlessBannerPgcrTarget(
+        { baseName: group.baseName, cardTitle: group.cardTitle, versions: group.versions },
+        false
+      );
+      let attachedFlawless = false;
       for (const first of group.versions || []) {
-        rows.push(this.rowFromFirst(first));
+        rows.push({
+          ...this.rowFromFirst(first),
+          flawlessPgcr: !attachedFlawless ? flawlessPgcr : null,
+        });
+        if (flawlessPgcr) attachedFlawless = true;
       }
     }
     return rows;

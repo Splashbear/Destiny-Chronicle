@@ -34,13 +34,63 @@
     <ng-container *ngIf="!ps.loadingGuardianFirsts && textFirsts() as page">
       <section *ngFor="let section of page.sections">
         <h2>{{ section.title }}</h2>
-        <div *ngFor="let row of section.rows" class="text-frow">
-          <span class="text-day-name">{{ row.name }}</span>
-          <span class="text-day-dim">{{ row.who }}</span>
-          <button *ngIf="row.first || row.activity" type="button" class="text-day-link" dcKind="text-first" [dcPayload]="row">{{ row.when }}</button>
-          <span *ngIf="!row.first && !row.activity">{{ row.when }}</span>
-          <span class="text-day-dim">{{ row.years }}</span>
-          <span>{{ row.tags }}</span>
+        <div *ngFor="let row of section.rows" class="text-frow-block">
+          <div class="text-frow">
+            <span class="text-day-name">{{ row.name }}</span>
+            <span class="text-day-dim">{{ row.who }}</span>
+            <button *ngIf="row.first || row.activity" type="button" class="text-day-link" dcKind="text-first" [dcPayload]="row">{{ row.when }}</button>
+            <span *ngIf="!row.first && !row.activity">{{ row.when }}</span>
+            <span class="text-day-dim">{{ row.years }}</span>
+            <span>{{ row.tags }}</span>
+          </div>
+          <div
+            *ngIf="row.soloStored || row.soloFlawlessStored || row.soloFirstFallback || row.soloFlawlessFirstFallback || row.flawlessPgcr"
+            class="text-frow-links">
+            <button
+              *ngIf="row.soloStored as soloStored"
+              type="button"
+              class="text-day-link text-day-link--solo"
+              dcKind="pgcr-stored"
+              [dcPayload]="soloStored">
+              Solo – {{ ps.formatDate(soloStored.period) }}
+            </button>
+            <ng-container *ngIf="row.soloFirstFallback as soloFallback">
+              <button
+                *ngIf="soloFallback.instanceId"
+                type="button"
+                class="text-day-link text-day-link--solo"
+                dcKind="pgcr-first"
+                [dcPayload]="soloFallback">
+                Solo – {{ ps.formatDate(soloFallback.completionDate) }}
+              </button>
+            </ng-container>
+            <button
+              *ngIf="row.soloFlawlessStored as soloFlawlessStored"
+              type="button"
+              class="text-day-link text-day-link--solo-flawless"
+              dcKind="pgcr-stored"
+              [dcPayload]="soloFlawlessStored">
+              Solo Flawless – {{ ps.formatDate(soloFlawlessStored.period) }}
+            </button>
+            <ng-container *ngIf="row.soloFlawlessFirstFallback as soloFlawlessFallback">
+              <button
+                *ngIf="soloFlawlessFallback.instanceId"
+                type="button"
+                class="text-day-link text-day-link--solo-flawless"
+                dcKind="pgcr-first"
+                [dcPayload]="soloFlawlessFallback">
+                Solo Flawless – {{ ps.formatDate(soloFlawlessFallback.completionDate) }}
+              </button>
+            </ng-container>
+            <button
+              *ngIf="row.flawlessPgcr as flawlessPgcr"
+              type="button"
+              class="text-day-link text-day-link--flawless"
+              dcKind="flawless-banner"
+              [dcPayload]="flawlessPgcr">
+              Flawless
+            </button>
+          </div>
         </div>
       </section>
       <button *ngIf="page.shown < page.total" type="button" class="text-day-more" dcKind="show-more">

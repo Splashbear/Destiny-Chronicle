@@ -513,6 +513,38 @@ img[src*='class-'] {
     text-decoration-color: #f0a04a;
   }
 }
+.text-day-link--solo {
+  color: #60a5fa; /* blue-400 — matches full-site Solo */
+  text-decoration-color: color-mix(in srgb, #60a5fa 70%, transparent);
+  &:hover,
+  &:focus-visible {
+    color: #93c5fd;
+    text-decoration-color: #93c5fd;
+  }
+}
+.text-day-link--solo-flawless,
+.text-day-link--flawless {
+  color: #4ade80; /* green-400 — matches full-site Flawless */
+  text-decoration-color: color-mix(in srgb, #4ade80 70%, transparent);
+  &:hover,
+  &:focus-visible {
+    color: #86efac;
+    text-decoration-color: #86efac;
+  }
+}
+.text-frow-block {
+  border-bottom: 1px solid #15191e;
+}
+.text-frow-block .text-frow {
+  border-bottom: 0;
+}
+.text-frow-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  padding: 0 0 8px;
+  font-size: 0.8125rem;
+}
 .text-day-more {
   margin-top: 16px;
   background: transparent;

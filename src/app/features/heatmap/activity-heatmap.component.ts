@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, EventEmitter, inject, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivityDbService } from '../../services/activity-db.service';
@@ -27,7 +27,6 @@ import {
 import { TextViewService } from '../../services/text-view.service';
 import { noteIdbRead } from '../../utils/idb-read-log';
 import { heatmapLoadAction } from '../../utils/heatmap-load-plan';
-import { textYearCalendar, TextHeatDay, TextHeatMonth } from '../../utils/text-tab-rows';
 import {
   buildHeatmapViewSummary,
   describeScopedCharacters,
@@ -79,14 +78,14 @@ interface NamedRange {
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="activity-heatmap">
-      <div class="flex flex-wrap items-end justify-between gap-3 mb-3">
+    <div class="activity-heatmap" [class.activity-heatmap--touch]="text.enabled()">
+      <div class="heatmap-toolbar">
         <div>
           <h2 class="text-xl font-bold text-white font-d2-headline">Activity Heatmap</h2>
           <p class="text-xs text-slate-400 mt-0.5">{{ timezone }} · {{ formatDaysHours(grandTotalSeconds, grandDaysPlayed) }}</p>
           <p class="text-xs text-amber-200/90 mt-0.5">Showing {{ viewSummary }}</p>
         </div>
-        <div class="flex flex-wrap items-center gap-2 text-xs">
+        <div class="heatmap-filters">
           <label class="filter-field">
             <span>View</span>
             <select [(ngModel)]="groupBy" (ngModelChange)="rebuild()">
@@ -125,22 +124,8 @@ interface NamedRange {
         </div>
       </div>
 
-      <div *ngIf="text.enabled()" class="text-hm">
-        <p class="text-hm-years">Year:
-          <button *ngFor="let y of years" type="button" (click)="textYearPick = y" [class.on]="textYear() === y">{{ textYear() === y ? '[' + y + ']' : y }}</button>
-        </p>
-        <p class="text-hm-note">Each row is a month, each character is one day. ░ none · ▒ some · ▓ heavy · █ peak</p>
-        <div *ngFor="let month of textMonths()" class="text-hm-row">
-          <span class="text-hm-month">{{ month.label }}</span>
-          <button *ngFor="let day of month.days" type="button" class="text-hm-day" (click)="openTextDay(day)" [title]="day.year + '-' + day.month + '-' + day.day">{{ day.glyph }}</button>
-        </div>
-        <h3 class="text-hm-markers">Season markers</h3>
-        <div *ngFor="let marker of textSeasonMarkers()" class="text-hm-marker">
-          <span>{{ marker.name }}</span><span>{{ marker.when }}</span>
-        </div>
-        <p *ngIf="textSeasonMarkers().length === 0" class="text-hm-note">No season starts in this year.</p>
-      </div>
-      <div class="heatmap-scroll" *ngIf="!text.enabled() && seasonColumns.length > 0">
+      <!-- Same calendar as full site; --touch enlarges cells for Text/mobile. -->
+      <div class="heatmap-scroll" *ngIf="seasonColumns.length > 0">
         <div class="heatmap-columns">
           <div *ngFor="let season of seasonColumns" class="season-column">
             <div class="season-header">
@@ -171,9 +156,9 @@ interface NamedRange {
           </div>
         </div>
       </div>
-      <p *ngIf="!text.enabled() && seasonColumns.length === 0" class="text-sm text-slate-400 py-8 text-center">No activity for {{ viewSummary }}. Greyed-out dropdown options have no playtime in this view.</p>
+      <p *ngIf="seasonColumns.length === 0" class="text-sm text-slate-400 py-8 text-center">No activity for {{ viewSummary }}. Greyed-out dropdown options have no playtime in this view.</p>
 
-      <div class="legend" *ngIf="!text.enabled()">
+      <div class="legend">
         <span>Less</span>
         <div class="w-3 h-3 rounded-sm" [style.background-color]="getIntensityColor(0.15)"></div>
         <div class="w-3 h-3 rounded-sm" [style.background-color]="getIntensityColor(0.4)"></div>
@@ -185,14 +170,21 @@ interface NamedRange {
   `,
   styles: [`
     .activity-heatmap { color: #e2e8f0; }
-    .text-day-cov { color: #98a2b0; margin: 8px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .text-hm { font: 15px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; }
-    .text-hm-years button, .text-hm-day { background: none; border: none; color: #d8e4ee; font: inherit; cursor: pointer; padding: 0 2px; }
-    .text-hm-years button.on { color: #fff; font-weight: 700; }
-    .text-hm-row { white-space: nowrap; }
-    .text-hm-month { display: inline-block; width: 2.5rem; color: #98a2b0; }
-    .text-hm-note, .text-hm-markers { color: #98a2b0; margin: 12px 0 4px; }
-    .text-hm-marker { display: flex; justify-content: space-between; max-width: 420px; gap: 12px; }
+    .heatmap-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .heatmap-filters {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+    }
     .filter-field {
       display: flex;
       flex-direction: column;
@@ -217,6 +209,7 @@ interface NamedRange {
       transform: rotateX(180deg);
       padding-top: 2px;
       margin-bottom: 8px;
+      -webkit-overflow-scrolling: touch;
     }
     .heatmap-scroll::-webkit-scrollbar { height: 10px; }
     .heatmap-scroll::-webkit-scrollbar-track {
@@ -288,6 +281,7 @@ interface NamedRange {
       display: flex;
       align-items: center;
       justify-content: center;
+      touch-action: manipulation;
     }
     .day-cell.pad { cursor: default; background: transparent !important; }
     .day-cell.has-activity:hover,
@@ -319,11 +313,79 @@ interface NamedRange {
       font-size: 10px;
       color: #94a3b8;
     }
+
+    /* Text view + narrow screens: same calendar, larger tap targets. */
+    .activity-heatmap--touch .heatmap-filters,
+    .activity-heatmap--touch .filter-field select {
+      font-size: 0.8125rem;
+    }
+    .activity-heatmap--touch .filter-field select {
+      min-width: 0;
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+    }
+    .activity-heatmap--touch .filter-field,
+    .activity-heatmap--touch .filter-field-wide {
+      flex: 1 1 9.5rem;
+      min-width: 9.5rem;
+    }
+    .activity-heatmap--touch .filter-field-wide {
+      flex-basis: 14rem;
+    }
+    .activity-heatmap--touch .heatmap-scroll::-webkit-scrollbar { height: 14px; }
+    .activity-heatmap--touch .season-column { width: 220px; }
+    .activity-heatmap--touch .season-header { padding-left: 36px; }
+    .activity-heatmap--touch .season-header h3 { font-size: 13px; }
+    .activity-heatmap--touch .season-header p { font-size: 11px; }
+    .activity-heatmap--touch .week-row {
+      grid-template-columns: 34px repeat(7, 26px);
+      gap: 2px;
+      margin-bottom: 2px;
+    }
+    .activity-heatmap--touch .month-label { font-size: 10px; }
+    .activity-heatmap--touch .day-cell {
+      width: 26px;
+      height: 26px;
+      border-radius: 3px;
+    }
+    .activity-heatmap--touch .day-num { font-size: 11px; }
+    .activity-heatmap--touch .cell-marker-icon {
+      width: 9px;
+      height: 9px;
+    }
+    .activity-heatmap--touch .legend { font-size: 12px; gap: 6px; }
+
+    @media (max-width: 640px) {
+      .heatmap-toolbar { align-items: stretch; }
+      .heatmap-filters { width: 100%; }
+      .filter-field,
+      .filter-field-wide {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: calc(50% - 0.5rem);
+      }
+      .filter-field select,
+      .filter-field-wide select {
+        min-width: 0;
+        width: 100%;
+      }
+      .season-column { width: 200px; }
+      .season-header { padding-left: 32px; }
+      .week-row {
+        grid-template-columns: 30px repeat(7, 24px);
+        gap: 2px;
+      }
+      .day-cell {
+        width: 24px;
+        height: 24px;
+      }
+      .day-num { font-size: 10px; }
+      .cell-marker-icon { width: 8px; height: 8px; }
+      .heatmap-scroll::-webkit-scrollbar { height: 12px; }
+    }
   `]
 })
 export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
   readonly text = inject(TextViewService);
-  textYearPick = 0;
   private activityByDay = new Map<string, { count: number; seconds: number }>();
 
   @Input() membershipIds: string[] = [];
@@ -846,38 +908,6 @@ export class ActivityHeatmapComponent implements OnInit, OnChanges, OnDestroy {
       lines.push(this.formatTime(cell.totalSeconds), `${cell.activities} activities`);
     }
     return lines.join('\n');
-  }
-
-  textYear(): number {
-    if (this.yearFilter !== 'all') {
-      const selected = Number(this.yearFilter);
-      if (Number.isFinite(selected)) {
-        return selected;
-      }
-    }
-    if (this.textYearPick && this.years.includes(this.textYearPick)) {
-      return this.textYearPick;
-    }
-    return this.years.length ? this.years[this.years.length - 1] : new Date().getFullYear();
-  }
-
-  textMonths(): TextHeatMonth[] {
-    const year = this.textYear();
-    return textYearCalendar(year, (y, month, day) => this.activityByDay.get(`${y}-${month}-${day}`)?.seconds ?? 0);
-  }
-
-  textSeasonMarkers(): Array<{ name: string; when: string }> {
-    const year = this.textYear();
-    return [...this.D1_SEASONS, ...this.D2_SEASONS]
-      .filter(range => range.start.getFullYear() === year)
-      .map(range => ({
-        name: range.name,
-        when: range.start.toLocaleDateString(undefined, { month: 'short', day: '2-digit' }),
-      }));
-  }
-
-  openTextDay(day: TextHeatDay): void {
-    this.navigateToDate.emit(new Date(day.year, day.month - 1, day.day));
   }
 
   onDayClick(cell: DayCell): void {
