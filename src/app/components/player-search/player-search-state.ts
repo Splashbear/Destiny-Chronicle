@@ -32,6 +32,7 @@ import {
   getPlayerKey as getPlayerKeyUtil,
   getFavoriteKey as getFavoriteKeyUtil,
 } from '../../utils/player-keys';
+import type { FlawlessRaidClear } from '../../utils/flawless-raid-clear';
 
 interface ActivityCache {
   activities: ActivityHistory[];
@@ -301,8 +302,11 @@ export abstract class PlayerSearchState {
    * Outer key: accountKey (`game|membershipType|membershipId`). Inner: `${game}:${baseName}`.
    */
   familyClearCountsByMembership: { [accountKey: string]: { [key: string]: number } } = {};
-  /** D2 raid/Pantheon base names with at least one fireteam flawless clear (PGCR), per accountKey. */
-  flawlessRaidBaseNamesByMembership: { [accountKey: string]: string[] } = {};
+  /**
+   * Earliest fireteam-flawless D2 raid/Pantheon clear per family (PGCR), per accountKey.
+   * Lights the Firsts Flawless banner and supplies the instance id for banner PGCR opens.
+   */
+  flawlessRaidClearsByMembership: { [accountKey: string]: FlawlessRaidClear[] } = {};
   /** Stores firsts per membershipId */
   guardianFirstsMap: { [membershipId: string]: ActivityFirstCompletion[] } = {};
   /** Aggregated (all-platform) firsts across selected players */

@@ -562,28 +562,45 @@ img[src*='class-'] {
   .text-day-name { grid-column: 1 / -1; font-weight: 700; }
 }
 
-/* Vertical Flawless ribbon on raid/dungeon Firsts card art (matches Solo Flawless green-400). */
+/* Horizontal Flawless badge on raid/dungeon Firsts card art (top-left). */
 .firsts-flawless-banner {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
+  top: 0.5rem;
+  left: 0.5rem;
   z-index: 5;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  min-height: 100%;
-  padding: 0.4rem 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0.28rem 0.55rem;
   background: #4ade80; /* tailwind green-400 — same as Solo Flawless text */
-  color: #0b1220;
-  font-size: 0.6875rem;
+  color: #fff;
+  font-size: 0.625rem;
   font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
   text-transform: uppercase;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+  transform: none;
+  border-radius: 0.2rem;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
   pointer-events: none;
+}
+
+button.firsts-flawless-banner--clickable {
+  appearance: none;
+  margin: 0;
+  border: 0;
+  font: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+button.firsts-flawless-banner--clickable:hover,
+button.firsts-flawless-banner--clickable:focus-visible {
+  background: #86efac; /* green-300 */
+  outline: none;
 }

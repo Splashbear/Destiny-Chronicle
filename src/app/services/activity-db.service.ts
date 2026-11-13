@@ -33,6 +33,10 @@ import { flawlessFromPgcr, soloFromPgcr } from '../utils/solo-from-pgcr';
 import { countClearsByBaseName } from '../utils/family-clear-counts';
 import { baseActivityNameFromVersioned } from '../utils/date-activity-grouping';
 import { chunkedBulkAddAssignIds, chunkedBulkPut } from '../utils/chunked-table-write';
+import {
+  mergeEarliestFlawlessRaidClear,
+  type FlawlessRaidClear,
+} from '../utils/flawless-raid-clear';
 
 // Phase 3: Memory Management & Caching Optimization
 interface CacheEntry<T> {
@@ -3287,15 +3291,14 @@ export class ActivityDbService extends Dexie {
   }
 
   /**
-   * Base names of D2 raids (incl. Pantheon) with at least one fireteam flawless clear.
-   * Uses PGCR roster deaths — not only the first-clear Firsts record — so later
-   * flawless clears still light the banner. Checkpoint Pantheon clears count.
+   * Earliest fireteam-flawless D2 raid/Pantheon clear per family (PGCR roster deaths).
+   * Includes later flawless clears beyond the Firsts first-clear row; Pantheon checkpoints count.
    */
-  async getFlawlessRaidBaseNames(
+  async getFlawlessRaidClears(
     membershipId: string,
     /** When set, only scan clears stored for this platform account (non–cross-save / per-card). */
     membershipType?: number
-  ): Promise<string[]> {
+  ): Promise<FlawlessRaidClear[]> {
     await this.initPromise;
     const acts = await this.activities
       .where('membershipId')
@@ -3393,12 +3396,12 @@ export class ActivityDbService extends Dexie {
       console.warn('[RaidFlawless] Batch PGCR fetch failed:', error);
     }
 
-    const flawlessBases = new Set<string>();
+    const byBase = new Map<string, FlawlessRaidClear>();
     for (const { activity, family } of candidates) {
       const instanceId = String(activity.activityDetails?.instanceId || '');
       if (!family || !instanceId) continue;
       const baseName = baseActivityNameFromVersioned(family);
-      if (!baseName || flawlessBases.has(baseName)) continue;
+      if (!baseName) continue;
 
       let pgcr = pgcrMap.get(instanceId);
       if (!pgcr) {
@@ -3408,13 +3411,25 @@ export class ActivityDbService extends Dexie {
           pgcr = undefined;
         }
       }
-      const verdict = flawlessFromPgcr(pgcr);
-      if (verdict === true) {
-        flawlessBases.add(baseName);
-      }
+      if (flawlessFromPgcr(pgcr) !== true) continue;
+      mergeEarliestFlawlessRaidClear(byBase, {
+        baseName,
+        instanceId,
+        period: activity.period ? String(activity.period) : undefined,
+        membershipId: activity.membershipId ? String(activity.membershipId) : membershipId,
+      });
     }
 
-    return [...flawlessBases];
+    return [...byBase.values()];
+  }
+
+  /** @deprecated Prefer getFlawlessRaidClears (keeps instance ids for banner PGCR). */
+  async getFlawlessRaidBaseNames(
+    membershipId: string,
+    membershipType?: number
+  ): Promise<string[]> {
+    const clears = await this.getFlawlessRaidClears(membershipId, membershipType);
+    return clears.map(c => c.baseName);
   }
 
   /**
