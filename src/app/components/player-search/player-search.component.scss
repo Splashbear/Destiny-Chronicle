@@ -1369,3 +1369,14 @@ img[src*="class-"] {
     width: 100%;
   }
 }
+
+/* Heatmap tab: Eras strip sits above the calendar. */
+.heatmap-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.heatmap-tab__eras {
+  display: block;
+}
