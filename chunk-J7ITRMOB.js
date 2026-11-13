@@ -1,0 +1,2 @@
+import{n as m}from"./chunk-WVRYRSE4.js";import{Ta as n,fb as o,kb as i,lb as p,wb as a,xb as c}from"./chunk-B2OUYILB.js";var s=["*"],u=(()=>{class t{kind="none";static \u0275fac=function(e){return new(e||t)};static \u0275cmp=n({type:t,selectors:[["dc-empty-state"]],inputs:{kind:"kind"},ngContentSelectors:s,decls:2,vars:1,consts:[[1,"destiny-empty-state"]],template:function(e,r){e&1&&(a(),i(0,"div",0),c(1),p()),e&2&&o("data-kind",r.kind)},dependencies:[m],encapsulation:2,changeDetection:0})}return t})();export{u as a};
+//# sourceMappingURL=chunk-J7ITRMOB.js.map

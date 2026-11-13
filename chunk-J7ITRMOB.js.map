@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/empty-state.component.ts"],
+  "sourcesContent": ["import { CommonModule } from '@angular/common';\nimport { ChangeDetectionStrategy, Component, Input } from '@angular/core';\n\n/**\n * Empty / loading / private placeholder (CODE_CLEANUP_SPEC Step 5).\n * Uses existing `.destiny-empty-state` look via host class.\n */\n@Component({\n  selector: 'dc-empty-state',\n  standalone: true,\n  imports: [CommonModule],\n  template: `\n    <div class=\"destiny-empty-state\" [attr.data-kind]=\"kind\">\n      <ng-content></ng-content>\n    </div>\n  `,\n  changeDetection: ChangeDetectionStrategy.OnPush,\n})\nexport class EmptyStateComponent {\n  /** Semantic hint for tests / styling: none | loading | private */\n  @Input() kind: 'none' | 'loading' | 'private' = 'none';\n}\n"],
+  "mappings": "qIAkBaA,GAAmB,IAAA,CAA1B,MAAOA,CAAmB,CAErBC,KAAuC,kDAFrCD,EAAmB,2BAAnBA,EAAmBE,UAAA,CAAA,CAAA,gBAAA,CAAA,EAAAC,OAAA,CAAAF,KAAA,MAAA,EAAAG,mBAAAC,EAAAC,MAAA,EAAAC,KAAA,EAAAC,OAAA,CAAA,CAAA,EAAA,qBAAA,CAAA,EAAAC,SAAA,SAAAC,EAAAC,EAAA,CAAAD,EAAA,QAN5BE,EAAA,EAAA,MAAA,CAAA,EACEC,EAAA,CAAA,EACFC,EAAA,6CAJQC,CAAY,EAAAC,cAAA,EAAAC,gBAAA,CAAA,CAAA,SAQXjB,CAAmB,GAAA",
+  "names": ["EmptyStateComponent", "kind", "selectors", "inputs", "ngContentSelectors", "_c0", "decls", "vars", "consts", "template", "rf", "ctx", "\u0275\u0275elementStart", "\u0275\u0275projection", "\u0275\u0275elementEnd", "CommonModule", "encapsulation", "changeDetection"]
+}

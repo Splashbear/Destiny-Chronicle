@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/utils/format-duration.ts"],
+  "sourcesContent": ["/** Formats a duration in seconds as Hh Mm (e.g. 7098h 08m). */\nexport function formatSecondsToHoursMinutes(\n  totalSeconds: number | undefined | null\n): string {\n  const seconds = totalSeconds ?? 0;\n  const hours = Math.floor(seconds / 3600);\n  const minutes = Math.floor((seconds % 3600) / 60);\n  const pad = (n: number) => n.toString().padStart(2, '0');\n  return `${hours}h ${pad(minutes)}m`;\n}\n"],
+  "mappings": "AACM,SAAUA,EACdC,EAAuC,CAEvC,IAAMC,EAAUD,GAAgB,EAC1BE,EAAQC,KAAKC,MAAMH,EAAU,IAAI,EACjCI,EAAUF,KAAKC,MAAOH,EAAU,KAAQ,EAAE,EAEhD,MAAO,GAAGC,CAAK,MADFI,GAAcA,EAAEC,SAAQ,EAAGC,SAAS,EAAG,GAAG,GAC/BH,CAAO,CAAC,GAClC",
+  "names": ["formatSecondsToHoursMinutes", "totalSeconds", "seconds", "hours", "Math", "floor", "minutes", "n", "toString", "padStart"]
+}
