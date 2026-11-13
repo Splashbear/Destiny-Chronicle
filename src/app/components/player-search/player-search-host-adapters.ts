@@ -650,7 +650,7 @@ export function build_asPlayerSelectionClearHost(c: any) {
       c.guardianFirstsMap = {};
       c.dungeonSoloFirsts = {};
       c.familyClearCountsByMembership = {};
-      c.flawlessRaidBaseNamesByMembership = {};
+      c.flawlessRaidClearsByMembership = {};
     },
     clearComputedAccountStats: () => {
       c.computedAccountStats = null;

@@ -19,6 +19,11 @@ import { ActivityDbService } from '../../services/activity-db.service';
 import { gameIconUrl, platformIconUrl } from '../../utils/platform-display';
 import { findDungeonSoloFirstForLabel } from '../../utils/dungeon-solo-lookup';
 import { anyFlawlessFamilyMatches } from '../../utils/flawless-family-match';
+import {
+  findFlawlessRaidClearForLabel,
+  type FlawlessRaidClear,
+} from '../../utils/flawless-raid-clear';
+import type { PgcrLiteDialogData } from '../pgcr-lite/pgcr-lite.component';
 import { PlayerSearchHostAdaptersMixin } from './player-search-host-adapters-mixin';
 
 /**
@@ -342,23 +347,27 @@ export abstract class PlayerSearchFirstsMixin extends PlayerSearchHostAdaptersMi
   protected async refreshFlawlessRaidBaseNamesForPlayer(player: PlayerSearchDisplay): Promise<void> {
     const accountKey = this.getAccountKeyForPlayer(player);
     if (this.isD1Player(player)) {
-      this.flawlessRaidBaseNamesByMembership = {
-        ...this.flawlessRaidBaseNamesByMembership,
+      this.flawlessRaidClearsByMembership = {
+        ...this.flawlessRaidClearsByMembership,
         [accountKey]: [],
       };
       return;
     }
     try {
-      const names = await this.activityDb.getFlawlessRaidBaseNames(
+      const clears = await this.activityDb.getFlawlessRaidClears(
         player.membershipId,
         player.membershipType
       );
-      this.flawlessRaidBaseNamesByMembership = {
-        ...this.flawlessRaidBaseNamesByMembership,
-        [accountKey]: names,
+      this.flawlessRaidClearsByMembership = {
+        ...this.flawlessRaidClearsByMembership,
+        [accountKey]: clears,
       };
-      if (names.length) {
-        console.log('[Firsts] Flawless raid families for', accountKey, names);
+      if (clears.length) {
+        console.log(
+          '[Firsts] Flawless raid families for',
+          accountKey,
+          clears.map(c => c.baseName)
+        );
       } else {
         console.warn('[Firsts] No flawless raid families found for', accountKey);
       }
@@ -366,8 +375,8 @@ export abstract class PlayerSearchFirstsMixin extends PlayerSearchHostAdaptersMi
       this.cdr.detectChanges();
     } catch (err) {
       console.warn('[Firsts] Raid flawless scan skipped for', accountKey, err);
-      this.flawlessRaidBaseNamesByMembership = {
-        ...this.flawlessRaidBaseNamesByMembership,
+      this.flawlessRaidClearsByMembership = {
+        ...this.flawlessRaidClearsByMembership,
         [accountKey]: [],
       };
     }
@@ -396,15 +405,24 @@ export abstract class PlayerSearchFirstsMixin extends PlayerSearchHostAdaptersMi
     return total;
   }
 
+  /** Scanned fireteam-flawless clears for one Firsts account card (or all filtered D2 accounts). */
+  private flawlessRaidClearsForScope(accountKey?: string): FlawlessRaidClear[] {
+    if (accountKey) {
+      return this.flawlessRaidClearsByMembership[accountKey] || [];
+    }
+    const out: FlawlessRaidClear[] = [];
+    for (const p of this.getFirstsFilteredPlayers()) {
+      if (this.isD1Player(p)) continue;
+      out.push(...(this.flawlessRaidClearsByMembership[this.getAccountKeyForPlayer(p)] || []));
+    }
+    return out;
+  }
+
   /** True when scanned flawless families match this Firsts card base name. */
   familyHasFlawlessRaidClear(baseName: string, accountKey?: string): boolean {
     if (!baseName) return false;
-    const lists = accountKey
-      ? [this.flawlessRaidBaseNamesByMembership[accountKey] || []]
-      : this.getFirstsFilteredPlayers()
-          .filter((p: any) => !this.isD1Player(p))
-          .map((p: any) => this.flawlessRaidBaseNamesByMembership[this.getAccountKeyForPlayer(p)] || []);
-    return lists.some((names: string[]) => anyFlawlessFamilyMatches(baseName, names));
+    const names = this.flawlessRaidClearsForScope(accountKey).map((c: FlawlessRaidClear) => c.baseName);
+    return anyFlawlessFamilyMatches(baseName, names);
   }
 
   cardHasFlawlessClear(
@@ -439,6 +457,103 @@ export abstract class PlayerSearchFirstsMixin extends PlayerSearchHostAdaptersMi
       }
     }
     return false;
+  }
+
+  /**
+   * PGCR payload for the vertical Flawless ribbon: earliest fireteam-flawless raid clear
+   * for the card family, else a marked first-clear / solo-flawless instance on the card.
+   */
+  getFlawlessBannerPgcrTarget(
+    item: {
+      baseName: string;
+      variants?: Array<{ hasClear?: boolean; first?: ActivityFirstCompletion }>;
+      cardTitle?: string;
+      versions?: ActivityFirstCompletion[];
+    },
+    showSoloFlawless = false,
+    accountKey?: string
+  ): PgcrLiteDialogData | null {
+    const clears = this.flawlessRaidClearsForScope(accountKey);
+    const fromScan =
+      findFlawlessRaidClearForLabel(item.baseName, clears) ||
+      (item.cardTitle ? findFlawlessRaidClearForLabel(item.cardTitle, clears) : null);
+    if (fromScan?.instanceId) {
+      return {
+        instanceId: String(fromScan.instanceId),
+        isD1: false,
+        membershipId: fromScan.membershipId ? String(fromScan.membershipId) : undefined,
+        period: fromScan.period || undefined,
+        activityLabel: `${fromScan.baseName} (Flawless)`,
+      };
+    }
+
+    let bestFirst: ActivityFirstCompletion | null = null;
+    let bestMs = Number.POSITIVE_INFINITY;
+    const considerFirst = (first?: ActivityFirstCompletion | null) => {
+      if (!first?.instanceId) return;
+      if (!(first.isFlawless || first.isSoloFlawless)) return;
+      if (accountKey && first.membershipId) {
+        const firstPlayer = this.selectedPlayers.find((p) => p.membershipId === first.membershipId);
+        if (firstPlayer && this.getAccountKeyForPlayer(firstPlayer) !== accountKey) return;
+      }
+      const ms = first.completionDate
+        ? Date.parse(first.completionDate)
+        : first.period
+          ? Date.parse(first.period)
+          : Number.POSITIVE_INFINITY;
+      if (!bestFirst || ms < bestMs) {
+        bestFirst = first;
+        bestMs = ms;
+      }
+    };
+    for (const variant of item.variants || []) {
+      considerFirst(variant.first);
+    }
+    for (const first of item.versions || []) {
+      considerFirst(first);
+    }
+    if (bestFirst) {
+      const first = bestFirst as ActivityFirstCompletion;
+      const instanceId = first.instanceId != null ? String(first.instanceId).trim() : '';
+      if (instanceId) {
+        return {
+          instanceId,
+          isD1: first.game === 'D1',
+          membershipId: first.membershipId ? String(first.membershipId) : undefined,
+          period: first.completionDate || first.period || undefined,
+          activityLabel: `${first.name || item.baseName} (Flawless)`,
+        };
+      }
+    }
+
+    if (showSoloFlawless) {
+      const midFromKey = accountKey ? accountKey.split('|')[2] : undefined;
+      const lists = midFromKey
+        ? [this.dungeonSoloFirsts[midFromKey]]
+        : Object.values(this.dungeonSoloFirsts);
+      for (const list of lists) {
+        const hit = list?.find(
+          (d: any) => d.family === item.baseName && d.firstFlawless?.activityDetails?.instanceId
+        );
+        const stored = hit?.firstFlawless;
+        const instanceId = stored?.activityDetails?.instanceId;
+        if (instanceId) {
+          return {
+            instanceId: String(instanceId),
+            isD1: false,
+            membershipId: stored.membershipId ? String(stored.membershipId) : midFromKey,
+            period: stored.period || undefined,
+            activityLabel: `${item.baseName} (Solo Flawless)`,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  openFlawlessBannerPgcr(data: PgcrLiteDialogData, _event?: MouseEvent): void {
+    if (!data?.instanceId) return;
+    this.pgcrModalService.openPgcrLite(data);
   }
 
   openExternalPGCRForFirst(first: ActivityFirstCompletion, _event?: MouseEvent) {

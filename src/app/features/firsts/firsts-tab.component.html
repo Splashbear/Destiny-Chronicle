@@ -117,11 +117,22 @@
           <span *ngIf="img && typeof img !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="img"></span>
         </ng-container>
         <div class="pgcr-image-scrim"></div>
-        <span *ngIf="ps.cardHasFlawlessClear(group, false, clearsAccountKey)"
-              class="firsts-flawless-banner"
-              aria-label="Flawless clear">
+        <button
+          *ngIf="ps.getFlawlessBannerPgcrTarget(group, false, clearsAccountKey) as flawlessPgcr; else pantheonFlawlessStatic"
+          type="button"
+          class="firsts-flawless-banner firsts-flawless-banner--clickable"
+          dcKind="flawless-banner"
+          [dcPayload]="flawlessPgcr"
+          [attr.aria-label]="'Open flawless PGCR for ' + (group.cardTitle || group.baseName)">
           Flawless
-        </span>
+        </button>
+        <ng-template #pantheonFlawlessStatic>
+          <span *ngIf="ps.cardHasFlawlessClear(group, false, clearsAccountKey)"
+                class="firsts-flawless-banner"
+                aria-label="Flawless clear">
+            Flawless
+          </span>
+        </ng-template>
       </div>
       <div class="pgcr-image-caption px-3 py-2 min-w-0">
         <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-1 min-w-0">
@@ -202,11 +213,22 @@
         <span *ngIf="cardImg && typeof cardImg !== 'string'" class="activity-image block min-h-[5.5rem]" [innerHTML]="cardImg"></span>
       </ng-container>
       <div class="pgcr-image-scrim"></div>
-      <span *ngIf="ps.cardHasFlawlessClear(item, !!showSoloFlawless, clearsAccountKey)"
-            class="firsts-flawless-banner"
-            aria-label="Flawless clear">
+      <button
+        *ngIf="ps.getFlawlessBannerPgcrTarget(item, !!showSoloFlawless, clearsAccountKey) as flawlessPgcr; else stackedFlawlessStatic"
+        type="button"
+        class="firsts-flawless-banner firsts-flawless-banner--clickable"
+        dcKind="flawless-banner"
+        [dcPayload]="flawlessPgcr"
+        [attr.aria-label]="'Open flawless PGCR for ' + item.baseName">
         Flawless
-      </span>
+      </button>
+      <ng-template #stackedFlawlessStatic>
+        <span *ngIf="ps.cardHasFlawlessClear(item, !!showSoloFlawless, clearsAccountKey)"
+              class="firsts-flawless-banner"
+              aria-label="Flawless clear">
+          Flawless
+        </span>
+      </ng-template>
     </div>
     <div class="pgcr-image-caption px-3 py-2 min-w-0">
       <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 mb-1 min-w-0">

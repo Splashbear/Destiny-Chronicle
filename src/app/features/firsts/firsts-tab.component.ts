@@ -89,6 +89,10 @@ export class FirstsTabComponent {
       this.ps.openExternalPGCRFromStored(hit.payload as any, event);
       return;
     }
+    if (hit.kind === 'flawless-banner') {
+      this.ps.openFlawlessBannerPgcr(hit.payload, event);
+      return;
+    }
     if (hit.kind === 'pgcr') {
       this.ps.openExternalPGCR(hit.payload as any, !!hit.flag, event);
     }
