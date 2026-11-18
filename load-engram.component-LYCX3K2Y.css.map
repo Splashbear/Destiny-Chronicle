@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/load-engram.component.ts"],
+  "sourcesContent": ["\n    .dc-load-engram { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }\n    .dc-load-engram--centered { align-items: center; text-align: center; }\n    .dc-load-engram--row {\n      flex-direction: row;\n      align-items: center;\n      gap: 0.75rem;\n      flex: 1;\n      min-width: 0;\n    }\n    .dc-load-engram--row .dc-load-engram__text { flex: 1; min-width: 0; }\n    .engram-decrypt-cap {\n      color: var(--dc-gold, #c9a227);\n      font-size: 1.05rem;\n      font-weight: 600;\n      letter-spacing: 0.01em;\n    }\n    .engram-decrypt-sub {\n      color: var(--dc-muted, #98a2b0);\n      font-size: 0.875rem;\n      margin-top: 0.15rem;\n    }\n  "],
+  "mappings": "AACI,CAAA,eAAkB,QAAA,KAAe,eAAA,OAAwB,IAAA,OAAc,UAAA,EACvE,CAAA,yBAA4B,YAAA,OAAqB,WAAA,OACjD,CAAA,oBACE,eAAA,IACA,YAAA,OACA,IAAA,OACA,KAAA,EACA,UAAA,EAEF,CAPA,oBAOA,CAAA,qBAA6C,KAAA,EAAS,UAAA,EACtD,CAAA,mBACE,MAAA,IAAA,SAAA,EAAA,SACA,UAAA,QACA,YAAA,IACA,eAAA,MAEF,CAAA,mBACE,MAAA,IAAA,UAAA,EAAA,SACA,UAAA,QACA,WAAA",
+  "names": []
+}

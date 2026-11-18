@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/export-options-dialog.component.ts"],
+  "sourcesContent": ["\n    .export-options-form {\n      color: rgba(226, 232, 240, 0.95);\n      font-size: 0.875rem;\n    }\n\n    .export-options-fieldset {\n      border: 1px solid rgba(255, 208, 32, 0.2);\n      border-radius: 0.5rem;\n      padding: 0.75rem 0.875rem;\n      background: rgba(14, 20, 26, 0.35);\n    }\n\n    .export-options-legend {\n      font-size: 0.6875rem;\n      font-weight: 600;\n      letter-spacing: 0.06em;\n      text-transform: uppercase;\n      color: var(--destiny-gold-bright, #e4c04a);\n      padding: 0 0.25rem;\n    }\n\n    .export-options-radio,\n    .export-options-check {\n      display: flex;\n      align-items: center;\n      gap: 0.5rem;\n      margin-top: 0.375rem;\n      cursor: pointer;\n    }\n\n    .export-options-radio input,\n    .export-options-check input {\n      accent-color: var(--destiny-flame, #e67e22);\n    }\n  "],
+  "mappings": "AACI,CAAA,oBACE,MAAA,UACA,UAAA,QAGF,CAAA,wBACE,OAAA,IAAA,MAAA,KAAA,GAAA,CAAA,GAAA,CAAA,EAAA,CAAA,IANF,cAOE,MAPF,QAQE,OAAA,QACA,WAAA,UAGF,CAAA,sBACE,UAAA,SACA,YAAA,IACA,eAAA,MACA,eAAA,UACA,MAAA,IAAA,qBAAA,EAAA,SAjBF,QAkBE,EAAA,OAGF,CAAA,qBAAA,CAAA,qBAEE,QAAA,KACA,YAAA,OACA,IAAA,MACA,WAAA,QACA,OAAA,QAGF,CATA,qBASA,MAAA,CATA,qBASA,MAEE,aAAA,IAAA,eAAA,EAAA",
+  "names": []
+}

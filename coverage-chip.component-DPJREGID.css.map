@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/shared/ui/coverage-chip.component.scss"],
+  "sourcesContent": ["/* Engram / Fireside — coverage chip (tokens via --dc-*) */\n.engram-cov {\n  display: inline-block;\n  margin: 0 0 12px;\n  padding: 6px 12px;\n  border-radius: 999px;\n  font-size: 0.875rem;\n  line-height: 1.3;\n}\n.engram-cov--full {\n  background: var(--dc-cov-full-bg, #1d2a1b);\n  color: var(--dc-cov-full-fg, #8fbf84);\n  border: 1px solid var(--dc-cov-full-border, #3b5a36);\n}\n.engram-cov--partial {\n  background: var(--dc-cov-partial-bg, #2b2412);\n  color: var(--dc-gold-bright, #e4c04a);\n  border: 1px solid var(--dc-cov-partial-border, #5a4a1c);\n}\n.engram-cov--sealed {\n  background: var(--dc-cov-sealed-bg, #1f2227);\n  color: var(--dc-cov-sealed-fg, #8a96a3);\n  border: 1px solid var(--dc-surface-border, #2a2f36);\n}\n"],
+  "mappings": "iBACA,CAAA,WACE,QAAA,oBACA,EAAA,EAAA,aACA,IAAA,mBACA,MACA,UAAA,QACA,YAAA,IAEF,CAAA,iBACE,WAAA,IAAA,gBAAA,EAAA,SACA,MAAA,IAAA,gBAAA,EAAA,SACA,OAAA,IAAA,MAAA,IAAA,oBAAA,EAAA,SAEF,CAAA,oBACE,WAAA,IAAA,mBAAA,EAAA,SACA,MAAA,IAAA,gBAAA,EAAA,SACA,OAAA,IAAA,MAAA,IAAA,uBAAA,EAAA,SAEF,CAAA,mBACE,WAAA,IAAA,kBAAA,EAAA,SACA,MAAA,IAAA,kBAAA,EAAA,SACA,OAAA,IAAA,MAAA,IAAA,mBAAA,EAAA",
+  "names": []
+}
