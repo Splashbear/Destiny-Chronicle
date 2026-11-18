@@ -63,7 +63,7 @@ export interface AccountCardPlatformStats {
               <span *ngIf="plat.lightLevel">· {{ plat.lightLevel }}</span>
             </div>
             <div class="text-yellow-300 font-mono text-sm"
-                 title="Time in activities (excludes orbit / social)">{{ displayPending ? '—' : formatDuration(plat.totalTime) }}</div>
+                 title="Total played time from Bungie character minutes (includes orbit / Tower / social)">{{ displayPending ? '—' : formatDuration(plat.totalTime) }}</div>
             <div class="text-xs text-slate-400">{{ displayPending ? '—' : plat.totalActivities }} activities · {{ plat.totalSeals }} seals</div>
           </div>
         </div>

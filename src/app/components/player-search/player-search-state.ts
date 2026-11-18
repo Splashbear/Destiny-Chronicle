@@ -227,6 +227,8 @@ export abstract class PlayerSearchState {
   activityBreakdownGroups: { type: string; label: string; game?: 'D1' | 'D2'; rows: ActivityCountRow[] }[] = [];
   /** Unique-instance activity time from the last Breakdown load. */
   breakdownActiveTimeSeconds = 0;
+  /** Scoped Active is a lower bound (some D1 durations still missing after cache backfill). */
+  breakdownActiveDurationIncomplete = false;
   /** Selected activity card labels for filtering; empty = show all */
   selectedBreakdownCardLabels = new Set<string>();
   /** Whether the tile selection area is collapsed */

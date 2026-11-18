@@ -10,7 +10,7 @@ import { ActivityDbService, StoredActivity } from './activity-db.service';
 import { DestinyManifestService } from './destiny-manifest.service';
 import { PGCRCacheService } from './pgcr-cache.service';
 import { d1PgcrCacheKey } from '../utils/pgcr-prune';
-import { backfillD1DurationsFromCache } from '../utils/time-story-d1-duration';
+import { backfillD1DurationsFromCache, needsD1DurationBackfill } from '../utils/time-story-d1-duration';
 import { dedupeLinkedSourceRows } from '../utils/time-story-linked-dedupe';
 import {
   leanFromArchiveLight,
@@ -49,6 +49,11 @@ export interface UnifiedBreakdownView {
   records: UnifiedBreakdownSource[];
   bars: TimeStoryByYearResult;
   timeZone?: string;
+  /**
+   * True when some scoped D1 source rows still lack duration after local cache
+   * backfill — Active is then a lower bound (do not dump the gap into Orbit).
+   */
+  activeDurationIncomplete?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -81,7 +86,12 @@ export class TimeStoryService {
     timeZone?: string
   ): Promise<UnifiedBreakdownView> {
     if (!scopes.length) {
-      return { records: [], bars: { years: [], totalSeconds: 0, totalGames: 0 }, timeZone };
+      return {
+        records: [],
+        bars: { years: [], totalSeconds: 0, totalGames: 0 },
+        timeZone,
+        activeDurationIncomplete: false,
+      };
     }
     const key = this.unifiedCacheKey(scopes, identityByMembership, timeZone);
     if (this.unifiedCache?.key === key) return this.unifiedCache.view;
@@ -98,6 +108,7 @@ export class TimeStoryService {
       records,
       bars: buildUnifiedYearBars(records, timeZone, keys),
       timeZone,
+      activeDurationIncomplete: sources.some(row => needsD1DurationBackfill(row)),
     };
     this.unifiedCache = { key, view };
     return view;

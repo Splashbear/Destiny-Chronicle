@@ -130,12 +130,12 @@
           <div class="dc-dossier-hdr__stats-col">
             <div class="dc-dossier-hdr__stats dc-dossier-hdr__stats--primary">
               <div class="dc-dossier-hdr__stat"
-                   title="Time in matches, strikes, raids, and other activities. Excludes orbit, Tower, and social spaces.">
+                   [attr.title]="dossierHeaderActiveTitle">
                 <span class="dc-dossier-hdr__label">Active time</span>
                 <div class="dc-dossier-hdr__stat-v">{{ dossierHeaderActiveTimeLabel }}</div>
               </div>
               <div class="dc-dossier-hdr__stat"
-                   title="Bungie character playtime that is not in an activity — orbit, Tower, and social spaces.">
+                   [attr.title]="dossierHeaderSocialTitle">
                 <span class="dc-dossier-hdr__label">Orbit &amp; social</span>
                 <div class="dc-dossier-hdr__stat-v">{{ dossierHeaderSocialTimeLabel }}</div>
               </div>
@@ -149,7 +149,7 @@
               </div>
             </div>
             <div class="dc-dossier-hdr__stats dc-dossier-hdr__stats--classes"
-                 title="Bungie character playtime by class, summed across every searched account (includes orbit).">
+                 [attr.title]="dossierHeaderClassTimesTitle">
               <div class="dc-dossier-hdr__stat" *ngFor="let cls of dossierHeaderClassTimes">
                 <span class="dc-dossier-hdr__label dc-dossier-hdr__label--class">
                   <img *ngIf="getClassIconUrl(cls.name) as icon"
