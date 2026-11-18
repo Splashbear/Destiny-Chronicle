@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { countSealsForPlatform } from '../../utils/account-stats-rollup';
+import { buildDossierHeaderStats } from '../../utils/dossier-header-stats';
 /** Anniversary / loading / archive UI helpers (CODE_CLEANUP_SPEC). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -779,8 +779,38 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     return '';
   }
 
+  /** Header stats for the current account-card scope (empty selection = all cards). */
+  private dossierHeaderStatsSnapshot() {
+    const scopedPlayers = this.timeStorySelectedPlayers || [];
+    const classSeconds = { Hunter: 0, Titan: 0, Warlock: 0 };
+    for (const pl of scopedPlayers) {
+      const game = (pl.game === 'D1' ? 'D1' : 'D2') as 'D1' | 'D2';
+      const chars = this.characters[this.getPlayerKey(pl)] || [];
+      for (const ch of chars) {
+        const type = Number(ch?.classType ?? ch?.characterBase?.classType);
+        const name = this.getClassName(type);
+        if (name !== 'Hunter' && name !== 'Titan' && name !== 'Warlock') continue;
+        classSeconds[name] += getCharacterMinutesPlayed(ch, game) * 60;
+      }
+    }
+    const haveCharacters = scopedPlayers.some(
+      (pl) => (this.characters[this.getPlayerKey(pl)] || []).length > 0
+    );
+    return buildDossierHeaderStats({
+      platformStats: this.perPlatformStats || [],
+      selectedAccountKeys: this.siteAccountFilterKeys,
+      activeSeconds: this.breakdownActiveTimeSeconds || this.activityBreakdownUnfilteredTimeSeconds || 0,
+      activeDurationIncomplete: !!this.breakdownActiveDurationIncomplete,
+      historySyncInProgress: this.timeStorySyncInProgress,
+      accountStatsPending: !!this.accountStatsPending,
+      classSeconds,
+      haveCharacters,
+      formatSeconds: (s) => this.formatSecondsToHoursMinutes(s),
+    });
+  }
+
   get dossierHeaderPlayedSeconds(): number {
-    return this.accountStats?.totalTime ?? 0;
+    return this.dossierHeaderStatsSnapshot().playedSeconds;
   }
 
   get dossierHeaderActiveSeconds(): number {
@@ -788,16 +818,25 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   get dossierHeaderActiveTimeLabel(): string {
-    const sec = this.dossierHeaderActiveSeconds;
-    if (!sec) return '—';
-    return this.formatSecondsToHoursMinutes(sec);
+    return this.dossierHeaderStatsSnapshot().activeLabel;
+  }
+
+  get dossierHeaderActiveTitle(): string {
+    const base =
+      'Time in matches, strikes, raids, and other activities. Excludes orbit, Tower, and social spaces.';
+    const extra = this.dossierHeaderStatsSnapshot().activeTitleExtra;
+    return extra ? `${base} ${extra}` : base;
   }
 
   get dossierHeaderSocialTimeLabel(): string {
-    const active = this.dossierHeaderActiveSeconds;
-    const played = this.dossierHeaderPlayedSeconds;
-    if (!active || !played) return '—';
-    return this.formatSecondsToHoursMinutes(Math.max(0, played - active));
+    return this.dossierHeaderStatsSnapshot().socialLabel;
+  }
+
+  get dossierHeaderSocialTitle(): string {
+    const base =
+      'Bungie character playtime that is not in an activity — orbit, Tower, and social spaces.';
+    const extra = this.dossierHeaderStatsSnapshot().socialTitleExtra;
+    return extra ? `${base} ${extra}` : base;
   }
 
   get dossierHeaderTimeLabel(): string {
@@ -805,50 +844,20 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
   }
 
   get dossierHeaderActivityCount(): string {
-    if (this.accountStatsPending) return '—';
-    return (this.accountStats?.totalActivityCount || 0).toLocaleString();
+    return this.dossierHeaderStatsSnapshot().activityCountLabel;
   }
 
   get dossierHeaderSealCount(): string {
-    // Seals come from Bungie's profile records alone, so show them as soon as titles load
-    // instead of waiting for the activity history fill (same per-account rule as the rollup).
-    const titles = this.aggregatedTitles;
-    if (titles?.length) {
-      const seen = new Set<string>();
-      let seals = 0;
-      for (const pl of this.selectedPlayers || []) {
-        if (pl.game === 'D1') continue;
-        const key = this.getPlayerKey(pl);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        seals += countSealsForPlatform(titles, pl.displayName, pl.platform);
-      }
-      return String(seals);
-    }
-    if (this.accountStatsPending) return '—';
-    return String(this.accountStats?.totalSeals || 0);
+    return this.dossierHeaderStatsSnapshot().sealCountLabel;
   }
 
-  /** Bungie character playtime by class, summed across every searched account. */
+  /** Bungie character playtime by class for the current account-card scope. */
   get dossierHeaderClassTimes(): Array<{ name: string; label: string }> {
-    const seconds = { Hunter: 0, Titan: 0, Warlock: 0 };
-    for (const pl of this.selectedPlayers || []) {
-      const game = (pl.game === 'D1' ? 'D1' : 'D2') as 'D1' | 'D2';
-      const chars = this.characters[this.getPlayerKey(pl)] || [];
-      for (const ch of chars) {
-        const type = Number(ch?.classType ?? ch?.characterBase?.classType);
-        const name = this.getClassName(type);
-        if (name !== 'Hunter' && name !== 'Titan' && name !== 'Warlock') continue;
-        seconds[name] += getCharacterMinutesPlayed(ch, game) * 60;
-      }
-    }
-    // Class time is Bungie character playtime: ready once the characters are, not after the activity fill.
-    const haveChars = (this.selectedPlayers || []).some((pl) => (this.characters[this.getPlayerKey(pl)] || []).length > 0);
-    const pending = !haveChars && this.accountStatsPending;
-    return (['Hunter', 'Titan', 'Warlock'] as const).map((name) => ({
-      name,
-      label: pending ? '—' : this.formatSecondsToHoursMinutes(seconds[name]),
-    }));
+    return this.dossierHeaderStatsSnapshot().classTimes;
+  }
+
+  get dossierHeaderClassTimesTitle(): string {
+    return this.dossierHeaderStatsSnapshot().classTimesTitle;
   }
 
   /** Flattened On This Day year cards for the header strip. */
@@ -1270,6 +1279,10 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
           timeZone
         );
         this.breakdownActiveTimeSeconds = view.bars.totalSeconds;
+        this.breakdownActiveDurationIncomplete = !!view.activeDurationIncomplete;
+      } else {
+        this.breakdownActiveTimeSeconds = 0;
+        this.breakdownActiveDurationIncomplete = false;
       }
     } catch (err) {
       console.error('[ActivityBreakdown] Failed to refresh Active time', err);
@@ -1309,7 +1322,8 @@ export abstract class PlayerSearchUiMixin extends PlayerSearchLoadMixin {
     for (const player of this.timeStorySelectedPlayers) {
       const playerGame = player.game === 'D1' ? 'D1' : 'D2';
       if (game !== 'Both' && playerGame !== game) continue;
-      const key = playerGame + ':' + player.membershipId;
+      // Canonical account key so D1/D2 and platforms stay distinct in the header scope.
+      const key = this.getPlayerKey(player);
       if (seen.has(key)) continue;
       seen.add(key);
       scopes.push({ membershipId: player.membershipId, game: playerGame });

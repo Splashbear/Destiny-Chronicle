@@ -42,6 +42,7 @@ export function resetSessionForPrimarySelect(c: any): void {
   c.activityBreakdownRows = null;
   c.activityBreakdownGroups = [];
   c.breakdownActiveTimeSeconds = 0;
+  c.breakdownActiveDurationIncomplete = false;
   c.syncActivityStore();
   c.guardianFirsts = [];
   c.playerTitles = {};
