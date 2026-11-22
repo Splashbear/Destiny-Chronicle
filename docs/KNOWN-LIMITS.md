@@ -1,6 +1,6 @@
 # Known limits
 
-- Destiny 1 in the archive covers billion 1 with one root (ids 1–1B, ~30 Aug–9 Dec 2014), or billions 1–2 when `D1_INDEX_ROOTS` / `D1_PLAYED_WITH_ROOTS` list two roots (ids 1–2B, ~Aug 2014–Mar 2015). Later Destiny 1 games depend on live Bungie, and coverage stays partial.
+- Destiny 1 in the archive covers one billion per configured root: one root is ids 1–1B (~30 Aug–9 Dec 2014); four roots (`D1_INDEX_ROOTS` / `D1_PLAYED_WITH_ROOTS`) are billions 1–4 (ids 1–4B, ~Aug 2014–Oct 2015). Later Destiny 1 games depend on live Bungie, and coverage stays partial. D1 Played With remains on hold until the remaining D1 billions are in.
 - Destiny 1 is never marked `full`.
 - Some rows in the compact index (instance ids from 10 billion to 16 billion) have no period. They still count as a shared game in Played With. They do not set First played or Last played, because those dates need a period.
 - Played With on the site is Destiny 2 only. A Destiny 1-only account is not sent to the summary API.

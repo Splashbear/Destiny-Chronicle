@@ -57,6 +57,10 @@ describe('d1RootIndexesForInstanceId', () => {
     expect(d1RootIndexesForInstanceId(D1_ONLY_B3, 3)).toEqual([2]);
     expect(d1RootIndexesForInstanceId(1_000_000_000, 3)).toEqual([0, 1]);
     expect(d1RootIndexesForInstanceId(4_000_000_000, 3)).toEqual([]);
+    expect(d1RootIndexesForInstanceId(3_000_000_001, 4)).toEqual([3]);
+    expect(d1RootIndexesForInstanceId(4_000_000_000, 4)).toEqual([3]);
+    expect(d1RootIndexesForInstanceId(4_000_000_001, 4)).toEqual([]);
+    expect(d1RootIndexesForInstanceId(3_000_000_001, 3)).toEqual([]);
   });
 
   it('maps played-with band from instance id', () => {

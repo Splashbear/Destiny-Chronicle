@@ -575,7 +575,7 @@ export class ArchiveService {
 
   /**
    * Build a SELECT list matching LeanActivity, defaulting optional columns the file lacks.
-   * Real D1 act roots (d1_final / d1_b2 / d1_b3_hs) have no director_activity_hash.
+   * Real D1 act roots (d1_final / d1_b2 / d1_b3_hs / d1_b4_hs) have no director_activity_hash.
    */
   private buildLeanActivitySelect(availableColumns: Set<string>): string {
     const has = (col: string) => availableColumns.has(col.toLowerCase());
@@ -707,7 +707,8 @@ export class ArchiveService {
    * Fast D1 instance path: only roots whose billion range contains the id, then
    * one pw/iid_band parquet for memberships (+ buckets in one SQL), then a single
    * batched act read of those mid_bucket files. Large rosters miss immediately.
-   * No mid_bucket=* hive scan. New D1 billions: append root to D1_INDEX_ROOTS — no rebuild.
+   * No mid_bucket=* hive scan. New D1 billions (including billion 4): append
+   * the root to D1_INDEX_ROOTS — routing follows root count × D1_BILLION, no rebuild.
    */
   private async queryD1InstanceViaPlayedWith(instanceId: string): Promise<LeanActivity[]> {
     const pathMod = await import('path');

@@ -25,7 +25,7 @@ The archive is the fast history at `<API_ROOT>`. Live Bungie fills games the arc
 Coverage on an archive response is `full`, `partial`, or `absent`.
 
 - **full** means a Destiny 2 list that was not cut off and does not sit on a known hole in the archive.
-- **partial** means some games may be missing. Destiny 1 is always partial. The Destiny 1 archive slice is billion 1 only (instance ids 1 through 1 billion, late August through early December 2014). Newer Destiny 1 games come from Bungie when that fill is on.
+- **partial** means some games may be missing. Destiny 1 is always partial. The Destiny 1 archive slice covers one billion instance ids per configured root (four roots: ids 1 through 4 billion, late August 2014 through about October 2015). Newer Destiny 1 games come from Bungie when that fill is on.
 - **absent** means the archive has no rows for that account. That does not mean the player never played.
 
 ## Played With rules

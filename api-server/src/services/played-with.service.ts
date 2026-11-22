@@ -43,7 +43,7 @@ export interface PlayedWithConfig {
   nameTable?: string;
   /** D1 played-with root: pw/iid_band=N/pw.parquet (first of d1Roots; back-compat). */
   d1Root?: string;
-  /** D1 played-with roots (billions 1–3). Shared boundary bands are read from every root that has them. */
+  /** D1 played-with roots (one per billion; cap is root count × 1B). Shared boundary bands are read from every root that has them. */
   d1Roots?: string[];
 }
 
@@ -408,7 +408,7 @@ export class PlayedWithService {
     collect('minimal', '', plan.minimal);
     collect('d1', '', plan.d1);
     
-    // D1 archive is incomplete (billions 1–2 at most); indexComplete must be false when D1 bands are used.
+    // D1 archive is incomplete (configured billions only); indexComplete must be false when D1 bands are used.
     const indexComplete = plan.d1.size > 0 ? false : plan.uncovered.length === 0;
     const coverage: PlayedWithCoverage = {
       complete: indexComplete,
