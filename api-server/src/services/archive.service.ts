@@ -12,6 +12,7 @@ import {
 } from '../utils/d1-roots';
 import { createAsyncQueue, withDuckDbRetry } from '../utils/duckdb-retry';
 import { sourceCompleted } from '../utils/light-activity-row';
+import { unionD1History } from '../utils/d1-history-union';
 import {
   describeConfiguredGameDataRoots,
   isPartialArchiveRoster,
@@ -1026,9 +1027,10 @@ export class ArchiveService {
         if (tierErrors.length > 0) {
           d1Result.tier.notes = [...(d1Result.tier.notes || []), ...tierErrors];
         }
-        // If D1 tier found activities, return them
+        // If D1 tier found activities, union them with lite-file D1 games for this
+        // account (archive row wins per game; lite fills what the archive lacks).
         if (d1Result.knownPlayer && d1Result.activities.length > 0) {
-          return d1Result;
+          return this.unionD1WithLite(membershipId, d1Result, options);
         }
         // D1 tier returned no activities; fall through to lite/extract (may have D1 data there)
         d1TierTriedAndEmpty = true;
@@ -1192,6 +1194,53 @@ export class ArchiveService {
     };
   }
 
+  /**
+   * D1 history union: archive index rows plus lite-file D1 rows for the same account,
+   * one entry per (game, instance_id). Lite (and per-mid extract when lite does not know
+   * the account) only add D1 rows for this membership_id. Lite errors never drop the
+   * archive answer.
+   */
+  private async unionD1WithLite(
+    membershipId: string,
+    d1Result: PlayerActivitiesResult,
+    options?: { game?: 'D1' | 'D2'; fromPeriod?: string; toPeriod?: string; limit?: number }
+  ): Promise<PlayerActivitiesResult> {
+    const d1Options = { ...options, game: 'D1' as const };
+    const notes = [...(d1Result.tier.notes || [])];
+    let lite: LeanActivity[] = [];
+    let liteSource = '';
+    try {
+      const liteResult = await this.tryLiteLookup(membershipId, d1Options);
+      if (liteResult.knownPlayer) {
+        lite = liteResult.activities;
+        liteSource = 'lite';
+      } else if (this.midLightExtractDir) {
+        const extractResult = await this.tryExtractLookup(membershipId, d1Options);
+        if (extractResult.knownPlayer) {
+          lite = extractResult.activities;
+          liteSource = 'extract';
+        }
+      }
+    } catch (error) {
+      const msg = `D1 lite union skipped: ${error instanceof Error ? error.message : 'unknown'}`;
+      logger.warn(msg, { membershipId });
+      notes.push(msg);
+    }
+    if (!lite.length) {
+      return { ...d1Result, tier: { ...d1Result.tier, notes: [...new Set(notes)] } };
+    }
+    const u = unionD1History(membershipId, d1Result.activities, lite, options?.limit ?? 10000);
+    if (u.liteOnlyGames > 0 || u.overlapGames > 0) {
+      notes.push(
+        `D1 history: ${u.archiveRows} archive rows + ${u.liteOnlyGames} ${liteSource}-only games (${u.overlapGames} in both)`
+      );
+    }
+    return {
+      activities: u.activities,
+      knownPlayer: true,
+      tier: { ...d1Result.tier, notes: [...new Set(notes)] },
+    };
+  }
   /**
    * Try tier 1: lite parquet lookup.
    */
