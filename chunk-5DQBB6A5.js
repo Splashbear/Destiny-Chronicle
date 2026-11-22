@@ -1,0 +1,2 @@
+var e={production:!0,debug:!1,traceGuardianFirsts:!1,bungie:{API_KEY:"e55082388d014a79b9f5da4be0063d1c",API_ROOT:"https://www.bungie.net/Platform"},useBungieDevProxy:!1,testMode:!1,baseHref:"/",mockData:{enabled:!1},analytics:{googleMeasurementId:"G-C9CRM83JS2",cloudflareToken:""},pgcrApiRoot:"https://api.destinychronicle.com",pgcrApiKey:"",useExternalPgcr:!0,useArchiveActivities:!0,archiveBungieDeltaFill:!0,enableD1Archive:!0,enablePlayedWith:!0,enableArchiveNameSearch:!1,offlineMode:!1,archiveRoot:""};export{e as a};
+//# sourceMappingURL=chunk-5DQBB6A5.js.map

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/components/account-card-grid/account-card-grid.component.ts"],
+  "sourcesContent": ["\n      .account-card-grid {\n        display: grid;\n        /* auto-fit collapses empty tracks so N cards stretch across the row */\n        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));\n        width: 100%;\n      }\n    "],
+  "mappings": "AACM,CAAA,kBACE,QAAA,KAEA,sBAAA,OAAA,QAAA,CAAA,OAAA,IAAA,IAAA,CAAA,MAAA,CAAA,MACA,MAAA",
+  "names": []
+}

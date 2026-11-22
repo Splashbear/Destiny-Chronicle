@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/app/features/firsts/firsts-host.token.ts"],
+  "sourcesContent": ["import { InjectionToken } from '@angular/core';\n\n/**\n * Parent host for the Firsts tab (CODE_CLEANUP_SPEC Step 4).\n * PlayerSearchComponent provides itself; later a FirstsStore can replace it.\n */\nexport const FIRSTS_HOST = new InjectionToken<any>('FIRSTS_HOST');\n"],
+  "mappings": "wCAMO,IAAMA,EAAc,IAAIC,EAAoB,aAAa",
+  "names": ["FIRSTS_HOST", "InjectionToken"]
+}
