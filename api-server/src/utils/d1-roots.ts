@@ -1,6 +1,8 @@
 import * as fs from 'fs';
 import { logger } from './logger';
 
+/** Max D1 instance id served from archive when billions 1–4 are configured. */
+export const D1_MAX_INSTANCE_ID_B4 = 4_000_000_000;
 /** Max D1 instance id served from archive when billions 1–3 are configured. */
 export const D1_MAX_INSTANCE_ID_B3 = 3_000_000_000;
 /** Max D1 instance id served from archive when billions 1–2 are configured. */
@@ -49,19 +51,22 @@ export function filterExistingRoots(roots: string[], label: string): string[] {
  * not how many currently exist on disk.
  */
 export function d1CoverageCaveat(configuredRootCount: number): string {
-  if (configuredRootCount >= 3) {
-    return 'D1 coverage: billions 1-3 (IDs 1-3B, Aug 30 2014 to ~Jul 2015). Later D1 history falls back to Bungie live.';
+  const n = Math.max(0, Math.floor(Number(configuredRootCount) || 0));
+  if (n <= 1) {
+    return 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live.';
   }
-  if (configuredRootCount >= 2) {
-    return 'D1 coverage: billions 1-2 (IDs 1-2B, Aug 30 2014 to ~Mar 2015). Later D1 history falls back to Bungie live.';
-  }
-  return 'D1 coverage: billion 1 only (IDs 1-1B, Aug 30 to Dec 9 2014). Later D1 history falls back to Bungie live.';
+  const end =
+    n === 4 ? '~Oct 2015' :
+    n === 3 ? '~Jul 2015' :
+    n === 2 ? '~Mar 2015' :
+    'later';
+  return `D1 coverage: billions 1-${n} (IDs 1-${n}B, Aug 30 2014 to ${end}). Later D1 history falls back to Bungie live.`;
 }
 
+/** Inclusive archive cap: configuredRootCount * D1_BILLION (1 root → 1B, 4 roots → 4B). */
 export function d1MaxInstanceId(configuredRootCount: number): number {
-  if (configuredRootCount >= 3) return D1_MAX_INSTANCE_ID_B3;
-  if (configuredRootCount >= 2) return D1_MAX_INSTANCE_ID_B2;
-  return D1_MAX_INSTANCE_ID_B1;
+  const n = Math.max(0, Math.floor(Number(configuredRootCount) || 0));
+  return n * D1_BILLION;
 }
 
 /**

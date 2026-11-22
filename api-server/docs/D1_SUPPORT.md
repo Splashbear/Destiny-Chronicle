@@ -90,16 +90,21 @@ Configure one or more D1 roots:
 - **One root** (legacy): **billion 1 only** (instance IDs `1`–`1,000,000,000`), **Aug 30–Dec 9 2014**.
 - **Two roots** (`D1_INDEX_ROOTS` / `D1_PLAYED_WITH_ROOTS`): **billions 1–2** (IDs `1`–`2,000,000,000`), **Aug 30 2014–~Mar 2015**.
 - **Three roots**: **billions 1–3** (IDs `1`–`3,000,000,000`), **Aug 30 2014–~Jul 2015**.
+- **Four roots**: **billions 1–4** (IDs `1`–`4,000,000,000`), **Aug 30 2014–~Oct 2015** (billion 4 sampled periods Jul 12 2015–Oct 19 2015).
 
 Later D1 history is **incomplete** from this source and **must fall back to Bungie live**.
 
 **D1 is still an active game**. Recent D1 activities exist and are real — they just aren't in this archive.
 
-Billion-2 played-with bands are `1000`–`2000`. Band `1000` exists in **both** roots (billion 1 holds only iid `1_000_000_000`; billion 2 holds `1_000_000_001`–`1_000_999_999`) — the API unions and dedupes that band. Billion-3 bands are `2000`–`3000`.
+Billion-2 played-with bands are `1000`–`2000`. Band `1000` exists in **both** roots (billion 1 holds only iid `1_000_000_000`; billion 2 holds `1_000_000_001`–`1_000_999_999`) — the API unions and dedupes that band. Billion-3 bands are `2000`–`3000`. Billion-4 bands are `3000`–`4000`.
 
 ### API Response Notes
 
-All D1 tier responses include a note in `tier.notes` based on how many roots are configured, for example:
+All D1 tier responses include a note in `tier.notes` based on how many roots are configured, for example four roots:
+```
+"D1 coverage: billions 1-4 (IDs 1-4B, Aug 30 2014 to ~Oct 2015). Later D1 history falls back to Bungie live."
+```
+or three roots:
 ```
 "D1 coverage: billions 1-3 (IDs 1-3B, Aug 30 2014 to ~Jul 2015). Later D1 history falls back to Bungie live."
 ```
@@ -145,10 +150,11 @@ Add these to your `.env`:
 D1_INDEX_ROOT=D:\DestinyChronicleDB\d1_final
 D1_PLAYED_WITH_ROOT=D:\DestinyChronicleDB\d1_final
 
-# Or multi-root (billions 1-3). ;-separated. Falls back to the single-root vars when unset.
+# Or multi-root (billions 1-4). ;-separated. Falls back to the single-root vars when unset.
 # Missing paths are skipped with a warning (API keeps running).
-D1_INDEX_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2;D:\DestinyChronicleDB\d1_b3_hs
-D1_PLAYED_WITH_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2;D:\DestinyChronicleDB\d1_b3_hs
+# D1 Played With remains on hold until the remaining D1 billions are in.
+D1_INDEX_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2;D:\DestinyChronicleDB\d1_b3_hs;D:\DestinyChronicleDB\d1_b4_hs
+D1_PLAYED_WITH_ROOTS=D:\DestinyChronicleDB\d1_final;D:\DestinyChronicleDB\d1_b2;D:\DestinyChronicleDB\d1_b3_hs;D:\DestinyChronicleDB\d1_b4_hs
 ```
 
 Each root is a parent folder containing:
@@ -200,7 +206,7 @@ Archive initialized: {
 }
 ```
 
-**Note**: D1 responses always have `level: "partial"` and `indexComplete: false` because the D1 archive only covers billions 1–2 at most. All period fields (`period`, `minPeriod`, `maxPeriod`) are returned as timezone-independent ISO 8601 UTC strings (e.g., `"2014-10-26T18:57:22Z"`).
+**Note**: D1 responses always have `level: "partial"` and `indexComplete: false` because the D1 archive only covers the configured billions (currently up to billions 1–4). All period fields (`period`, `minPeriod`, `maxPeriod`) are returned as timezone-independent ISO 8601 UTC strings (e.g., `"2014-10-26T18:57:22Z"`).
 
 ### PGCR Endpoints
 
@@ -219,9 +225,9 @@ Archive initialized: {
 `POST /played-with`
 
 **With D1_PLAYED_WITH_ROOT / D1_PLAYED_WITH_ROOTS configured**:
-- Plans D1 bands for instance IDs in range 1–1B (one root) or 1–2B (two+ roots)
-- Reads `pw/iid_band=N/pw.parquet` from every existing root (union; band 1000 from both)
-- Coverage response includes `d1Bands` count and a billions 1–2 (or billion 1) caveat
+- Plans D1 bands for instance IDs in range 1–N billion, where N is the configured root count (four roots = 1–4B)
+- Reads `pw/iid_band=N/pw.parquet` from every existing root (union; shared boundary bands from both adjacent roots)
+- Coverage response includes `d1Bands` count and a caveat derived from the configured root count
 
 **Response**:
 ```json
@@ -242,7 +248,7 @@ Archive initialized: {
 }
 ```
 
-**Note**: When D1 bands are present (`d1Bands > 0`), `complete` is always `false` because the D1 index only covers billion 1. The `d1CoverageCaveat` field provides context about this limitation.
+**Note**: When D1 bands are present (`d1Bands > 0`), `complete` is always `false` because the D1 index only covers the configured billions. The `d1CoverageCaveat` field provides context about this limitation. D1 Played With remains on hold until the remaining D1 billions are in.
 
 ## Data Sizes
 
