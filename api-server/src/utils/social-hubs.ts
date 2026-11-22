@@ -14,6 +14,8 @@ export const D1_SOCIAL_ACTIVITY_HASHES: ReadonlySet<number> = new Set([
   2330516073, // Tower
   1522220810, // Tower variant
   2370413227, // unidentified Tower-like (not in D1 manifest)
+  3743955707, // Tower (D1 variant, mode 0, no stats; 2015)
+  1390160729, // Vestian Outpost (Reef social space, mode 0)
 ]);
 
 /** Activity hashes for mode-0 hub visits (and known Tower variants). */

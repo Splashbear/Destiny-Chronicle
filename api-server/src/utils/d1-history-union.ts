@@ -91,3 +91,26 @@ export function unionD1History(
   const activities = limit != null && limit >= 0 ? merged.slice(0, limit) : merged;
   return { activities, archiveRows: archRows.length, liteOnlyGames, overlapGames };
 }
+
+/**
+ * Keep only D1 rows on the account's current characters. Rows with no character id are kept
+ * (cannot be attributed). D2 rows are never touched.
+ */
+export function excludeNonCurrentD1Characters<T extends { game?: string; character_id?: string | null }>(
+  rows: readonly T[],
+  currentCharacterIds: ReadonlySet<string>
+): { kept: T[]; excluded: number; excludedCharacters: string[] } {
+  const kept: T[] = [];
+  const gone = new Set<string>();
+  let excluded = 0;
+  for (const r of rows) {
+    const ch = r.character_id == null ? '' : String(r.character_id);
+    if (r.game === 'D1' && ch && !currentCharacterIds.has(ch)) {
+      excluded++;
+      gone.add(ch);
+      continue;
+    }
+    kept.push(r);
+  }
+  return { kept, excluded, excludedCharacters: [...gone] };
+}

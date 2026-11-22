@@ -12,7 +12,8 @@ import {
 } from '../utils/d1-roots';
 import { createAsyncQueue, withDuckDbRetry } from '../utils/duckdb-retry';
 import { sourceCompleted } from '../utils/light-activity-row';
-import { unionD1History } from '../utils/d1-history-union';
+import { excludeNonCurrentD1Characters, unionD1History } from '../utils/d1-history-union';
+import type { D1CharacterStatusService } from './d1-character-status.service';
 import {
   describeConfiguredGameDataRoots,
   isPartialArchiveRoster,
@@ -60,6 +61,8 @@ export class ArchiveService {
   private gapIndexRoot: string;
   /** W11: optional membership_id-sorted gap root (parquet RG pruning). Prefer when complete. */
   private gapIndexSortedRoot: string;
+  /** Optional: Bungie current D1 characters (deleted-character filter). */
+  private d1CharacterStatus: D1CharacterStatusService | null = null;
   /** Extra gap roots unioned with the primary gap root (see ApiConfig.gapIndexExtraRoots). */
   private gapExtraRoots: string[];
   private enableGapLean: boolean;
@@ -986,14 +989,69 @@ export class ArchiveService {
     };
   }
 
+  setD1CharacterStatus(svc: D1CharacterStatusService | null): void {
+    this.d1CharacterStatus = svc;
+  }
+
   /**
    * Multi-tier lookup for player activities.
    * Tries: lite ? per-mid extract ? compact ids ? absent.
    * Never falls through if a tier knows the player (even if filters leave 0 rows).
    * Tracks all tier errors in coverage.notes.
    */
+  /**
+   * Multi-tier lookup, then (D1 only) drop games on characters that are no longer on the
+   * account (deleted characters), using Bungie's current character list (cached). Fails open.
+   */
   async getPlayerActivitiesMultiTier(
     membershipId: string,
+    options?: {
+      game?: 'D1' | 'D2';
+      fromPeriod?: string;
+      toPeriod?: string;
+      limit?: number;
+    }
+  ): Promise<PlayerActivitiesResult> {
+    const result = await this.getPlayerActivitiesMultiTierUnfiltered(membershipId, options);
+    if (options?.game !== 'D1' || !this.d1CharacterStatus || result.activities.length === 0) {
+      return result;
+    }
+    const typeCounts = new Map<number, number>();
+    for (const a of result.activities) {
+      if (a.membership_type === 1 || a.membership_type === 2) {
+        typeCounts.set(a.membership_type, (typeCounts.get(a.membership_type) || 0) + 1);
+      }
+    }
+    const membershipType = [...typeCounts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+    let current: Set<string> | null = null;
+    try {
+      current = await this.d1CharacterStatus.getCurrentCharacterIds(membershipId, membershipType);
+    } catch (error) {
+      logger.warn('D1 character filter skipped (fail open)', { membershipId, error: String(error) });
+      current = null;
+    }
+    if (!current) {
+      return {
+        ...result,
+        tier: { ...result.tier, notes: [...(result.tier.notes || []), 'D1 deleted-character filter unavailable (Bungie unreachable, no cache)'] },
+      };
+    }
+    const { kept, excluded, excludedCharacters } = excludeNonCurrentD1Characters(result.activities, current);
+    if (excluded === 0) return result;
+    return {
+      ...result,
+      activities: kept,
+      tier: {
+        ...result.tier,
+        notes: [
+          ...(result.tier.notes || []),
+          `D1: excluded ${excluded} rows on ${excludedCharacters.length} deleted character(s)`,
+        ],
+      },
+    };
+  }
+
+  private async getPlayerActivitiesMultiTierUnfiltered(    membershipId: string,
     options?: {
       game?: 'D1' | 'D2';
       fromPeriod?: string;

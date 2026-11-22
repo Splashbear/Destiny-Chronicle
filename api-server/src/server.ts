@@ -1,4 +1,4 @@
-﻿import express, { Express, Request, Response } from 'express';
+import express, { Express, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { loadConfig, validateConfig } from './utils/config';
@@ -23,6 +23,7 @@ import { installCors } from './http/cors';
 import { freeGiB, installApiGuard, serverStartedAt, SELF_CHECK_TOKEN } from './usage/usage';
 import { startMaintenance } from './usage/maintenance';
 import { installUsageAdminRoute } from './usage/usage-admin';
+import { D1CharacterStatusService } from './services/d1-character-status.service';
 
 function fsExists(p: string): boolean {
   try {
@@ -77,6 +78,19 @@ async function startServer(): Promise<void> {
     config.gapIndexExtraRoots
   );
   await archiveService.initialize();
+
+  // D1: count only characters still on the account (Bungie current character list, cached).
+  if ((process.env.D1_DELETED_CHARACTER_FILTER || 'true').toLowerCase() !== 'false') {
+    const cachePath =
+      (process.env.D1_CHARACTER_CACHE_PATH || '').trim() ||
+      (config.watermarkPath ? path.join(path.dirname(config.watermarkPath), 'd1_character_cache.json') : '');
+    if (cachePath) {
+      archiveService.setD1CharacterStatus(new D1CharacterStatusService({ apiKey: config.bungieApiKey, cachePath }));
+      logger.info('D1 deleted-character filter enabled', { cachePath, bungieKey: !!config.bungieApiKey });
+    } else {
+      logger.warn('D1 deleted-character filter disabled: set D1_CHARACTER_CACHE_PATH or PGCR_WATERMARK_PATH');
+    }
+  }
 
   const bungieApiService = new BungieApiService(config.bungieApiKey, config.bungieApiRoot);
 
